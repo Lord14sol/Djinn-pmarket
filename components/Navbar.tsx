@@ -6,7 +6,7 @@ import Image from 'next/image';
 
 // --- ICONOS ---
 const DjinnStar = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 mr-1 text-yellow-500 animate-pulse">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 mr-1 text-[#F492B7] animate-pulse">
         <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
     </svg>
 );
@@ -24,66 +24,68 @@ const categories = ["Trending", "New", "Earth 🌍", "Politics", "Crypto", "Spor
 
 export default function Navbar() {
     const [isOpen, setIsOpen] = useState(false);
+    // NUEVO: Estado para saber cuál es la categoría activa. Iniciamos en "Trending".
+    const [activeCategory, setActiveCategory] = useState("Trending");
 
     return (
         <nav className="fixed top-0 left-0 w-full z-50 bg-black/95 backdrop-blur-md border-b border-white/10">
 
-            {/* --- CAMBIO CLAVE: Usamos 'w-full' y padding lateral grande (px-6 md:px-12) --- */}
-            {/* Esto hace que el contenido se estire pero mantenga un margen de seguridad a los lados */}
             <div className="w-full px-6 md:px-12 h-28 flex items-center justify-between gap-4">
-
                 {/* LOGO + BRAND */}
                 <Link href="/" className="flex items-center gap-0 group min-w-max">
                     <div className="relative w-28 h-28 transition-transform duration-300 group-hover:scale-105 z-10">
-                        <Image
-                            src="/star.png"
-                            alt="Djinn Logo"
-                            fill
-                            className="object-contain"
-                            priority
-                        />
+                        <Image src="/star.png" alt="Djinn Logo" fill className="object-contain" priority />
                     </div>
-                    <span
-                        className="text-4xl text-white tracking-tight hidden sm:block -ml-6 mt-4 z-0"
-                        style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}
-                    >
+                    <span className="text-4xl text-white tracking-tight hidden sm:block -ml-6 mt-4 z-0" style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}>
                         Djinn
                     </span>
                 </Link>
 
-                {/* Espaciador flexible */}
                 <div className="flex-1"></div>
 
                 {/* Botones Derecha */}
                 <div className="flex items-center gap-4">
-                    <button className="bg-yellow-500 hover:bg-yellow-400 text-black font-extrabold text-sm py-3 px-6 rounded-lg transition-transform hover:scale-105 shadow-lg hidden sm:block uppercase tracking-wide">
+                    <button className="bg-[#F492B7] text-black font-extrabold text-sm py-3 px-6 rounded-lg transition-transform hover:scale-105 shadow-[0_0_15px_rgba(244,146,183,0.4)] hidden sm:block uppercase tracking-wide">
                         Connect Wallet
                     </button>
-
                     <button onClick={() => setIsOpen(!isOpen)} className="p-3 text-gray-300 hover:text-white hover:bg-white/10 rounded-lg border border-white/10">
                         {isOpen ? <CloseIcon /> : <MenuIcon />}
                     </button>
                 </div>
             </div>
 
-            {/* CATEGORÍAS (También ajustadas al ancho completo) */}
+            {/* CATEGORÍAS */}
             <div className="border-t border-white/5 relative group">
-                {/* Ajustamos el padding-left aquí también para que coincida con el logo */}
-                <div className="flex items-center overflow-x-auto scrollbar-hide py-3 pl-6 md:pl-12 pr-32">
-                    <div className="flex gap-8 text-sm font-bold text-gray-400 whitespace-nowrap uppercase tracking-wider">
+                <div className="flex items-center overflow-x-auto scrollbar-hide py-3 pl-0 md:pl-0">
+                    <div className="flex items-center gap-8 text-sm font-bold text-gray-400 whitespace-nowrap uppercase tracking-wider pl-6 md:pl-12">
                         {categories.map((cat) => (
-                            <Link
-                                key={cat}
-                                href="#"
-                                className={`flex items-center transition-colors hover:text-yellow-500 ${cat.includes("Earth") ? "text-blue-400 font-black" : ""} ${cat === "Trending" ? "text-yellow-400 font-black" : ""}`}
-                            >
-                                {cat === "Trending" && <DjinnStar />}
-                                {cat.toUpperCase()}
-                            </Link>
+                            <React.Fragment key={cat}>
+                                <button
+                                    // CAMBIO: Al hacer click, actualizamos el estado activeCategory
+                                    onClick={() => setActiveCategory(cat)}
+                                    className={`flex items-center transition-colors hover:text-white 
+                                    ${
+                                        // LOGICA DINÁMICA: Si esta categoría es la activa, se pone ROSA (#F492B7)
+                                        activeCategory === cat
+                                            ? "text-[#F492B7] font-black"
+                                            : "text-gray-400"
+                                        }`}
+                                >
+                                    {/* La estrella solo aparece en "Trending" por diseño, aunque esté inactiva */}
+                                    {cat === "Trending" && <DjinnStar />}
+                                    {cat.toUpperCase()}
+                                </button>
+
+                                {/* DIVISOR: Solo después de "New" */}
+                                {cat === "New" && (
+                                    <div className="h-5 w-[1px] bg-white/30 mx-2"></div>
+                                )}
+                            </React.Fragment>
                         ))}
                     </div>
                 </div>
-                {/* Fade */}
+
+                {/* Fade derecho */}
                 <div className="pointer-events-none absolute inset-y-0 right-0 w-32 bg-gradient-to-l from-black via-black/90 to-transparent flex items-center justify-end pr-4">
                     <div className="animate-pulse opacity-50">
                         <ChevronRightIcon />
@@ -91,20 +93,20 @@ export default function Navbar() {
                 </div>
             </div>
 
-            {/* MENÚ DESPLEGABLE */}
+            {/* MENÚ DESPLEGABLE (Móvil) */}
             {isOpen && (
                 <div className="absolute top-28 right-6 w-72 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-5">
-                    {/* ...contenido del menú... */}
+                    {/* ... (resto del menú sin cambios) ... */}
                     <div className="p-4 border-b border-gray-800 grid grid-cols-2 gap-2">
                         <button className="flex items-center justify-center gap-2 p-2 rounded-lg bg-black border border-gray-800 hover:border-gray-600 transition-colors text-xs text-gray-400">☀️ Light</button>
                         <button className="flex items-center justify-center gap-2 p-2 rounded-lg bg-gray-800 border border-gray-600 text-white transition-colors text-xs font-bold">🌙 Dark</button>
                     </div>
                     <div className="p-2">
+                        {/* ...links... */}
                         <Link href="#" className="flex items-center gap-3 p-3 rounded-lg hover:bg-white/5 transition-colors group">
                             <div className="p-2 rounded bg-yellow-500/10 text-yellow-500 group-hover:bg-yellow-500 group-hover:text-black transition-colors"><PodiumIcon /></div>
                             <div><div className="text-sm font-bold text-white">Leaderboard</div><div className="text-xs text-gray-500">Top Traders</div></div>
                         </Link>
-                        {/* ...más links... */}
                         <Link href="#" className="flex items-center gap-3 p-3 rounded-lg hover:bg-white/5 transition-colors group">
                             <div className="p-2 rounded bg-blue-500/10 text-blue-500 group-hover:bg-blue-500 group-hover:text-white transition-colors"><EcgIcon /></div>
                             <div><div className="text-sm font-bold text-white">Activity</div><div className="text-xs text-gray-500">Live</div></div>
@@ -116,7 +118,7 @@ export default function Navbar() {
                             <Link href="#" className="hover:text-white flex justify-between">Terms & Conditions <span>↗</span></Link>
                         </div>
                         <div className="mt-4 sm:hidden">
-                            <button className="w-full bg-yellow-500 text-black font-bold py-2 rounded-lg text-sm">Connect Wallet</button>
+                            <button className="w-full bg-[#F492B7] text-black font-bold py-2 rounded-lg text-sm">Connect Wallet</button>
                         </div>
                     </div>
                 </div>
