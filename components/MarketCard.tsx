@@ -1,294 +1,180 @@
 'use client';
-import React, { useState, useEffect } from 'react';
 
-interface Outcome {
-    label: string;
-    percentage: number;
-    price: number;
-}
+import React, { useState, useEffect, useRef } from 'react';
 
-interface MarketCardProps {
-    type: 'binary' | 'multi' | 'date';
-    category?: string;
-    title: string;
-    volume: number;
-    outcomes: Outcome[];
-    image?: string;
-    isTrending?: boolean;
-    createdBy?: string;
-    timeLeft?: string;
-    isClosingSoon?: boolean;
-    resolutionType?: 'Daily' | 'Annually' | 'Custom';
-}
-
-// Aladdin Genie Lamp SVG Icon
-const GenieLampIcon = () => (
-    <svg
-        viewBox="0 0 512 512"
-        fill="currentColor"
-        className="w-5 h-5"
-    >
-        <path d="M142.9 142.9c-17.5 17.5-30.1 38-37.8 59.8c-5.9 16.7-24.2 25.4-40.8 19.5s-25.4-24.2-19.5-40.8C55.6 150.7 73.2 122 97.6 97.6c87.2-87.2 228.3-87.5 315.8-1L455 55c6.9-6.9 16.3-10.9 26.1-11.1L503 43.8c11.5-.2 22.5 4.6 30.6 13.2s14.4 20.3 13.2 31.8l-.1 21.9c-.2 9.8-4.3 19.2-11.2 26.1l-41.7 41.7C410.5 316 223.5 316 142.9 142.9zM64 501.9c-.1 5.3 .6 10.6 2.2 15.7c-7.2-2.9-14-7.1-20-12.8s-10.5-13-13.4-20.6c1.8 .2 3.7 .3 5.5 .3c8.7 .1 17.5-.8 26.4-2.6c0 6.6-.3 13.2-1 19.8zM32 448c0 17.7 14.3 32 32 32c0 24.6 5.5 47.8 15.4 68.6c2.2 4.6 4.6 9.1 7.1 13.4c-1.6-.9-3.2-1.9-4.7-2.9c-5-3.6-9.7-7.6-14-11.9c-12.9-12.9-23.6-28.2-31.4-45.1c-7.8-17-11.9-35.5-11.9-54.6c0-3.2 .1-6.4 .3-9.6c0-.4 .1-.8 .1-1.2c.1-2.2 .3-4.4 .6-6.6zM306 186.9l44.2 44.2c6.2 6.2 16.4 6.2 22.6 0s6.2-16.4 0-22.6l-44.2-44.2c-6.2-6.2-16.4-6.2-22.6 0s-6.2 16.4 0 22.6zm-44.2 67.3c6.2-6.2 6.2-16.4 0-22.6s-16.4-6.2-22.6 0l-44.2 44.2c-6.2 6.2-6.2 16.4 0 22.6s16.4 6.2 22.6 0l44.2-44.2z" />
-    </svg>
+// --- ICONOS ---
+const TrendingUpIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 mr-1"><path fillRule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clipRule="evenodd" /></svg>
 );
 
-export default function MarketCard({
-    type,
-    category,
-    title,
-    volume,
-    outcomes,
-    image,
-    isTrending = false,
-    createdBy = "Djinn",
-    timeLeft,
-    isClosingSoon = false,
-    resolutionType
-}: MarketCardProps) {
-    const [isSaved, setIsSaved] = useState(false);
-    const [showPotentialWin, setShowPotentialWin] = useState(false);
-    const [showSavedToast, setShowSavedToast] = useState(false);
+// --- COMPONENTE ESTRELLA (Optimizado para Clics Rápidos) ---
+const StarIcon = ({ active, onClick }: { active: boolean; onClick: (e: React.MouseEvent) => void }) => {
+    const [showAnimation, setShowAnimation] = useState(false);
+    const [animKey, setAnimKey] = useState(0); // Llave para forzar el reinicio
+    const timerRef = useRef<NodeJS.Timeout | null>(null); // Referencia al temporizador
 
-    const mainPercentage = type === 'binary'
-        ? (outcomes && outcomes.length > 0 ? Math.max(...outcomes.map(o => o.percentage)) : 0)
-        : (outcomes && outcomes.length > 0 ? outcomes[0].percentage : 0);
+    const handleClick = (e: React.MouseEvent) => {
+        // 1. Ejecutar lógica del padre
+        onClick(e);
 
-    // Handle save with toast notification
-    const handleSaveClick = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        setIsSaved(!isSaved);
-        setShowSavedToast(true);
+        // 2. Si NO estaba activo (es decir, ahora se va a activar/guardar)
+        if (!active) {
+            // Limpiamos cualquier temporizador anterior para que no corte la animación nueva
+            if (timerRef.current) clearTimeout(timerRef.current);
+
+            // Incrementamos la llave -> Esto destruye el DOM anterior y crea uno nuevo -> Reinicia animación
+            setAnimKey(prev => prev + 1);
+            setShowAnimation(true);
+
+            // Nuevo temporizador
+            timerRef.current = setTimeout(() => {
+                setShowAnimation(false);
+            }, 1800);
+        } else {
+            // Si estamos desmarcando (quitando el saved), ocultamos el texto inmediatamente
+            setShowAnimation(false);
+        }
     };
 
-    // Auto-hide toast after animation
+    // Limpieza al desmontar
     useEffect(() => {
-        if (showSavedToast) {
-            const timer = setTimeout(() => {
-                setShowSavedToast(false);
-            }, 2000);
-            return () => clearTimeout(timer);
-        }
-    }, [showSavedToast]);
+        return () => {
+            if (timerRef.current) clearTimeout(timerRef.current);
+        };
+    }, []);
 
     return (
-        <div className="relative border border-gray-800 bg-gray-900 rounded-xl overflow-visible hover:border-yellow-500 transition-all cursor-pointer group">
+        <div className="relative z-20">
 
-            {/* "Saved!" Toast */}
-            {showSavedToast && (
-                <div className="absolute -top-8 left-1/2 -translate-x-1/2 text-yellow-400 text-sm font-bold animate-slide-up-fade pointer-events-none z-50">
+            <style jsx>{`
+        @keyframes floatNatural {
+          0% { opacity: 0; transform: translateY(5px) translateX(-50%); }
+          20% { opacity: 1; transform: translateY(0px) translateX(-50%); }
+          100% { opacity: 0; transform: translateY(-30px) translateX(-50%); }
+        }
+        .animate-saved {
+          animation: floatNatural 1.8s ease-out forwards;
+        }
+      `}</style>
+
+            {/* Usamos 'key={animKey}' para obligar a React a reiniciar la animación en cada clic */}
+            {showAnimation && (
+                <div key={animKey} className="absolute bottom-full left-1/2 mb-1 text-[#F492B7] text-xs font-extrabold animate-saved pointer-events-none whitespace-nowrap filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
                     Saved!
                 </div>
             )}
 
-            {/* Top Section */}
-            <div className="relative p-6 pb-4">
-
-                {/* Trending Badge */}
-                {isTrending && (
-                    <div className="absolute top-4 right-4 bg-pink-500 text-white text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1 z-10">
-                        <span>📈</span> Trending
-                    </div>
-                )}
-
-                {/* Category + Timer Row */}
-                <div className="flex items-center justify-between mb-4">
-                    <span className="text-blue-400 text-xs font-bold uppercase tracking-wider bg-blue-400/10 px-2 py-1 rounded">
-                        {category || "General"}
-                    </span>
-
-                    {timeLeft && (
-                        <span className={`text-xs font-mono font-bold ${isClosingSoon ? 'text-red-500' : 'text-gray-400'}`}>
-                            {timeLeft}
-                        </span>
-                    )}
-
-                    {resolutionType && !timeLeft && (
-                        <span className="text-xs text-gray-400 flex items-center gap-1">
-                            🔄 {resolutionType}
-                        </span>
-                    )}
-                </div>
-
-                {/* Title + Image/Percentage Circle */}
-                <div className="flex items-start justify-between gap-4">
-                    <h2 className="text-lg font-bold text-white group-hover:text-yellow-400 transition-colors flex-1">
-                        {title}
-                    </h2>
-
-                    {image ? (
-                        <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-gray-800">
-                            <img src={image} alt={title} className="w-full h-full object-cover" />
-                        </div>
-                    ) : (
-                        <div className="relative w-16 h-16 flex-shrink-0">
-                            <svg className="w-16 h-16 transform -rotate-90">
-                                <circle cx="32" cy="32" r="28" stroke="#374151" strokeWidth="6" fill="none" />
-                                <circle
-                                    cx="32" cy="32" r="28"
-                                    stroke="#F59E0B"
-                                    strokeWidth="6"
-                                    fill="none"
-                                    strokeDasharray={`${(mainPercentage / 100) * 175.93} 175.93`}
-                                    className="transition-all duration-500"
-                                />
-                            </svg>
-                            <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                <span className="text-lg font-bold text-white">{mainPercentage}%</span>
-                                <span className="text-[10px] text-gray-400">chance</span>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {/* Outcomes Section */}
-            <div className="px-6 pb-6">
-                {type === 'binary' && outcomes.length === 2 && (
-                    <div className="grid grid-cols-2 gap-3">
-                        {outcomes.map((outcome, idx) => (
-                            <button
-                                key={idx}
-                                className={`${outcome.label.toLowerCase() === 'no'
-                                    ? 'bg-pink-500 hover:bg-pink-600'
-                                    : 'bg-green-500 hover:bg-green-600'
-                                    } text-white rounded-lg py-4 transition-all flex flex-col items-center justify-center`}
-                            >
-                                <span className="text-sm font-medium mb-1">{outcome.label}</span>
-                                <span className="text-2xl font-bold">{outcome.price}¢</span>
-                            </button>
-                        ))}
-                    </div>
-                )}
-
-                {type === 'multi' && (
-                    <div className="space-y-2">
-                        {outcomes.map((outcome, idx) => (
-                            <div key={idx} className="flex items-center justify-between bg-gray-800 hover:bg-gray-700 rounded-lg px-4 py-3 transition-all cursor-pointer">
-                                <span className="text-sm font-medium text-white">{outcome.label}</span>
-                                <div className="flex items-center gap-3">
-                                    <span className="text-lg font-bold text-white">{outcome.percentage}%</span>
-                                    <div className="flex gap-2">
-                                        <button className="bg-blue-500 hover:bg-blue-600 text-white text-xs px-3 py-1 rounded">Yes</button>
-                                        <button className="bg-pink-500 hover:bg-pink-600 text-white text-xs px-3 py-1 rounded">No</button>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-
-                {type === 'date' && (
-                    <div className="space-y-2">
-                        {outcomes.map((outcome, idx) => (
-                            <div key={idx} className="flex items-center justify-between bg-gray-800 hover:bg-gray-700 rounded-lg px-4 py-3 transition-all cursor-pointer">
-                                <span className="text-sm font-medium text-white">{outcome.label}</span>
-                                <div className="flex items-center gap-3">
-                                    <span className="text-lg font-bold text-white">{outcome.percentage}%</span>
-                                    <div className="flex gap-2">
-                                        <button className="bg-green-500 hover:bg-green-600 text-white text-xs px-3 py-1 rounded">Yes</button>
-                                        <button className="bg-pink-500 hover:bg-pink-600 text-white text-xs px-3 py-1 rounded">No</button>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-
-            {/* Footer: Volume + Actions */}
-            <div className="px-6 pb-4 border-t border-gray-800 pt-4">
-
-                <div className="flex items-center justify-between mb-3">
-                    <span className="text-gray-200 font-mono text-base font-semibold">
-                        ${(volume / 1000000).toFixed(1)}M Vol
-                    </span>
-
-                    {/* Actions: Genie Lamp + Bookmark */}
-                    <div className="flex items-center gap-4">
-
-                        {/* GENIE LAMP */}
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setShowPotentialWin(!showPotentialWin);
-                            }}
-                            className="text-yellow-400 hover:text-yellow-300 hover:scale-110 transition-all active:scale-95"
-                            title="Market Info"
-                        >
-                            <GenieLampIcon />
-                        </button>
-
-                        {/* Bookmark Star */}
-                        <button
-                            onClick={handleSaveClick}
-                            className={`text-xl hover:scale-110 transition-all active:scale-95 ${isSaved ? 'text-yellow-500' : 'text-gray-400 hover:text-yellow-500'
-                                }`}
-                            title="Save Market"
-                        >
-                            {isSaved ? '⭐' : '☆'}
-                        </button>
-                    </div>
-                </div>
-
-                {/* Creator Badge */}
-                <div className="text-xs text-gray-500">
-                    by <span className="text-gray-300 font-medium">{createdBy}</span>
-                </div>
-            </div>
-
-            {/* Market Info Popup (Lamp Click) */}
-            {showPotentialWin && (
-                <>
-                    <div
-                        className="fixed inset-0 z-30"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            setShowPotentialWin(false);
-                        }}
-                    />
-
-                    <div className="absolute bottom-full right-4 mb-2 bg-gray-800 border border-yellow-500/50 rounded-xl p-5 shadow-2xl z-40 w-72">
-                        <div className="flex items-center justify-between mb-3">
-                            <h4 className="text-yellow-400 font-bold flex items-center gap-2 text-base">
-                                <GenieLampIcon /> Djinn's Wisdom
-                            </h4>
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setShowPotentialWin(false);
-                                }}
-                                className="text-gray-400 hover:text-white text-xl leading-none"
-                            >
-                                ×
-                            </button>
-                        </div>
-
-                        <div className="space-y-3 text-sm">
-                            <div className="flex justify-between items-center">
-                                <span className="text-gray-400">Liquidity:</span>
-                                <span className="text-white font-bold">${(volume / 1000000).toFixed(1)}M</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-gray-400">24h Volume:</span>
-                                <span className="text-white font-mono font-semibold">$2.1M</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-gray-400">Spread:</span>
-                                <span className="text-white font-mono font-semibold">0.5%</span>
-                            </div>
-                            <div className="flex justify-between items-center border-t border-gray-700 pt-2">
-                                <span className="text-gray-400">Current Probability:</span>
-                                <span className="text-yellow-400 font-bold text-base">{mainPercentage}%</span>
-                            </div>
-                        </div>
-
-                        <p className="mt-4 text-xs text-gray-400 italic text-center">
-                            💡 Click YES or NO to place your prediction
-                        </p>
-                    </div>
-                </>
-            )}
-
+            <svg
+                onClick={handleClick}
+                xmlns="http://www.w3.org/2000/svg"
+                fill={active ? "currentColor" : "none"}
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+                className={`w-6 h-6 transition-all duration-200 cursor-pointer hover:scale-110 active:scale-90 ${active ? 'text-[#F492B7]' : 'text-gray-500 hover:text-[#F492B7]'}`}
+            >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.385a.563.563 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+            </svg>
         </div>
     );
+};
+
+// --- PROPS ---
+interface MarketCardProps {
+    title: string;
+    icon: string;
+    chance: number;
+    volume: string;
+    endDate?: Date;
 }
+
+// --- COMPONENTE PRINCIPAL ---
+const MarketCard = ({ title, icon, chance, volume, endDate }: MarketCardProps) => {
+    const [isStarred, setIsStarred] = useState(false);
+    const yesPrice = chance;
+    const noPrice = 100 - chance;
+    const [timeLeft, setTimeLeft] = useState("");
+    const [isUrgent, setIsUrgent] = useState(false);
+
+    useEffect(() => {
+        if (!endDate) return;
+        const interval = setInterval(() => {
+            const now = new Date();
+            const difference = endDate.getTime() - now.getTime();
+            const threeDaysInMs = 3 * 24 * 60 * 60 * 1000;
+
+            if (difference <= 0) {
+                setTimeLeft("Ended");
+                setIsUrgent(false);
+                clearInterval(interval);
+            } else {
+                setIsUrgent(difference < threeDaysInMs);
+                const days = Math.floor(difference / (1000 * 60 * 60 * 24));
+                const hours = Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((difference % (1000 * 60)) / 1000);
+                setTimeLeft(`${days}d ${hours.toString().padStart(2, '0')}h ${minutes.toString().padStart(2, '0')}m ${seconds.toString().padStart(2, '0')}s`);
+            }
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [endDate]);
+
+    return (
+        <div className="bg-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/5 shadow-[0_4px_24px_rgba(244,146,183,0.15)] flex flex-col gap-5 cursor-pointer transition-all duration-500 ease-out hover:-translate-y-3 hover:bg-white/10 hover:shadow-[0_20px_60px_rgba(244,146,183,0.3)] group relative overflow-visible h-full">
+
+            {/* Header */}
+            <div className="flex justify-end items-center h-6">
+                <span className="flex items-center bg-[#F492B7] text-black text-xs font-bold px-3 py-1.5 rounded-full shadow-[0_0_10px_rgba(244,146,183,0.3)]">
+                    <TrendingUpIcon />
+                    Trending
+                </span>
+            </div>
+
+            {/* Cuerpo */}
+            <div className="flex justify-between items-start gap-3 flex-1">
+                <div className="flex flex-col gap-3 max-w-[70%]">
+                    <div className="text-4xl filter drop-shadow-lg">{icon}</div>
+                    <h3 className="text-xl font-bold text-white leading-tight group-hover:text-[#F492B7] transition-colors">
+                        {title}
+                    </h3>
+                </div>
+
+                {/* Gráfico */}
+                <div className="relative w-20 h-20 flex-shrink-0">
+                    <div className="absolute inset-0 rounded-full border-[5px] border-white/5 group-hover:border-white/10 transition-colors"></div>
+                    <div
+                        className="absolute inset-0 rounded-full border-[5px] border-transparent border-t-[#F492B7] border-r-[#F492B7]"
+                        style={{ transform: `rotate(${45 + (chance * 3.6)}deg)` }}
+                    ></div>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-xl font-black text-white">{chance}%</span>
+                        <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">chance</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Botones */}
+            <div className="grid grid-cols-2 gap-3 mt-4">
+                <button className="bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-[#ff4d4d] hover:text-white hover:border-transparent hover:shadow-[0_0_25px_rgba(255,77,77,0.4)] font-black text-3xl rounded-2xl p-4 flex flex-col items-center justify-center transition-all duration-200 active:scale-95 group/btn-no">
+                    <span className="text-sm font-bold mb-1 opacity-80 text-red-400 group-hover/btn-no:text-white/90">No</span>
+                    {noPrice}¢
+                </button>
+                <button className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 hover:bg-[#00C800] hover:text-white hover:border-transparent hover:shadow-[0_0_25px_rgba(0,200,0,0.4)] font-black text-3xl rounded-2xl p-4 flex flex-col items-center justify-center transition-all duration-200 active:scale-95 group/btn-yes">
+                    <span className="text-sm font-bold mb-1 opacity-80 text-emerald-400 group-hover/btn-yes:text-white/90">Yes</span>
+                    {yesPrice}¢
+                </button>
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-between items-center pt-3 border-t border-white/5 h-10 mt-auto group-hover:border-white/10 transition-colors">
+                <span className="text-gray-400 text-sm font-medium">{volume} Vol</span>
+                <div className="flex items-center gap-3">
+                    {isUrgent && <span className="text-[#ff4d4d] font-mono font-bold text-xs tracking-tight">{timeLeft}</span>}
+                    <StarIcon active={isStarred} onClick={(e) => { e.stopPropagation(); setIsStarred(!isStarred); }} />
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default MarketCard;

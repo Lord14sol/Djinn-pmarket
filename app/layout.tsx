@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-// 1. IMPORTAMOS LA FUENTE "Libre Baskerville" (Estilo Adriane Text)
 import { Geist, Geist_Mono, Libre_Baskerville } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
@@ -15,11 +14,10 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// 2. CONFIGURAMOS LA FUENTE
 const adrianeStyle = Libre_Baskerville({
-  weight: "700", // Bold
+  weight: "700",
   subsets: ["latin"],
-  variable: "--font-adriane", // La guardamos en una variable
+  variable: "--font-adriane",
 });
 
 export const metadata: Metadata = {
@@ -35,7 +33,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        // 3. AGREGAMOS LA VARIABLE font-adriane AL BODY
+        // FONDO NEGRO FORZADO (bg-black). Esto elimina la posibilidad de franjas grises.
         className={`${geistSans.variable} ${geistMono.variable} ${adrianeStyle.variable} antialiased bg-black text-white flex flex-col min-h-screen`}
       >
         <Navbar />
