@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Libre_Baskerville } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { SolanaProvider } from "@/components/SolanaProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,14 +34,15 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        // FONDO NEGRO FORZADO (bg-black). Esto elimina la posibilidad de franjas grises.
         className={`${geistSans.variable} ${geistMono.variable} ${adrianeStyle.variable} antialiased bg-black text-white flex flex-col min-h-screen`}
       >
-        <Navbar />
-        <main className="pt-32 flex-grow">
-          {children}
-        </main>
-        <Footer />
+        <SolanaProvider>
+          <Navbar />
+          <main className="pt-20 flex-grow">
+            {children}
+          </main>
+          <Footer />
+        </SolanaProvider>
       </body>
     </html>
   );
