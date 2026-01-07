@@ -59,7 +59,6 @@ export default function Navbar() {
             `}</style>
 
             <div className="w-full px-6 md:px-12 h-24 flex items-center justify-between relative">
-                {/* LOGO */}
                 <Link href="/" className="flex items-center group gap-0">
                     <div className="relative w-20 h-20 md:w-24 md:h-24 transition-transform duration-500 group-hover:scale-105">
                         <Image src="/star.png" alt="Djinn Logo" fill className="object-contain" priority />
@@ -70,7 +69,6 @@ export default function Navbar() {
                 </Link>
 
                 <div className="flex items-center gap-4">
-                    {/* BOTÓN CONNECT MINI */}
                     <div className="hidden sm:flex items-center">
                         {!connected ? (
                             <button onClick={() => setVisible(true)} className="djinn-bubble-btn-mini">
@@ -88,7 +86,6 @@ export default function Navbar() {
                         )}
                     </div>
 
-                    {/* HAMBURGUESA */}
                     <button
                         onClick={() => setIsOpen(!isOpen)}
                         className="p-2 text-gray-400 hover:text-white transition-colors"
@@ -97,17 +94,25 @@ export default function Navbar() {
                     </button>
                 </div>
 
-                {/* MENÚ HAMBURGUESA DESPLEGABLE */}
                 {isOpen && (
                     <div className="absolute top-24 right-6 w-64 bg-[#0B0E14] border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-5 z-[60]">
                         <div className="p-2">
-                            <Link href="/leaderboard" className="flex items-center gap-3 p-4 rounded-xl hover:bg-white/5 transition-colors group">
+                            <Link
+                                href="/leaderboard"
+                                onClick={() => setIsOpen(false)}
+                                className="flex items-center gap-3 p-4 rounded-xl hover:bg-white/5 transition-colors group"
+                            >
                                 <div className="text-yellow-500/80 group-hover:text-yellow-500 transition-colors">
                                     <PodiumIcon />
                                 </div>
                                 <span className="text-sm font-bold text-gray-200 uppercase tracking-widest">Leaderboard</span>
                             </Link>
-                            <Link href="/activity" className="flex items-center gap-3 p-4 rounded-xl hover:bg-white/5 transition-colors group">
+                            {/* AJUSTE PARA LA RUTA /LIVE */}
+                            <Link
+                                href="/live"
+                                onClick={() => setIsOpen(false)}
+                                className="flex items-center gap-3 p-4 rounded-xl hover:bg-white/5 transition-colors group"
+                            >
                                 <div className="text-[#F492B7]/80 group-hover:text-[#F492B7] transition-colors">
                                     <ActivityIcon />
                                 </div>
@@ -117,7 +122,7 @@ export default function Navbar() {
                         {connected && (
                             <div className="p-2 border-t border-white/5 bg-black/40">
                                 <button
-                                    onClick={disconnect}
+                                    onClick={() => { disconnect(); setIsOpen(false); }}
                                     className="w-full text-center py-3 text-[10px] text-gray-500 hover:text-red-400 uppercase tracking-[0.2em] font-black transition-colors"
                                 >
                                     Disconnect Wallet
@@ -128,7 +133,6 @@ export default function Navbar() {
                 )}
             </div>
 
-            {/* CATEGORÍAS */}
             <div className="border-t border-white/5 flex overflow-x-auto scrollbar-hide py-5 px-6 md:px-12 gap-10 bg-black/40 items-center">
                 {mainCategories.map((cat) => (
                     <button
@@ -146,7 +150,6 @@ export default function Navbar() {
                 ))}
             </div>
 
-            {/* SUB-CATEGORÍAS EARTH */}
             {activeCategory === "Earth" && (
                 <div className="border-t border-[#F492B7]/10 flex overflow-x-auto scrollbar-hide py-4 px-10 md:px-20 gap-10 bg-[#F492B7]/5 animate-in slide-in-from-top-2 duration-300">
                     {earthSubcategories.map((sub) => (
