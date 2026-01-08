@@ -1,42 +1,36 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 
 // --- ICONOS ---
 const TrendingUpIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 mr-1"><path fillRule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clipRule="evenodd" /></svg>
 );
 
-// --- COMPONENTE ESTRELLA (Optimizado para Clics Rápidos) ---
+// --- COMPONENTE ESTRELLA ---
 const StarIcon = ({ active, onClick }: { active: boolean; onClick: (e: React.MouseEvent) => void }) => {
     const [showAnimation, setShowAnimation] = useState(false);
-    const [animKey, setAnimKey] = useState(0); // Llave para forzar el reinicio
-    const timerRef = useRef<NodeJS.Timeout | null>(null); // Referencia al temporizador
+    const [animKey, setAnimKey] = useState(0);
+    const timerRef = useRef<NodeJS.Timeout | null>(null);
 
     const handleClick = (e: React.MouseEvent) => {
-        // 1. Ejecutar lógica del padre
+        e.preventDefault(); // Evita que el Link se active
+        e.stopPropagation(); // Evita que el evento suba al contenedor
         onClick(e);
 
-        // 2. Si NO estaba activo (es decir, ahora se va a activar/guardar)
         if (!active) {
-            // Limpiamos cualquier temporizador anterior para que no corte la animación nueva
             if (timerRef.current) clearTimeout(timerRef.current);
-
-            // Incrementamos la llave -> Esto destruye el DOM anterior y crea uno nuevo -> Reinicia animación
             setAnimKey(prev => prev + 1);
             setShowAnimation(true);
-
-            // Nuevo temporizador
             timerRef.current = setTimeout(() => {
                 setShowAnimation(false);
             }, 1800);
         } else {
-            // Si estamos desmarcando (quitando el saved), ocultamos el texto inmediatamente
             setShowAnimation(false);
         }
     };
 
-    // Limpieza al desmontar
     useEffect(() => {
         return () => {
             if (timerRef.current) clearTimeout(timerRef.current);
@@ -45,19 +39,17 @@ const StarIcon = ({ active, onClick }: { active: boolean; onClick: (e: React.Mou
 
     return (
         <div className="relative z-20">
-
             <style jsx>{`
-        @keyframes floatNatural {
-          0% { opacity: 0; transform: translateY(5px) translateX(-50%); }
-          20% { opacity: 1; transform: translateY(0px) translateX(-50%); }
-          100% { opacity: 0; transform: translateY(-30px) translateX(-50%); }
-        }
-        .animate-saved {
-          animation: floatNatural 1.8s ease-out forwards;
-        }
-      `}</style>
+                @keyframes floatNatural {
+                    0% { opacity: 0; transform: translateY(5px) translateX(-50%); }
+                    20% { opacity: 1; transform: translateY(0px) translateX(-50%); }
+                    100% { opacity: 0; transform: translateY(-30px) translateX(-50%); }
+                }
+                .animate-saved {
+                    animation: floatNatural 1.8s ease-out forwards;
+                }
+            `}</style>
 
-            {/* Usamos 'key={animKey}' para obligar a React a reiniciar la animación en cada clic */}
             {showAnimation && (
                 <div key={animKey} className="absolute bottom-full left-1/2 mb-1 text-[#F492B7] text-xs font-extrabold animate-saved pointer-events-none whitespace-nowrap filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
                     Saved!
@@ -86,10 +78,11 @@ interface MarketCardProps {
     chance: number;
     volume: string;
     endDate?: Date;
+    slug: string; // ← NUEVO: Para el routing
 }
 
 // --- COMPONENTE PRINCIPAL ---
-const MarketCard = ({ title, icon, chance, volume, endDate }: MarketCardProps) => {
+const MarketCard = ({ title, icon, chance, volume, endDate, slug }: MarketCardProps) => {
     const [isStarred, setIsStarred] = useState(false);
     const yesPrice = chance;
     const noPrice = 100 - chance;
@@ -120,8 +113,11 @@ const MarketCard = ({ title, icon, chance, volume, endDate }: MarketCardProps) =
     }, [endDate]);
 
     return (
-        <div className="bg-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/5 shadow-[0_4px_24px_rgba(244,146,183,0.15)] flex flex-col gap-5 cursor-pointer transition-all duration-500 ease-out hover:-translate-y-3 hover:bg-white/10 hover:shadow-[0_20px_60px_rgba(244,146,183,0.3)] group relative overflow-visible h-full">
-
+        // TODO EL CARD ES UN LINK AHORA
+        <Link
+            href={`/market/${slug}`}
+            className="bg-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/5 shadow-[0_4px_24px_rgba(244,146,183,0.15)] flex flex-col gap-5 cursor-pointer transition-all duration-500 ease-out hover:-translate-y-3 hover:bg-white/10 hover:shadow-[0_20px_60px_rgba(244,146,183,0.3)] group relative overflow-visible h-full block"
+        >
             {/* Header */}
             <div className="flex justify-end items-center h-6">
                 <span className="flex items-center bg-[#F492B7] text-black text-xs font-bold px-3 py-1.5 rounded-full shadow-[0_0_10px_rgba(244,146,183,0.3)]">
@@ -155,11 +151,25 @@ const MarketCard = ({ title, icon, chance, volume, endDate }: MarketCardProps) =
 
             {/* Botones */}
             <div className="grid grid-cols-2 gap-3 mt-4">
-                <button className="bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-[#ff4d4d] hover:text-white hover:border-transparent hover:shadow-[0_0_25px_rgba(255,77,77,0.4)] font-black text-3xl rounded-2xl p-4 flex flex-col items-center justify-center transition-all duration-200 active:scale-95 group/btn-no">
+                <button
+                    onClick={(e) => {
+                        e.preventDefault(); // Evita navegación del Link
+                        e.stopPropagation();
+                        alert(`Betting NO on: ${title}`);
+                    }}
+                    className="bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-[#ff4d4d] hover:text-white hover:border-transparent hover:shadow-[0_0_25px_rgba(255,77,77,0.4)] font-black text-3xl rounded-2xl p-4 flex flex-col items-center justify-center transition-all duration-200 active:scale-95 group/btn-no"
+                >
                     <span className="text-sm font-bold mb-1 opacity-80 text-red-400 group-hover/btn-no:text-white/90">No</span>
                     {noPrice}¢
                 </button>
-                <button className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 hover:bg-[#00C800] hover:text-white hover:border-transparent hover:shadow-[0_0_25px_rgba(0,200,0,0.4)] font-black text-3xl rounded-2xl p-4 flex flex-col items-center justify-center transition-all duration-200 active:scale-95 group/btn-yes">
+                <button
+                    onClick={(e) => {
+                        e.preventDefault(); // Evita navegación del Link
+                        e.stopPropagation();
+                        alert(`Betting YES on: ${title}`);
+                    }}
+                    className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 hover:bg-[#00C800] hover:text-white hover:border-transparent hover:shadow-[0_0_25px_rgba(0,200,0,0.4)] font-black text-3xl rounded-2xl p-4 flex flex-col items-center justify-center transition-all duration-200 active:scale-95 group/btn-yes"
+                >
                     <span className="text-sm font-bold mb-1 opacity-80 text-emerald-400 group-hover/btn-yes:text-white/90">Yes</span>
                     {yesPrice}¢
                 </button>
@@ -170,10 +180,10 @@ const MarketCard = ({ title, icon, chance, volume, endDate }: MarketCardProps) =
                 <span className="text-gray-400 text-sm font-medium">{volume} Vol</span>
                 <div className="flex items-center gap-3">
                     {isUrgent && <span className="text-[#ff4d4d] font-mono font-bold text-xs tracking-tight">{timeLeft}</span>}
-                    <StarIcon active={isStarred} onClick={(e) => { e.stopPropagation(); setIsStarred(!isStarred); }} />
+                    <StarIcon active={isStarred} onClick={(e) => { setIsStarred(!isStarred); }} />
                 </div>
             </div>
-        </div>
+        </Link>
     );
 };
 
