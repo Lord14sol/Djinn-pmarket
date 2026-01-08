@@ -19,6 +19,7 @@ const MenuIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" fill="none" view
 const CloseIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>);
 const PodiumIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" /></svg>);
 const ActivityIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12h5.25L9 15.75l1.5-7.5 2.25 9 1.5-4.5h4.5" /></svg>);
+const UserIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>);
 
 const mainCategories = ["Trending", "New", "Earth", "Politics", "Crypto", "Sports", "Culture", "Tech", "Science", "Finance", "Climate", "Mentions", "Movies", "Social Media", "Space", "AI", "Gaming", "Music", "History"];
 const earthSubcategories = ["North America", "Middle America", "South America", "Europe", "Africa", "Asia", "Oceania"];
@@ -75,13 +76,17 @@ export default function Navbar() {
                                 Connect Wallet
                             </button>
                         ) : (
-                            <div className="flex items-center gap-3 bg-[#F492B7]/10 border border-[#F492B7]/20 py-1.5 pl-4 pr-1.5 rounded-full">
+                            // AL HACER CLIC EN EL COMPONENTE DE PFP, SE ABRE EL MENÚ
+                            <div
+                                onClick={() => setIsOpen(!isOpen)}
+                                className="flex items-center gap-3 bg-[#F492B7]/10 border border-[#F492B7]/20 py-1.5 pl-4 pr-1.5 rounded-full cursor-pointer hover:bg-[#F492B7]/20 transition-all"
+                            >
                                 <span className="text-[10px] font-mono text-white/80">
                                     {publicKey?.toString().slice(0, 4)}..{publicKey?.toString().slice(-4)}
                                 </span>
-                                <Link href="/profile" className="relative w-9 h-9 rounded-full border border-[#F492B7]/50 overflow-hidden bg-gray-900">
+                                <div className="relative w-9 h-9 rounded-full border border-[#F492B7]/50 overflow-hidden bg-gray-900">
                                     <Image src="/star.png" alt="Profile" fill className="object-cover p-1" />
-                                </Link>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -97,6 +102,20 @@ export default function Navbar() {
                 {isOpen && (
                     <div className="absolute top-24 right-6 w-64 bg-[#0B0E14] border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-5 z-[60]">
                         <div className="p-2">
+                            {/* NUEVA OPCIÓN: PERFIL DEL LORD */}
+                            {connected && (
+                                <Link
+                                    href={`/profile/${publicKey?.toString()}`}
+                                    onClick={() => setIsOpen(false)}
+                                    className="flex items-center gap-3 p-4 rounded-xl hover:bg-white/5 transition-colors group"
+                                >
+                                    <div className="text-blue-400/80 group-hover:text-blue-400 transition-colors">
+                                        <UserIcon />
+                                    </div>
+                                    <span className="text-sm font-bold text-gray-200 uppercase tracking-widest">My Profile</span>
+                                </Link>
+                            )}
+
                             <Link
                                 href="/leaderboard"
                                 onClick={() => setIsOpen(false)}
@@ -107,7 +126,6 @@ export default function Navbar() {
                                 </div>
                                 <span className="text-sm font-bold text-gray-200 uppercase tracking-widest">Leaderboard</span>
                             </Link>
-                            {/* AJUSTE PARA LA RUTA /LIVE */}
                             <Link
                                 href="/live"
                                 onClick={() => setIsOpen(false)}
