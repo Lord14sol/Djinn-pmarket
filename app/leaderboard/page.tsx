@@ -1,170 +1,226 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import Navbar from '@/components/Navbar';
 
-// DATOS DE ÉLITE: REYES DEL BAZAR
-const topDjinns = [
-    { rank: 1, user: 'Kch123', profit: '+$2,055,127', lastPool: 'BTC HIT $150K', avatar: '🦁', slug: 'btc-hit-150k' },
-    { rank: 2, user: 'SeriouslySirius', profit: '+$1,242,655', lastPool: 'GTA 6 DELAY', avatar: '🦅', slug: 'gta-6-delay' },
-    { rank: 3, user: 'OnchainScammer', profit: '+$871,423', lastPool: 'SOLANA MOBILE 3', avatar: ' foxes', slug: 'solana-mobile-3' },
-    { rank: 4, user: 'Lord_Prophet', profit: '+$750,200', lastPool: 'SOLANA TO $500', avatar: '👑', slug: 'sol-500' },
-    { rank: 5, user: 'AlphaOracle', profit: '+$620,110', lastPool: 'ETH MERGE 2', avatar: '🔮', slug: 'eth-merge' },
+// DATOS INICIALES
+const initialDjinns = [
+    { user: 'Kch123', profit: 2055127, avatar: '🦁', slug: 'kch123' },
+    { user: 'SeriouslySirius', profit: 1242655, avatar: '🦅', slug: 'seriouslysirius' },
+    { user: 'OnchainScammer', profit: 871423, avatar: '🦊', slug: 'onchainscammer' },
+    { user: 'Lord_Prophet', profit: 750200, avatar: '👑', slug: 'lord_prophet' },
+    { user: 'AlphaOracle', profit: 620110, avatar: '🔮', slug: 'alphaoracle' },
+    { user: 'CryptoZard', profit: 450000, avatar: '🧙‍♂️', slug: 'cryptozard' },
+    { user: 'SolHunter', profit: 320000, avatar: '🐕', slug: 'solhunter' },
+    { user: 'WhaleWatcher', profit: 280000, avatar: '🐳', slug: 'whalewatcher' },
 ];
 
 const biggestWins = [
-    { rank: 1, user: 'Bossoskil', market: 'Miami vs. Ohio State', bet: '$385,511', profit: '+$1,446,914', avatar: '🐳', slug: 'miami-ohio' },
-    { rank: 2, user: 'Beachboy4', market: 'Elche CF vs. Villarreal', bet: '$729,038', profit: '+$1,664,838', avatar: '🌊', slug: 'elche-villarreal' },
-    { rank: 3, user: 'DegenKing', market: 'Solana to $500', bet: '$120,000', profit: '+$980,200', avatar: '🔱', slug: 'sol-500' },
+    { rank: 1, user: 'Bossoskil', market: 'Miami vs. Ohio State', bet: '$385,511', profit: '$1,446,914', avatar: '🐳', slug: 'bossoskil' },
+    { rank: 2, user: 'Beachboy4', market: 'Elche CF vs. Villarreal', bet: '$729,038', profit: '$1,664,838', avatar: '🌊', slug: 'beachboy4' },
+    { rank: 3, user: 'DegenKing', market: 'Solana to $500', bet: '$120,000', profit: '$980,200', avatar: '🔱', slug: 'degenking' },
 ];
 
 export default function LeaderboardPage() {
-    const [timeframe, setTimeframe] = useState('All');
-    const [viewLimit, setViewLimit] = useState(10);
+    const [liveTraders, setLiveTraders] = useState<any[]>([]);
+
+    useEffect(() => {
+        const syncLiveTraders = () => {
+            const savedProfile = localStorage.getItem('djinn_user_profile');
+            if (savedProfile) {
+                const profile = JSON.parse(savedProfile);
+                if (profile.profit > 0) {
+                    setLiveTraders([{
+                        user: profile.username,
+                        profit: profile.profit,
+                        avatar: '👤',
+                        isYou: true,
+                        slug: profile.username.toLowerCase()
+                    }]);
+                }
+            }
+        };
+        syncLiveTraders();
+        window.addEventListener('storage', syncLiveTraders);
+        return () => window.removeEventListener('storage', syncLiveTraders);
+    }, []);
+
+    const sortedDjinns = [...initialDjinns, ...liveTraders]
+        .sort((a, b) => b.profit - a.profit)
+        .map((djinn, idx) => ({ ...djinn, rank: idx + 1 }));
+
+    const podium = sortedDjinns.slice(0, 3);
+    const list = sortedDjinns.slice(3, 10);
 
     return (
-        <main className="min-h-screen bg-black text-white selection:bg-[#F492B7] selection:text-black font-sans pb-32">
-            <Navbar />
+        <main className="min-h-screen bg-black text-white pb-40 pt-40 px-10">
+            <div className="max-w-[1600px] mx-auto">
 
-            <div className="max-w-[1450px] mx-auto grid grid-cols-12 gap-16 pt-44 px-10">
+                {/* TÍTULO SIMPLE A LA IZQUIERDA - NO ENORME */}
+                <h1 className="text-5xl font-black mb-16 uppercase tracking-tight text-left">
+                    Leaderboard
+                </h1>
 
-                {/* --- RANKING PRINCIPAL (IZQUIERDA) --- */}
-                <div className="col-span-12 lg:col-span-8 animate-in fade-in slide-in-from-left-4 duration-700">
-                    <h1 className="text-8xl font-black mb-16 tracking-tighter uppercase leading-none drop-shadow-[0_0_35px_rgba(244,146,183,0.2)]">
-                        Leaderboard
-                    </h1>
+                {/* PODIO CENTRADO CON 3 CARDS */}
+                <div className="flex items-end justify-center gap-6 mb-32 max-w-[1200px] mx-auto">
+                    {/* RANK 2 - IZQUIERDA */}
+                    <PodiumCard djinn={podium[1]} height="h-[360px]" />
 
-                    {/* SELECTORES DE TIEMPO PREMIUM */}
-                    <div className="flex gap-5 mb-16">
-                        {['Today', 'All'].map((t) => (
-                            <button
-                                key={t}
-                                onClick={() => setTimeframe(t)}
-                                className={`px-12 py-5 rounded-full text-[12px] tracking-[0.3em] transition-all border-2 font-black uppercase ${timeframe === t
-                                    ? 'bg-[#F492B7] text-black border-[#F492B7] shadow-[0_0_40px_rgba(244,146,183,0.4)] scale-105'
-                                    : 'text-white border-white/10 hover:border-white/30 hover:bg-white/5'
-                                    }`}
-                            >
-                                {t}
-                            </button>
-                        ))}
+                    {/* RANK 1 - CENTRO MÁS GRANDE CON GLOW ROSA */}
+                    <div className="relative z-20">
+                        <div className="absolute -inset-2 bg-gradient-to-r from-[#F492B7] to-purple-600 rounded-[3rem] blur-xl opacity-40"></div>
+                        <PodiumCard djinn={podium[0]} height="h-[460px]" isFirst={true} />
                     </div>
 
-                    {/* LISTA DE DJINNS */}
-                    <div className="space-y-5">
-                        {topDjinns.map((djinn) => (
+                    {/* RANK 3 - DERECHA */}
+                    <PodiumCard djinn={podium[2]} height="h-[320px]" />
+                </div>
+
+                <div className="grid grid-cols-12 gap-12">
+                    {/* LISTA PRINCIPAL - IZQUIERDA */}
+                    <div className="col-span-12 lg:col-span-8 space-y-4">
+                        {list.map((djinn) => (
                             <div
-                                key={djinn.rank}
-                                className="flex items-center justify-between py-8 px-12 rounded-[40px] bg-[#0D0D0D] border border-white/5 hover:border-[#F492B7]/40 hover:-translate-y-2 transition-all duration-500 group shadow-2xl"
+                                key={djinn.user}
+                                className="flex items-center justify-between py-7 px-10 rounded-3xl bg-[#0D0D0D] border border-white/5 hover:border-[#F492B7]/30 transition-all group"
                             >
-                                <div className="flex items-center gap-10">
-                                    <span className="text-5xl font-black italic tracking-tighter text-[#F492B7]/30 group-hover:text-[#F492B7] transition-colors duration-500">
+                                <div className="flex items-center gap-8">
+                                    {/* NÚMERO RANK - BLANCO ✅ */}
+                                    <span className="text-3xl font-black text-white w-16 shrink-0">
                                         #{djinn.rank}
                                     </span>
-                                    <div className="flex items-center gap-8">
-                                        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-white/10 to-transparent flex items-center justify-center text-4xl shrink-0 border border-white/10 shadow-inner group-hover:scale-110 transition-transform">
+
+                                    <div className="flex items-center gap-6">
+                                        {/* AVATAR */}
+                                        <Link
+                                            href={`/profile/${djinn.slug}`}
+                                            className="w-14 h-14 rounded-full bg-white/5 flex items-center justify-center text-3xl shrink-0 border border-white/5 hover:scale-110 transition-transform"
+                                        >
                                             {djinn.avatar}
-                                        </div>
-                                        <div className="flex flex-col">
-                                            <Link href={`/profile/${djinn.user.toLowerCase()}`} className="text-2xl font-black text-white hover:text-[#F492B7] transition-colors tracking-tight uppercase">
-                                                {djinn.user}
-                                            </Link>
-                                            <Link href={`/market/${djinn.slug}`} className="text-[10px] text-gray-600 font-bold mt-2 uppercase tracking-[0.2em] hover:text-white transition-colors flex items-center gap-2">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-[#F492B7]/50" />
-                                                Last: {djinn.lastPool}
-                                            </Link>
-                                        </div>
+                                        </Link>
+
+                                        {/* USERNAME - SE MANTIENE BLANCO, HOVER ROSA */}
+                                        <Link
+                                            href={`/profile/${djinn.slug}`}
+                                            className="text-xl font-black uppercase tracking-tight text-white hover:text-[#F492B7] transition-colors"
+                                        >
+                                            {djinn.user}
+                                            {djinn.isYou && (
+                                                <span className="ml-3 text-[9px] bg-[#F492B7] text-black px-2 py-1 rounded-full">YOU</span>
+                                            )}
+                                        </Link>
                                     </div>
                                 </div>
+
+                                {/* PROFIT - BLANCO ✅ */}
                                 <div className="text-right">
-                                    <div className="text-4xl font-black text-[#10B981] italic tracking-tighter drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]">
-                                        {djinn.profit}
+                                    <div className="text-3xl font-black text-white tracking-tight">
+                                        +${djinn.profit.toLocaleString()}
                                     </div>
-                                    <div className="text-[9px] font-black text-gray-700 uppercase tracking-widest mt-1">Total Profit</div>
+                                    <div className="text-[9px] font-bold text-gray-600 uppercase tracking-wider mt-1">
+                                        All Time Profit
+                                    </div>
                                 </div>
                             </div>
                         ))}
                     </div>
-                </div>
 
-                {/* --- BIGGEST WINS (DERECHA) --- */}
-                <div className="col-span-12 lg:col-span-4 lg:pt-40 animate-in fade-in slide-in-from-right-4 duration-700">
-                    <div className="bg-[#0D0D0D] border border-white/5 rounded-[50px] p-12 sticky top-40 shadow-2xl border-t border-t-white/10">
-                        <h2 className="text-3xl font-black text-white mb-10 tracking-tighter uppercase flex items-center gap-3">
-                            <span className="text-[#F492B7]">⚡</span> Biggest wins
-                        </h2>
+                    {/* BIGGEST WINS - DERECHA */}
+                    <div className="col-span-12 lg:col-span-4">
+                        <div className="bg-[#0D0D0D] border border-white/5 rounded-3xl p-8 sticky top-40">
+                            <div className="flex items-center gap-2 mb-10">
+                                <span className="text-2xl">⚡</span>
+                                <h2 className="text-2xl font-black uppercase tracking-tight">
+                                    Biggest Wins
+                                </h2>
+                            </div>
 
-                        {/* SELECTOR TOP - ESTILO DJINN */}
-                        <div className="flex gap-2 bg-black/50 p-1.5 rounded-2xl border border-white/5 mb-14 w-full">
-                            {[3, 5, 10].map((num) => (
-                                <button
-                                    key={num}
-                                    onClick={() => setViewLimit(num)}
-                                    className={`flex-1 py-3 rounded-xl text-[10px] font-black transition-all ${viewLimit === num
-                                        ? 'bg-[#F492B7] text-black shadow-lg shadow-[#F492B7]/20'
-                                        : 'text-gray-500 hover:text-white hover:bg-white/5'
-                                        }`}
-                                >
-                                    TOP {num}
-                                </button>
-                            ))}
-                        </div>
+                            <div className="space-y-8">
+                                {biggestWins.map((win) => (
+                                    <div key={win.user} className="relative pl-8 border-l-2 border-white/10 pb-6">
+                                        <div className="absolute -left-2 top-0 w-4 h-4 rounded-full bg-[#F492B7] border-2 border-black"></div>
 
-                        <div className="space-y-16">
-                            {biggestWins.map((win) => (
-                                <div key={win.rank} className="flex gap-8 group relative">
-                                    <div className="text-5xl font-black italic text-[#F492B7]/20 absolute -left-4 -top-2 group-hover:text-[#F492B7]/40 transition-colors">
-                                        #{win.rank}
-                                    </div>
-
-                                    <div className="flex-1 relative z-10 pl-6">
-                                        <div className="flex items-center gap-4 mb-5">
-                                            <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-xl shrink-0 group-hover:rotate-12 transition-transform">
+                                        <div className="flex items-center gap-3 mb-3">
+                                            <Link
+                                                href={`/profile/${win.slug}`}
+                                                className="text-2xl hover:scale-110 transition-transform"
+                                            >
                                                 {win.avatar}
-                                            </div>
-                                            <Link href={`/profile/${win.user.toLowerCase()}`} className="text-lg font-black text-white hover:text-[#F492B7] transition-colors uppercase tracking-tight">
+                                            </Link>
+                                            <Link
+                                                href={`/profile/${win.slug}`}
+                                                className="text-lg font-black uppercase text-white hover:text-[#F492B7] transition-colors"
+                                            >
                                                 {win.user}
                                             </Link>
                                         </div>
 
-                                        <Link href={`/market/${win.slug}`} className="block text-sm text-gray-400 font-medium mb-6 leading-snug hover:text-white transition-all uppercase tracking-tight italic">
+                                        <p className="text-xs text-gray-500 italic mb-4 uppercase font-bold">
                                             "{win.market}"
-                                        </Link>
+                                        </p>
 
-                                        <div className="flex justify-between items-end border-t border-white/5 pt-5">
-                                            <div className="flex flex-col">
-                                                <span className="text-[9px] text-gray-600 font-black tracking-widest uppercase">Position</span>
-                                                <span className="text-lg font-bold text-white tracking-tighter">{win.bet}</span>
-                                            </div>
-                                            <div className="text-right">
-                                                <span className="text-[9px] text-gray-600 font-black tracking-widest uppercase">Bounty</span>
-                                                <span className="block text-3xl font-black text-[#10B981] tracking-tighter italic">
-                                                    {win.profit}
-                                                </span>
+                                        <div className="bg-white/[0.02] p-5 rounded-2xl border border-white/5">
+                                            <div className="flex justify-between items-center">
+                                                <div>
+                                                    <span className="text-[9px] text-gray-600 font-black uppercase block mb-1">Position</span>
+                                                    <span className="text-base font-bold text-white">{win.bet}</span>
+                                                </div>
+                                                <div className="text-right">
+                                                    <span className="text-[9px] text-gray-600 font-black uppercase block mb-1">Bounty</span>
+                                                    {/* BLANCO ✅ */}
+                                                    <span className="text-xl font-black text-white">+{win.profit}</span>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
                         </div>
-
-                        <button className="w-full mt-12 py-5 rounded-2xl border-2 border-dashed border-white/10 text-gray-500 font-black uppercase text-[10px] tracking-[0.3em] hover:border-[#F492B7]/40 hover:text-[#F492B7] transition-all">
-                            View All Conquers
-                        </button>
                     </div>
                 </div>
-
             </div>
         </main>
     );
 }
 
-function MiniCard({ label, value, color = "text-white" }: any) {
+// COMPONENTE PODIO
+function PodiumCard({ djinn, height, isFirst = false }: any) {
+    if (!djinn) return null;
     return (
-        <div className="bg-[#0D0D0D] border border-white/5 p-8 rounded-[2.5rem] shadow-xl border-t border-t-white/10">
-            <p className="text-gray-600 text-[10px] font-black uppercase tracking-widest mb-3 font-bold">{label}</p>
-            <p className={`text-4xl font-black tracking-tighter ${color}`}>{value}</p>
+        <div className={`relative ${height} w-[320px] bg-[#0D0D0D] ${isFirst ? 'border-t-8 border-t-[#F492B7]' : 'border-t-4 border-t-white/10'} rounded-[3rem] p-10 flex flex-col items-center justify-center transition-all duration-500 shadow-2xl hover:translate-y-[-10px]`}>
+
+            {/* AVATAR FLOTANTE ARRIBA */}
+            <Link
+                href={`/profile/${djinn.slug}`}
+                className={`absolute -top-20 w-36 h-36 rounded-full border-[6px] border-black overflow-hidden bg-[#0A0A0A] shadow-2xl flex items-center justify-center text-7xl hover:scale-110 transition-transform ${isFirst ? 'ring-4 ring-[#F492B7]' : 'ring-2 ring-white/10'}`}
+            >
+                {djinn.avatar}
+            </Link>
+
+            <div className="text-center mt-16 w-full">
+                {/* RANK */}
+                <span className={`text-[11px] font-black uppercase tracking-[0.4em] mb-5 block ${isFirst ? 'text-[#F492B7]' : 'text-gray-600'}`}>
+                    RANK {djinn.rank}
+                </span>
+
+                {/* USERNAME */}
+                <Link
+                    href={`/profile/${djinn.slug}`}
+                    className="text-3xl font-black uppercase tracking-tight mb-10 block hover:text-[#F492B7] transition-colors truncate px-4"
+                >
+                    {djinn.user}
+                </Link>
+
+                {/* PROFIT CARD - NÚMEROS MÁS PEQUEÑOS PARA QUE ENTREN ✅ */}
+                <div className={`px-6 py-5 rounded-3xl transition-all ${isFirst ? 'bg-[#F492B7] text-black' : 'bg-white/5 border border-white/5'}`}>
+                    <p className="text-3xl font-black tracking-tight leading-tight">
+                        +${djinn.profit.toLocaleString()}
+                    </p>
+                    <p className={`text-[10px] font-black uppercase tracking-wider mt-2 ${isFirst ? 'text-black/60' : 'text-gray-600'}`}>
+                        All Time Profit
+                    </p>
+                </div>
+            </div>
         </div>
     );
 }
