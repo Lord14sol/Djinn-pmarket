@@ -135,7 +135,7 @@ export default function ProfilePage() {
             <div className="max-w-[1600px] mx-auto px-14">
                 {/* PROFILE HEADER */}
                 <div className="flex items-start gap-12 -mt-24 relative z-10 mb-20">
-                    <div className="w-60 h-60 rounded-full border-[8px] border-black overflow-hidden bg-black ring-2 ring-[#F492B7]/40 shadow-2xl">
+                    <div className="w-60 h-60 rounded-full border-[6px] border-black overflow-hidden bg-black shadow-2xl">
                         <img src={profile.pfp} className="w-full h-full object-cover" alt="" />
                     </div>
                     <div className="mt-28">
@@ -146,23 +146,40 @@ export default function ProfilePage() {
 
                 {/* STATS GRID */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
-                    <StatCard label="PORTFOLIO" value={`$${profile.portfolio.toLocaleString()}`} />
-                    <StatCard label="WIN RATE" value={`${profile.winRate}%`} color="text-[#F492B7]" />
-                    <StatCard label="BIGGEST WIN" value={`+$${profile.biggestWin.toLocaleString()}`} color="text-[#10B981]" />
+                    <StatCard label="PORTFOLIO" value={`$${profile.portfolio.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`} />
+                    <StatCard label="WIN RATE" value={`${profile.winRate.toFixed(1)}%`} color="text-[#F492B7]" />
+                    <StatCard label="BIGGEST WIN" value={`+$${profile.biggestWin.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`} color="text-[#10B981]" />
                     <StatCard label="MARKETS CREATED" value={profile.createdMarkets?.length || 0} color="text-blue-400" />
                 </div>
 
-                {/* P/L CHART CON GRÁFICO */}
-                <div className="bg-[#0D0D0D] border border-white/5 rounded-[3rem] p-10 mb-12 shadow-2xl">
-                    <div className="flex justify-between items-start mb-8">
-                        <div>
-                            <p className="text-gray-600 text-[10px] font-black uppercase tracking-widest mb-2">P/L PERFORMANCE</p>
-                            <h2 className="text-6xl font-black tracking-tighter text-[#10B981]">+${profile.profit.toLocaleString()}</h2>
-                        </div>
-                    </div>
+                {/* P/L CHART ESTILO POLYMARKET CON DISEÑO MEJORADO */}
+                <div className="bg-gradient-to-br from-[#0D0D0D] to-black border border-white/10 rounded-[2.5rem] p-10 mb-12 shadow-2xl relative overflow-hidden">
+                    {/* Efecto de brillo sutil */}
+                    <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-[#10B981]/5 via-transparent to-transparent pointer-events-none"></div>
 
-                    {/* GRÁFICO SIMPLE */}
-                    <ProfitChart activeBets={profile.activeBets} />
+                    <div className="relative z-10">
+                        <div className="flex items-center gap-3 mb-8">
+                            <div className="w-10 h-10 flex items-center justify-center rounded-lg overflow-hidden">
+                                <img src="/star.png" alt="Djinn" className="w-full h-full object-contain" />
+                            </div>
+                            <span className="text-white/80 text-lg" style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}>
+                                Djinn
+                            </span>
+                        </div>
+
+                        <div className="mb-3">
+                            <span className="text-[#10B981] text-xs font-black uppercase tracking-[0.2em]">▲ Profit/Loss</span>
+                        </div>
+
+                        <h2 className="text-5xl font-[900] text-[#10B981] mb-2 tracking-tighter italic leading-none">
+                            ${profile.profit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </h2>
+
+                        <p className="text-gray-500 text-sm font-medium uppercase tracking-widest mb-10">Past Month</p>
+
+                        {/* GRÁFICO */}
+                        <ProfitChart activeBets={profile.activeBets} />
+                    </div>
                 </div>
 
                 {/* GEMS */}
@@ -174,8 +191,10 @@ export default function ProfilePage() {
                             </div>
                         ))}
                     </div>
-                    <span className="text-[100px] font-black tracking-tighter leading-none">{profile.gems.toLocaleString()}</span>
-                    <span className="text-gray-600 text-sm font-black uppercase tracking-[0.5em] mt-4">Gems Earned</span>
+                    <span className="text-[90px] font-[900] tracking-tighter leading-none italic" style={{ textShadow: '0 0 40px rgba(244,146,183,0.3)' }}>
+                        {profile.gems.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </span>
+                    <span className="text-[#F492B7] text-sm font-black uppercase tracking-[0.3em] mt-6">Gems Earned</span>
                 </div>
 
                 {/* CREATED MARKETS */}
@@ -228,23 +247,23 @@ export default function ProfilePage() {
     );
 }
 
-// PROFIT CHART COMPONENT
+// PROFIT CHART COMPONENT MEJORADO
 function ProfitChart({ activeBets }: any) {
     const maxProfit = Math.max(...activeBets.map((b: any) => b.profit), 100);
     const minProfit = Math.min(...activeBets.map((b: any) => b.profit), -100);
     const range = maxProfit - minProfit;
 
     return (
-        <div className="relative h-48 w-full bg-black/30 rounded-2xl p-6 border border-white/5">
+        <div className="relative h-64 w-full bg-black/40 rounded-2xl p-8 border border-white/10 backdrop-blur-sm">
             {/* GRID LINES */}
-            <div className="absolute inset-6 flex flex-col justify-between">
+            <div className="absolute inset-8 flex flex-col justify-between">
                 {[0, 1, 2, 3, 4].map((i) => (
-                    <div key={i} className="w-full h-px bg-white/5" />
+                    <div key={i} className="w-full h-px bg-white/[0.03]" />
                 ))}
             </div>
 
-            {/* BARS */}
-            <div className="relative h-full flex items-end justify-around gap-4">
+            {/* BARS CON EFECTO GLOW */}
+            <div className="relative h-full flex items-end justify-around gap-6">
                 {activeBets.map((bet: any, idx: number) => {
                     const height = Math.abs((bet.profit / range) * 100);
                     const isPositive = bet.profit >= 0;
@@ -254,19 +273,31 @@ function ProfitChart({ activeBets }: any) {
                             <div className="relative w-full flex flex-col items-center justify-end h-full">
                                 {isPositive ? (
                                     <div
-                                        className="w-full bg-gradient-to-t from-[#10B981] to-[#10B981]/50 rounded-t-lg transition-all duration-300 group-hover:brightness-125"
-                                        style={{ height: `${height}%`, minHeight: '8px' }}
-                                    />
+                                        className="w-full bg-gradient-to-t from-[#10B981] to-[#10B981]/40 rounded-t-xl transition-all duration-300 group-hover:brightness-125 relative"
+                                        style={{
+                                            height: `${height}%`,
+                                            minHeight: '12px',
+                                            boxShadow: '0 0 20px rgba(16, 185, 129, 0.3)'
+                                        }}
+                                    >
+                                        <div className="absolute inset-0 bg-gradient-to-t from-white/20 to-transparent rounded-t-xl"></div>
+                                    </div>
                                 ) : (
                                     <div
-                                        className="w-full bg-gradient-to-b from-red-500 to-red-500/50 rounded-b-lg transition-all duration-300 group-hover:brightness-125"
-                                        style={{ height: `${height}%`, minHeight: '8px' }}
-                                    />
+                                        className="w-full bg-gradient-to-b from-red-500 to-red-500/40 rounded-b-xl transition-all duration-300 group-hover:brightness-125 relative"
+                                        style={{
+                                            height: `${height}%`,
+                                            minHeight: '12px',
+                                            boxShadow: '0 0 20px rgba(239, 68, 68, 0.3)'
+                                        }}
+                                    >
+                                        <div className="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent rounded-b-xl"></div>
+                                    </div>
                                 )}
                             </div>
 
-                            {/* TOOLTIP */}
-                            <div className="opacity-0 group-hover:opacity-100 absolute bottom-full mb-2 bg-black/90 border border-white/20 rounded-lg p-2 text-xs font-bold whitespace-nowrap transition-opacity z-10">
+                            {/* TOOLTIP MEJORADO */}
+                            <div className="opacity-0 group-hover:opacity-100 absolute bottom-full mb-3 bg-black/95 border border-[#F492B7]/30 rounded-xl p-3 text-xs font-black whitespace-nowrap transition-all z-10 backdrop-blur-xl">
                                 <span className={bet.profit >= 0 ? 'text-[#10B981]' : 'text-red-500'}>
                                     {bet.profit >= 0 ? '+' : ''}${bet.profit}
                                 </span>
@@ -276,18 +307,21 @@ function ProfitChart({ activeBets }: any) {
                 })}
             </div>
 
-            {/* ZERO LINE */}
-            <div className="absolute left-6 right-6 top-1/2 h-px bg-white/20" />
+            {/* ZERO LINE CON GLOW */}
+            <div className="absolute left-8 right-8 top-1/2 h-[2px] bg-gradient-to-r from-transparent via-[#F492B7]/40 to-transparent"
+                style={{ boxShadow: '0 0 10px rgba(244, 146, 183, 0.2)' }}></div>
         </div>
     );
 }
 
-// STAT CARD
+// STAT CARD CON NÚMEROS ESTILO ACTIVITY
 function StatCard({ label, value, color = "text-white" }: any) {
     return (
-        <div className="bg-[#0D0D0D] border border-white/5 p-8 rounded-[2.5rem] shadow-xl hover:border-[#F492B7]/20 transition-all hover:-translate-y-1">
-            <p className="text-gray-600 text-[10px] font-black uppercase tracking-widest mb-3">{label}</p>
-            <p className={`text-4xl font-black tracking-tighter ${color}`}>{value}</p>
+        <div className="bg-gradient-to-br from-[#0D0D0D] to-black border border-white/10 p-8 rounded-[2rem] shadow-xl hover:border-[#F492B7]/30 transition-all hover:-translate-y-1">
+            <p className="text-gray-500 text-xs font-black uppercase tracking-[0.2em] mb-4">{label}</p>
+            <p className={`text-4xl font-[900] tracking-tighter italic leading-none ${color}`}>
+                {value}
+            </p>
         </div>
     );
 }

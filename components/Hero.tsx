@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { compressImage } from '@/lib/utils';
+import HowItWorksModal from './HowItWorksModal'; // <--- IMPORTACIÓN DEL NUEVO COMPONENTE
 
 // --- ICONOS ORIGINALES ---
 const SearchIcon = () => (
@@ -19,8 +20,7 @@ const CloseIcon = () => (
 
 const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-    const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false);
-    const [currentStep, setCurrentStep] = useState(0);
+    const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false); // <--- ESTADO PARA EL NUEVO MODAL
 
     const [marketType, setMarketType] = useState<'binary' | 'multiple'>('binary');
     const [poolName, setPoolName] = useState('');
@@ -30,20 +30,17 @@ const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
         { id: 2, name: '' }
     ]);
 
-    const { setVisible } = useWalletModal();
-
     // --- FUNCIÓN DE CREACIÓN REFORZADA ---
     const handleCreateMarket = async () => {
         if (!poolName) return alert("Please enter a question, Sir.");
 
-        // Comprimimos la imagen para mantener la velocidad de la máquina
         const finalBanner = mainImage ? await compressImage(mainImage) : "🔮";
 
         const newMarket = {
             id: Date.now(),
             title: poolName,
             icon: finalBanner,
-            type: marketType, // 'binary' o 'multiple'
+            type: marketType,
             options: marketType === 'multiple' ? options : [
                 { id: 1, name: 'Yes', chance: 50 },
                 { id: 2, name: 'No', chance: 50 }
@@ -54,10 +51,8 @@ const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
             slug: poolName.toLowerCase().trim().replace(/[^\w\s-]/g, '').replace(/[\s_-]+/g, '-').replace(/^-+|-+$/g, '')
         };
 
-        // ENVIAMOS AL ESTADO GLOBAL
         onMarketCreated(newMarket);
 
-        // RESET DE TERMINAL
         setIsCreateModalOpen(false);
         setPoolName('');
         setMainImage(null);
@@ -83,21 +78,11 @@ const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
         );
     };
 
-    const steps = [
-        { title: "1. Pick a Tent", description: "Enter the Djinn bazaar and choose your fortune.", image: (<div className="h-40 bg-amber-100 rounded-2xl flex items-center justify-center text-4xl">🔮</div>) },
-        { title: "2. Deposit Solana", description: "Connect your Phantom wallet to fund your journey.", image: (<div className="h-40 bg-purple-100 rounded-2xl flex items-center justify-center text-4xl">👻</div>) },
-        { title: "3. Claim Your Fortune 💰", description: "The Djinn rewards the bold.", image: (<div className="h-40 bg-yellow-100 rounded-2xl flex items-center justify-center text-4xl">💰</div>) }
-    ];
-
-    const handleNext = () => {
-        if (currentStep < steps.length - 1) setCurrentStep(currentStep + 1);
-        else { setVisible(true); setIsHowItWorksOpen(false); setCurrentStep(0); }
-    };
-
     return (
         <>
             <section className="relative w-full min-h-[40vh] flex flex-col items-center justify-center px-4 pt-24 pb-6">
                 <div className="w-full max-w-3xl flex flex-col items-center gap-5">
+                    {/* BARRA DE BÚSQUEDA */}
                     <div className="relative group w-full">
                         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                             <SearchIcon />
@@ -105,18 +90,21 @@ const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
                         <input type="text" className="block w-full pl-12 pr-4 py-4 bg-[#1C1D25] border border-gray-800 rounded-2xl text-lg text-white outline-none focus:ring-2 focus:ring-[#F492B7]" placeholder="Search for markets..." />
                     </div>
 
+                    {/* BOTÓN CREAR MERCADO */}
                     <div className="flex justify-center mt-1">
                         <button onClick={() => setIsCreateModalOpen(true)} className="bg-[#F492B7] text-black text-xl font-black py-4 px-12 rounded-xl shadow-[0_0_30px_rgba(244,146,183,0.3)] hover:scale-105 active:scale-95 transition-all uppercase">
                             Create a Market
                         </button>
                     </div>
 
-                    <button onClick={() => setIsHowItWorksOpen(true)} className="px-6 py-2 rounded-full bg-[#F492B7]/10 border border-[#F492B7]/20 text-[#F492B7] text-sm font-bold">
+                    {/* BOTÓN HOW IT WORKS */}
+                    <button onClick={() => setIsHowItWorksOpen(true)} className="px-6 py-2 rounded-full bg-[#F492B7]/10 border border-[#F492B7]/20 text-[#F492B7] text-sm font-bold hover:bg-[#F492B7]/20 transition-all">
                         How it works?
                     </button>
                 </div>
             </section>
 
+            {/* MODAL DE CREACIÓN DE MERCADO (Existente) */}
             {isCreateModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                     <div className="absolute inset-0 bg-black/95 backdrop-blur-xl" onClick={() => setIsCreateModalOpen(false)} />
@@ -170,7 +158,12 @@ const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
                     </div>
                 </div>
             )}
-            {/* Modal How It Works omitido por brevedad, se mantiene igual */}
+
+            {/* --- NUEVO MODAL HOW IT WORKS --- */}
+            <HowItWorksModal
+                isOpen={isHowItWorksOpen}
+                onClose={() => setIsHowItWorksOpen(false)}
+            />
         </>
     );
 };

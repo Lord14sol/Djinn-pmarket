@@ -5,7 +5,23 @@
 html,
 body {
   background-color: #000000 !important;
+  /* Fondo negro absoluto para DJINN */
   color: white !important;
   margin: 0;
   padding: 0;
+}
+
+/* --- UTILIDADES --- */
+
+/* Clase para eliminar las flechas (spinners) de los inputs numéricos */
+/* Esencial para el input de "Cantidad a Apostar" */
+.no-spinner::-webkit-outer-spin-button,
+.no-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.no-spinner {
+  -moz-appearance: textfield;
+  /* Para Firefox */
 }
