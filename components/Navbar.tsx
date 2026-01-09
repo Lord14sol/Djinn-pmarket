@@ -29,6 +29,7 @@ export default function Navbar() {
     const [activeCategory, setActiveCategory] = useState("Trending");
     const [activeSubcategory, setActiveSubcategory] = useState("");
 
+    // Hooks de Solana Wallet Adapter
     const { setVisible } = useWalletModal();
     const { connected, publicKey, disconnect } = useWallet();
 
@@ -76,7 +77,6 @@ export default function Navbar() {
                                 Connect Wallet
                             </button>
                         ) : (
-                            // AL HACER CLIC EN EL COMPONENTE DE PFP, SE ABRE EL MENÚ
                             <div
                                 onClick={() => setIsOpen(!isOpen)}
                                 className="flex items-center gap-3 bg-[#F492B7]/10 border border-[#F492B7]/20 py-1.5 pl-4 pr-1.5 rounded-full cursor-pointer hover:bg-[#F492B7]/20 transition-all"
@@ -102,7 +102,6 @@ export default function Navbar() {
                 {isOpen && (
                     <div className="absolute top-24 right-6 w-64 bg-[#0B0E14] border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-5 z-[60]">
                         <div className="p-2">
-                            {/* NUEVA OPCIÓN: PERFIL DEL LORD */}
                             {connected && (
                                 <Link
                                     href={`/profile/${publicKey?.toString()}`}
@@ -159,7 +158,7 @@ export default function Navbar() {
                             setActiveCategory(cat);
                             if (cat !== "Earth") setActiveSubcategory("");
                         }}
-                        className={`relative text-[14px] font-black uppercase tracking-[0.25em] transition-all whitespace-nowrap
+                        className={`relative text-[14px] font-black uppercase tracking-[0.25em] transition-all whitespace-nowrap 
                         ${activeCategory === cat ? "text-[#F492B7]" : "text-gray-400 hover:text-gray-200"}`}
                     >
                         {cat === "Trending" && <DjinnStar />}

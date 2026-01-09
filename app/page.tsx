@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Navbar from '@/components/Navbar';
 import Hero from '@/components/Hero';
 import MarketCard from '@/components/MarketCard';
 
@@ -114,7 +113,13 @@ export default function Home() {
       if (savedMarkets) {
         const customMarkets = JSON.parse(savedMarkets);
         // Combinamos manteniendo los creados por el Lord al principio
-        setMarkets([...customMarkets, ...initialStaticMarkets]);
+        setMarkets((prev) => {
+          // Evitamos duplicados básicos revisando IDs si fuera necesario, 
+          // pero por ahora concatenamos los nuevos arriba
+          const staticIds = new Set(initialStaticMarkets.map(m => m.id));
+          const uniqueCustom = customMarkets.filter((m: any) => !staticIds.has(m.id));
+          return [...uniqueCustom, ...initialStaticMarkets];
+        });
       }
     } catch (e) {
       console.error("Error loading markets", e);
@@ -123,7 +128,7 @@ export default function Home() {
 
   // 3. FUNCIÓN DE CREACIÓN PROTEGIDA
   const handleCreateMarket = (newMarket: any) => {
-    setMarkets([newMarket, ...markets]);
+    setMarkets(prev => [newMarket, ...prev]);
 
     try {
       const savedMarkets = JSON.parse(localStorage.getItem('djinn_markets') || '[]');
@@ -136,12 +141,12 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-black text-white font-sans selection:bg-[#F492B7] selection:text-black">
-      <Navbar />
+    <div className="text-white font-sans selection:bg-[#F492B7] selection:text-black">
 
+      {/* Hero Section con Callback para crear mercados */}
       <Hero onMarketCreated={handleCreateMarket} />
 
-      <section className="px-6 md:px-12 pb-20 max-w-[1600px] mx-auto">
+      <section className="px-6 md:px-12 pb-20 max-w-[1600px] mx-auto mt-10">
         <h2 className="text-4xl font-black mb-10 flex items-center gap-4 tracking-tight uppercase italic">
           Trending Markets
           <span className="text-xs font-bold text-gray-500 bg-white/5 px-4 py-1.5 rounded-full border border-white/5 uppercase tracking-widest not-italic">
@@ -150,14 +155,14 @@ export default function Home() {
         </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {markets.map((market) => (
+          {markets.map((market, index) => (
             <MarketCard
-              key={market.id}
-              {...market} // <-- CLAVE: Pasamos type y options automáticamente
+              key={`${market.id}-${index}`}
+              {...market}
             />
           ))}
         </div>
       </section>
-    </main>
+    </div>
   );
 }

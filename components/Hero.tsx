@@ -2,10 +2,16 @@
 
 import React, { useState } from 'react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
+import { useConnection, useWallet } from '@solana/wallet-adapter-react';
+import { LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
 import { compressImage } from '@/lib/utils';
-import HowItWorksModal from './HowItWorksModal'; // <--- IMPORTACIÓN DEL NUEVO COMPONENTE
+import HowItWorksModal from './HowItWorksModal';
 
-// --- ICONOS ORIGINALES ---
+// --- CONFIGURACIÓN DE LA BÓVEDA MAESTRA ---
+const CREATION_FEE_SOL = 0.05;
+const TREASURY_WALLET = new PublicKey("C31JQfZBVRsnvFqiNptD95rvbEx8fsuPwdZn62yEWx9X");
+
+// --- ICONOS ---
 const SearchIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-gray-400">
         <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
@@ -19,8 +25,14 @@ const CloseIcon = () => (
 );
 
 const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
+    // Hooks de Solana
+    const { connection } = useConnection();
+    const { publicKey, sendTransaction } = useWallet();
+    const { setVisible } = useWalletModal();
+
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-    const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false); // <--- ESTADO PARA EL NUEVO MODAL
+    const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
 
     const [marketType, setMarketType] = useState<'binary' | 'multiple'>('binary');
     const [poolName, setPoolName] = useState('');
@@ -30,34 +42,84 @@ const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
         { id: 2, name: '' }
     ]);
 
-    // --- FUNCIÓN DE CREACIÓN REFORZADA ---
+    // --- FUNCIÓN DE CREACIÓN MAESTRA ---
     const handleCreateMarket = async () => {
+        // 1. Validaciones
+        if (!publicKey) {
+            setVisible(true);
+            return;
+        }
         if (!poolName) return alert("Please enter a question, Sir.");
 
-        const finalBanner = mainImage ? await compressImage(mainImage) : "🔮";
+        setIsLoading(true);
 
-        const newMarket = {
-            id: Date.now(),
-            title: poolName,
-            icon: finalBanner,
-            type: marketType,
-            options: marketType === 'multiple' ? options : [
-                { id: 1, name: 'Yes', chance: 50 },
-                { id: 2, name: 'No', chance: 50 }
-            ],
-            chance: 50,
-            volume: "$0",
-            endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-            slug: poolName.toLowerCase().trim().replace(/[^\w\s-]/g, '').replace(/[\s_-]+/g, '-').replace(/^-+|-+$/g, '')
-        };
+        try {
+            console.log("Iniciando protocolo de cobro...");
 
-        onMarketCreated(newMarket);
+            // 2. OBTENER BLOCKHASH RECIENTE (Evita que se congele)
+            const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
 
-        setIsCreateModalOpen(false);
-        setPoolName('');
-        setMainImage(null);
-        setMarketType('binary');
-        setOptions([{ id: 1, name: '' }, { id: 2, name: '' }]);
+            // 3. CONSTRUIR TRANSACCIÓN
+            const transaction = new Transaction().add(
+                SystemProgram.transfer({
+                    fromPubkey: publicKey,
+                    toPubkey: TREASURY_WALLET,
+                    lamports: CREATION_FEE_SOL * LAMPORTS_PER_SOL,
+                })
+            );
+
+            // 4. ENVIAR Y CONFIRMAR
+            const signature = await sendTransaction(transaction, connection);
+
+            // Confirmación robusta
+            await connection.confirmTransaction({
+                blockhash,
+                lastValidBlockHeight,
+                signature
+            }, 'confirmed');
+
+            console.log("Pago confirmado. Signature:", signature);
+
+            // 5. LÓGICA DE CREACIÓN VISUAL
+            const finalBanner = mainImage ? await compressImage(mainImage) : "🔮";
+
+            const newMarket = {
+                id: Date.now(),
+                title: poolName,
+                icon: finalBanner,
+                type: marketType,
+                options: marketType === 'multiple' ? options : [
+                    { id: 1, name: 'Yes', chance: 50 },
+                    { id: 2, name: 'No', chance: 50 }
+                ],
+                chance: 50,
+                volume: "$0",
+                endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+                slug: poolName.toLowerCase().trim().replace(/[^\w\s-]/g, '').replace(/[\s_-]+/g, '-').replace(/^-+|-+$/g, ''),
+                creator: publicKey.toString(),
+                createdAt: Date.now(),
+                txSignature: signature,
+                economics: {
+                    creationFee: CREATION_FEE_SOL,
+                    resolutionFee: 2.0
+                }
+            };
+
+            onMarketCreated(newMarket);
+
+            // 6. RESETEAR FORMULARIO
+            setIsCreateModalOpen(false);
+            setPoolName('');
+            setMainImage(null);
+            setMarketType('binary');
+            setOptions([{ id: 1, name: '' }, { id: 2, name: '' }]);
+
+        } catch (error) {
+            console.error("Error creating market:", error);
+            // No alertamos si el usuario rechaza la transacción manualmente
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleImageUpload = (file: File) => {
@@ -90,7 +152,7 @@ const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
                         <input type="text" className="block w-full pl-12 pr-4 py-4 bg-[#1C1D25] border border-gray-800 rounded-2xl text-lg text-white outline-none focus:ring-2 focus:ring-[#F492B7]" placeholder="Search for markets..." />
                     </div>
 
-                    {/* BOTÓN CREAR MERCADO */}
+                    {/* BOTÓN PRINCIPAL */}
                     <div className="flex justify-center mt-1">
                         <button onClick={() => setIsCreateModalOpen(true)} className="bg-[#F492B7] text-black text-xl font-black py-4 px-12 rounded-xl shadow-[0_0_30px_rgba(244,146,183,0.3)] hover:scale-105 active:scale-95 transition-all uppercase">
                             Create a Market
@@ -104,12 +166,12 @@ const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
                 </div>
             </section>
 
-            {/* MODAL DE CREACIÓN DE MERCADO (Existente) */}
+            {/* MODAL DE CREACIÓN */}
             {isCreateModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/95 backdrop-blur-xl" onClick={() => setIsCreateModalOpen(false)} />
+                    <div className="absolute inset-0 bg-black/95 backdrop-blur-xl" onClick={() => !isLoading && setIsCreateModalOpen(false)} />
                     <div className="relative bg-[#0B0E14] border border-white/10 rounded-[2rem] w-full max-w-2xl overflow-hidden shadow-2xl">
-                        <button onClick={() => setIsCreateModalOpen(false)} className="absolute top-8 right-8 text-gray-500 hover:text-white transition-colors">
+                        <button onClick={() => setIsCreateModalOpen(false)} disabled={isLoading} className="absolute top-8 right-8 text-gray-500 hover:text-white transition-colors disabled:opacity-50">
                             <CloseIcon />
                         </button>
 
@@ -152,14 +214,19 @@ const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
                                     </div>
                                 </div>
 
-                                <button onClick={handleCreateMarket} className="w-full bg-[#F492B7] text-black py-5 rounded-xl font-black text-lg uppercase shadow-lg">Create Market</button>
+                                <button
+                                    onClick={handleCreateMarket}
+                                    disabled={isLoading}
+                                    className="w-full bg-[#F492B7] text-black py-5 rounded-xl font-black text-lg uppercase shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                >
+                                    {isLoading ? 'Processing...' : 'Create Market'}
+                                </button>
                             </div>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* --- NUEVO MODAL HOW IT WORKS --- */}
             <HowItWorksModal
                 isOpen={isHowItWorksOpen}
                 onClose={() => setIsHowItWorksOpen(false)}
