@@ -123,19 +123,30 @@ export default function ActivityPage() {
 
                                 {/* Derecha: Monto, Shares, Tiempo y Acción */}
                                 <div className="flex items-center gap-6">
-                                    <div className="text-right">
-                                        {/* Monto en blanco */}
-                                        <span className="text-2xl font-black italic text-white block tracking-tight">
-                                            ${trade.amount?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                        </span>
-                                        {/* Shares */}
-                                        {trade.shares && (
-                                            <span className="text-[10px] text-gray-400 font-bold block">
-                                                {trade.shares.toFixed(2)} shares
+                                    <div className="text-right flex flex-col items-end">
+                                        {/* Monto en blanco + SOL */}
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm font-bold text-[#F492B7] tracking-wider">
+                                                {trade.sol_amount ? `${trade.sol_amount} SOL` : ''}
                                             </span>
+                                            <span className="text-xl font-black italic text-white tracking-tight">
+                                                ${trade.amount?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </span>
+                                        </div>
+
+                                        {/* Profit / Shares */}
+                                        {trade.shares && (
+                                            <div className="flex flex-col items-end">
+                                                <span className="text-[10px] text-gray-400 font-bold block">
+                                                    {trade.shares.toFixed(2)} shares
+                                                </span>
+                                                <span className="text-[10px] font-bold text-[#10B981]">
+                                                    +${(trade.shares - trade.amount).toFixed(2)} reward
+                                                </span>
+                                            </div>
                                         )}
                                         {/* Tiempo */}
-                                        <span className="text-[10px] text-gray-500 font-bold tracking-wider mt-1 block">
+                                        <span className="text-[9px] text-gray-500 font-bold tracking-wider mt-1 block">
                                             {trade.created_at ? formatTimeAgo(trade.created_at) : 'Just now'}
                                         </span>
                                     </div>

@@ -35,9 +35,10 @@ export default function Navbar() {
     const { setVisible } = useWalletModal();
     const { connected, publicKey, disconnect } = useWallet();
 
-    // Cargar foto de perfil desde localStorage
+    // Cargar perfil (Local + Supabase)
     useEffect(() => {
-        const loadProfile = () => {
+        const loadProfile = async () => {
+            // 1. Intentar local storage primero (rápido)
             try {
                 const savedProfile = localStorage.getItem('djinn_user_profile');
                 if (savedProfile) {
@@ -46,13 +47,33 @@ export default function Navbar() {
                     if (profile.username) setUsername(profile.username);
                 }
             } catch (e) {
-                console.error("Error loading profile", e);
+                console.error("Error loading local profile", e);
+            }
+
+            // 2. Si hay wallet, intentar Supabase (fuente de verdad)
+            if (connected && publicKey) {
+                try {
+                    // Importar dinámicamente o usar la importación top-level si agregamos el import
+                    // Para evitar conflictos con 'use client', asegúrate de que supabase-db.ts sea client-safe o úsalo aquí.
+                    // Como Navbar es 'use client', podemos importar supabaseDb arriba.
+                    // Pero necesitamos agregarlo a los imports.
+                    // Asumiendo que agregaremos el import arriba, aquí llamamos:
+                    const dbProfile = await import('@/lib/supabase-db').then(mod => mod.getProfile(publicKey.toBase58()));
+                    if (dbProfile) {
+                        if (dbProfile.avatar_url) setUserPfp(dbProfile.avatar_url);
+                        if (dbProfile.username) setUsername(dbProfile.username);
+                    }
+                } catch (err) {
+                    console.error("Error loading remote profile", err);
+                }
             }
         };
+
         loadProfile();
+        // Escuchar cambios de storage local
         window.addEventListener('storage', loadProfile);
         return () => window.removeEventListener('storage', loadProfile);
-    }, []);
+    }, [connected, publicKey]);
 
     return (
         <nav className="fixed top-0 left-0 w-full z-50 bg-black/90 backdrop-blur-xl border-b border-white/5">

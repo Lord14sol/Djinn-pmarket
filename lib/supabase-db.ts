@@ -105,7 +105,7 @@ export async function getComments(marketSlug: string, currentWallet?: string): P
     })) || [];
 }
 
-export async function createComment(comment: Omit<Comment, 'id' | 'created_at' | 'likes_count' | 'liked_by_me' | 'replies'>): Promise<Comment | null> {
+export async function createComment(comment: Omit<Comment, 'id' | 'created_at' | 'likes_count' | 'liked_by_me' | 'replies'>): Promise<{ data: Comment | null, error: any }> {
     const { data, error } = await supabase
         .from('comments')
         .insert({ ...comment, likes_count: 0 })
@@ -114,9 +114,9 @@ export async function createComment(comment: Omit<Comment, 'id' | 'created_at' |
 
     if (error) {
         console.error('Error creating comment:', error);
-        return null;
+        return { data: null, error };
     }
-    return data;
+    return { data, error: null };
 }
 
 export async function updateCommentPosition(walletAddress: string, marketSlug: string, position: 'YES' | 'NO', positionAmount: string): Promise<boolean> {
@@ -218,7 +218,8 @@ export interface Activity {
     username: string;
     avatar_url: string | null;
     action: 'YES' | 'NO';
-    amount: number;
+    amount: number; // USD Amount
+    sol_amount?: number;
     shares: number;
     market_title: string;
     market_slug: string;
@@ -245,7 +246,7 @@ export async function getActivity(minAmount: number = 0, limit: number = 50): Pr
     return data || [];
 }
 
-export async function createActivity(activity: Omit<Activity, 'id' | 'created_at'>): Promise<Activity | null> {
+export async function createActivity(activity: Omit<Activity, 'id' | 'created_at'>): Promise<{ data: Activity | null, error: any }> {
     const { data, error } = await supabase
         .from('activity')
         .insert(activity)
@@ -254,9 +255,48 @@ export async function createActivity(activity: Omit<Activity, 'id' | 'created_at
 
     if (error) {
         console.error('Error creating activity:', error);
-        return null;
+        return { data: null, error };
     }
-    return data;
+    return { data, error: null };
+}
+
+// --- HOLDERS (Derived from Activity) ---
+export interface Holder {
+    rank: number;
+    name: string;
+    avatar: string | null;
+    shares: number;
+    wallet_address: string;
+}
+
+export async function getTopHolders(slug: string): Promise<Holder[]> {
+    // In a real production app, we would use a dedicated 'positions' table updated via triggers.
+    // For this prototype, we calculate holdings by summing up 'activity' shares for the market.
+    const { data, error } = await supabase
+        .from('activity')
+        .select('*')
+        .eq('market_slug', slug);
+
+    if (error || !data) return [];
+
+    const agg: Record<string, Holder> = {};
+
+    data.forEach(act => {
+        if (!agg[act.wallet_address]) {
+            agg[act.wallet_address] = {
+                rank: 0,
+                name: act.username,
+                avatar: act.avatar_url,
+                shares: 0,
+                wallet_address: act.wallet_address
+            };
+        }
+        // Simple accumulation logic
+        agg[act.wallet_address].shares += act.shares || 0;
+    });
+
+    const sorted = Object.values(agg).sort((a, b) => b.shares - a.shares);
+    return sorted.map((h, i) => ({ ...h, rank: i + 1 }));
 }
 
 // ============================================

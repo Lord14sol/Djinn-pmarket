@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS activity (
   avatar_url TEXT,
   action TEXT NOT NULL,
   amount DECIMAL NOT NULL,
+  sol_amount DECIMAL,
   shares DECIMAL,
   market_title TEXT NOT NULL,
   market_slug TEXT NOT NULL,

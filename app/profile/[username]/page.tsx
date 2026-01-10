@@ -60,9 +60,10 @@ export default function ProfilePage() {
     // El slug del perfil
     const profileSlug = params.username as string;
     const isDefaultProfile = profileSlug === 'default';
-    const isMyProfile = !isDefaultProfile && publicKey;
+    const [isMyProfile, setIsMyProfile] = useState(false);
+    const [targetWalletAddress, setTargetWalletAddress] = useState<string | null>(null);
 
-    // 2. CARGA DE PERFIL (SUPABASE + LOCALSTORAGE)
+    // 2. CARGA DE PERFIL (SUPABASE + LOCALSTORAGE) - SUPPORT FOR OTHER USERS
     useEffect(() => {
         if (isDefaultProfile) {
             setProfile({
@@ -72,42 +73,116 @@ export default function ProfilePage() {
                 banner: "https://images.unsplash.com/photo-1614850523296-d8c1af93d400?q=80&w=2070",
                 gems: 0, profit: 0, portfolio: 0, winRate: 0, biggestWin: 0, medals: [], activeBets: [], closedBets: [], createdMarkets: []
             });
+            setIsMyProfile(false);
             return;
         }
 
         const loadProfile = async () => {
-            // Cargar datos locales de bets/markets (no sync con Supabase aún)
-            const savedProfileLocal = localStorage.getItem('djinn_user_profile');
-            const savedMarkets = localStorage.getItem('djinn_markets');
+            try {
+                // First, try to load profile by username from Supabase
+                const allProfiles = await supabaseDb.getActivity(); // Get all to filter by username
+                // Find the user's wallet by looking up their username in activity
+                const userActivity = allProfiles.find((a: any) => a.username === profileSlug);
 
-            let localData = { ...initialProfile };
-            if (savedProfileLocal) {
-                const parsed = JSON.parse(savedProfileLocal);
-                const { portfolio, ...rest } = parsed;
-                localData = { ...localData, ...rest };
-            }
-            if (savedMarkets) localData.createdMarkets = JSON.parse(savedMarkets);
+                let profileData = { ...initialProfile };
+                let walletAddr: string | null = null;
 
-            // Si hay wallet conectada, intentar cargar identidad de Supabase
-            if (publicKey) {
-                const profileDb = await supabaseDb.getProfile(publicKey.toBase58());
-                if (profileDb) {
-                    localData.username = profileDb.username;
-                    localData.bio = profileDb.bio || localData.bio;
-                    localData.pfp = profileDb.avatar_url || localData.pfp;
-                    localData.banner = profileDb.banner_url || localData.banner;
+                if (userActivity) {
+                    walletAddr = userActivity.wallet_address;
+                    setTargetWalletAddress(walletAddr);
+
+                    // Load profile from Supabase
+                    const profileDb = await supabaseDb.getProfile(walletAddr);
+                    if (profileDb) {
+                        profileData.username = profileDb.username;
+                        profileData.bio = profileDb.bio || profileData.bio;
+                        profileData.pfp = profileDb.avatar_url || profileData.pfp;
+                        profileData.banner = profileDb.banner_url || profileData.banner;
+                    }
+                } else if (publicKey) {
+                    // Fallback: if username not found in activity, check if viewing own profile
+                    const myProfile = await supabaseDb.getProfile(publicKey.toBase58());
+                    if (myProfile && myProfile.username === profileSlug) {
+                        walletAddr = publicKey.toBase58();
+                        setTargetWalletAddress(walletAddr);
+                        profileData.username = myProfile.username;
+                        profileData.bio = myProfile.bio || profileData.bio;
+                        profileData.pfp = myProfile.avatar_url || profileData.pfp;
+                        profileData.banner = myProfile.banner_url || profileData.banner;
+                    } else {
+                        // Load from localStorage as last resort
+                        const savedProfileLocal = localStorage.getItem('djinn_user_profile');
+                        if (savedProfileLocal) {
+                            const parsed = JSON.parse(savedProfileLocal);
+                            if (parsed.username === profileSlug) {
+                                const { portfolio, ...rest } = parsed;
+                                profileData = { ...profileData, ...rest };
+                                walletAddr = publicKey.toBase58();
+                                setTargetWalletAddress(walletAddr);
+                            }
+                        }
+                    }
                 }
-            }
 
-            setProfile(localData);
+                // Check if viewing own profile
+                setIsMyProfile(publicKey ? walletAddr === publicKey.toBase58() : false);
+
+                // Load created markets from localStorage
+                const savedMarkets = localStorage.getItem('djinn_markets');
+                if (savedMarkets) profileData.createdMarkets = JSON.parse(savedMarkets);
+
+                setProfile(profileData);
+
+                // Load active bets if we have a wallet address
+                if (walletAddr) {
+                    loadActiveBets(walletAddr);
+                }
+            } catch (error) {
+                console.error('Error loading profile:', error);
+            }
         };
 
         loadProfile();
+    }, [isDefaultProfile, publicKey, profileSlug]);
 
-        // Listener para cambios locales
-        window.addEventListener('storage', loadProfile);
-        return () => window.removeEventListener('storage', loadProfile);
-    }, [isDefaultProfile, publicKey]);
+    // 3. LOAD ACTIVE BETS FROM SUPABASE
+    const loadActiveBets = async (walletAddress: string) => {
+        try {
+            const activity = await supabaseDb.getActivity();
+            const userActivity = activity.filter((a: any) => a.wallet_address === walletAddress);
+
+            // Transform activity into bet format
+            const bets = await Promise.all(userActivity.map(async (act: any) => {
+                // Fetch current market price to calculate profit
+                const marketData = await supabaseDb.getMarketData(act.market_slug);
+                const currentPrice = marketData?.live_price || 50;
+
+                // Calculate based on YES/NO position
+                const purchasePrice = act.action === 'YES' ? currentPrice : (100 - currentPrice);
+                const invested = act.amount || 0;
+                const shares = act.shares || 0;
+
+                // Simple profit calculation (shares value at current price - invested)
+                const currentValue = shares * (purchasePrice / 100);
+                const profit = currentValue - invested;
+                const change = invested > 0 ? ((profit / invested) * 100).toFixed(1) : '0.0';
+
+                return {
+                    id: act.id || act.market_slug,
+                    title: act.market_title,
+                    invested,
+                    current: currentValue,
+                    side: act.action,
+                    change: `${profit >= 0 ? '+' : ''}${change}%`,
+                    profit
+                };
+            }));
+
+            setProfile(prev => ({ ...prev, activeBets: bets }));
+        } catch (error) {
+            console.error('Error loading active bets:', error);
+        }
+    };
 
     const updateAndSave = async (newData: any) => {
         setProfile(newData);
