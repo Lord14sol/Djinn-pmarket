@@ -38,7 +38,7 @@ const StarIcon = ({ active, onClick }: { active: boolean; onClick: (e: React.Mou
     );
 };
 
-const MarketCard = ({ title, icon, chance, volume, endDate, slug, type, options }: any) => {
+const MarketCard = ({ title, icon, chance, volume, endDate, slug, type, options, isNew = false }: any) => {
     const [isStarred, setIsStarred] = useState(false);
     const [timeLeft, setTimeLeft] = useState("");
     const [showTimer, setShowTimer] = useState(false);
@@ -82,16 +82,40 @@ const MarketCard = ({ title, icon, chance, volume, endDate, slug, type, options 
                     <div className="w-full h-full flex items-center justify-center text-7xl opacity-20">{icon || '🔮'}</div>
                 )}
                 <div className="absolute top-4 right-4 z-10">
-                    <span className="flex items-center bg-[#F492B7] text-black text-[10px] font-black px-3 py-1.5 rounded-full shadow-xl uppercase tracking-widest">
-                        <TrendingUpIcon /> Trending
-                    </span>
+                    {isNew ? (
+                        /* Badge NEW con glow verde vibrante */
+                        <div className="relative">
+                            <div className="absolute -inset-1 bg-emerald-500 rounded-full blur-md opacity-60 animate-pulse"></div>
+                            <span className="relative flex items-center gap-1.5 bg-gradient-to-r from-emerald-500 to-emerald-400 text-white text-[10px] font-black px-4 py-2 rounded-full shadow-[0_0_20px_rgba(16,185,129,0.5)] uppercase tracking-wider">
+                                <span className="w-1.5 h-1.5 bg-white rounded-full animate-ping"></span>
+                                NEW
+                            </span>
+                        </div>
+                    ) : (
+                        /* Badge TRENDING con chispas rosadas */
+                        <div className="relative">
+                            {/* Chispas animadas alrededor */}
+                            <span className="absolute -top-2 -right-2 text-[10px] text-[#F492B7] animate-ping drop-shadow-[0_0_4px_#F492B7]">✦</span>
+                            <span className="absolute -bottom-2 -left-2 text-[10px] text-[#F492B7] animate-ping drop-shadow-[0_0_4px_#F492B7]" style={{ animationDelay: '0.5s' }}>✦</span>
+                            <span className="absolute -top-1 left-0 text-[8px] text-[#F492B7] animate-pulse drop-shadow-[0_0_3px_#F492B7]">✦</span>
+                            <span className="absolute -bottom-1 right-0 text-[8px] text-[#F492B7] animate-pulse drop-shadow-[0_0_3px_#F492B7]" style={{ animationDelay: '0.3s' }}>✦</span>
+                            <span className="absolute top-1/2 -translate-y-1/2 -left-3 text-[8px] text-[#F492B7] animate-bounce drop-shadow-[0_0_4px_#F492B7]" style={{ animationDelay: '0.2s' }}>✦</span>
+                            <span className="absolute top-1/2 -translate-y-1/2 -right-3 text-[8px] text-[#F492B7] animate-bounce drop-shadow-[0_0_4px_#F492B7]" style={{ animationDelay: '0.7s' }}>✦</span>
+                            {/* Glow pulsante detrás */}
+                            <div className="absolute -inset-1 bg-gradient-to-r from-[#F492B7] to-[#ff6fb7] rounded-full blur-md opacity-60 animate-pulse"></div>
+                            {/* Badge principal */}
+                            <span className="relative flex items-center gap-1 bg-gradient-to-r from-[#F492B7] to-[#ff6fb7] text-black text-[10px] font-black px-3 py-1.5 rounded-full shadow-[0_0_25px_rgba(244,146,183,0.6)] uppercase tracking-wider">
+                                <TrendingUpIcon /> Trending
+                            </span>
+                        </div>
+                    )}
                 </div>
             </div>
 
             <div className="p-8 flex flex-col flex-grow overflow-hidden">
                 <div className="flex justify-between items-start gap-4 mb-4">
-                    {/* TÍTULO RECTO (NOT-ITALIC) */}
-                    <h3 className="text-2xl font-black text-white leading-[1.1] tracking-tight group-hover:text-[#F492B7] transition-colors flex-1 line-clamp-2 uppercase not-italic">
+                    {/* TÍTULO */}
+                    <h3 className="text-xl font-bold text-white leading-[1.2] tracking-tight group-hover:text-[#F492B7] transition-colors flex-1 line-clamp-2">
                         {title}
                     </h3>
                     {!isMultiple && (
@@ -112,8 +136,8 @@ const MarketCard = ({ title, icon, chance, volume, endDate, slug, type, options 
                                 const optChance = Math.floor(100 / options.length);
                                 return (
                                     <div key={opt.id} className="flex items-center justify-between bg-white/5 p-4 rounded-2xl border border-white/5 hover:border-white/10 transition-colors">
-                                        {/* TEXTO RECTO EN OPCIONES */}
-                                        <span className="text-sm font-bold text-gray-200 truncate pr-2 flex-1 uppercase not-italic">{opt.name}</span>
+                                        {/* TEXTO EN OPCIONES */}
+                                        <span className="text-sm font-bold text-gray-200 truncate pr-2 flex-1">{opt.name}</span>
                                         <div className="flex items-center gap-3">
                                             <div className="relative w-10 h-10 flex-shrink-0">
                                                 <div className="absolute inset-0 rounded-full border-[2px] border-white/5"></div>

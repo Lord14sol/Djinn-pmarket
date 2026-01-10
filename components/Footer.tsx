@@ -17,10 +17,10 @@ export default function Footer() {
             {/* Luz ambiental sutil */}
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[200px] bg-[#F492B7] opacity-[0.03] blur-[100px] pointer-events-none"></div>
 
-            <div className="max-w-[1600px] mx-auto grid grid-cols-1 md:grid-cols-4 gap-12 mb-16 relative z-10">
+            <div className="max-w-[1600px] mx-auto grid grid-cols-1 md:grid-cols-3 gap-12 mb-16 relative z-10">
 
                 {/* Columna 1: Brand */}
-                <div className="col-span-1 md:col-span-1 flex flex-col">
+                <div className="col-span-1 flex flex-col">
                     <div className="flex items-start opacity-90">
                         <div className="relative w-32 h-32 transition-transform hover:scale-105 duration-500 cursor-pointer -ml-2">
                             <Image src="/star.png" alt="Djinn Logo" fill className="object-contain drop-shadow-[0_0_20px_rgba(244,146,183,0.15)]" />
@@ -32,17 +32,7 @@ export default function Footer() {
                     </p>
                 </div>
 
-                {/* Columna 2 */}
-                <div className="pt-4">
-                    <h4 className="text-white font-bold mb-6 uppercase tracking-wider text-sm">Platform</h4>
-                    <ul className="flex flex-col gap-4 text-sm text-gray-400 font-medium">
-                        <li className="hover:text-[#F492B7] cursor-pointer w-max transition-colors">Explore Markets</li>
-                        <li className="hover:text-[#F492B7] cursor-pointer w-max transition-colors">Leaderboard</li>
-                        <li className="hover:text-[#F492B7] cursor-pointer w-max transition-colors">Create Market</li>
-                    </ul>
-                </div>
-
-                {/* Columna 3 */}
+                {/* Columna 2: Resources */}
                 <div className="pt-4">
                     <h4 className="text-white font-bold mb-6 uppercase tracking-wider text-sm">Resources</h4>
                     <ul className="flex flex-col gap-4 text-sm text-gray-400 font-medium">
@@ -53,7 +43,7 @@ export default function Footer() {
                     </ul>
                 </div>
 
-                {/* Columna 4 */}
+                {/* Columna 3: Community */}
                 <div className="pt-4">
                     <h4 className="text-white font-bold mb-6 uppercase tracking-wider text-sm">Community</h4>
                     <p className="text-gray-400 text-sm mb-6">Join the conversation.</p>
@@ -68,7 +58,7 @@ export default function Footer() {
 
             {/* Barra inferior */}
             <div className="max-w-[1600px] mx-auto flex flex-col md:flex-row justify-between items-center border-t border-white/10 pt-8 gap-4 relative z-10">
-                <span className="text-gray-500 text-xs font-medium">© 2026 Djinn Markets. All rights reserved.</span>
+                <span className="text-gray-500 text-xs font-medium">© 2026 Djinn. All rights reserved.</span>
                 <div className="flex items-center gap-4 text-gray-500 text-xs font-mono">
                     <span>v1.0.3-beta</span>
                 </div>

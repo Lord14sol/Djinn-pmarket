@@ -56,8 +56,8 @@ export default function LeaderboardPage() {
         <main className="min-h-screen bg-black text-white pb-40 pt-40 px-10">
             <div className="max-w-[1600px] mx-auto">
 
-                {/* TÍTULO SIMPLE A LA IZQUIERDA - NO ENORME */}
-                <h1 className="text-5xl font-black mb-16 uppercase tracking-tight text-left">
+                {/* TÍTULO LIMPIO */}
+                <h1 className="text-3xl font-bold mb-16 tracking-tight text-left">
                     Leaderboard
                 </h1>
 
@@ -85,8 +85,8 @@ export default function LeaderboardPage() {
                                 className="flex items-center justify-between py-7 px-10 rounded-3xl bg-[#0D0D0D] border border-white/5 hover:border-[#F492B7]/30 transition-all group"
                             >
                                 <div className="flex items-center gap-8">
-                                    {/* NÚMERO RANK - BLANCO ✅ */}
-                                    <span className="text-3xl font-black text-white w-16 shrink-0">
+                                    {/* NÚMERO RANK */}
+                                    <span className="text-2xl font-bold text-gray-500 w-16 shrink-0">
                                         #{djinn.rank}
                                     </span>
 
@@ -99,25 +99,25 @@ export default function LeaderboardPage() {
                                             {djinn.avatar}
                                         </Link>
 
-                                        {/* USERNAME - SE MANTIENE BLANCO, HOVER ROSA */}
+                                        {/* USERNAME - Tipografía limpia */}
                                         <Link
                                             href={`/profile/${djinn.slug}`}
-                                            className="text-xl font-black uppercase tracking-tight text-white hover:text-[#F492B7] transition-colors"
+                                            className="text-lg font-bold tracking-tight text-white hover:text-[#F492B7] transition-colors"
                                         >
                                             {djinn.user}
                                             {djinn.isYou && (
-                                                <span className="ml-3 text-[9px] bg-[#F492B7] text-black px-2 py-1 rounded-full">YOU</span>
+                                                <span className="ml-3 text-[9px] bg-[#F492B7] text-black px-2 py-1 rounded-full font-black">YOU</span>
                                             )}
                                         </Link>
                                     </div>
                                 </div>
 
-                                {/* PROFIT - BLANCO ✅ */}
+                                {/* PROFIT - Estilo Activity: italic bold verde */}
                                 <div className="text-right">
-                                    <div className="text-3xl font-black text-white tracking-tight">
-                                        +${djinn.profit.toLocaleString()}
+                                    <div className="text-3xl font-black italic text-emerald-400 tracking-tight">
+                                        ${djinn.profit.toLocaleString()}
                                     </div>
-                                    <div className="text-[9px] font-bold text-gray-600 uppercase tracking-wider mt-1">
+                                    <div className="text-[9px] font-bold text-gray-600 tracking-wider mt-1">
                                         All Time Profit
                                     </div>
                                 </div>
@@ -129,8 +129,7 @@ export default function LeaderboardPage() {
                     <div className="col-span-12 lg:col-span-4">
                         <div className="bg-[#0D0D0D] border border-white/5 rounded-3xl p-8 sticky top-40">
                             <div className="flex items-center gap-2 mb-10">
-                                <span className="text-2xl">⚡</span>
-                                <h2 className="text-2xl font-black uppercase tracking-tight">
+                                <h2 className="text-xl font-bold tracking-tight">
                                     Biggest Wins
                                 </h2>
                             </div>
@@ -149,26 +148,26 @@ export default function LeaderboardPage() {
                                             </Link>
                                             <Link
                                                 href={`/profile/${win.slug}`}
-                                                className="text-lg font-black uppercase text-white hover:text-[#F492B7] transition-colors"
+                                                className="text-base font-bold text-white hover:text-[#F492B7] transition-colors"
                                             >
                                                 {win.user}
                                             </Link>
                                         </div>
 
-                                        <p className="text-xs text-gray-500 italic mb-4 uppercase font-bold">
+                                        <p className="text-xs text-gray-500 mb-4 font-medium">
                                             "{win.market}"
                                         </p>
 
                                         <div className="bg-white/[0.02] p-5 rounded-2xl border border-white/5">
                                             <div className="flex justify-between items-center">
                                                 <div>
-                                                    <span className="text-[9px] text-gray-600 font-black uppercase block mb-1">Position</span>
+                                                    <span className="text-[9px] text-gray-600 font-bold block mb-1">Position</span>
                                                     <span className="text-base font-bold text-white">{win.bet}</span>
                                                 </div>
                                                 <div className="text-right">
-                                                    <span className="text-[9px] text-gray-600 font-black uppercase block mb-1">Bounty</span>
-                                                    {/* BLANCO ✅ */}
-                                                    <span className="text-xl font-black text-white">+{win.profit}</span>
+                                                    <span className="text-[9px] text-gray-600 font-bold block mb-1">Bounty</span>
+                                                    {/* Profit estilo Activity: italic bold grande */}
+                                                    <span className="text-2xl font-black italic text-emerald-400">{win.profit}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -183,44 +182,93 @@ export default function LeaderboardPage() {
     );
 }
 
-// COMPONENTE PODIO
-function PodiumCard({ djinn, height, isFirst = false }: any) {
+// COMPONENTE PODIO - ÉPICO
+function PodiumCard({ djinn, height, isFirst = false, rank }: any) {
     if (!djinn) return null;
+
+    // Colores y estilos según el rank
+    const getRankStyles = () => {
+        if (djinn.rank === 1) {
+            return {
+                border: 'border-t-8 border-t-[#F492B7]',
+                ring: 'ring-4 ring-[#F492B7] shadow-[0_0_40px_rgba(244,146,183,0.5)]',
+                badge: 'bg-gradient-to-r from-[#F492B7] to-[#ff6fb7] text-black',
+                icon: '👑',
+                glow: true
+            };
+        } else if (djinn.rank === 2) {
+            return {
+                border: 'border-t-6 border-t-gray-300',
+                ring: 'ring-2 ring-gray-300 shadow-[0_0_20px_rgba(200,200,200,0.3)]',
+                badge: 'bg-gradient-to-r from-gray-300 to-gray-400 text-black',
+                icon: '🥈',
+                glow: false
+            };
+        } else {
+            return {
+                border: 'border-t-4 border-t-amber-600',
+                ring: 'ring-2 ring-amber-600 shadow-[0_0_20px_rgba(217,119,6,0.3)]',
+                badge: 'bg-gradient-to-r from-amber-600 to-amber-700 text-white',
+                icon: '🥉',
+                glow: false
+            };
+        }
+    };
+
+    const styles = getRankStyles();
+
     return (
-        <div className={`relative ${height} w-[320px] bg-[#0D0D0D] ${isFirst ? 'border-t-8 border-t-[#F492B7]' : 'border-t-4 border-t-white/10'} rounded-[3rem] p-10 flex flex-col items-center justify-center transition-all duration-500 shadow-2xl hover:translate-y-[-10px]`}>
+        <div className={`relative ${height} w-[320px] bg-gradient-to-b from-[#0D0D0D] to-[#080808] ${styles.border} rounded-[3rem] p-10 flex flex-col items-center justify-center transition-all duration-500 shadow-2xl hover:translate-y-[-10px] group`}>
+
+            {/* Glow de fondo para Rank 1 */}
+            {styles.glow && (
+                <div className="absolute inset-0 rounded-[3rem] bg-gradient-to-b from-[#F492B7]/10 to-transparent pointer-events-none"></div>
+            )}
 
             {/* AVATAR FLOTANTE ARRIBA */}
             <Link
                 href={`/profile/${djinn.slug}`}
-                className={`absolute -top-20 w-36 h-36 rounded-full border-[6px] border-black overflow-hidden bg-[#0A0A0A] shadow-2xl flex items-center justify-center text-7xl hover:scale-110 transition-transform ${isFirst ? 'ring-4 ring-[#F492B7]' : 'ring-2 ring-white/10'}`}
+                className={`absolute -top-16 w-32 h-32 rounded-full border-[5px] border-black overflow-hidden bg-[#0A0A0A] flex items-center justify-center text-6xl hover:scale-110 transition-transform ${styles.ring}`}
             >
                 {djinn.avatar}
             </Link>
 
-            <div className="text-center mt-16 w-full">
-                {/* RANK */}
-                <span className={`text-[11px] font-black uppercase tracking-[0.4em] mb-5 block ${isFirst ? 'text-[#F492B7]' : 'text-gray-600'}`}>
-                    RANK {djinn.rank}
-                </span>
+            <div className="text-center mt-20 w-full relative z-10">
+                {/* BADGE DE RANK */}
+                <div className="flex justify-center mb-4">
+                    <span className={`text-xs font-black px-4 py-1.5 rounded-full ${styles.badge} tracking-widest`}>
+                        #{djinn.rank}
+                    </span>
+                </div>
 
                 {/* USERNAME */}
                 <Link
                     href={`/profile/${djinn.slug}`}
-                    className="text-3xl font-black uppercase tracking-tight mb-10 block hover:text-[#F492B7] transition-colors truncate px-4"
+                    className="text-xl font-bold tracking-tight mb-8 block hover:text-[#F492B7] transition-colors truncate px-4"
                 >
                     {djinn.user}
                 </Link>
 
-                {/* PROFIT CARD - NÚMEROS MÁS PEQUEÑOS PARA QUE ENTREN ✅ */}
-                <div className={`px-6 py-5 rounded-3xl transition-all ${isFirst ? 'bg-[#F492B7] text-black' : 'bg-white/5 border border-white/5'}`}>
-                    <p className="text-3xl font-black tracking-tight leading-tight">
-                        +${djinn.profit.toLocaleString()}
+                {/* PROFIT - Verde grande */}
+                <div className="bg-white/5 border border-white/10 px-6 py-5 rounded-2xl">
+                    <p className="text-3xl font-black italic tracking-tight leading-tight text-emerald-400">
+                        ${djinn.profit.toLocaleString()}
                     </p>
-                    <p className={`text-[10px] font-black uppercase tracking-wider mt-2 ${isFirst ? 'text-black/60' : 'text-gray-600'}`}>
+                    <p className="text-[10px] font-bold tracking-wider mt-2 text-gray-600">
                         All Time Profit
                     </p>
                 </div>
             </div>
+
+            {/* Chispas para Rank 1 */}
+            {djinn.rank === 1 && (
+                <>
+                    <span className="absolute top-10 left-4 text-[10px] text-[#F492B7] animate-ping drop-shadow-[0_0_4px_#F492B7]">✦</span>
+                    <span className="absolute top-20 right-4 text-[10px] text-[#F492B7] animate-ping drop-shadow-[0_0_4px_#F492B7]" style={{ animationDelay: '0.5s' }}>✦</span>
+                    <span className="absolute bottom-20 left-6 text-[8px] text-[#F492B7] animate-pulse drop-shadow-[0_0_3px_#F492B7]">✦</span>
+                    <span className="absolute bottom-16 right-6 text-[8px] text-[#F492B7] animate-pulse drop-shadow-[0_0_3px_#F492B7]" style={{ animationDelay: '0.3s' }}>✦</span>
+                </>
+            )}
         </div>
     );
 }

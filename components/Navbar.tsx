@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
+import { useCategory } from '@/lib/CategoryContext';
 
 // --- ICONOS ---
 const DjinnStar = () => (
@@ -22,16 +23,36 @@ const ActivityIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" fill="none" 
 const UserIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>);
 
 const mainCategories = ["Trending", "New", "Earth", "Politics", "Crypto", "Sports", "Culture", "Tech", "Science", "Finance", "Climate", "Mentions", "Movies", "Social Media", "Space", "AI", "Gaming", "Music", "History"];
-const earthSubcategories = ["North America", "Middle America", "South America", "Europe", "Africa", "Asia", "Oceania"];
+const earthSubcategories = ["North America", "Central America", "South America", "Europe", "Africa", "Asia", "Oceania"];
 
 export default function Navbar() {
     const [isOpen, setIsOpen] = useState(false);
-    const [activeCategory, setActiveCategory] = useState("Trending");
-    const [activeSubcategory, setActiveSubcategory] = useState("");
+    const { activeCategory, setActiveCategory, activeSubcategory, setActiveSubcategory } = useCategory();
+    const [userPfp, setUserPfp] = useState<string | null>(null);
+    const [username, setUsername] = useState<string>("User");
 
     // Hooks de Solana Wallet Adapter
     const { setVisible } = useWalletModal();
     const { connected, publicKey, disconnect } = useWallet();
+
+    // Cargar foto de perfil desde localStorage
+    useEffect(() => {
+        const loadProfile = () => {
+            try {
+                const savedProfile = localStorage.getItem('djinn_user_profile');
+                if (savedProfile) {
+                    const profile = JSON.parse(savedProfile);
+                    if (profile.pfp) setUserPfp(profile.pfp);
+                    if (profile.username) setUsername(profile.username);
+                }
+            } catch (e) {
+                console.error("Error loading profile", e);
+            }
+        };
+        loadProfile();
+        window.addEventListener('storage', loadProfile);
+        return () => window.removeEventListener('storage', loadProfile);
+    }, []);
 
     return (
         <nav className="fixed top-0 left-0 w-full z-50 bg-black/90 backdrop-blur-xl border-b border-white/5">
@@ -73,21 +94,32 @@ export default function Navbar() {
                 <div className="flex items-center gap-4">
                     <div className="hidden sm:flex items-center">
                         {!connected ? (
-                            <button onClick={() => setVisible(true)} className="djinn-bubble-btn-mini">
+                            /* Desconectado: Botón Connect Wallet */
+                            <button
+                                onClick={() => setVisible(true)}
+                                className="px-5 py-2.5 rounded-xl bg-[#F492B7] text-black text-[11px] font-black uppercase tracking-wider hover:bg-[#ff6fb7] hover:scale-105 active:scale-95 transition-all duration-300 shadow-[0_0_20px_rgba(244,146,183,0.2)]"
+                            >
                                 Connect Wallet
                             </button>
                         ) : (
-                            <div
-                                onClick={() => setIsOpen(!isOpen)}
-                                className="flex items-center gap-3 bg-[#F492B7]/10 border border-[#F492B7]/20 py-1.5 pl-4 pr-1.5 rounded-full cursor-pointer hover:bg-[#F492B7]/20 transition-all"
+                            /* Conectado: Foto + dirección rosa → click va al perfil */
+                            <Link
+                                href={`/profile/${publicKey?.toString()}`}
+                                className="group flex items-center gap-3 bg-[#0d0d0f] border border-[#F492B7]/20 py-1 pl-1 pr-4 rounded-full cursor-pointer hover:border-[#F492B7]/50 hover:bg-[#F492B7]/5 transition-all duration-300"
                             >
-                                <span className="text-[10px] font-mono text-white/80">
-                                    {publicKey?.toString().slice(0, 4)}..{publicKey?.toString().slice(-4)}
-                                </span>
-                                <div className="relative w-9 h-9 rounded-full border border-[#F492B7]/50 overflow-hidden bg-gray-900">
-                                    <Image src="/star.png" alt="Profile" fill className="object-cover p-1" />
+                                {/* Avatar destacado */}
+                                <div className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-[#F492B7]/40 group-hover:border-[#F492B7] transition-all shadow-[0_0_15px_rgba(244,146,183,0.15)] group-hover:shadow-[0_0_20px_rgba(244,146,183,0.3)]">
+                                    {userPfp ? (
+                                        <img src={userPfp} alt="Profile" className="w-full h-full object-cover" />
+                                    ) : (
+                                        <Image src="/star.png" alt="Profile" fill className="object-cover p-1.5" />
+                                    )}
                                 </div>
-                            </div>
+                                {/* Dirección en rosa */}
+                                <span className="text-[11px] font-bold text-[#F492B7] tracking-wide group-hover:text-[#ff6fb7] transition-colors">
+                                    {publicKey?.toString().slice(0, 4)}...{publicKey?.toString().slice(-4)}
+                                </span>
+                            </Link>
                         )}
                     </div>
 

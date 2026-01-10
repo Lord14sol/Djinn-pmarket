@@ -8,6 +8,24 @@ import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
 import { Clock, DollarSign, Wallet, MessageSquare, Activity, Image as ImageIcon, X, Send, Heart, CornerDownRight, TrendingUp, TrendingDown, Users, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import * as supabaseDb from '@/lib/supabase-db';
+
+// Función para formatear tiempo relativo
+function formatTimeAgo(timestamp: string): string {
+    if (!timestamp) return 'Just now';
+    const now = Date.now();
+    const created = new Date(timestamp).getTime();
+    const diff = now - created;
+    const seconds = Math.floor(diff / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (seconds < 60) return 'Just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    return `${days}d ago`;
+}
 
 // --- CONFIGURACIÓN DE TESORERÍA ---
 const TREASURY_WALLET = new PublicKey("C31JQfZBVRsnvFqiNptD95rvbEx8fsuPwdZn62yEWx9X");
@@ -127,9 +145,73 @@ export default function MarketPage() {
         if (savedProfile) setUserProfile(JSON.parse(savedProfile));
         if (!foundMarket) foundMarket = { type: 'binary', title: slug, icon: "🔮", yesPrice: 50, noPrice: 50, volume: "$0", description: "Market info..." };
         setMarket(foundMarket);
-        setLivePrice(foundMarket.yesPrice || 50);
-        setChartData(generateChartData(foundMarket.yesPrice || 50));
-    }, [slug]);
+
+        // CARGAR DATOS DESDE SUPABASE
+        const loadFromSupabase = async () => {
+            // Cargar precio del market
+            const marketDataDb = await supabaseDb.getMarketData(slug);
+            if (marketDataDb) {
+                setLivePrice(marketDataDb.live_price);
+                setChartData(generateChartData(marketDataDb.live_price));
+            } else {
+                setLivePrice(foundMarket.yesPrice || 50);
+                setChartData(generateChartData(foundMarket.yesPrice || 50));
+            }
+
+            // Cargar comentarios desde Supabase
+            const walletAddress = publicKey?.toBase58();
+            const commentsDb = await supabaseDb.getComments(slug, walletAddress);
+            if (commentsDb.length > 0) {
+                // Convertir formato de Supabase a formato local
+                const formattedComments = commentsDb.map(c => ({
+                    id: c.id as any,
+                    user: c.username,
+                    avatar: c.avatar_url,
+                    isMe: c.wallet_address === walletAddress,
+                    time: formatTimeAgo(c.created_at || ''),
+                    text: c.text,
+                    image: c.image_url,
+                    likes: c.likes_count,
+                    likedByMe: c.liked_by_me || false,
+                    position: c.position as 'YES' | 'NO' | null,
+                    positionAmount: c.position_amount,
+                    replies: c.replies?.map(r => ({
+                        id: r.id as any,
+                        user: r.username,
+                        avatar: r.avatar_url,
+                        isMe: r.wallet_address === walletAddress,
+                        time: formatTimeAgo(r.created_at || ''),
+                        text: r.text,
+                        image: r.image_url,
+                        likes: r.likes_count,
+                        likedByMe: r.liked_by_me || false,
+                        position: r.position as 'YES' | 'NO' | null,
+                        positionAmount: r.position_amount,
+                        replies: []
+                    })) || []
+                }));
+                setComments(formattedComments);
+            }
+        };
+
+        loadFromSupabase();
+
+        // Suscribirse a cambios en tiempo real
+        const commentsChannel = supabaseDb.subscribeToComments(slug, () => {
+            loadFromSupabase();
+        });
+
+        const marketChannel = supabaseDb.subscribeToMarketData(slug, (payload) => {
+            if (payload.new?.live_price) {
+                setLivePrice(payload.new.live_price);
+            }
+        });
+
+        return () => {
+            commentsChannel.unsubscribe();
+            marketChannel.unsubscribe();
+        };
+    }, [slug, publicKey]);
 
     const amountNum = parseFloat(betAmount) || 0;
     const isOverBalance = amountNum > solBalance;
@@ -138,7 +220,7 @@ export default function MarketPage() {
     const usdValueInTrading = (amountNum * solPrice).toFixed(2);
     const potentialProfit = estimatedShares - amountNum;
 
-    // --- PLACE BET CORREGIDO (CON CONFIRMACIÓN REAL) ---
+    // --- PLACE BET CORREGIDO (CON CONFIRMACIÓN REAL + ACTIVITY) ---
     const handlePlaceBet = async () => {
         if (!publicKey || isOverBalance || amountNum <= 0) return;
         setIsPending(true);
@@ -163,19 +245,57 @@ export default function MarketPage() {
             setIsSuccess(true);
             setTimeout(() => setIsSuccess(false), 3000);
 
-            // Impacto AMM Visual
-            const priceImpact = (amountNum / 500);
-            const newPrice = selectedSide === 'YES' ? Math.min(99, livePrice + priceImpact) : Math.max(1, livePrice - priceImpact);
+            // Impacto AMM realista estilo Polymarket
+            // Fórmula: impacto = (monto_usd / liquidez_virtual) * factor
+            // Mercado con $10M de liquidez virtual, factor 0.5
+            const virtualLiquidity = 10000000; // $10M
+            const usdBet = amountNum * solPrice;
+            const priceImpact = (usdBet / virtualLiquidity) * 50; // ~0.5% por cada $100,000
+            const newPrice = selectedSide === 'YES'
+                ? Math.min(99, livePrice + priceImpact)
+                : Math.max(1, livePrice - priceImpact);
             setLivePrice(newPrice);
 
-            const now = new Date();
-            setChartData(prev => [...prev, { time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), value: Number(newPrice.toFixed(1)) }]);
+            // Guardar mi posición para mostrar en comments
+            setMyHeldPosition(selectedSide);
+            const usdAmount = (amountNum * solPrice).toFixed(2);
+            setMyHeldAmount(`$${usdAmount}`);
 
-            setActivityList([{ user: "Lord", action: `Bought ${selectedSide}`, amount: `${amountNum} SOL`, time: "Just now", isSell: selectedSide === 'NO' }, ...activityList]);
+            // Actualizar mi posición en Supabase (para comments)
+            await supabaseDb.updateCommentPosition(publicKey.toBase58(), slug, selectedSide, `$${usdAmount}`);
+
+            // Actualizar comments locales para feedback inmediato
+            const updatedComments = comments.map(c =>
+                c.isMe ? { ...c, position: selectedSide, positionAmount: `$${usdAmount}` } : c
+            );
+            setComments(updatedComments);
+
+            const now = new Date();
+            const newChartPoint = { time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), value: Number(newPrice.toFixed(1)) };
+            setChartData(prev => {
+                const updatedChart = [...prev, newChartPoint];
+                return updatedChart;
+            });
+
+            // Activity con shares y USD
+            const sharesAmount = estimatedShares.toFixed(2);
+
+            // GUARDAR DATOS DEL MARKET EN SUPABASE (PERSISTENCIA GLOBAL)
+            await supabaseDb.updateMarketPrice(slug, newPrice, usdBet);
+
+            // GUARDAR ACTIVIDAD EN SUPABASE (GLOBAL)
+            await supabaseDb.createActivity({
+                wallet_address: publicKey.toBase58(),
+                username: userProfile.username,
+                avatar_url: userProfile.avatarUrl,
+                action: selectedSide,
+                amount: parseFloat(usdAmount),
+                shares: parseFloat(sharesAmount),
+                market_title: market?.title || 'Unknown Market',
+                market_slug: slug
+            });
 
             setBetAmount('');
-
-            // Forzar actualización de balance tras confirmación
             setTimeout(() => updateBalance(), 1000);
 
         } catch (e) {
@@ -191,28 +311,109 @@ export default function MarketPage() {
         if (file) { const reader = new FileReader(); reader.onloadend = () => { setNewCommentImage(reader.result as string); }; reader.readAsDataURL(file); }
     };
 
-    const handlePostComment = () => {
+    // Función para recargar comentarios desde Supabase
+    const reloadComments = async () => {
+        const walletAddress = publicKey?.toBase58();
+        const commentsDb = await supabaseDb.getComments(slug, walletAddress);
+        const formattedComments = commentsDb.map(c => ({
+            id: c.id as any,
+            user: c.username,
+            avatar: c.avatar_url,
+            isMe: c.wallet_address === walletAddress,
+            time: formatTimeAgo(c.created_at || ''),
+            text: c.text,
+            image: c.image_url,
+            likes: c.likes_count,
+            likedByMe: c.liked_by_me || false,
+            position: c.position as 'YES' | 'NO' | null,
+            positionAmount: c.position_amount,
+            replies: c.replies?.map(r => ({
+                id: r.id as any,
+                user: r.username,
+                avatar: r.avatar_url,
+                isMe: r.wallet_address === walletAddress,
+                time: formatTimeAgo(r.created_at || ''),
+                text: r.text,
+                image: r.image_url,
+                likes: r.likes_count,
+                likedByMe: r.liked_by_me || false,
+                position: r.position as 'YES' | 'NO' | null,
+                positionAmount: r.position_amount,
+                replies: []
+            })) || []
+        }));
+        setComments(formattedComments);
+    };
+
+    const handlePostComment = async () => {
         if (!newCommentText.trim() && !newCommentImage) return;
-        const newComment: Comment = { id: Date.now(), user: userProfile.username, avatar: userProfile.avatarUrl, isMe: true, time: "Just now", text: newCommentText, image: newCommentImage, likes: 0, likedByMe: false, position: myHeldPosition, positionAmount: myHeldAmount, replies: [] };
-        setComments(prev => [newComment, ...prev]);
-        setNewCommentText(""); setNewCommentImage(null);
+        if (!publicKey) {
+            alert('Please connect your wallet to comment');
+            return;
+        }
+
+        // Guardar en Supabase
+        await supabaseDb.createComment({
+            market_slug: slug,
+            wallet_address: publicKey.toBase58(),
+            username: userProfile.username,
+            avatar_url: userProfile.avatarUrl,
+            text: newCommentText,
+            image_url: newCommentImage,
+            position: myHeldPosition,
+            position_amount: myHeldAmount,
+            parent_id: null
+        });
+
+        setNewCommentText("");
+        setNewCommentImage(null);
+
+        // Recargar comentarios
+        await reloadComments();
     };
 
-    const handlePostReply = (parentId: number) => {
+    const handlePostReply = async (parentId: string | number) => {
         if (!replyText.trim()) return;
-        const newReply: Comment = { id: Date.now(), user: userProfile.username, avatar: userProfile.avatarUrl, isMe: true, time: "Just now", text: replyText, image: null, likes: 0, likedByMe: false, position: myHeldPosition, positionAmount: myHeldAmount, replies: [] };
-        setComments(comments.map(c => c.id === parentId ? { ...c, replies: [...c.replies, newReply] } : c));
-        setReplyText(""); setActiveReplyId(null);
+        if (!publicKey) {
+            alert('Please connect your wallet to reply');
+            return;
+        }
+
+        // Guardar en Supabase
+        await supabaseDb.createComment({
+            market_slug: slug,
+            wallet_address: publicKey.toBase58(),
+            username: userProfile.username,
+            avatar_url: userProfile.avatarUrl,
+            text: replyText,
+            image_url: null,
+            position: myHeldPosition,
+            position_amount: myHeldAmount,
+            parent_id: parentId as string
+        });
+
+        setReplyText("");
+        setActiveReplyId(null);
+
+        // Recargar comentarios
+        await reloadComments();
     };
 
-    const handleToggleLike = (commentId: number, isReply = false, parentId: number | null = null) => {
-        const updateLike = (c: Comment) => ({ ...c, likes: c.likedByMe ? c.likes - 1 : c.likes + 1, likedByMe: !c.likedByMe });
-        if (!isReply) setComments(prev => prev.map(c => c.id === commentId ? updateLike(c) : c));
-        else if (parentId) setComments(prev => prev.map(p => p.id === parentId ? { ...p, replies: p.replies.map(r => r.id === commentId ? updateLike(r) : r) } : p));
+    const handleToggleLike = async (commentId: string | number) => {
+        if (!publicKey) {
+            alert('Please connect your wallet to like');
+            return;
+        }
+
+        // Toggle like en Supabase
+        await supabaseDb.toggleLike(commentId as string, publicKey.toBase58());
+
+        // Recargar comentarios
+        await reloadComments();
     };
 
     if (!market) return <div className="min-h-screen bg-black" />;
-    const chartColor = selectedSide === 'YES' ? '#10B981' : '#EF4444';
+    const chartColor = selectedSide === 'YES' ? '#10b981' : '#EF4444'; // emerald-500 para YES
 
     return (
         <div className="min-h-screen bg-black text-white font-sans pb-32">
@@ -261,12 +462,12 @@ export default function MarketPage() {
                                 {bottomTab === 'COMMENTS' && (
                                     <div className="space-y-6">
                                         <div className="bg-[#0E0E0E] p-4 rounded-[2rem] border border-white/10">
-                                            <textarea className="w-full bg-transparent p-2 text-sm focus:outline-none resize-none h-20" placeholder="Manifest your prediction..." value={newCommentText} onChange={(e) => setNewCommentText(e.target.value)} />
+                                            <textarea className="w-full bg-transparent p-2 text-sm focus:outline-none resize-none h-20" placeholder="Thoughts?" value={newCommentText} onChange={(e) => setNewCommentText(e.target.value)} />
                                             {newCommentImage && <div className="relative inline-block mt-2"><img src={newCommentImage} className="max-h-40 rounded-xl" /><button onClick={() => setNewCommentImage(null)} className="absolute top-0 right-0 bg-red-500 rounded-full p-1"><X size={10} /></button></div>}
                                             <div className="flex justify-between mt-3 border-t border-white/5 pt-3">
                                                 <button onClick={() => fileInputRef.current?.click()} className="text-gray-500 hover:text-white transition-colors"><ImageIcon size={18} /></button>
                                                 <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
-                                                <button onClick={handlePostComment} className="bg-[#F492B7] text-black px-6 py-2 rounded-xl text-xs font-black uppercase">Summon</button>
+                                                <button onClick={handlePostComment} className="bg-[#F492B7] text-black px-6 py-2 rounded-xl text-xs font-black uppercase">Send Comment</button>
                                             </div>
                                         </div>
                                         {comments.map(c => (
@@ -274,7 +475,7 @@ export default function MarketPage() {
                                                 <UserAvatar isMe={c.isMe} avatar={c.avatar} />
                                                 <div className="flex-1">
                                                     <div className="flex items-center gap-3 mb-1">
-                                                        <Link href={`/profile/${c.user}`} className={`text-sm font-bold hover:underline transition-colors ${c.isMe ? 'text-[#F492B7]' : 'text-white'}`}>{c.user}</Link>
+                                                        <Link href={c.isMe ? `/profile/${c.user}` : '/profile/default'} className={`text-sm font-bold hover:underline transition-colors ${c.isMe ? 'text-[#F492B7]' : 'text-white'}`}>{c.user}</Link>
                                                         {c.position && <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-tighter ${c.position === 'YES' ? 'bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/20' : 'bg-red-500/10 text-red-500 border border-red-500/20'}`}>{c.position} HOLDER • {c.positionAmount}</div>}
                                                         <span className="text-[10px] text-gray-600 ml-auto">{c.time}</span>
                                                     </div>
@@ -298,7 +499,7 @@ export default function MarketPage() {
                                                             <UserAvatar isMe={r.isMe} avatar={r.avatar} />
                                                             <div className="flex-1">
                                                                 <div className="flex items-center gap-2">
-                                                                    <Link href={`/profile/${r.user}`} className="text-xs font-bold text-[#F492B7]">{r.user}</Link>
+                                                                    <Link href={r.isMe ? `/profile/${r.user}` : '/profile/default'} className="text-xs font-bold text-[#F492B7]">{r.user}</Link>
                                                                     <span className="text-[8px] text-gray-600">{r.time}</span>
                                                                 </div>
                                                                 <p className="text-gray-400 text-xs mt-1">{r.text}</p>
@@ -342,8 +543,8 @@ export default function MarketPage() {
                             </div>
 
                             <div className="grid grid-cols-2 gap-3 mb-6">
-                                <button onClick={() => setSelectedSide('YES')} className={`p-4 rounded-2xl border transition-all ${selectedSide === 'YES' ? 'bg-[#10B981]/10 border-[#10B981]' : 'bg-white/5 border-white/5'}`}>
-                                    <span className={`block text-xs font-black uppercase mb-1 ${selectedSide === 'YES' ? 'text-[#10B981]' : 'text-gray-500'}`}>YES</span>
+                                <button onClick={() => setSelectedSide('YES')} className={`p-4 rounded-2xl border transition-all ${selectedSide === 'YES' ? 'bg-emerald-500/10 border-emerald-500' : 'bg-white/5 border-white/5'}`}>
+                                    <span className={`block text-xs font-black uppercase mb-1 ${selectedSide === 'YES' ? 'text-emerald-500' : 'text-gray-500'}`}>YES</span>
                                     <span className="block text-2xl font-black text-white">{livePrice.toFixed(0)}¢</span>
                                 </button>
                                 <button onClick={() => setSelectedSide('NO')} className={`p-4 rounded-2xl border transition-all ${selectedSide === 'NO' ? 'bg-red-500/10 border-red-500' : 'bg-white/5 border-white/5'}`}>
@@ -390,6 +591,6 @@ export default function MarketPage() {
 
 // HELPERS MANTENIDOS
 function TabButton({ label, icon, active, onClick }: any) { return <button onClick={onClick} className={`flex items-center gap-2 text-xs font-black uppercase tracking-widest transition-colors pb-2 ${active ? 'text-white border-b-2 border-[#F492B7]' : 'text-gray-600 hover:text-gray-400'}`}>{icon} {label}</button>; }
-function ActivityRow({ user, action, amount, time, isSell = false }: any) { return <div className="flex items-center justify-between py-3 border-b border-white/5 px-4 hover:bg-white/5 transition-colors"><div className="flex items-center gap-3"><div className={`w-2 h-2 rounded-full ${isSell ? 'bg-red-500' : 'bg-[#10B981]'}`} /><Link href={`/profile/${user}`} className="text-xs font-bold text-white font-mono hover:text-[#F492B7] transition-colors">{user}</Link><span className={`text-[10px] font-black uppercase ${isSell ? 'text-red-500' : 'text-[#10B981]'}`}>{action}</span></div><div className="text-right"><span className="block text-xs font-bold text-white">{amount}</span><span className="text-[9px] text-gray-600 font-bold uppercase">{time}</span></div></div>; }
-function HolderRow({ holder }: { holder: Holder }) { return <div className="flex items-center justify-between group py-2 px-4 hover:bg-white/5 rounded-xl transition-all"><div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-sm">{holder.avatar || '👤'}</div><Link href={`/profile/${holder.name}`} className={`text-sm font-bold hover:underline hover:text-[#F492B7] transition-colors ${holder.isMe ? 'text-[#F492B7]' : 'text-gray-300'}`}>{holder.name} {holder.isMe && '(You)'}</Link></div><span className="font-mono text-sm font-black text-white">{holder.shares}</span></div>; }
+function ActivityRow({ user, action, amount, time, isSell = false }: any) { return <div className="flex items-center justify-between py-3 border-b border-white/5 px-4 hover:bg-white/5 transition-colors"><div className="flex items-center gap-3"><div className={`w-2 h-2 rounded-full ${isSell ? 'bg-red-500' : 'bg-[#10B981]'}`} /><Link href="/profile/default" className="text-xs font-bold text-white font-mono hover:text-[#F492B7] transition-colors">{user}</Link><span className={`text-[10px] font-black uppercase ${isSell ? 'text-red-500' : 'text-[#10B981]'}`}>{action}</span></div><div className="text-right"><span className="block text-xs font-bold text-white">{amount}</span><span className="text-[9px] text-gray-600 font-bold uppercase">{time}</span></div></div>; }
+function HolderRow({ holder }: { holder: Holder }) { return <div className="flex items-center justify-between group py-2 px-4 hover:bg-white/5 rounded-xl transition-all"><div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-sm">{holder.avatar || '👤'}</div><Link href={holder.isMe ? `/profile/${holder.name}` : '/profile/default'} className={`text-sm font-bold hover:underline hover:text-[#F492B7] transition-colors ${holder.isMe ? 'text-[#F492B7]' : 'text-gray-300'}`}>{holder.name} {holder.isMe && '(You)'}</Link></div><span className="font-mono text-sm font-black text-white">{holder.shares}</span></div>; }
 function UserAvatar({ isMe, avatar }: { isMe: boolean, avatar: string | null }) { const commonClasses = "w-10 h-10 rounded-full shrink-0 shadow-lg border border-white/10 object-cover"; if (isMe) { if (avatar) return <img src={avatar} alt="Profile" className={commonClasses} />; return <div className={`${commonClasses} bg-gradient-to-br from-[#F492B7] to-purple-600`} />; } return <div className={`${commonClasses} bg-white/5 flex items-center justify-center text-lg`}>{avatar || '👤'}</div>; }

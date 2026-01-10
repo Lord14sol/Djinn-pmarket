@@ -4,6 +4,7 @@ import "./globals.css";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { SolanaProvider } from "@/components/SolanaProvider";
+import { CategoryProvider } from "@/lib/CategoryContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -37,11 +38,13 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} ${adrianeStyle.variable} antialiased bg-black text-white flex flex-col min-h-screen`}
       >
         <SolanaProvider>
-          <Navbar />
-          <main className="pt-20 flex-grow">
-            {children}
-          </main>
-          <Footer />
+          <CategoryProvider>
+            <Navbar />
+            <main className="pt-20 flex-grow">
+              {children}
+            </main>
+            <Footer />
+          </CategoryProvider>
         </SolanaProvider>
       </body>
     </html>

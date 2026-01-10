@@ -8,6 +8,8 @@ import Image from 'next/image';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 
+import * as supabaseDb from '@/lib/supabase-db';
+
 export default function ProfilePage() {
     const params = useParams();
     const router = useRouter();
@@ -26,7 +28,7 @@ export default function ProfilePage() {
         banner: "https://images.unsplash.com/photo-1614850523296-d8c1af93d400?q=80&w=2070",
         gems: 1250,
         profit: 15375.00,
-        portfolio: 0, // Inicia en 0, lo llenaremos con la Blockchain
+        portfolio: 0,
         winRate: 68.5,
         biggestWin: 2450,
         medals: ["🏆", "🥇", "💎", "🔥"],
@@ -46,55 +48,84 @@ export default function ProfilePage() {
     const bannerInputRef = useRef<HTMLInputElement>(null);
     const pfpInputRef = useRef<HTMLInputElement>(null);
 
-    // --- 1. OBTENER SALDO REAL DE SOLANA (LA PIEZA FALTANTE) ---
+    // --- 1. OBTENER SALDO REAL DE SOLANA ---
     useEffect(() => {
         if (!connection || !publicKey) return;
-
         connection.getBalance(publicKey).then((balance) => {
             const solAmount = balance / LAMPORTS_PER_SOL;
-
-            setProfile(prev => ({
-                ...prev,
-                portfolio: solAmount // Ahora aquí aparecerán sus 5.00 SOL
-            }));
+            setProfile(prev => ({ ...prev, portfolio: solAmount }));
         });
     }, [connection, publicKey]);
 
-    // 2. CARGA AUTOMÁTICA DE MERCADOS Y PERFIL (LOCALSTORAGE)
+    // El slug del perfil
+    const profileSlug = params.username as string;
+    const isDefaultProfile = profileSlug === 'default';
+    const isMyProfile = !isDefaultProfile && publicKey;
+
+    // 2. CARGA DE PERFIL (SUPABASE + LOCALSTORAGE)
     useEffect(() => {
-        const loadEverything = () => {
-            const savedProfile = localStorage.getItem('djinn_user_profile');
+        if (isDefaultProfile) {
+            setProfile({
+                username: "New User",
+                bio: "This user hasn't customized their profile yet.",
+                pfp: "https://api.dicebear.com/7.x/avataaars/svg?seed=default",
+                banner: "https://images.unsplash.com/photo-1614850523296-d8c1af93d400?q=80&w=2070",
+                gems: 0, profit: 0, portfolio: 0, winRate: 0, biggestWin: 0, medals: [], activeBets: [], closedBets: [], createdMarkets: []
+            });
+            return;
+        }
+
+        const loadProfile = async () => {
+            // Cargar datos locales de bets/markets (no sync con Supabase aún)
+            const savedProfileLocal = localStorage.getItem('djinn_user_profile');
             const savedMarkets = localStorage.getItem('djinn_markets');
 
-            setProfile(prev => {
-                let updated = { ...prev };
-                if (savedProfile) {
-                    const parsed = JSON.parse(savedProfile);
-                    // No sobreescribimos el portfolio del localStorage para priorizar la blockchain
-                    const { portfolio, ...rest } = parsed;
-                    updated = { ...updated, ...rest };
+            let localData = { ...initialProfile };
+            if (savedProfileLocal) {
+                const parsed = JSON.parse(savedProfileLocal);
+                const { portfolio, ...rest } = parsed;
+                localData = { ...localData, ...rest };
+            }
+            if (savedMarkets) localData.createdMarkets = JSON.parse(savedMarkets);
+
+            // Si hay wallet conectada, intentar cargar identidad de Supabase
+            if (publicKey) {
+                const profileDb = await supabaseDb.getProfile(publicKey.toBase58());
+                if (profileDb) {
+                    localData.username = profileDb.username;
+                    localData.bio = profileDb.bio || localData.bio;
+                    localData.pfp = profileDb.avatar_url || localData.pfp;
+                    localData.banner = profileDb.banner_url || localData.banner;
                 }
-                if (savedMarkets) {
-                    const markets = JSON.parse(savedMarkets);
-                    updated.createdMarkets = markets;
-                }
-                return updated;
-            });
+            }
+
+            setProfile(localData);
         };
 
-        loadEverything();
-        window.addEventListener('storage', loadEverything);
-        const interval = setInterval(loadEverything, 1000);
-        return () => {
-            window.removeEventListener('storage', loadEverything);
-            clearInterval(interval);
-        };
-    }, []);
+        loadProfile();
 
-    const updateAndSave = (newData: any) => {
+        // Listener para cambios locales
+        window.addEventListener('storage', loadProfile);
+        return () => window.removeEventListener('storage', loadProfile);
+    }, [isDefaultProfile, publicKey]);
+
+    const updateAndSave = async (newData: any) => {
         setProfile(newData);
-        const { createdMarkets, portfolio, ...profileToSave } = newData; // No guardamos portfolio estático
+
+        // Guardar estado local (bets, medals, stats)
+        const { createdMarkets, portfolio, ...profileToSave } = newData;
         localStorage.setItem('djinn_user_profile', JSON.stringify(profileToSave));
+
+        // Guardar identidad en Supabase
+        if (publicKey) {
+            await supabaseDb.upsertProfile({
+                wallet_address: publicKey.toBase58(),
+                username: newData.username,
+                bio: newData.bio,
+                avatar_url: newData.pfp,
+                banner_url: newData.banner
+            });
+        }
     };
 
     const saveIdentity = () => {
@@ -136,7 +167,8 @@ export default function ProfilePage() {
         if (file) {
             const reader = new FileReader();
             reader.onloadend = () => {
-                updateAndSave({ ...profile, [type]: reader.result as string });
+                const newData = { ...profile, [type]: reader.result as string };
+                updateAndSave(newData);
             };
             reader.readAsDataURL(file);
         }
@@ -148,12 +180,14 @@ export default function ProfilePage() {
             <div className="w-full h-[420px] relative overflow-hidden bg-[#0A0A0A] -mt-32">
                 <img src={profile.banner} className="w-full h-full object-cover opacity-90" alt="" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent" />
-                <button
-                    onClick={() => { setTempName(profile.username); setTempBio(profile.bio); setIsEditModalOpen(true); }}
-                    className="absolute bottom-10 right-14 border border-white/20 bg-black/50 backdrop-blur-xl text-white px-8 py-3 rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] z-20 hover:bg-[#F492B7] hover:text-black transition-all"
-                >
-                    ✎ Edit Profile
-                </button>
+                {!isDefaultProfile && (
+                    <button
+                        onClick={() => { setTempName(profile.username); setTempBio(profile.bio); setIsEditModalOpen(true); }}
+                        className="absolute bottom-10 right-14 border border-white/20 bg-black/50 backdrop-blur-xl text-white px-8 py-3 rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] z-20 hover:bg-[#F492B7] hover:text-black transition-all"
+                    >
+                        ✎ Edit Profile
+                    </button>
+                )}
             </div>
 
             <div className="max-w-[1600px] mx-auto px-14">
