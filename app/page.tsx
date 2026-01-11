@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Hero from '@/components/Hero';
 import MarketCard from '@/components/MarketCard';
 import { useCategory } from '@/lib/CategoryContext';
-import GlobalActivityFeed from '@/components/GlobalActivityFeed';
+
 
 export default function Home() {
   const { activeCategory, activeSubcategory } = useCategory();
@@ -308,10 +308,7 @@ export default function Home() {
         )}
       </section>
 
-      {/* Global Activity Feed */}
-      <section className="px-6 md:px-12 pb-20 max-w-[1600px] mx-auto">
-        <GlobalActivityFeed />
-      </section>
+
     </div>
   );
 }

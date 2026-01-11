@@ -109,36 +109,45 @@ const MarketCard = ({ title, icon, chance, volume, endDate, slug, type, options,
                     )}
                     <div className="absolute top-4 right-4 z-10">
                         {isNew ? (
-                            /* Badge NEW - Futuristic Cyan/Blue style */
+                            /* Badge NEW - Green sprout style */
                             <div className="relative group">
                                 {/* Outer glow ring */}
-                                <div className="absolute -inset-0.5 bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 rounded-lg blur opacity-75 group-hover:opacity-100 transition-opacity animate-pulse"></div>
+                                <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-400 via-green-500 to-emerald-600 rounded-lg blur opacity-75 group-hover:opacity-100 transition-opacity"></div>
                                 {/* Inner badge */}
-                                <div className="relative flex items-center gap-2 bg-black px-3 py-1.5 rounded-lg border border-cyan-500/50">
-                                    {/* Animated dot */}
-                                    <div className="relative">
-                                        <div className="absolute inset-0 w-2 h-2 bg-cyan-400 rounded-full animate-ping opacity-75"></div>
-                                        <div className="w-2 h-2 bg-cyan-400 rounded-full shadow-[0_0_8px_#22d3ee]"></div>
-                                    </div>
-                                    <span className="text-[10px] font-black uppercase tracking-widest bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
-                                        Just Added
+                                <div className="relative flex items-center gap-2 bg-black px-3 py-1.5 rounded-lg border border-emerald-500/50">
+                                    {/* Sprout icon */}
+                                    <svg className="w-3.5 h-3.5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M5.5 17a4.5 4.5 0 01-1.44-8.765 4.5 4.5 0 018.302-3.046 3.5 3.5 0 014.504 4.272A4 4 0 0115 17H5.5zm3.75-2.75a.75.75 0 001.5 0V9.66l1.95 2.1a.75.75 0 101.1-1.02l-3.25-3.5a.75.75 0 00-1.1 0l-3.25 3.5a.75.75 0 101.1 1.02l1.95-2.1v4.59z" clipRule="evenodd" />
+                                    </svg>
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">
+                                        New
                                     </span>
                                 </div>
                             </div>
                         ) : (
-                            /* Badge HOT - Fire gradient orange/yellow style */
-                            <div className="relative group">
-                                {/* Fire glow effect */}
-                                <div className="absolute -inset-0.5 bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-400 rounded-lg blur opacity-60 group-hover:opacity-90 transition-opacity"></div>
-                                {/* Inner badge */}
-                                <div className="relative flex items-center gap-1.5 bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500 px-3 py-1.5 rounded-lg shadow-lg">
-                                    {/* Fire icon */}
-                                    <svg className="w-3 h-3 text-white drop-shadow-sm" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.214.33-.403.713-.57 1.116-.334.804-.614 1.768-.84 2.734a31.365 31.365 0 00-.613 3.58 2.64 2.64 0 01-.945-1.067c-.328-.68-.398-1.534-.398-2.654A1 1 0 005.05 6.05 6.981 6.981 0 003 11a7 7 0 1011.95-4.95c-.592-.591-.98-.985-1.348-1.467-.363-.476-.724-1.063-1.207-2.03zM12.12 15.12A3 3 0 017 13s.879.5 2.5.5c0-1 .5-4 1.25-4.5.5 1 .786 1.293 1.371 1.879A2.99 2.99 0 0113 13a2.99 2.99 0 01-.879 2.121z" clipRule="evenodd" />
-                                    </svg>
-                                    <span className="text-[10px] font-black uppercase tracking-wide text-white drop-shadow-sm">
-                                        Hot
-                                    </span>
+                            /* Badge TRENDING - FLOATING FIRE (no container) */
+                            <div className="relative w-6 h-7">
+                                {/* Radiating glow behind */}
+                                <div className="absolute inset-0 bg-gradient-to-t from-orange-500/50 via-amber-400/30 to-transparent rounded-full blur-md fire-glow" />
+
+                                {/* Fire element */}
+                                <div className="relative w-full h-full fire-flicker">
+                                    {/* Outer flame - red/orange */}
+                                    <div className="fire-dance absolute bottom-0 left-1/2 -translate-x-1/2 w-5 h-6 rounded-[50%_50%_50%_50%_/_60%_60%_40%_40%] bg-gradient-to-t from-red-600 via-orange-500 to-yellow-400" />
+
+                                    {/* Middle flame - orange */}
+                                    <div className="fire-dance-alt absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-5 rounded-[50%_50%_50%_50%_/_60%_60%_40%_40%] bg-gradient-to-t from-orange-500 via-amber-400 to-yellow-300" />
+
+                                    {/* Inner flame - yellow/white hot */}
+                                    <div className="fire-dance absolute bottom-0.5 left-1/2 -translate-x-1/2 w-2.5 h-3.5 rounded-[50%_50%_50%_50%_/_60%_60%_40%_40%] bg-gradient-to-t from-yellow-400 via-yellow-200 to-white" style={{ animationDelay: '0.1s' }} />
+
+                                    {/* Core - white hot */}
+                                    <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-2.5 rounded-full bg-white shadow-[0_0_8px_4px_rgba(255,255,255,0.9)]" />
+
+                                    {/* Sparks */}
+                                    <div className="fire-spark absolute bottom-5 left-0.5 w-1 h-1 rounded-full bg-yellow-200" />
+                                    <div className="fire-spark-2 absolute bottom-6 right-0 w-0.5 h-0.5 rounded-full bg-orange-200" />
+                                    <div className="fire-spark-3 absolute bottom-4 left-2.5 w-0.5 h-0.5 rounded-full bg-white" />
                                 </div>
                             </div>
                         )}

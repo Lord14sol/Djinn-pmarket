@@ -102,6 +102,20 @@ export default function MultiLineChart({ outcomes, hasPosition }: MultiLineChart
         currentValue: outcome.data[outcome.data.length - 1]?.value || 0
     }));
 
+    // Custom dot for the last data point
+    const renderCustomizedDot = (props: any) => {
+        const { cx, cy, index, stroke } = props;
+        if (index === mergedData.length - 1) {
+            return (
+                <svg x={cx - 6} y={cy - 6} width={12} height={12} fill="white" viewBox="0 0 1024 1024">
+                    <circle cx="512" cy="512" r="512" fill={stroke} />
+                    <circle cx="512" cy="512" r="200" fill="white" />
+                </svg>
+            );
+        }
+        return <></>;
+    };
+
     return (
         <div className="relative w-full">
             {/* Legend with current values */}
@@ -109,18 +123,24 @@ export default function MultiLineChart({ outcomes, hasPosition }: MultiLineChart
 
             {/* Chart container */}
             <div className="relative h-64 md:h-80 w-full bg-gradient-to-br from-white/[0.02] to-transparent rounded-2xl border border-white/5 backdrop-blur-sm overflow-hidden">
-                {/* Grid pattern */}
-                <div className="absolute inset-0 opacity-10" style={{
-                    backgroundImage: 'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)',
-                    backgroundSize: '40px 40px'
+                {/* Grid pattern - Kalshi style */}
+                <div className="absolute inset-0 opacity-[0.03]" style={{
+                    backgroundImage: 'linear-gradient(#fff 1px, transparent 1px)',
+                    backgroundSize: '100% 40px'
                 }} />
 
-                {/* Djinn watermark */}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 opacity-[0.12]">
+                {/* Djinn watermark - Centered */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 opacity-[0.12] select-none">
                     <div className="flex items-center gap-0">
-                        <Image src="/star.png" alt="Djinn" width={160} height={160} className="-mr-4" />
-                        <span className="text-6xl font-bold text-white" style={{ fontFamily: 'var(--font-adriane), serif' }}>Djinn</span>
+                        <Image src="/star.png" alt="Djinn" width={140} height={140} className="-mr-3" />
+                        <span className="text-5xl font-bold text-white" style={{ fontFamily: 'var(--font-adriane), serif' }}>Djinn</span>
                     </div>
+                </div>
+
+                {/* Volume Display - Bottom Left */}
+                <div className="absolute left-6 bottom-4 pointer-events-none z-10">
+                    <p className="text-gray-500 text-xs font-mono uppercase tracking-widest mb-1">24h Volume</p>
+                    <p className="text-white text-xl font-bold tracking-tight">$7,058,874</p>
                 </div>
 
                 <ResponsiveContainer width="100%" height="100%">
@@ -153,21 +173,23 @@ export default function MultiLineChart({ outcomes, hasPosition }: MultiLineChart
                             return (
                                 <Line
                                     key={outcome.name}
-                                    type="monotone"
+                                    type="stepAfter" // Polymarket/Kalshi style often uses step or monotone. Monotone is smoother. Let's stick to monotone but maybe try cleaner curves.
                                     dataKey={outcome.name}
                                     name={outcome.name}
                                     stroke={color}
-                                    strokeWidth={isHovered ? 3 : 2}
-                                    dot={false}
+                                    strokeWidth={isHovered ? 4 : 2.5}
+                                    dot={renderCustomizedDot}
                                     activeDot={{
                                         r: 6,
                                         fill: color,
-                                        stroke: '#000',
+                                        stroke: '#fff',
                                         strokeWidth: 2,
                                     }}
-                                    opacity={isOtherHovered ? 0.3 : 1}
+                                    opacity={isOtherHovered ? 0.2 : 1}
                                     onMouseEnter={() => setHoveredLine(outcome.name)}
                                     onMouseLeave={() => setHoveredLine(null)}
+                                    // Make line smoother
+                                    isAnimationActive={true}
                                 />
                             );
                         })}

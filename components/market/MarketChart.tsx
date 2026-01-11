@@ -62,8 +62,8 @@ export default function MarketChart({ data, color, hasPosition, flashOnUpdate }:
                 {/* Djinn watermark */}
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 opacity-[0.12]">
                     <div className="flex items-center gap-0">
-                        <Image src="/star.png" alt="Djinn" width={160} height={160} className="-mr-4" />
-                        <span className="text-6xl font-bold text-white" style={{ fontFamily: 'var(--font-adriane), serif' }}>Djinn</span>
+                        <Image src="/star.png" alt="Djinn" width={140} height={140} className="-mr-3" />
+                        <span className="text-5xl font-bold text-white" style={{ fontFamily: 'var(--font-adriane), serif' }}>Djinn</span>
                     </div>
                 </div>
 

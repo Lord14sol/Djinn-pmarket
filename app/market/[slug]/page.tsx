@@ -293,6 +293,17 @@ export default function MarketPage() {
                 alert(`Error al registrar actividad: ${activityError.message || JSON.stringify(activityError)}`);
             }
 
+            // Save bet for payout calculation
+            await supabaseDb.createBet({
+                market_slug: effectiveSlug,
+                wallet_address: publicKey.toBase58(),
+                side: selectedSide,
+                amount: parseFloat(usdBet.toFixed(2)),
+                sol_amount: parseFloat(amountNum.toFixed(4)),
+                shares: parseFloat(estimatedShares.toFixed(2)),
+                entry_price: livePrice
+            });
+
             // Update Comments Context
             await supabaseDb.updateCommentPosition(publicKey.toBase58(), effectiveSlug, selectedSide, `$${usdBet.toFixed(2)}`);
 

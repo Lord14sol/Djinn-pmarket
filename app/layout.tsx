@@ -5,6 +5,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { SolanaProvider } from "@/components/SolanaProvider";
 import { CategoryProvider } from "@/lib/CategoryContext";
+import AchievementNotification from "@/components/achievements/AchievementNotification";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,8 +24,15 @@ const adrianeStyle = Libre_Baskerville({
 });
 
 export const metadata: Metadata = {
-  title: "Djinn Markets",
+  title: "Djinn",
   description: "The future is priced in.",
+  icons: {
+    icon: [
+      { url: '/star.png', sizes: '64x64', type: 'image/png' },
+      { url: '/star.png', sizes: '128x128', type: 'image/png' },
+    ],
+    apple: '/star.png',
+  },
 };
 
 export default function RootLayout({
@@ -40,6 +48,7 @@ export default function RootLayout({
         <SolanaProvider>
           <CategoryProvider>
             <Navbar />
+            <AchievementNotification />
             <main className="pt-20 flex-grow">
               {children}
             </main>

@@ -3,16 +3,114 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useWallet } from '@solana/wallet-adapter-react';
+import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
+import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { useCategory } from '@/lib/CategoryContext';
 
 // --- ICONOS ---
-const DjinnStar = () => (
-    <div className="absolute -left-5 top-1/2 -translate-y-1/2">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-[#F492B7] animate-star-slow">
-            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-        </svg>
+// Premium multi-layer animated fire for Trending
+const TrendingFlame = () => (
+    <div className="absolute -left-6 top-1/2 -translate-y-1/2 flex items-center justify-center">
+        <div className="relative w-5 h-5">
+            {/* Glow behind */}
+            <div className="absolute inset-0 bg-gradient-to-t from-orange-500/40 to-transparent rounded-full blur-md animate-pulse" />
+
+            {/* Main flame SVG */}
+            <svg viewBox="0 0 24 24" className="w-5 h-5 relative z-10">
+                <defs>
+                    {/* Hot fire gradient */}
+                    <linearGradient id="fireGradient" x1="0%" y1="100%" x2="50%" y2="0%">
+                        <stop offset="0%" stopColor="#FF4500">
+                            <animate attributeName="stop-color" values="#FF4500;#FF6B35;#FF4500" dur="0.8s" repeatCount="indefinite" />
+                        </stop>
+                        <stop offset="50%" stopColor="#FF8C00">
+                            <animate attributeName="stop-color" values="#FF8C00;#FFA500;#FF8C00" dur="0.6s" repeatCount="indefinite" />
+                        </stop>
+                        <stop offset="100%" stopColor="#FFD700">
+                            <animate attributeName="stop-color" values="#FFD700;#FFED4A;#FFD700" dur="0.7s" repeatCount="indefinite" />
+                        </stop>
+                    </linearGradient>
+
+                    {/* Inner core gradient */}
+                    <linearGradient id="coreGradient" x1="0%" y1="100%" x2="0%" y2="0%">
+                        <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.9" />
+                        <stop offset="100%" stopColor="#FFE4B5" stopOpacity="0.6" />
+                    </linearGradient>
+
+                    {/* Glow filter */}
+                    <filter id="fireGlow" x="-50%" y="-50%" width="200%" height="200%">
+                        <feGaussianBlur stdDeviation="1.5" result="blur" />
+                        <feMerge>
+                            <feMergeNode in="blur" />
+                            <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                    </filter>
+                </defs>
+
+                {/* Outer flame - organic dancing motion */}
+                <path
+                    fill="url(#fireGradient)"
+                    filter="url(#fireGlow)"
+                    d="M12 2C12 5 10 7 10 10C10 12.5 11 14 12 14C13 14 14 12.5 14 10C14 7 12 5 12 2Z M8 8C8 10 7 11 7 13C7 15.5 9.5 17 12 17C14.5 17 17 15.5 17 13C17 11 16 10 16 8C16 9.5 15 11 15 12.5C15 14 14 15 12 15C10 15 9 14 9 12.5C9 11 8 9.5 8 8Z"
+                >
+                    <animateTransform
+                        attributeName="transform"
+                        type="scale"
+                        values="1 1;0.95 1.05;1.02 0.98;0.98 1.03;1 1"
+                        dur="0.8s"
+                        repeatCount="indefinite"
+                    />
+                </path>
+
+                {/* Middle flame layer */}
+                <path
+                    fill="url(#fireGradient)"
+                    opacity="0.8"
+                    d="M12 4C12 6.5 10.5 8 10.5 10.5C10.5 12.5 11 13.5 12 13.5C13 13.5 13.5 12.5 13.5 10.5C13.5 8 12 6.5 12 4Z"
+                >
+                    <animateTransform
+                        attributeName="transform"
+                        type="translate"
+                        values="0 0;0.3 -0.2;-0.2 0.1;0.1 -0.3;0 0"
+                        dur="0.5s"
+                        repeatCount="indefinite"
+                    />
+                </path>
+
+                {/* Inner core - bright white/yellow */}
+                <ellipse
+                    cx="12"
+                    cy="12"
+                    rx="1.5"
+                    ry="2.5"
+                    fill="url(#coreGradient)"
+                >
+                    <animate
+                        attributeName="ry"
+                        values="2.5;3;2.2;2.8;2.5"
+                        dur="0.4s"
+                        repeatCount="indefinite"
+                    />
+                    <animate
+                        attributeName="opacity"
+                        values="0.9;1;0.85;0.95;0.9"
+                        dur="0.3s"
+                        repeatCount="indefinite"
+                    />
+                </ellipse>
+
+                {/* Sparks/particles */}
+                <circle cx="10" cy="6" r="0.5" fill="#FFD700" opacity="0.8">
+                    <animate attributeName="cy" values="6;4;6" dur="0.6s" repeatCount="indefinite" />
+                    <animate attributeName="opacity" values="0.8;0;0.8" dur="0.6s" repeatCount="indefinite" />
+                </circle>
+                <circle cx="14" cy="7" r="0.4" fill="#FFA500" opacity="0.7">
+                    <animate attributeName="cy" values="7;5;7" dur="0.5s" repeatCount="indefinite" />
+                    <animate attributeName="opacity" values="0.7;0;0.7" dur="0.5s" repeatCount="indefinite" />
+                </circle>
+            </svg>
+        </div>
     </div>
 );
 
@@ -30,34 +128,27 @@ export default function Navbar() {
     const { activeCategory, setActiveCategory, activeSubcategory, setActiveSubcategory } = useCategory();
     const [userPfp, setUserPfp] = useState<string | null>(null);
     const [username, setUsername] = useState<string>("User");
+    const [balance, setBalance] = useState<number>(0);
 
     // Hooks de Solana Wallet Adapter
     const { setVisible } = useWalletModal();
     const { connected, publicKey, disconnect } = useWallet();
+    const { connection } = useConnection();
 
-    // Cargar perfil (Local + Supabase)
+    // Cargar perfil (Local + Supabase + Balance)
     useEffect(() => {
-        const loadProfile = async () => {
-            // 1. Intentar local storage primero (rápido)
-            try {
-                const savedProfile = localStorage.getItem('djinn_user_profile');
-                if (savedProfile) {
-                    const profile = JSON.parse(savedProfile);
-                    if (profile.pfp) setUserPfp(profile.pfp);
-                    if (profile.username) setUsername(profile.username);
-                }
-            } catch (e) {
-                console.error("Error loading local profile", e);
-            }
-
-            // 2. Si hay wallet, intentar Supabase (fuente de verdad)
+        const loadData = async () => {
             if (connected && publicKey) {
+                // 1. Balance
                 try {
-                    // Importar dinámicamente o usar la importación top-level si agregamos el import
-                    // Para evitar conflictos con 'use client', asegúrate de que supabase-db.ts sea client-safe o úsalo aquí.
-                    // Como Navbar es 'use client', podemos importar supabaseDb arriba.
-                    // Pero necesitamos agregarlo a los imports.
-                    // Asumiendo que agregaremos el import arriba, aquí llamamos:
+                    const bal = await connection.getBalance(publicKey);
+                    setBalance(bal / LAMPORTS_PER_SOL);
+                } catch (e) {
+                    console.error("Error loading balance", e);
+                }
+
+                // 2. Profile
+                try {
                     const dbProfile = await import('@/lib/supabase-db').then(mod => mod.getProfile(publicKey.toBase58()));
                     if (dbProfile) {
                         if (dbProfile.avatar_url) setUserPfp(dbProfile.avatar_url);
@@ -69,11 +160,8 @@ export default function Navbar() {
             }
         };
 
-        loadProfile();
-        // Escuchar cambios de storage local
-        window.addEventListener('storage', loadProfile);
-        return () => window.removeEventListener('storage', loadProfile);
-    }, [connected, publicKey]);
+        loadData();
+    }, [connected, publicKey, connection]);
 
     return (
         <nav className="fixed top-0 left-0 w-full z-50 bg-black/90 backdrop-blur-xl border-b border-white/5">
@@ -82,24 +170,14 @@ export default function Navbar() {
                     0%, 100% { opacity: 1; transform: scale(1); }
                     50% { opacity: 0.6; transform: scale(0.9); }
                 }
+                @keyframes flameModern {
+                    0%, 100% { transform: scaleY(1) scaleX(1); opacity: 1; }
+                    25% { transform: scaleY(1.08) scaleX(0.95); opacity: 0.95; }
+                    50% { transform: scaleY(0.92) scaleX(1.05); opacity: 1; }
+                    75% { transform: scaleY(1.05) scaleX(0.97); opacity: 0.9; }
+                }
                 .animate-star-slow { animation: breathe 3s ease-in-out infinite; }
-
-                .djinn-bubble-btn-mini {
-                    background: rgba(244, 146, 183, 0.1) !important;
-                    color: #F492B7 !important;
-                    font-weight: 700 !important;
-                    font-size: 0.75rem !important;
-                    padding: 0.5rem 1.2rem !important;
-                    border-radius: 9999px !important;
-                    border: 1px solid rgba(244, 146, 183, 0.2) !important;
-                    transition: all 0.3s ease;
-                    text-transform: uppercase;
-                    letter-spacing: 0.08em;
-                }
-                .djinn-bubble-btn-mini:hover {
-                    background: rgba(244, 146, 183, 0.18) !important;
-                    border-color: rgba(244, 146, 183, 0.4) !important;
-                }
+                .animate-flame-modern { animation: flameModern 1.2s ease-in-out infinite; transform-origin: bottom center; }
             `}</style>
 
             <div className="w-full px-6 md:px-12 h-24 flex items-center justify-between relative">
@@ -113,9 +191,17 @@ export default function Navbar() {
                 </Link>
 
                 <div className="flex items-center gap-4">
-                    <div className="hidden sm:flex items-center">
+                    <div className="hidden sm:flex items-center gap-4">
+                        {/* Botón Create Market estilo principal */}
+                        <Link
+                            href="/?create=true"
+                            className="bg-[#F492B7] text-black text-sm font-black py-3 px-6 rounded-xl shadow-[0_0_20px_rgba(244,146,183,0.3)] hover:scale-105 active:scale-95 transition-all uppercase tracking-wide"
+                        >
+                            Create a Market
+                        </Link>
+
                         {!connected ? (
-                            /* Desconectado: Botón Connect Wallet */
+                            /* Desconectado */
                             <button
                                 onClick={() => setVisible(true)}
                                 className="px-5 py-2.5 rounded-xl bg-[#F492B7] text-black text-[11px] font-black uppercase tracking-wider hover:bg-[#ff6fb7] hover:scale-105 active:scale-95 transition-all duration-300 shadow-[0_0_20px_rgba(244,146,183,0.2)]"
@@ -123,30 +209,36 @@ export default function Navbar() {
                                 Connect Wallet
                             </button>
                         ) : (
-                            /* Conectado: Foto + dirección rosa → click va al perfil */
-                            <Link
-                                href={`/profile/${publicKey?.toString()}`}
-                                className="group flex items-center gap-3 bg-[#0d0d0f] border border-[#F492B7]/20 py-1 pl-1 pr-4 rounded-full cursor-pointer hover:border-[#F492B7]/50 hover:bg-[#F492B7]/5 transition-all duration-300"
-                            >
-                                {/* Avatar destacado */}
-                                <div className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-[#F492B7]/40 group-hover:border-[#F492B7] transition-all shadow-[0_0_15px_rgba(244,146,183,0.15)] group-hover:shadow-[0_0_20px_rgba(244,146,183,0.3)]">
+                            /* Conectado: Rediseño estilo usuario */
+                            <div className="flex items-center bg-[#1A1A1A] rounded-lg p-1 pr-4 gap-3 border border-white/5 hover:border-white/20 transition-all cursor-pointer group" onClick={() => setIsOpen(!isOpen)}>
+                                {/* Avatar - No white border */}
+                                <div className="relative w-8 h-8 rounded-full overflow-hidden">
                                     {userPfp ? (
                                         <img src={userPfp} alt="Profile" className="w-full h-full object-cover" />
                                     ) : (
-                                        <Image src="/star.png" alt="Profile" fill className="object-cover p-1.5" />
+                                        <div className="w-full h-full bg-blue-500 flex items-center justify-center">
+                                            <span className="text-xs">🐸</span>
+                                        </div>
                                     )}
                                 </div>
-                                {/* Dirección en rosa */}
-                                <span className="text-[11px] font-bold text-[#F492B7] tracking-wide group-hover:text-[#ff6fb7] transition-colors">
-                                    {publicKey?.toString().slice(0, 4)}...{publicKey?.toString().slice(-4)}
-                                </span>
-                            </Link>
+
+                                <div className="flex flex-col items-start leading-none">
+                                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">
+                                        {publicKey?.toString().slice(0, 4)}...{publicKey?.toString().slice(-4)}
+                                    </span>
+                                    <span className="text-xs font-bold text-white tracking-tight" style={{ fontFamily: 'var(--font-adriane), serif' }}>
+                                        {balance.toFixed(2)} SOL
+                                    </span>
+                                </div>
+
+                                <span className="text-gray-500 text-xs">▼</span>
+                            </div>
                         )}
                     </div>
 
                     <button
                         onClick={() => setIsOpen(!isOpen)}
-                        className="p-2 text-gray-400 hover:text-white transition-colors"
+                        className="p-2 text-gray-400 hover:text-white transition-colors sm:hidden"
                     >
                         {isOpen ? <CloseIcon /> : <MenuIcon />}
                     </button>
@@ -167,6 +259,18 @@ export default function Navbar() {
                                     <span className="text-sm font-bold text-gray-200 uppercase tracking-widest">My Profile</span>
                                 </Link>
                             )}
+
+                            {/* Mobile Create Market */}
+                            <Link
+                                href="/?create=true"
+                                onClick={() => setIsOpen(false)}
+                                className="flex sm:hidden items-center gap-3 p-4 rounded-xl hover:bg-white/5 transition-colors group"
+                            >
+                                <div className="text-green-400/80 group-hover:text-green-400 transition-colors">
+                                    <span className="text-lg">✨</span>
+                                </div>
+                                <span className="text-sm font-bold text-gray-200 uppercase tracking-widest">Create Market</span>
+                            </Link>
 
                             <Link
                                 href="/leaderboard"
@@ -214,7 +318,7 @@ export default function Navbar() {
                         className={`relative text-[14px] font-black uppercase tracking-[0.25em] transition-all whitespace-nowrap 
                         ${activeCategory === cat ? "text-[#F492B7]" : "text-gray-400 hover:text-gray-200"}`}
                     >
-                        {cat === "Trending" && <DjinnStar />}
+
                         {cat}
                     </button>
                 ))}

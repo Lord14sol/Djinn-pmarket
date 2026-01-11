@@ -46,11 +46,22 @@ export async function getMarketPDA(
     creator: PublicKey,
     marketIndex: number
 ): Promise<[PublicKey, number]> {
-    const indexBuffer = Buffer.alloc(8);
-    indexBuffer.writeBigUInt64LE(BigInt(marketIndex));
+    // Create seeds as Uint8Array array (correct format for findProgramAddressSync)
+    const marketSeed = Buffer.from('market', 'utf8');
+    const creatorSeed = creator.toBuffer();
 
-    return await PublicKey.findProgramAddress(
-        [Buffer.from('market'), creator.toBuffer(), indexBuffer],
+    // Convert index to 8-byte little-endian buffer
+    const indexSeed = Buffer.alloc(8);
+    // Write as little endian using standard Buffer methods
+    const idx = marketIndex;
+    indexSeed[0] = idx & 0xff;
+    indexSeed[1] = (idx >> 8) & 0xff;
+    indexSeed[2] = (idx >> 16) & 0xff;
+    indexSeed[3] = (idx >> 24) & 0xff;
+    // Upper 4 bytes are 0 for small numbers
+
+    return PublicKey.findProgramAddressSync(
+        [marketSeed, creatorSeed, indexSeed],
         PROGRAM_ID
     );
 }

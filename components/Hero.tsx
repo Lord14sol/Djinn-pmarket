@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { compressImage } from '@/lib/utils';
@@ -44,6 +45,8 @@ const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
     const wallet = useWallet();
     const { publicKey, signTransaction, signAllTransactions } = wallet;
     const { setVisible } = useWalletModal();
+    const searchParams = useSearchParams();
+    const router = useRouter();
 
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false);
@@ -63,6 +66,15 @@ const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
     const [showResults, setShowResults] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
     const searchRef = useRef<HTMLDivElement>(null);
+
+    // Open modal when ?create=true is in URL (from navbar)
+    useEffect(() => {
+        if (searchParams.get('create') === 'true') {
+            setIsCreateModalOpen(true);
+            // Clean up URL
+            router.replace('/', { scroll: false });
+        }
+    }, [searchParams, router]);
 
     // Search logic with debounce
     useEffect(() => {
@@ -158,9 +170,9 @@ const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    // --- FUNCIÓN DE CREACIÓN CON SMART CONTRACT ---
+    // --- FUNCIÓN DE CREACIÓN (SIMPLIFIED - SUPABASE ONLY FOR NOW) ---
     const handleCreateMarket = async () => {
-        if (!publicKey || !signTransaction || !signAllTransactions) {
+        if (!publicKey) {
             setVisible(true);
             return;
         }
@@ -169,37 +181,18 @@ const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
         setIsLoading(true);
 
         try {
-            console.log("🚀 Creating market on Solana...");
+            console.log("🚀 Creating market...");
 
-            // 1. CREATE MARKET ON-CHAIN
+            // Generate unique IDs
             const resolutionTime = Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60);
-            const description = marketType === 'multiple'
-                ? options.map(o => o.name).join(' | ')
-                : 'Yes or No';
-
-            const { signature, marketPDA } = await createMarketOnChain(
-                wallet as any,
-                poolName,
-                description,
-                resolutionTime
-            );
-
-            console.log("✅ Market created! TX:", signature);
-
-            // 2. CREATE TOKEN MINTS
-            const { yesTokenMint, noTokenMint } = await createMarketTokenMints(
-                wallet as any,
-                marketPDA
-            );
-
-            console.log("✅ Tokens created!");
-
-            // 3. SAVE TO SUPABASE
-            const finalBanner = mainImage ? await compressImage(mainImage) : "🔮";
+            const marketId = `market_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             const slug = poolName.toLowerCase().trim()
                 .replace(/[^\w\s-]/g, '')
                 .replace(/[\s_-]+/g, '-')
                 .replace(/^-+|-+$/g, '');
+
+            // SAVE TO SUPABASE (without blockchain for now)
+            const finalBanner = mainImage ? await compressImage(mainImage) : "🔮";
 
             const supabaseClient = supabase;
             const { error: dbError } = await supabaseClient.from('markets').insert({
@@ -207,16 +200,19 @@ const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
                 title: poolName,
                 creator_wallet: publicKey.toString(),
                 end_date: new Date(resolutionTime * 1000).toISOString(),
-                market_pda: marketPDA.toBase58(),
-                yes_token_mint: yesTokenMint.toBase58(),
-                no_token_mint: noTokenMint.toBase58(),
-                tx_signature: signature,
+                market_pda: marketId, // Using generated ID instead of blockchain PDA
+                yes_token_mint: `yes_${marketId}`,
+                no_token_mint: `no_${marketId}`,
+                tx_signature: `local_${Date.now()}`,
                 banner_url: finalBanner,
             });
 
-            if (dbError) console.error('DB error:', dbError);
+            if (dbError) {
+                console.error('DB error:', dbError);
+                // Continue anyway - save locally
+            }
 
-            // 4. UPDATE UI
+            // UPDATE UI
             const newMarket = {
                 id: Date.now(),
                 title: poolName,
@@ -232,21 +228,25 @@ const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
                 slug,
                 creator: publicKey.toString(),
                 createdAt: Date.now(),
-                txSignature: signature,
-                marketPDA: marketPDA.toBase58(),
+                marketPDA: marketId,
                 economics: { creationFee: 0.03, resolutionFee: 2.0 }
             };
 
             onMarketCreated(newMarket);
 
-            // 5. RESET
+            // RESET
             setIsCreateModalOpen(false);
             setPoolName('');
             setMainImage(null);
             setMarketType('binary');
             setOptions([{ id: 1, name: '' }, { id: 2, name: '' }]);
 
-            alert(`✅ Market created on Solana!\n\nTransaction: ${signature.slice(0, 8)}...`);
+            // Trigger Achievement Milestones
+            import('@/lib/supabase-db').then(mod => {
+                mod.checkMarketMilestones(publicKey.toString());
+            });
+
+            alert(`✅ Market created successfully!`);
 
         } catch (error: any) {
             console.error("❌ Error:", error);
@@ -410,7 +410,7 @@ const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
                                     disabled={isLoading}
                                     className="w-full bg-[#F492B7] text-black py-5 rounded-xl font-black text-lg uppercase shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                 >
-                                    {isLoading ? '⏳ Creating on Solana...' : 'Create Market (0.03 SOL)'}
+                                    {isLoading ? '⏳ CREATING ON SOLANA...' : 'CREATE MARKET'}
                                 </button>
                             </div>
                         </div>

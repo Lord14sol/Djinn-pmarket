@@ -23,25 +23,38 @@ export default function ProfilePage() {
 
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [betTab, setBetTab] = useState<'active' | 'closed'>('active');
+    const [isLoading, setIsLoading] = useState(true);
+    const [unclaimedPayouts, setUnclaimedPayouts] = useState<supabaseDb.Bet[]>([]);
 
-    const initialProfile = {
-        username: "LORD",
+    const initialProfile: {
+        username: string;
+        bio: string;
+        pfp: string;
+        banner: string;
+        gems: number;
+        profit: number;
+        portfolio: number;
+        winRate: number;
+        biggestWin: number;
+        medals: string[];
+        activeBets: any[];
+        closedBets: any[];
+        achievements: any[];
+        createdMarkets: any[];
+    } = {
+        username: "lord",
         bio: "The future is priced in. Controlling the Solana prediction bazaar with arcane precision.",
         pfp: "https://api.dicebear.com/7.x/avataaars/svg?seed=lord",
         banner: "https://images.unsplash.com/photo-1614850523296-d8c1af93d400?q=80&w=2070",
         gems: 0,
-        profit: 15375.00,
+        profit: 0,
         portfolio: 0,
-        winRate: 68.5,
-        biggestWin: 2450,
-        medals: ["🏆", "🥇", "💎", "🔥"],
-        activeBets: [
-            { id: '1', title: "Will Bitcoin reach $100k by end of January 2026?", invested: 500, current: 725, side: "YES", change: "+45.0%", profit: 225 },
-            { id: '2', title: "Tesla stock above $300 by Q2 2026", invested: 300, current: 340, side: "NO", change: "+13.3%", profit: 40 },
-            { id: '3', title: "Will Apple announce AR glasses in 2026?", invested: 750, current: 690, side: "YES", change: "-8.0%", profit: -60 },
-            { id: '4', title: "Ethereum merge to finality in Q1 2026", invested: 450, current: 580, side: "YES", change: "+28.9%", profit: 130 }
-        ],
+        winRate: 0,
+        biggestWin: 0,
+        medals: [],
+        activeBets: [],
         closedBets: [],
+        achievements: [],
         createdMarkets: []
     };
 
@@ -57,6 +70,11 @@ export default function ProfilePage() {
         connection.getBalance(publicKey).then((balance) => {
             const solAmount = balance / LAMPORTS_PER_SOL;
             setProfile(prev => ({ ...prev, portfolio: solAmount }));
+        });
+
+        // Load unclaimed payouts
+        supabaseDb.getUnclaimedPayouts(publicKey.toBase58()).then(payouts => {
+            setUnclaimedPayouts(payouts);
         });
     }, [connection, publicKey]);
 
@@ -74,74 +92,163 @@ export default function ProfilePage() {
                 bio: "This user hasn't customized their profile yet.",
                 pfp: "https://api.dicebear.com/7.x/avataaars/svg?seed=default",
                 banner: "https://images.unsplash.com/photo-1614850523296-d8c1af93d400?q=80&w=2070",
-                gems: 0, profit: 0, portfolio: 0, winRate: 0, biggestWin: 0, medals: [], activeBets: [], closedBets: [], createdMarkets: []
+                gems: 0, profit: 0, portfolio: 0, winRate: 0, biggestWin: 0, medals: [],
+                achievements: [],
+                activeBets: [], closedBets: [], createdMarkets: []
             });
             setIsMyProfile(false);
+            setIsLoading(false);
             return;
         }
 
         const loadProfile = async () => {
+            setIsLoading(true);
+
+            let profileData = { ...initialProfile, achievements: [] };
+            let walletAddr: string | null = null;
+            let isMe = false;
+
             try {
-                // First, try to load profile by username from Supabase
-                const allProfiles = await supabaseDb.getActivity(); // Get all to filter by username
-                // Find the user's wallet by looking up their username in activity
-                const userActivity = allProfiles.find((a: any) => a.username === profileSlug);
+                // PRIORITY 1: If user has wallet connected, check if this is THEIR profile
+                if (publicKey) {
+                    const myWallet = publicKey.toBase58();
 
-                let profileData = { ...initialProfile };
-                let walletAddr: string | null = null;
-
-                if (userActivity) {
-                    walletAddr = userActivity.wallet_address;
-                    setTargetWalletAddress(walletAddr);
-
-                    // Load profile from Supabase
-                    const profileDb = await supabaseDb.getProfile(walletAddr);
-                    if (profileDb) {
-                        profileData.username = profileDb.username;
-                        profileData.bio = profileDb.bio || profileData.bio;
-                        profileData.pfp = profileDb.avatar_url || profileData.pfp;
-                        profileData.banner = profileDb.banner_url || profileData.banner;
-                    }
-                } else if (publicKey) {
-                    // Fallback: if username not found in activity, check if viewing own profile
-                    const myProfile = await supabaseDb.getProfile(publicKey.toBase58());
-                    if (myProfile && myProfile.username === profileSlug) {
-                        walletAddr = publicKey.toBase58();
-                        setTargetWalletAddress(walletAddr);
-                        profileData.username = myProfile.username;
-                        profileData.bio = myProfile.bio || profileData.bio;
-                        profileData.pfp = myProfile.avatar_url || profileData.pfp;
-                        profileData.banner = myProfile.banner_url || profileData.banner;
-                    } else {
-                        // Load from localStorage as last resort
-                        const savedProfileLocal = localStorage.getItem('djinn_user_profile');
-                        if (savedProfileLocal) {
-                            const parsed = JSON.parse(savedProfileLocal);
-                            if (parsed.username === profileSlug) {
-                                const { portfolio, ...rest } = parsed;
-                                profileData = { ...profileData, ...rest };
-                                walletAddr = publicKey.toBase58();
+                    // Load saved profile from localStorage first (fast, avoids flash)
+                    const savedLocal = localStorage.getItem('djinn_user_profile');
+                    if (savedLocal) {
+                        try {
+                            const parsed = JSON.parse(savedLocal);
+                            // Check if URL slug matches saved username (case insensitive)
+                            if (parsed.username?.toLowerCase() === profileSlug.toLowerCase()) {
+                                isMe = true;
+                                walletAddr = myWallet;
                                 setTargetWalletAddress(walletAddr);
+                                // Apply saved data
+                                profileData = {
+                                    ...profileData,
+                                    username: parsed.username || profileData.username,
+                                    bio: parsed.bio || profileData.bio,
+                                    pfp: parsed.pfp || profileData.pfp,
+                                    banner: parsed.banner || profileData.banner,
+                                    gems: parsed.gems || 0,
+                                    profit: parsed.profit || 0,
+                                    medals: parsed.medals || [],
+                                    activeBets: parsed.activeBets || profileData.activeBets,
+                                    createdMarkets: parsed.createdMarkets || []
+                                };
                             }
+                        } catch (e) {
+                            console.error('Error parsing localStorage profile:', e);
+                        }
+                    }
+
+                    // Also check: if slug is "LORD" (default), or slug IS the wallet address
+                    // but user is authenticated -> treat as their profile
+                    const isSlugLord = profileSlug.toLowerCase() === 'lord' || profileSlug.toLowerCase() === initialProfile.username.toLowerCase();
+                    const isSlugMyWallet = profileSlug === myWallet;
+
+                    if (!isMe && (isSlugLord || isSlugMyWallet)) {
+                        isMe = true;
+                        walletAddr = myWallet;
+                        setTargetWalletAddress(walletAddr);
+
+                        // Load from localStorage if available
+                        if (savedLocal) {
+                            try {
+                                const parsed = JSON.parse(savedLocal);
+                                profileData = {
+                                    ...profileData,
+                                    username: parsed.username || profileData.username,
+                                    bio: parsed.bio || profileData.bio,
+                                    pfp: parsed.pfp || profileData.pfp,
+                                    banner: parsed.banner || profileData.banner,
+                                    gems: parsed.gems || 0,
+                                    profit: parsed.profit || 0,
+                                    medals: parsed.medals || [],
+                                    activeBets: parsed.activeBets || profileData.activeBets,
+                                    createdMarkets: parsed.createdMarkets || []
+                                };
+                            } catch (e) {
+                                console.error('Error parsing saved profile:', e);
+                            }
+                        }
+                    }
+
+                    // Try to enhance with Supabase data if available
+                    if (isMe) {
+                        const dbProfile = await supabaseDb.getProfile(myWallet);
+                        if (dbProfile) {
+                            // Supabase overwrites localStorage for certain fields
+                            if (dbProfile.avatar_url) profileData.pfp = dbProfile.avatar_url;
+                            if (dbProfile.banner_url) profileData.banner = dbProfile.banner_url;
+                            if (dbProfile.bio) profileData.bio = dbProfile.bio;
+                            if (dbProfile.username) profileData.username = dbProfile.username;
                         }
                     }
                 }
 
-                // Check if viewing own profile
-                setIsMyProfile(publicKey ? walletAddr === publicKey.toBase58() : false);
+                // PRIORITY 2: If not my profile, check if viewing someone else's profile
+                if (!isMe) {
+                    // Try to find user in activity by username
+                    const allProfiles = await supabaseDb.getActivity();
+                    const userActivity = allProfiles.find((a: any) =>
+                        a.username?.toLowerCase() === profileSlug.toLowerCase()
+                    );
 
-                // Load created markets from localStorage
+                    if (userActivity) {
+                        walletAddr = userActivity.wallet_address;
+                        setTargetWalletAddress(walletAddr);
+
+                        // Load their profile from Supabase
+                        const profileDb = await supabaseDb.getProfile(walletAddr);
+                        if (profileDb) {
+                            profileData.username = profileDb.username;
+                            profileData.bio = profileDb.bio || profileData.bio;
+                            profileData.pfp = profileDb.avatar_url || profileData.pfp;
+                            profileData.banner = profileDb.banner_url || profileData.banner;
+                        } else {
+                            profileData.username = userActivity.username;
+                        }
+                    } else if (profileSlug.toLowerCase() !== 'lord' && profileSlug.toLowerCase() !== initialProfile.username.toLowerCase()) {
+                        // GHOST PROFILE - user doesn't exist
+                        profileData = {
+                            ...initialProfile,
+                            username: profileSlug,
+                            bio: "This Djinn has not yet manifested fully in this realm.",
+                            pfp: `https://api.dicebear.com/7.x/avataaars/svg?seed=${profileSlug}`,
+                            gems: 0,
+                            profit: 0,
+                            portfolio: 0,
+                            activeBets: [],
+                            createdMarkets: [],
+                            medals: [],
+                            achievements: []
+                        };
+                    }
+                }
+
+                // Load created markets from localStorage (for all profiles, user created markets are stored locally)
                 const savedMarkets = localStorage.getItem('djinn_markets');
-                if (savedMarkets) profileData.createdMarkets = JSON.parse(savedMarkets);
+                if (savedMarkets && isMe) {
+                    profileData.createdMarkets = JSON.parse(savedMarkets);
+                }
 
+                setIsMyProfile(isMe);
                 setProfile(profileData);
 
-                // Load active bets if we have a wallet address
-                if (walletAddr) {
-                    loadActiveBets(walletAddr);
+                // Load active bets - use publicKey if it's my profile, otherwise use walletAddr
+                const betsWallet = isMe && publicKey ? publicKey.toBase58() : walletAddr;
+                if (betsWallet) {
+                    loadActiveBets(betsWallet);
+                    // Load Achievements
+                    supabaseDb.getUserAchievements(betsWallet).then(achievements => {
+                        setProfile(prev => ({ ...prev, achievements }));
+                    });
                 }
             } catch (error) {
                 console.error('Error loading profile:', error);
+            } finally {
+                setIsLoading(false);
             }
         };
 
@@ -258,7 +365,7 @@ export default function ProfilePage() {
             <div className="w-full h-[420px] relative overflow-hidden bg-[#0A0A0A] -mt-32">
                 <img src={profile.banner} className="w-full h-full object-cover opacity-90" alt="" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent" />
-                {!isDefaultProfile && (
+                {isMyProfile && (
                     <button
                         onClick={() => { setTempName(profile.username); setTempBio(profile.bio); setIsEditModalOpen(true); }}
                         className="absolute bottom-10 right-14 border border-white/20 bg-black/50 backdrop-blur-xl text-white px-8 py-3 rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] z-20 hover:bg-[#F492B7] hover:text-black transition-all"
@@ -275,7 +382,7 @@ export default function ProfilePage() {
                         <img src={profile.pfp} className="w-full h-full object-cover" alt="" />
                     </div>
                     <div className="mt-28 flex-1">
-                        <h1 className="text-7xl font-black tracking-tighter uppercase leading-none drop-shadow-2xl">{profile.username}</h1>
+                        <h1 className="text-7xl font-black tracking-tighter leading-none drop-shadow-2xl">{profile.username}</h1>
                         {/* Bio estilo Twitter - sin barra lateral */}
                         <p className="text-gray-400 text-lg mt-4 max-w-2xl leading-relaxed">{profile.bio}</p>
 
@@ -287,19 +394,27 @@ export default function ProfilePage() {
                             <span className="text-[#F492B7] text-sm font-black uppercase tracking-widest">💎 Gems</span>
                         </div>
 
-                        {/* Wallet address */}
+                        {/* Wallet address - click anywhere to copy */}
                         {targetWalletAddress && (
-                            <div className="flex items-center gap-2 mt-4">
-                                <span className="text-gray-600 text-sm font-mono bg-white/5 px-3 py-1 rounded-lg">
+                            <button
+                                onClick={() => {
+                                    navigator.clipboard.writeText(targetWalletAddress);
+                                    // Visual feedback
+                                    const btn = document.getElementById('wallet-copy-btn');
+                                    if (btn) {
+                                        btn.textContent = '✅ Copied!';
+                                        setTimeout(() => { btn.textContent = '📋 Copy'; }, 1500);
+                                    }
+                                }}
+                                className="flex items-center gap-2 mt-4 group cursor-pointer hover:opacity-80 transition-opacity"
+                            >
+                                <span className="text-gray-600 text-sm font-mono bg-white/5 px-3 py-1 rounded-lg group-hover:bg-white/10 transition-colors">
                                     {targetWalletAddress.slice(0, 6)}...{targetWalletAddress.slice(-4)}
                                 </span>
-                                <button
-                                    onClick={() => navigator.clipboard.writeText(targetWalletAddress)}
-                                    className="text-gray-500 hover:text-[#F492B7] transition-colors text-xs"
-                                >
+                                <span id="wallet-copy-btn" className="text-gray-500 group-hover:text-[#F492B7] transition-colors text-xs">
                                     📋 Copy
-                                </button>
-                            </div>
+                                </span>
+                            </button>
                         )}
                     </div>
                 </div>
@@ -315,12 +430,58 @@ export default function ProfilePage() {
                     <StatCard label="MARKETS CREATED" value={profile.createdMarkets?.length || 0} color="text-blue-400" />
                 </div>
 
+                {/* ACHIEVEMENTS */}
+                {profile.achievements && profile.achievements.length > 0 && (
+                    <div className="mb-12">
+                        <h3 className="text-xl font-black uppercase tracking-widest text-[#F492B7] mb-6 flex items-center gap-3">
+                            <span>🏆</span> Achievements
+                        </h3>
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                            {profile.achievements.map((ach: any) => (
+                                <div key={ach.code} className="bg-[#111] border border-white/5 rounded-2xl p-4 flex flex-col items-center text-center group hover:border-[#F492B7]/50 transition-all hover:-translate-y-1">
+                                    <div className="w-16 h-16 rounded-full bg-black border border-white/10 mb-3 relative overflow-hidden group-hover:shadow-[0_0_15px_rgba(244,146,183,0.3)] transition-all">
+                                        {ach.image_url ? (
+                                            <img src={ach.image_url} alt={ach.name} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center text-2xl">🏆</div>
+                                        )}
+                                    </div>
+                                    <h4 className="text-white font-bold text-xs uppercase tracking-wider mb-1">{ach.name}</h4>
+                                    <span className="text-[#F492B7] text-[10px] font-mono">+{ach.xp} XP</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {/* P/L CHART - POLYMARKET STYLE */}
                 <ProfitLossCard profit={profile.profit} activeBets={profile.activeBets} />
 
                 {/* CREATOR REWARDS - PUMPFUN STYLE */}
                 {profile.createdMarkets && profile.createdMarkets.length > 0 && (
-                    <CreatorRewardsCard createdMarkets={profile.createdMarkets} />
+                    <CreatorRewardsCard createdMarkets={profile.createdMarkets} isMyProfile={isMyProfile} />
+                )}
+
+                {/* UNCLAIMED WINNINGS - BETS PAYOUT */}
+                {unclaimedPayouts.length > 0 && isMyProfile && (
+                    <UnclaimedWinningsCard
+                        payouts={unclaimedPayouts}
+                        onClaim={async (betId, amount) => {
+                            if (!confirm(`Claim ${amount.toFixed(4)} SOL?`)) return;
+                            try {
+                                const { error } = await supabaseDb.claimPayout(betId);
+                                if (error) throw error;
+                                alert('✅ Payout claimed successfully!');
+                                // Remove from local state
+                                setUnclaimedPayouts(prev => prev.filter(p => p.id !== betId));
+                                // Update balance (simulated)
+                                setProfile(prev => ({ ...prev, portfolio: prev.portfolio + amount }));
+                            } catch (e: any) {
+                                console.error(e);
+                                alert('Error claiming payout: ' + e.message);
+                            }
+                        }}
+                    />
                 )}
 
                 {/* CREATED MARKETS */}
@@ -467,10 +628,10 @@ function BetCard({ bet, onCashOut, router }: any) {
                 <div className={`absolute top-0 right-0 w-32 h-32 ${isPositive ? 'bg-[#10B981]/10' : 'bg-red-500/10'} rounded-full blur-2xl pointer-events-none`}></div>
 
                 {/* Djinn watermark */}
-                <div className="absolute bottom-4 right-4 opacity-10 pointer-events-none">
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 opacity-[0.08]">
                     <div className="flex items-center gap-0">
-                        <img src="/star.png" alt="" className="w-16 h-16 -mr-2" />
-                        <span className="text-2xl font-bold text-white" style={{ fontFamily: 'var(--font-adriane), serif' }}>Djinn</span>
+                        <img src="/star.png" alt="" className="w-20 h-20 -mr-2" />
+                        <span className="text-3xl font-bold text-white" style={{ fontFamily: 'var(--font-adriane), serif' }}>Djinn</span>
                     </div>
                 </div>
 
@@ -700,11 +861,11 @@ function ProfitLossCard({ profit, activeBets }: { profit: number; activeBets: an
                         backgroundImage: 'linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)',
                         backgroundSize: '20px 20px'
                     }} />
-                    {/* Djinn watermark - same as MarketChart */}
+                    {/* Djinn watermark - standardized */}
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 opacity-[0.12]">
                         <div className="flex items-center gap-0">
-                            <img src="/star.png" alt="" className="w-40 h-40 -mr-4" />
-                            <span className="text-6xl font-bold text-white" style={{ fontFamily: 'var(--font-adriane), serif' }}>Djinn</span>
+                            <img src="/star.png" alt="" className="w-[140px] h-[140px] -mr-3" />
+                            <span className="text-5xl font-bold text-white" style={{ fontFamily: 'var(--font-adriane), serif' }}>Djinn</span>
                         </div>
                     </div>
                     <ResponsiveContainer width="100%" height="100%">
@@ -725,7 +886,7 @@ function ProfitLossCard({ profit, activeBets }: { profit: number; activeBets: an
                                     padding: '8px 12px'
                                 }}
                                 labelStyle={{ color: '#999', fontSize: 10 }}
-                                formatter={(value: number) => [`$${value.toLocaleString('en-US', { minimumFractionDigits: 2 })}`, 'Value']}
+                                formatter={(value: number | undefined) => [value ? `$${value.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '$0', 'Value']}
                             />
                             <Area
                                 type="monotone"
@@ -743,7 +904,7 @@ function ProfitLossCard({ profit, activeBets }: { profit: number; activeBets: an
 }
 
 // --- CREATOR REWARDS CARD - DJINN STYLE ---
-function CreatorRewardsCard({ createdMarkets }: { createdMarkets: any[] }) {
+function CreatorRewardsCard({ createdMarkets, isMyProfile }: { createdMarkets: any[], isMyProfile: boolean }) {
     const [period, setPeriod] = useState<'1D' | '1W' | '1M' | '3M' | '1Y' | 'all'>('1W');
 
     // Mock rewards data
@@ -780,18 +941,20 @@ function CreatorRewardsCard({ createdMarkets }: { createdMarkets: any[] }) {
                 <div className="flex items-center justify-between mb-8">
                     <h3 className="text-2xl font-black uppercase tracking-tighter text-white">Creator Rewards</h3>
                     <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => {
-                                if (typeof window !== 'undefined' && (window as any).solana) {
-                                    alert(`✅ Claiming ${unclaimedSol.toFixed(3)} SOL to your connected wallet...\n\nThis would send the accumulated creator fees to your wallet.`);
-                                } else {
-                                    alert('⚠️ Please connect your wallet first to claim rewards!');
-                                }
-                            }}
-                            className="px-5 py-2.5 bg-[#10B981] text-white font-black text-sm rounded-xl hover:bg-[#0ea472] transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)]"
-                        >
-                            💰 Claim {unclaimedSol.toFixed(3)} SOL
-                        </button>
+                        {isMyProfile && (
+                            <button
+                                onClick={() => {
+                                    if (typeof window !== 'undefined' && (window as any).solana) {
+                                        alert(`✅ Claiming ${unclaimedSol.toFixed(3)} SOL to your connected wallet...\n\nThis would send the accumulated creator fees to your wallet.`);
+                                    } else {
+                                        alert('⚠️ Please connect your wallet first to claim rewards!');
+                                    }
+                                }}
+                                className="px-5 py-2.5 bg-[#10B981] text-white font-black text-sm rounded-xl hover:bg-[#0ea472] transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+                            >
+                                💰 Claim {unclaimedSol.toFixed(3)} SOL
+                            </button>
+                        )}
                         <button className="px-5 py-2.5 bg-white/5 border border-white/10 text-white font-black text-sm rounded-xl hover:bg-white/10 transition-all">
                             Share
                         </button>
@@ -823,11 +986,11 @@ function CreatorRewardsCard({ createdMarkets }: { createdMarkets: any[] }) {
                         backgroundImage: 'linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)',
                         backgroundSize: '20px 20px'
                     }} />
-                    {/* Djinn watermark - same as MarketChart */}
+                    {/* Djinn watermark - standardized */}
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 opacity-[0.12]">
                         <div className="flex items-center gap-0">
-                            <img src="/star.png" alt="" className="w-40 h-40 -mr-4" />
-                            <span className="text-6xl font-bold text-white" style={{ fontFamily: 'var(--font-adriane), serif' }}>Djinn</span>
+                            <img src="/star.png" alt="" className="w-[140px] h-[140px] -mr-3" />
+                            <span className="text-5xl font-bold text-white" style={{ fontFamily: 'var(--font-adriane), serif' }}>Djinn</span>
                         </div>
                     </div>
                     <ResponsiveContainer width="100%" height="100%">
@@ -867,6 +1030,65 @@ function CreatorRewardsCard({ createdMarkets }: { createdMarkets: any[] }) {
                     ))}
                 </div>
 
+            </div>
+        </div>
+    );
+}
+
+// --- UNCLAIMED WINNINGS CARD ---
+function UnclaimedWinningsCard({ payouts, onClaim }: { payouts: any[], onClaim: (id: string, amount: number) => void }) {
+    const totalUnclaimed = payouts.reduce((sum, p) => sum + (p.payout || 0), 0);
+
+    return (
+        <div className="bg-gradient-to-br from-[#0D0D0D] to-black border border-emerald-500/30 rounded-[2.5rem] p-10 mb-12 shadow-[0_0_30px_rgba(16,185,129,0.1)] relative overflow-hidden">
+            {/* Background glow */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+            <div className="relative z-10">
+                <div className="flex items-center justify-between mb-8">
+                    <div>
+                        <h3 className="text-2xl font-black uppercase tracking-tighter text-white flex items-center gap-2">
+                            <span>🏆 Winnings Available</span>
+                            <span className="bg-emerald-500 text-black text-xs px-2 py-1 rounded-md">Action Required</span>
+                        </h3>
+                        <p className="text-gray-400 text-sm mt-1">You won bets on resolved markets!</p>
+                    </div>
+                    <div className="text-right">
+                        <p className="text-gray-500 text-xs font-black uppercase tracking-widest mb-1">Total Claimable</p>
+                        <p className="text-4xl font-[900] text-emerald-400 tracking-tighter leading-none">
+                            {totalUnclaimed.toFixed(4)} SOL
+                        </p>
+                    </div>
+                </div>
+
+                <div className="space-y-4">
+                    {payouts.map((payout) => (
+                        <div key={payout.id} className="bg-white/5 border border-white/10 rounded-xl p-4 flex items-center justify-between group hover:border-emerald-500/50 transition-colors">
+                            <div className="flex items-center gap-4">
+                                <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center text-xl">
+                                    💰
+                                </div>
+                                <div>
+                                    <h4 className="font-bold text-white group-hover:text-emerald-400 transition-colors">{payout.market_slug}</h4>
+                                    <div className="flex gap-2 text-xs text-gray-400">
+                                        <span className="font-mono">Bet: {payout.side}</span>
+                                        <span>•</span>
+                                        <span className="font-mono">Invested: {parseFloat(payout.sol_amount).toFixed(4)} SOL</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <p className="font-black text-emerald-400 text-xl">+{parseFloat(payout.payout).toFixed(4)} SOL</p>
+                                <button
+                                    onClick={() => onClaim(payout.id, parseFloat(payout.payout))}
+                                    className="px-4 py-2 bg-emerald-500 text-black font-bold uppercase text-xs rounded-lg hover:bg-emerald-400 transition-colors shadow-lg shadow-emerald-500/20"
+                                >
+                                    Claim
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
             </div>
         </div>
     );

@@ -4,7 +4,7 @@ import { PublicKey } from '@solana/web3.js';
 export const PROGRAM_ID = new PublicKey('BFgyP2Hba1kD6ZgzusZgSMuYmxnb6C1ne78sxvWxAHGk');
 
 // Fee constants (must match smart contract)
-export const MARKET_CREATION_FEE = 30_000_000; // 0.03 SOL in lamports
+export const MARKET_CREATION_FEE = 11_000_000; // ~$2 USD in lamports (0.011 SOL @ ~$180/SOL)
 export const TRADING_FEE_BPS = 10; // 0.1%
 export const RESOLUTION_FEE_BPS = 200; // 2%
 export const BPS_DENOMINATOR = 10_000;
