@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Hero from '@/components/Hero';
 import MarketCard from '@/components/MarketCard';
+import { MarketGridSkeleton } from '@/components/ui/Skeletons';
 import { useCategory } from '@/lib/CategoryContext';
 
 
@@ -181,6 +182,7 @@ export default function Home() {
   ];
 
   const [markets, setMarkets] = useState<any[]>(initialStaticMarkets);
+  const [isLoading, setIsLoading] = useState(true);
 
   // 2. Cargamos del LocalStorage al iniciar
   useEffect(() => {
@@ -196,6 +198,9 @@ export default function Home() {
       }
     } catch (e) {
       console.error("Error loading markets", e);
+    } finally {
+      // Small delay to show skeleton briefly
+      setTimeout(() => setIsLoading(false), 300);
     }
   }, []);
 
@@ -290,7 +295,9 @@ export default function Home() {
           {getCategoryTitle()}
         </h2>
 
-        {sortedMarkets.length === 0 ? (
+        {isLoading ? (
+          <MarketGridSkeleton count={8} />
+        ) : sortedMarkets.length === 0 ? (
           <div className="text-center py-20 border-2 border-dashed border-white/10 rounded-3xl">
             <p className="text-gray-500 text-xl font-bold uppercase tracking-widest">No markets in this category yet</p>
             <p className="text-gray-600 mt-2">Create one to be the first!</p>

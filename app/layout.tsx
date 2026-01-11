@@ -24,8 +24,34 @@ const adrianeStyle = Libre_Baskerville({
 });
 
 export const metadata: Metadata = {
-  title: "Djinn",
-  description: "The future is priced in.",
+  title: "Djinn Markets | Prediction Markets on Solana",
+  description: "Trade on the future. Create markets, bet on outcomes, earn rewards. The most premium prediction market experience on Solana.",
+  keywords: ["prediction markets", "solana", "crypto", "betting", "djinn", "defi", "web3"],
+  authors: [{ name: "Djinn Markets" }],
+  creator: "Djinn Markets",
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: "https://djinn.markets",
+    siteName: "Djinn Markets",
+    title: "Djinn Markets | Prediction Markets on Solana",
+    description: "Trade on the future. Create markets, bet on outcomes, earn rewards.",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Djinn Markets - The Future is Priced In",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Djinn Markets | Prediction Markets on Solana",
+    description: "Trade on the future. The most premium prediction market experience.",
+    images: ["/og-image.png"],
+    creator: "@DjinnMarkets",
+  },
   icons: {
     icon: [
       { url: '/star.png', sizes: '64x64', type: 'image/png' },
@@ -33,6 +59,8 @@ export const metadata: Metadata = {
     ],
     apple: '/star.png',
   },
+  manifest: "/manifest.json",
+  themeColor: "#000000",
 };
 
 export default function RootLayout({
