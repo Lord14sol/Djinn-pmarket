@@ -173,15 +173,17 @@ Profit: 20 - 10 = 10 SOL (100% ROI)
 | Componente | Progreso | Estado |
 |------------|----------|--------|
 | UI/UX | 100% | ✅ Completo |
-| Wallet Integration | 100% | ✅ Completo |
-| Database | 100% | ✅ Completo |
-| Comments & Social | 100% | ✅ Completo |
-| **Smart Contract** | **95%** | 🟡 Testing |
+| Wallet Integration | 50% | 🟡 Connect Only (No Read/Write) |
+| Database | 30% | 🟡 LocalStorage (Moving to Supabase) |
+| Comments & Social | 80% | 🟡 Local State |
+| **Smart Contract** | **20%** | 🟡 Implemented (Not Connected) |
 | Frontend ↔ SC Integration | 0% | ❌ Pendiente |
 | Escrow System | 0% | ❌ Pendiente |
-| Oracle/Resolution | 50% | 🟡 Manual |
+| Oracle/Resolution | 10% | ❌ Manual (Mock) |
 
-**Progreso Global: ~75%**
+**Progreso Global: ~40%** (Frontend MVP Complete)
+
+> ℹ️ For the detailed migration plan, see [ARCHITECTURE.md](./ARCHITECTURE.md)
 
 ---
 
