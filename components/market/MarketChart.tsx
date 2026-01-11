@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Image from 'next/image';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface MarketChartProps {
@@ -57,6 +58,14 @@ export default function MarketChart({ data, color, hasPosition, flashOnUpdate }:
                     backgroundImage: 'linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)',
                     backgroundSize: '20px 20px'
                 }} />
+
+                {/* Djinn watermark */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 opacity-[0.12]">
+                    <div className="flex items-center gap-0">
+                        <Image src="/star.png" alt="Djinn" width={160} height={160} className="-mr-4" />
+                        <span className="text-6xl font-bold text-white" style={{ fontFamily: 'var(--font-adriane), serif' }}>Djinn</span>
+                    </div>
+                </div>
 
                 <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={data} margin={{ top: 20, right: 20, bottom: 20, left: 0 }}>

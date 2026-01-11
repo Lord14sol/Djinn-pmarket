@@ -45,12 +45,27 @@ const MarketCard = ({ title, icon, chance, volume, endDate, slug, type, options,
     const [showTimer, setShowTimer] = useState(false);
     const [showBetModal, setShowBetModal] = useState(false);
     const [selectedOutcome, setSelectedOutcome] = useState<'yes' | 'no'>('yes');
+    const [selectedOption, setSelectedOption] = useState<string | null>(null);
+    const [selectedOptionChance, setSelectedOptionChance] = useState(50);
 
     const isMultiple = type === 'multiple';
 
+    // Handler for binary markets (YES/NO only)
     const handleBetClick = (e: React.MouseEvent, outcome: 'yes' | 'no') => {
         e.preventDefault();
         e.stopPropagation();
+        setSelectedOption(null);
+        setSelectedOptionChance(chance || 50);
+        setSelectedOutcome(outcome);
+        setShowBetModal(true);
+    };
+
+    // Handler for multiple option markets (Argentina, Chile, Brasil, etc.)
+    const handleMultiBetClick = (e: React.MouseEvent, outcome: 'yes' | 'no', optionName: string, optionChance: number) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setSelectedOption(optionName);
+        setSelectedOptionChance(optionChance);
         setSelectedOutcome(outcome);
         setShowBetModal(true);
     };
@@ -94,30 +109,37 @@ const MarketCard = ({ title, icon, chance, volume, endDate, slug, type, options,
                     )}
                     <div className="absolute top-4 right-4 z-10">
                         {isNew ? (
-                            /* Badge NEW con glow verde vibrante */
-                            <div className="relative">
-                                <div className="absolute -inset-1 bg-emerald-500 rounded-full blur-md opacity-60 animate-pulse"></div>
-                                <span className="relative flex items-center gap-1.5 bg-gradient-to-r from-emerald-500 to-emerald-400 text-white text-[10px] font-black px-4 py-2 rounded-full shadow-[0_0_20px_rgba(16,185,129,0.5)] uppercase tracking-wider">
-                                    <span className="w-1.5 h-1.5 bg-white rounded-full animate-ping"></span>
-                                    NEW
-                                </span>
+                            /* Badge NEW - Futuristic Cyan/Blue style */
+                            <div className="relative group">
+                                {/* Outer glow ring */}
+                                <div className="absolute -inset-0.5 bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 rounded-lg blur opacity-75 group-hover:opacity-100 transition-opacity animate-pulse"></div>
+                                {/* Inner badge */}
+                                <div className="relative flex items-center gap-2 bg-black px-3 py-1.5 rounded-lg border border-cyan-500/50">
+                                    {/* Animated dot */}
+                                    <div className="relative">
+                                        <div className="absolute inset-0 w-2 h-2 bg-cyan-400 rounded-full animate-ping opacity-75"></div>
+                                        <div className="w-2 h-2 bg-cyan-400 rounded-full shadow-[0_0_8px_#22d3ee]"></div>
+                                    </div>
+                                    <span className="text-[10px] font-black uppercase tracking-widest bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
+                                        Just Added
+                                    </span>
+                                </div>
                             </div>
                         ) : (
-                            /* Badge TRENDING con chispas rosadas */
-                            <div className="relative">
-                                {/* Chispas animadas alrededor */}
-                                <span className="absolute -top-2 -right-2 text-[10px] text-[#F492B7] animate-ping drop-shadow-[0_0_4px_#F492B7]">✦</span>
-                                <span className="absolute -bottom-2 -left-2 text-[10px] text-[#F492B7] animate-ping drop-shadow-[0_0_4px_#F492B7]" style={{ animationDelay: '0.5s' }}>✦</span>
-                                <span className="absolute -top-1 left-0 text-[8px] text-[#F492B7] animate-pulse drop-shadow-[0_0_3px_#F492B7]">✦</span>
-                                <span className="absolute -bottom-1 right-0 text-[8px] text-[#F492B7] animate-pulse drop-shadow-[0_0_3px_#F492B7]" style={{ animationDelay: '0.3s' }}>✦</span>
-                                <span className="absolute top-1/2 -translate-y-1/2 -left-3 text-[8px] text-[#F492B7] animate-bounce drop-shadow-[0_0_4px_#F492B7]" style={{ animationDelay: '0.2s' }}>✦</span>
-                                <span className="absolute top-1/2 -translate-y-1/2 -right-3 text-[8px] text-[#F492B7] animate-bounce drop-shadow-[0_0_4px_#F492B7]" style={{ animationDelay: '0.7s' }}>✦</span>
-                                {/* Glow pulsante detrás */}
-                                <div className="absolute -inset-1 bg-gradient-to-r from-[#F492B7] to-[#ff6fb7] rounded-full blur-md opacity-60 animate-pulse"></div>
-                                {/* Badge principal */}
-                                <span className="relative flex items-center gap-1 bg-gradient-to-r from-[#F492B7] to-[#ff6fb7] text-black text-[10px] font-black px-3 py-1.5 rounded-full shadow-[0_0_25px_rgba(244,146,183,0.6)] uppercase tracking-wider">
-                                    <TrendingUpIcon /> Trending
-                                </span>
+                            /* Badge HOT - Fire gradient orange/yellow style */
+                            <div className="relative group">
+                                {/* Fire glow effect */}
+                                <div className="absolute -inset-0.5 bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-400 rounded-lg blur opacity-60 group-hover:opacity-90 transition-opacity"></div>
+                                {/* Inner badge */}
+                                <div className="relative flex items-center gap-1.5 bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500 px-3 py-1.5 rounded-lg shadow-lg">
+                                    {/* Fire icon */}
+                                    <svg className="w-3 h-3 text-white drop-shadow-sm" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.214.33-.403.713-.57 1.116-.334.804-.614 1.768-.84 2.734a31.365 31.365 0 00-.613 3.58 2.64 2.64 0 01-.945-1.067c-.328-.68-.398-1.534-.398-2.654A1 1 0 005.05 6.05 6.981 6.981 0 003 11a7 7 0 1011.95-4.95c-.592-.591-.98-.985-1.348-1.467-.363-.476-.724-1.063-1.207-2.03zM12.12 15.12A3 3 0 017 13s.879.5 2.5.5c0-1 .5-4 1.25-4.5.5 1 .786 1.293 1.371 1.879A2.99 2.99 0 0113 13a2.99 2.99 0 01-.879 2.121z" clipRule="evenodd" />
+                                    </svg>
+                                    <span className="text-[10px] font-black uppercase tracking-wide text-white drop-shadow-sm">
+                                        Hot
+                                    </span>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -146,18 +168,30 @@ const MarketCard = ({ title, icon, chance, volume, endDate, slug, type, options,
                                 {options.map((opt: any) => {
                                     const optChance = Math.floor(100 / options.length);
                                     return (
-                                        <div key={opt.id} className="flex items-center justify-between bg-white/5 p-4 rounded-2xl border border-white/5 hover:border-white/10 transition-colors">
-                                            {/* TEXTO EN OPCIONES */}
+                                        <div key={opt.id} className="flex items-center justify-between bg-white/5 p-4 rounded-2xl border border-white/5 hover:border-[#F492B7]/30 transition-colors">
+                                            {/* Option Name */}
                                             <span className="text-sm font-bold text-gray-200 truncate pr-2 flex-1">{opt.name}</span>
                                             <div className="flex items-center gap-3">
+                                                {/* Chance Circle */}
                                                 <div className="relative w-10 h-10 flex-shrink-0">
                                                     <div className="absolute inset-0 rounded-full border-[2px] border-white/5"></div>
                                                     <div className="absolute inset-0 rounded-full border-[2px] border-transparent border-t-[#F492B7] border-r-[#F492B7]" style={{ transform: `rotate(${45 + (optChance * 3.6)}deg)` }}></div>
                                                     <div className="absolute inset-0 flex items-center justify-center text-[9px] font-black text-white">{optChance}%</div>
                                                 </div>
+                                                {/* YES/NO Buttons */}
                                                 <div className="flex gap-1.5">
-                                                    <button className="px-3 py-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 rounded-xl text-[10px] font-black hover:bg-emerald-500 hover:text-white transition-all uppercase">Yes</button>
-                                                    <button className="px-3 py-2 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-[10px] font-black hover:bg-red-500 hover:text-white transition-all uppercase">No</button>
+                                                    <button
+                                                        onClick={(e) => handleMultiBetClick(e, 'yes', opt.name, optChance)}
+                                                        className="px-3 py-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 rounded-xl text-[10px] font-black hover:bg-emerald-500 hover:text-white transition-all uppercase"
+                                                    >
+                                                        Yes
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => handleMultiBetClick(e, 'no', opt.name, optChance)}
+                                                        className="px-3 py-2 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-[10px] font-black hover:bg-red-500 hover:text-white transition-all uppercase"
+                                                    >
+                                                        No
+                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
@@ -213,9 +247,9 @@ const MarketCard = ({ title, icon, chance, volume, endDate, slug, type, options,
                 isOpen={showBetModal}
                 onClose={() => setShowBetModal(false)}
                 market={{
-                    title,
+                    title: selectedOption ? `${title} — ${selectedOption}` : title,
                     icon,
-                    chance,
+                    chance: selectedOptionChance,
                     volume,
                     marketPDA,
                     yesTokenMint,

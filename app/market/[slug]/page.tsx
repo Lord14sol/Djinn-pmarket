@@ -10,6 +10,7 @@ import Link from 'next/link';
 
 // Components
 import MarketChart from '@/components/market/MarketChart';
+import MultiLineChart from '@/components/market/MultiLineChart';
 import OrderBook from '@/components/market/OrderBook';
 import CommentsSection from '@/components/market/CommentsSection';
 import OutcomeList, { Outcome } from '@/components/market/OutcomeList';
@@ -24,35 +25,53 @@ const MULTI_OUTCOMES: Record<string, Outcome[]> = {
         { id: 'us-strike-mexico-jan-31', title: 'January 31', volume: '$352K', yesPrice: 7, noPrice: 93, chance: 7 },
         { id: 'us-strike-mexico-mar-31', title: 'March 31', volume: '$137K', yesPrice: 22, noPrice: 78, chance: 22 },
         { id: 'us-strike-mexico-dec-31', title: 'December 31', volume: '$130K', yesPrice: 38, noPrice: 62, chance: 38 },
+    ],
+    'world-cup-winner-multiple': [
+        { id: 'world-cup-argentina', title: 'Argentina', volume: '$150K', yesPrice: 35, noPrice: 65, chance: 35 },
+        { id: 'world-cup-chile', title: 'Chile', volume: '$80K', yesPrice: 15, noPrice: 85, chance: 15 },
+        { id: 'world-cup-brasil', title: 'Brasil', volume: '$120K', yesPrice: 30, noPrice: 70, chance: 30 },
+        { id: 'world-cup-bolivia', title: 'Bolivia', volume: '$50K', yesPrice: 5, noPrice: 95, chance: 5 },
     ]
 };
 
 const marketDisplayData: Record<string, any> = {
     'argentina-world-cup-2026': { title: "Will Argentina be finalist on the FIFA World Cup 2026?", icon: "🇦🇷", description: "Se resuelve YES si Argentina juega la final." },
     'btc-hit-150k': { title: 'Will Bitcoin reach ATH on 2026?', icon: '₿', description: 'Resolves YES if BTC breaks its previous record.' },
-    'us-strike-mexico': { title: 'US strike on Mexico by...?', icon: '🇺🇸', description: 'Predicting geopolitical events.' }
+    'us-strike-mexico': { title: 'US strike on Mexico by...?', icon: '🇺🇸', description: 'Predicting geopolitical events.' },
+    'world-cup-winner-multiple': { title: 'Who will win the World Cup 2026?', icon: '🏆', description: 'Predict which country will lift the trophy in the FIFA World Cup 2026.' }
 };
 
 
 
-// Generate a flat line history for stability, or very slight organic variance
-// User requested "quiet", only moving on buys/sells.
+// Generate chart data for single outcome
 const generateChartData = (basePrice: number) => {
     const data = [];
-    // Generate a flat line history for stability, or very slight organic variance
-    // User requested "quiet", only moving on buys/sells.
     for (let i = 0; i < 50; i++) {
         const date = new Date();
         date.setHours(date.getHours() - (50 - i));
-        // Mock history: just show the current price as a baseline
-        // In a real app, we would fetch historical candles.
-        // For now, flat line is better than random noise.
         data.push({
             time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             value: basePrice
         });
     }
     return data;
+};
+
+// Generate chart data for multi-outcome (all options with different colors)
+const generateMultiOutcomeChartData = (options: { name: string; chance: number }[]) => {
+    return options.map(opt => ({
+        name: opt.name,
+        data: Array.from({ length: 50 }, (_, i) => {
+            const date = new Date();
+            date.setHours(date.getHours() - (50 - i));
+            // Add slight variance for visual interest
+            const variance = Math.sin(i * 0.2) * 2;
+            return {
+                time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                value: Math.max(1, Math.min(99, opt.chance + variance))
+            };
+        })
+    }));
 };
 
 export default function MarketPage() {
@@ -86,10 +105,28 @@ export default function MarketPage() {
     const [activityList, setActivityList] = useState<any[]>([]);
     const [holders, setHolders] = useState<any[]>([]);
 
+    // Multi-outcome trading state
+    const [selectedOutcomeName, setSelectedOutcomeName] = useState<string | null>(
+        isMultiOutcome ? outcomes[0]?.title || null : null
+    );
+
     // My Position
     const [myHeldPosition, setMyHeldPosition] = useState<'YES' | 'NO' | null>(null);
     const [myHeldAmount, setMyHeldAmount] = useState<string | null>(null);
     const [lastOrder, setLastOrder] = useState<any>(null);
+
+    // Handler for when user clicks YES/NO on an outcome
+    const handleOutcomeBuyClick = (outcomeId: string, outcomeName: string, side: 'YES' | 'NO', price: number) => {
+        // Find the outcome to get its correct price
+        const outcome = outcomes.find(o => o.id === outcomeId);
+        if (outcome) {
+            setSelectedOutcomeId(outcomeId);
+            setSelectedOutcomeName(outcomeName);
+            setSelectedSide(side);
+            // Set the livePrice based on the outcome's yesPrice
+            setLivePrice(outcome.yesPrice);
+        }
+    };
 
     // Initial Load
     useEffect(() => {
@@ -285,35 +322,63 @@ export default function MarketPage() {
                     </div>
                 </div>
 
-                {/* MULTI-OUTCOME LIST (Like Polymarket) */}
-                {isMultiOutcome && (
-                    <div className="mb-10">
-                        <OutcomeList
-                            outcomes={outcomes}
-                            selectedId={selectedOutcomeId}
-                            onSelect={setSelectedOutcomeId}
-                        />
-                    </div>
-                )}
-
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                     {/* LEFT COLUMN */}
                     <div className="lg:col-span-8 space-y-6">
 
                         {/* CHART CARD */}
                         <div className="bg-[#0A0A0A] border border-white/10 rounded-[2rem] p-6 shadow-2xl relative overflow-hidden">
-                            <div className="flex justify-between items-start mb-2">
-                                <div className="flex items-baseline gap-3">
-                                    <span className="text-5xl font-black tracking-tighter transition-colors" style={{ color: chartColor }}>{livePrice.toFixed(1)}%</span>
-                                    <span className="text-xl font-bold text-gray-500">chance</span>
-                                </div>
-                                {!myHeldPosition && (
-                                    <div className="text-[10px] font-black uppercase text-gray-600 bg-white/5 px-2 py-1 rounded">
-                                        {isMultiOutcome ? outcomes.find(o => o.id === selectedOutcomeId)?.title : 'Binary'}
+                            {isMultiOutcome ? (
+                                /* Multi-outcome: Chart first, then outcomes list */
+                                <>
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xl font-black tracking-tight text-white">All Outcomes</span>
+                                            <span className="text-xs font-bold text-gray-500 bg-white/5 px-2 py-1 rounded">{outcomes.length} options</span>
+                                        </div>
+                                        {myHeldPosition && (
+                                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-[#10B981]/20 to-[#10B981]/10 border border-[#10B981]/30">
+                                                <div className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
+                                                <span className="text-[10px] font-black uppercase text-[#10B981] tracking-wide">Your Position Active</span>
+                                            </div>
+                                        )}
                                     </div>
-                                )}
-                            </div>
-                            <MarketChart data={chartData} color={chartColor} hasPosition={!!myHeldPosition} />
+
+                                    {/* Multi-line chart with all outcomes */}
+                                    <MultiLineChart
+                                        outcomes={generateMultiOutcomeChartData(outcomes.map(o => ({ name: o.title, chance: o.yesPrice })))}
+                                        hasPosition={!!myHeldPosition}
+                                    />
+
+                                    {/* Outcomes list BELOW the chart */}
+                                    <div className="mt-6 pt-6 border-t border-white/10">
+                                        <h3 className="text-sm font-black uppercase text-gray-500 mb-4 tracking-wider">Select an outcome to trade</h3>
+                                        <OutcomeList
+                                            outcomes={outcomes}
+                                            selectedId={selectedOutcomeId}
+                                            onSelect={setSelectedOutcomeId}
+                                            onBuyClick={handleOutcomeBuyClick}
+                                        />
+                                    </div>
+                                </>
+                            ) : (
+                                /* Single outcome chart */
+                                <>
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div className="flex items-baseline gap-3">
+                                            <span className="text-5xl font-black tracking-tighter transition-colors" style={{ color: chartColor }}>{livePrice.toFixed(1)}%</span>
+                                            <span className="text-xl font-bold text-gray-500">chance</span>
+                                        </div>
+                                        {myHeldPosition && (
+                                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-[#10B981]/20 to-[#10B981]/10 border border-[#10B981]/30">
+                                                <div className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
+                                                <span className="text-[10px] font-black uppercase text-[#10B981] tracking-wide">Your Position Active</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <MarketChart data={chartData} color={chartColor} hasPosition={!!myHeldPosition} />
+                                </>
+                            )}
                         </div>
 
                         {/* TABS & CONTENT */}
@@ -394,7 +459,8 @@ export default function MarketPage() {
                     <div className="lg:col-span-4 space-y-6">
                         {/* TRADING PANEL */}
                         <div className="bg-[#0E0E0E] border border-white/10 rounded-[2.5rem] p-6 shadow-2xl">
-                            <div className="flex justify-between mb-6 items-center">
+                            {/* Header with selected outcome indicator */}
+                            <div className="flex justify-between mb-4 items-center">
                                 <h3 className="text-[10px] font-black uppercase tracking-widest text-white opacity-40">Trade</h3>
                                 <div className="flex items-center gap-3">
                                     <div className="flex items-center gap-1 text-[10px] text-gray-400 font-bold bg-white/5 px-2 py-1 rounded">
@@ -407,15 +473,19 @@ export default function MarketPage() {
                                 </div>
                             </div>
 
-                            {/* ... Buttons ... */}
+                            {/* YES/NO Buttons - show outcome name in multi-outcome mode */}
 
                             <div className="grid grid-cols-2 gap-3 mb-6">
                                 <button onClick={() => setSelectedSide('YES')} className={`p-4 rounded-2xl border transition-all ${selectedSide === 'YES' ? 'bg-emerald-500/10 border-emerald-500' : 'bg-white/5 border-white/5'}`}>
-                                    <span className={`block text-xs font-black uppercase mb-1 ${selectedSide === 'YES' ? 'text-emerald-500' : 'text-gray-500'}`}>YES</span>
+                                    <span className={`block text-xs font-black uppercase mb-1 ${selectedSide === 'YES' ? 'text-emerald-500' : 'text-gray-500'}`}>
+                                        {isMultiOutcome && selectedOutcomeName ? `YES ${selectedOutcomeName}` : 'YES'}
+                                    </span>
                                     <span className="block text-2xl font-black text-white">{livePrice.toFixed(0)}¢</span>
                                 </button>
                                 <button onClick={() => setSelectedSide('NO')} className={`p-4 rounded-2xl border transition-all ${selectedSide === 'NO' ? 'bg-red-500/10 border-red-500' : 'bg-white/5 border-white/5'}`}>
-                                    <span className={`block text-xs font-black uppercase mb-1 ${selectedSide === 'NO' ? 'text-red-500' : 'text-gray-500'}`}>NO</span>
+                                    <span className={`block text-xs font-black uppercase mb-1 ${selectedSide === 'NO' ? 'text-red-500' : 'text-gray-500'}`}>
+                                        {isMultiOutcome && selectedOutcomeName ? `NO ${selectedOutcomeName}` : 'NO'}
+                                    </span>
                                     <span className="block text-2xl font-black text-white">{(100 - livePrice).toFixed(0)}¢</span>
                                 </button>
                             </div>
@@ -430,15 +500,15 @@ export default function MarketPage() {
                                 </span>
                             </div>
 
+                            {/* Potential returns shown when amount entered */}
                             {amountNum > 0 && !isOverBalance && (
-                                <div className="mb-6 p-4 bg-white/5 rounded-2xl border border-white/5 space-y-2 animate-in fade-in zoom-in">
-                                    <div className="flex justify-between">
-                                        <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Est. Shares</span>
-                                        <span className="text-sm font-bold text-white">{estimatedShares.toFixed(2)}</span>
-                                    </div>
-                                    <div className="flex justify-between border-t border-white/5 pt-2">
-                                        <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Potential Return</span>
-                                        <span className="text-sm font-bold text-[#10B981]">+${potentialProfit.toFixed(2)}</span>
+                                <div className="mb-6 p-3 bg-gradient-to-br from-[#10B981]/10 to-transparent rounded-xl border border-[#10B981]/20">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-[10px] font-bold text-gray-400">If {selectedSide} wins</span>
+                                        <div className="text-right">
+                                            <span className="text-lg font-black text-[#10B981]">+${potentialProfit.toFixed(2)}</span>
+                                            <span className="block text-[9px] text-gray-500">{estimatedShares.toFixed(0)} shares</span>
+                                        </div>
                                     </div>
                                 </div>
                             )}

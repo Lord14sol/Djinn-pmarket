@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { compressImage } from '@/lib/utils';
@@ -8,6 +8,7 @@ import HowItWorksModal from './HowItWorksModal';
 import { createMarketOnChain } from '@/lib/program';
 import { createMarketTokenMints } from '@/lib/token-utils';
 import { supabase } from '@/lib/supabase';
+import Link from 'next/link';
 
 // --- ICONOS ---
 const SearchIcon = () => (
@@ -21,6 +22,23 @@ const CloseIcon = () => (
         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
     </svg>
 );
+
+// Mock markets for search
+const MOCK_MARKETS = [
+    { id: 'argentina-world-cup-2026', title: 'Will Argentina be finalist on the FIFA World Cup 2026?', icon: '🇦🇷', category: 'Sports' },
+    { id: 'btc-hit-150k', title: 'Will Bitcoin reach ATH on 2026?', icon: '₿', category: 'Crypto' },
+    { id: 'us-strike-mexico', title: 'US strike on Mexico by...?', icon: '🇺🇸', category: 'Politics' },
+    { id: 'world-cup-winner-multiple', title: 'Who will win the World Cup 2026?', icon: '🏆', category: 'Sports' },
+];
+
+interface SearchResult {
+    type: 'market' | 'profile';
+    id: string;
+    title: string;
+    subtitle?: string;
+    icon?: string;
+    url: string;
+}
 
 const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
     const wallet = useWallet();
@@ -38,6 +56,107 @@ const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
         { id: 1, name: '' },
         { id: 2, name: '' }
     ]);
+
+    // Search state
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+    const [showResults, setShowResults] = useState(false);
+    const [isSearching, setIsSearching] = useState(false);
+    const searchRef = useRef<HTMLDivElement>(null);
+
+    // Search logic with debounce
+    useEffect(() => {
+        if (!searchQuery.trim()) {
+            setSearchResults([]);
+            return;
+        }
+
+        setIsSearching(true);
+        const timer = setTimeout(async () => {
+            const lowerQuery = searchQuery.toLowerCase();
+            const results: SearchResult[] = [];
+
+            // Search mock markets
+            MOCK_MARKETS.forEach(market => {
+                if (market.title.toLowerCase().includes(lowerQuery) ||
+                    market.category.toLowerCase().includes(lowerQuery)) {
+                    results.push({
+                        type: 'market',
+                        id: market.id,
+                        title: market.title,
+                        subtitle: market.category,
+                        icon: market.icon,
+                        url: `/market/${market.id}`
+                    });
+                }
+            });
+
+            // Search localStorage markets
+            try {
+                const createdMarkets = JSON.parse(localStorage.getItem('djinn_created_markets') || '[]');
+                createdMarkets.forEach((market: any) => {
+                    if (market.title?.toLowerCase().includes(lowerQuery)) {
+                        results.push({
+                            type: 'market',
+                            id: market.slug,
+                            title: market.title,
+                            subtitle: 'Created Market',
+                            icon: market.icon,
+                            url: `/market/${market.slug}`
+                        });
+                    }
+                });
+            } catch (e) { }
+
+            // Search profiles from Supabase by username
+            try {
+                const { searchProfiles } = await import('@/lib/supabase-db');
+                const profiles = await searchProfiles(searchQuery, 5);
+                profiles.forEach(profile => {
+                    results.push({
+                        type: 'profile',
+                        id: profile.wallet_address,
+                        title: profile.username,
+                        subtitle: `${profile.wallet_address.slice(0, 6)}...${profile.wallet_address.slice(-4)}`,
+                        icon: profile.avatar_url || undefined,
+                        url: `/profile/${profile.wallet_address}`
+                    });
+                });
+            } catch (e) {
+                console.error('Error searching profiles:', e);
+            }
+
+            // Search for wallet addresses (profiles) - if looks like wallet
+            if (/^[1-9A-HJ-NP-Za-km-z]{20,}$/.test(searchQuery)) {
+                // Only add if not already in results
+                if (!results.find(r => r.id === searchQuery)) {
+                    results.push({
+                        type: 'profile',
+                        id: searchQuery,
+                        title: `${searchQuery.slice(0, 6)}...${searchQuery.slice(-4)}`,
+                        subtitle: 'View Wallet Profile',
+                        url: `/profile/${searchQuery}`
+                    });
+                }
+            }
+
+            setSearchResults(results);
+            setIsSearching(false);
+        }, 300); // 300ms debounce
+
+        return () => clearTimeout(timer);
+    }, [searchQuery]);
+
+    // Close results on click outside
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+                setShowResults(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     // --- FUNCIÓN DE CREACIÓN CON SMART CONTRACT ---
     const handleCreateMarket = async () => {
@@ -159,12 +278,69 @@ const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
         <>
             <section className="relative w-full min-h-[40vh] flex flex-col items-center justify-center px-4 pt-24 pb-6">
                 <div className="w-full max-w-3xl flex flex-col items-center gap-5">
-                    {/* BARRA DE BÚSQUEDA */}
-                    <div className="relative group w-full">
+                    {/* BARRA DE BÚSQUEDA FUNCIONAL */}
+                    <div ref={searchRef} className="relative group w-full">
                         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                             <SearchIcon />
                         </div>
-                        <input type="text" className="block w-full pl-12 pr-4 py-4 bg-[#1C1D25] border border-gray-800 rounded-2xl text-lg text-white outline-none focus:ring-2 focus:ring-[#F492B7]" placeholder="Search for markets..." />
+                        <input
+                            type="text"
+                            className="block w-full pl-12 pr-4 py-4 bg-[#1C1D25] border border-gray-800 rounded-2xl text-lg text-white outline-none focus:ring-2 focus:ring-[#F492B7]"
+                            placeholder="Search for markets or profiles..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onFocus={() => setShowResults(true)}
+                        />
+
+                        {/* Search Results Dropdown */}
+                        {showResults && searchQuery && (
+                            <div className="absolute top-full left-0 right-0 mt-2 bg-[#0A0A0A] border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50 max-h-80 overflow-y-auto">
+                                {searchResults.length > 0 ? (
+                                    <div className="p-2">
+                                        {searchResults.map((result, idx) => (
+                                            <Link
+                                                key={`${result.type}-${result.id}-${idx}`}
+                                                href={result.url}
+                                                onClick={() => { setShowResults(false); setSearchQuery(''); }}
+                                                className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-all group"
+                                            >
+                                                {/* Icon */}
+                                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg ${result.type === 'market'
+                                                    ? 'bg-[#F492B7]/10 border border-[#F492B7]/20'
+                                                    : 'bg-blue-500/10 border border-blue-500/20'
+                                                    }`}>
+                                                    {result.type === 'market' ? (
+                                                        result.icon || '📊'
+                                                    ) : (
+                                                        '👤'
+                                                    )}
+                                                </div>
+
+                                                {/* Content */}
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-bold text-white truncate group-hover:text-[#F492B7] transition-colors">
+                                                        {result.title}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500">
+                                                        {result.type === 'market' ? '📊 Market' : '👤 Profile'} • {result.subtitle}
+                                                    </p>
+                                                </div>
+
+                                                {/* Arrow */}
+                                                <svg className="w-4 h-4 text-gray-600 group-hover:text-[#F492B7] transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                </svg>
+                                            </Link>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="py-8 text-center">
+                                        <p className="text-gray-500 text-sm">No results found for "{searchQuery}"</p>
+                                        <p className="text-gray-600 text-xs mt-1">Try another search term or paste a wallet address</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     {/* BOTÓN PRINCIPAL */}

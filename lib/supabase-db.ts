@@ -41,6 +41,20 @@ export async function upsertProfile(profile: Partial<Profile> & { wallet_address
     return data;
 }
 
+export async function searchProfiles(query: string, limit: number = 10): Promise<Profile[]> {
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .ilike('username', `%${query}%`)
+        .limit(limit);
+
+    if (error) {
+        console.error('Error searching profiles:', error);
+        return [];
+    }
+    return data || [];
+}
+
 // ============================================
 // COMMENTS
 // ============================================
