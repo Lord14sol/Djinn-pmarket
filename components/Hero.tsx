@@ -7,7 +7,7 @@ import { compressImage } from '@/lib/utils';
 import HowItWorksModal from './HowItWorksModal';
 import { createMarketOnChain } from '@/lib/program';
 import { createMarketTokenMints } from '@/lib/token-utils';
-import { createClient } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 
 // --- ICONOS ---
 const SearchIcon = () => (
@@ -82,8 +82,8 @@ const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
                 .replace(/[\s_-]+/g, '-')
                 .replace(/^-+|-+$/g, '');
 
-            const supabase = createClient();
-            const { error: dbError } = await supabase.from('markets').insert({
+            const supabaseClient = supabase;
+            const { error: dbError } = await supabaseClient.from('markets').insert({
                 slug,
                 title: poolName,
                 creator_wallet: publicKey.toString(),
