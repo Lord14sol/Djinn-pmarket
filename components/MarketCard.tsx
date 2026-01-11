@@ -223,7 +223,8 @@ const MarketCard = ({ title, icon, chance, volume, endDate, slug, type, options,
                 }}
                 outcome={selectedOutcome}
             />
-        </>;
+        </>
+    );
 };
 
 export default MarketCard;
