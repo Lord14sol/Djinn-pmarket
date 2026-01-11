@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import QuickBetModal from './QuickBetModal';
 
 // --- ICONOS ORIGINALES (RESTAURADOS) ---
 const TrendingUpIcon = () => (
@@ -38,12 +39,21 @@ const StarIcon = ({ active, onClick }: { active: boolean; onClick: (e: React.Mou
     );
 };
 
-const MarketCard = ({ title, icon, chance, volume, endDate, slug, type, options, isNew = false }: any) => {
+const MarketCard = ({ title, icon, chance, volume, endDate, slug, type, options, isNew = false, marketPDA, yesTokenMint, noTokenMint }: any) => {
     const [isStarred, setIsStarred] = useState(false);
     const [timeLeft, setTimeLeft] = useState("");
     const [showTimer, setShowTimer] = useState(false);
+    const [showBetModal, setShowBetModal] = useState(false);
+    const [selectedOutcome, setSelectedOutcome] = useState<'yes' | 'no'>('yes');
 
     const isMultiple = type === 'multiple';
+
+    const handleBetClick = (e: React.MouseEvent, outcome: 'yes' | 'no') => {
+        e.preventDefault();
+        e.stopPropagation();
+        setSelectedOutcome(outcome);
+        setShowBetModal(true);
+    };
 
     useEffect(() => {
         if (!endDate) return;
@@ -155,11 +165,17 @@ const MarketCard = ({ title, icon, chance, volume, endDate, slug, type, options,
                         </div>
                     ) : (
                         <div className="grid grid-cols-2 gap-3 mt-auto mb-4">
-                            <button className="bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white font-black text-3xl rounded-[1.8rem] py-10 flex flex-col items-center justify-center transition-all duration-300 shadow-lg uppercase tracking-widest">
+                            <button
+                                onClick={(e) => handleBetClick(e, 'no')}
+                                className="bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white font-black text-3xl rounded-[1.8rem] py-10 flex flex-col items-center justify-center transition-all duration-300 shadow-lg uppercase tracking-widest"
+                            >
                                 <span className="text-[11px] font-black uppercase mb-1 opacity-70 tracking-widest">No</span>
                                 {100 - (chance || 50)}¢
                             </button>
-                            <button className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-white font-black text-3xl rounded-[1.8rem] py-10 flex flex-col items-center justify-center transition-all duration-300 shadow-lg uppercase tracking-widest">
+                            <button
+                                onClick={(e) => handleBetClick(e, 'yes')}
+                                className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-white font-black text-3xl rounded-[1.8rem] py-10 flex flex-col items-center justify-center transition-all duration-300 shadow-lg uppercase tracking-widest"
+                            >
                                 <span className="text-[11px] font-black uppercase mb-1 opacity-70 tracking-widest">Yes</span>
                                 {chance || 50}¢
                             </button>
@@ -190,7 +206,23 @@ const MarketCard = ({ title, icon, chance, volume, endDate, slug, type, options,
                 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(244, 146, 183, 0.5); }
             `}</style>
         </Link>
-    );
+
+        {/* Quick Bet Modal */ }
+    <QuickBetModal
+        isOpen={showBetModal}
+        onClose={() => setShowBetModal(false)}
+        market={{
+            title,
+            icon,
+            chance,
+            volume,
+            marketPDA,
+            yesTokenMint,
+            noTokenMint
+        }}
+        outcome={selectedOutcome}
+    />
+    </>;
 };
 
 export default MarketCard;

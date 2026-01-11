@@ -2,14 +2,12 @@
 
 import React, { useState } from 'react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
-import { useConnection, useWallet } from '@solana/wallet-adapter-react';
-import { LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
+import { useWallet } from '@solana/wallet-adapter-react';
 import { compressImage } from '@/lib/utils';
 import HowItWorksModal from './HowItWorksModal';
-
-// --- CONFIGURACIÓN DE LA BÓVEDA MAESTRA ---
-const CREATION_FEE_SOL = 0.05;
-const TREASURY_WALLET = new PublicKey("C31JQfZBVRsnvFqiNptD95rvbEx8fsuPwdZn62yEWx9X");
+import { createMarketOnChain } from '@/lib/program';
+import { createMarketTokenMints } from '@/lib/token-utils';
+import { createClient } from '@/lib/supabase';
 
 // --- ICONOS ---
 const SearchIcon = () => (
@@ -25,9 +23,8 @@ const CloseIcon = () => (
 );
 
 const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
-    // Hooks de Solana
-    const { connection } = useConnection();
-    const { publicKey, sendTransaction } = useWallet();
+    const wallet = useWallet();
+    const { publicKey, signTransaction, signAllTransactions } = wallet;
     const { setVisible } = useWalletModal();
 
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -42,47 +39,65 @@ const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
         { id: 2, name: '' }
     ]);
 
-    // --- FUNCIÓN DE CREACIÓN MAESTRA ---
+    // --- FUNCIÓN DE CREACIÓN CON SMART CONTRACT ---
     const handleCreateMarket = async () => {
-        // 1. Validaciones
-        if (!publicKey) {
+        if (!publicKey || !signTransaction || !signAllTransactions) {
             setVisible(true);
             return;
         }
-        if (!poolName) return alert("Please enter a question, Sir.");
+        if (!poolName) return alert("Please enter a question");
 
         setIsLoading(true);
 
         try {
-            console.log("Iniciando protocolo de cobro...");
+            console.log("🚀 Creating market on Solana...");
 
-            // 2. OBTENER BLOCKHASH RECIENTE (Evita que se congele)
-            const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+            // 1. CREATE MARKET ON-CHAIN
+            const resolutionTime = Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60);
+            const description = marketType === 'multiple'
+                ? options.map(o => o.name).join(' | ')
+                : 'Yes or No';
 
-            // 3. CONSTRUIR TRANSACCIÓN
-            const transaction = new Transaction().add(
-                SystemProgram.transfer({
-                    fromPubkey: publicKey,
-                    toPubkey: TREASURY_WALLET,
-                    lamports: CREATION_FEE_SOL * LAMPORTS_PER_SOL,
-                })
+            const { signature, marketPDA } = await createMarketOnChain(
+                wallet as any,
+                poolName,
+                description,
+                resolutionTime
             );
 
-            // 4. ENVIAR Y CONFIRMAR
-            const signature = await sendTransaction(transaction, connection);
+            console.log("✅ Market created! TX:", signature);
 
-            // Confirmación robusta
-            await connection.confirmTransaction({
-                blockhash,
-                lastValidBlockHeight,
-                signature
-            }, 'confirmed');
+            // 2. CREATE TOKEN MINTS
+            const { yesTokenMint, noTokenMint } = await createMarketTokenMints(
+                wallet as any,
+                marketPDA
+            );
 
-            console.log("Pago confirmado. Signature:", signature);
+            console.log("✅ Tokens created!");
 
-            // 5. LÓGICA DE CREACIÓN VISUAL
+            // 3. SAVE TO SUPABASE
             const finalBanner = mainImage ? await compressImage(mainImage) : "🔮";
+            const slug = poolName.toLowerCase().trim()
+                .replace(/[^\w\s-]/g, '')
+                .replace(/[\s_-]+/g, '-')
+                .replace(/^-+|-+$/g, '');
 
+            const supabase = createClient();
+            const { error: dbError } = await supabase.from('markets').insert({
+                slug,
+                title: poolName,
+                creator_wallet: publicKey.toString(),
+                end_date: new Date(resolutionTime * 1000).toISOString(),
+                market_pda: marketPDA.toBase58(),
+                yes_token_mint: yesTokenMint.toBase58(),
+                no_token_mint: noTokenMint.toBase58(),
+                tx_signature: signature,
+                banner_url: finalBanner,
+            });
+
+            if (dbError) console.error('DB error:', dbError);
+
+            // 4. UPDATE UI
             const newMarket = {
                 id: Date.now(),
                 title: poolName,
@@ -94,29 +109,29 @@ const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
                 ],
                 chance: 50,
                 volume: "$0",
-                endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-                slug: poolName.toLowerCase().trim().replace(/[^\w\s-]/g, '').replace(/[\s_-]+/g, '-').replace(/^-+|-+$/g, ''),
+                endDate: new Date(resolutionTime * 1000),
+                slug,
                 creator: publicKey.toString(),
                 createdAt: Date.now(),
                 txSignature: signature,
-                economics: {
-                    creationFee: CREATION_FEE_SOL,
-                    resolutionFee: 2.0
-                }
+                marketPDA: marketPDA.toBase58(),
+                economics: { creationFee: 0.03, resolutionFee: 2.0 }
             };
 
             onMarketCreated(newMarket);
 
-            // 6. RESETEAR FORMULARIO
+            // 5. RESET
             setIsCreateModalOpen(false);
             setPoolName('');
             setMainImage(null);
             setMarketType('binary');
             setOptions([{ id: 1, name: '' }, { id: 2, name: '' }]);
 
-        } catch (error) {
-            console.error("Error creating market:", error);
-            // No alertamos si el usuario rechaza la transacción manualmente
+            alert(`✅ Market created on Solana!\n\nTransaction: ${signature.slice(0, 8)}...`);
+
+        } catch (error: any) {
+            console.error("❌ Error:", error);
+            alert(`Failed: ${error.message || 'Unknown error'}`);
         } finally {
             setIsLoading(false);
         }
@@ -219,7 +234,7 @@ const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
                                     disabled={isLoading}
                                     className="w-full bg-[#F492B7] text-black py-5 rounded-xl font-black text-lg uppercase shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                 >
-                                    {isLoading ? 'Processing...' : 'Create Market'}
+                                    {isLoading ? '⏳ Creating on Solana...' : 'Create Market (0.03 SOL)'}
                                 </button>
                             </div>
                         </div>
