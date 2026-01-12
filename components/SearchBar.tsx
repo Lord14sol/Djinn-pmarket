@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Search, X, TrendingUp, User, Loader2 } from 'lucide-react';
+import { searchMarkets, searchProfiles } from '@/lib/supabase-db';
 
 interface SearchResult {
     type: 'market' | 'profile';
@@ -57,60 +58,50 @@ export default function SearchBar() {
 
         setIsLoading(true);
 
-        // Simulate search delay
-        const timer = setTimeout(() => {
-            const searchResults: SearchResult[] = [];
-            const lowerQuery = query.toLowerCase();
+        const timeoutId = setTimeout(async () => {
+            try {
+                // Import dynamically or use the one from lib (we need to import it at top)
+                // Assuming we added import { searchMarkets, searchProfiles } from '@/lib/supabase-db';
 
-            // Search markets
-            MOCK_MARKETS.forEach(market => {
-                if (market.title.toLowerCase().includes(lowerQuery) ||
-                    market.category.toLowerCase().includes(lowerQuery)) {
+                const [markets, profiles] = await Promise.all([
+                    searchMarkets(query),
+                    searchProfiles(query)
+                ]);
+
+                const searchResults: SearchResult[] = [];
+
+                // Process Markets
+                markets.forEach((m: any) => {
                     searchResults.push({
                         type: 'market',
-                        id: market.id,
-                        title: market.title,
-                        subtitle: market.category,
-                        icon: market.icon,
-                        url: `/market/${market.id}`
+                        id: m.slug,
+                        title: m.slug.replace(/-/g, ' ').toUpperCase(), // Fallback title
+                        subtitle: 'Market',
+                        icon: '📊',
+                        url: `/market/${m.slug}`
                     });
-                }
-            });
-
-            // Search for wallet addresses (profiles) - starts with valid base58
-            if (/^[1-9A-HJ-NP-Za-km-z]{4,}$/.test(query)) {
-                searchResults.push({
-                    type: 'profile',
-                    id: query,
-                    title: `${query.slice(0, 6)}...${query.slice(-4)}`,
-                    subtitle: 'Wallet Address',
-                    url: `/profile/${query}`
                 });
+
+                // Process Profiles
+                profiles.forEach((p: any) => {
+                    searchResults.push({
+                        type: 'profile',
+                        id: p.wallet_address,
+                        title: p.username || 'Unknown',
+                        subtitle: `${p.wallet_address.slice(0, 4)}...${p.wallet_address.slice(-4)}`,
+                        url: `/profile/${p.username || p.wallet_address}`
+                    });
+                });
+
+                setResults(searchResults);
+            } catch (err) {
+                console.error(err);
+            } finally {
+                setIsLoading(false);
             }
+        }, 300);
 
-            // Also search for created markets from localStorage
-            try {
-                const createdMarkets = JSON.parse(localStorage.getItem('djinn_created_markets') || '[]');
-                createdMarkets.forEach((market: any) => {
-                    if (market.title.toLowerCase().includes(lowerQuery) ||
-                        market.category?.toLowerCase().includes(lowerQuery)) {
-                        searchResults.push({
-                            type: 'market',
-                            id: market.slug,
-                            title: market.title,
-                            subtitle: market.category || 'Market',
-                            icon: market.icon,
-                            url: `/market/${market.slug}`
-                        });
-                    }
-                });
-            } catch (e) { }
-
-            setResults(searchResults);
-            setIsLoading(false);
-        }, 200);
-
-        return () => clearTimeout(timer);
+        return () => clearTimeout(timeoutId);
     }, [query]);
 
     // Keyboard shortcut (Cmd/Ctrl + K)
@@ -186,8 +177,8 @@ export default function SearchBar() {
                                             >
                                                 {/* Icon */}
                                                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg ${result.type === 'market'
-                                                        ? 'bg-[#F492B7]/10 border border-[#F492B7]/20'
-                                                        : 'bg-blue-500/10 border border-blue-500/20'
+                                                    ? 'bg-[#F492B7]/10 border border-[#F492B7]/20'
+                                                    : 'bg-blue-500/10 border border-blue-500/20'
                                                     }`}>
                                                     {result.type === 'market' ? (
                                                         result.icon || <TrendingUp size={18} className="text-[#F492B7]" />

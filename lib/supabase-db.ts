@@ -41,19 +41,7 @@ export async function upsertProfile(profile: Partial<Profile> & { wallet_address
     return data;
 }
 
-export async function searchProfiles(query: string, limit: number = 10): Promise<Profile[]> {
-    const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .ilike('username', `%${query}%`)
-        .limit(limit);
 
-    if (error) {
-        console.error('Error searching profiles:', error);
-        return [];
-    }
-    return data || [];
-}
 
 // ============================================
 // COMMENTS
@@ -509,23 +497,72 @@ export interface Bet {
 }
 
 export async function createBet(bet: Omit<Bet, 'id' | 'payout' | 'claimed' | 'created_at'>) {
-    const { data, error } = await supabase
+    // 1. Check if an active (claimed=false) bet already exists for this user/market/side
+    const { data: existingBet, error: fetchError } = await supabase
         .from('bets')
-        .insert({
-            ...bet,
-            claimed: false
-        })
-        .select()
+        .select('*')
+        .eq('wallet_address', bet.wallet_address)
+        .eq('market_slug', bet.market_slug) // Assuming bets have market_slug
+        .eq('side', bet.side)
+        .eq('claimed', false)
         .single();
 
-    if (error) console.error('Error creating bet:', error);
-
-    // Check bet milestones (FIRST_BET, WHALE)
-    if (data) {
-        await checkBetMilestones(data.wallet_address, data.amount);
+    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 = JSON object requested, multiple (or no) results returned
+        console.error('Error checking existing bet:', fetchError);
     }
 
-    return { data, error };
+    // 2. If exists, UPDATE it
+    if (existingBet) {
+        const newAmount = Number(existingBet.amount) + Number(bet.amount);
+        const newSolAmount = Number(existingBet.sol_amount) + Number(bet.sol_amount);
+        const newShares = Number(existingBet.shares) + Number(bet.shares);
+
+        // Calculate weighted average entry price
+        // (Old Total Val + New Total Val) / Total Shares? 
+        // Or just re-derive from total amount / total shares?
+        // Let's use straightforward weighted avg:
+        // (old_shares * old_price + new_shares * new_price) / new_total_shares
+        const weightedPrice = ((Number(existingBet.shares) * Number(existingBet.entry_price)) + (Number(bet.shares) * Number(bet.entry_price))) / newShares;
+
+        const { data, error } = await supabase
+            .from('bets')
+            .update({
+                amount: newAmount,
+                sol_amount: newSolAmount,
+                shares: newShares,
+                entry_price: weightedPrice
+            })
+            .eq('id', existingBet.id)
+            .select()
+            .single();
+
+        if (error) console.error('Error updating bet:', error);
+
+        // Check milestone on the AGGREGATED amount
+        if (data) await checkBetMilestones(data.wallet_address, data.amount);
+
+        return { data, error };
+    }
+
+    // 3. If NOT exists, INSERT new
+    else {
+        const { data, error } = await supabase
+            .from('bets')
+            .insert({
+                ...bet,
+                claimed: false
+            })
+            .select()
+            .single();
+
+        if (error) console.error('Error creating bet:', error);
+
+        if (data) {
+            await checkBetMilestones(data.wallet_address, data.amount);
+        }
+
+        return { data, error };
+    }
 }
 
 export async function getUserBets(walletAddress: string): Promise<Bet[]> {
@@ -781,3 +818,29 @@ export async function checkBetMilestones(walletAddress: string, betAmount: numbe
     return granted;
 }
 
+
+// ============================================
+// SEARCH
+// ============================================
+
+export async function searchMarkets(query: string) {
+    const { data, error } = await supabase
+        .from('market_data')
+        .select('*')
+        .ilike('slug', `%${query}%`)
+        .limit(5);
+
+    if (error) console.error('Error searching markets:', error);
+    return data || [];
+}
+
+export async function searchProfiles(query: string) {
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .or(`username.ilike.%${query}%,wallet_address.eq.${query}`)
+        .limit(5);
+
+    if (error) console.error('Error searching profiles:', error);
+    return data || [];
+}
