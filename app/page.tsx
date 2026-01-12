@@ -206,7 +206,7 @@ export default function Home() {
             chance: Math.round((m.total_yes_pool / (m.total_yes_pool + m.total_no_pool + 1)) * 100) || 50,
             volume: `$${((m.total_yes_pool + m.total_no_pool) / 1000).toFixed(1)}K`,
             type: 'binary',
-            category: m.category || 'Trending',
+            category: (m as any).category || 'Trending',
             endDate: m.end_date ? new Date(m.end_date) : new Date('2026-12-31'),
             slug: m.slug,
             createdAt: m.created_at ? new Date(m.created_at).getTime() : Date.now(),
