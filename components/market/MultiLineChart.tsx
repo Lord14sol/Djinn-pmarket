@@ -19,6 +19,7 @@ const OUTCOME_COLORS = [
 interface MultiLineChartProps {
     outcomes: { name: string; data: { time: string; value: number }[] }[];
     hasPosition?: boolean;
+    selectedOutcome?: string | null;
 }
 
 // Custom tooltip component
@@ -82,7 +83,7 @@ const CustomLegend = ({ outcomes }: { outcomes: { name: string; color: string; c
 // Time period selector
 const periods = ['1H', '6H', '1D', '1W', '1M', 'ALL'];
 
-export default function MultiLineChart({ outcomes, hasPosition }: MultiLineChartProps) {
+export default function MultiLineChart({ outcomes, hasPosition, selectedOutcome }: MultiLineChartProps) {
     const [activePeriod, setActivePeriod] = useState('ALL');
     const [hoveredLine, setHoveredLine] = useState<string | null>(null);
 
@@ -118,49 +119,51 @@ export default function MultiLineChart({ outcomes, hasPosition }: MultiLineChart
 
     return (
         <div className="relative w-full">
-            {/* Legend with current values */}
-            <CustomLegend outcomes={legendData} />
+            {/* Header: Legend + Real Volume if available (or static moved out) */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-4 gap-4">
+                <CustomLegend outcomes={legendData} />
+
+                {/* Volume Display - Moved Outside & Made Dynamic later if needed */}
+                <div className="text-right px-2">
+                    <p className="text-gray-600 text-[9px] font-mono uppercase tracking-widest mb-0.5">24h Volume</p>
+                    <p className="text-white text-lg font-bold tracking-tight">$0.00</p>
+                </div>
+            </div>
 
             {/* Chart container */}
-            <div className="relative h-64 md:h-80 w-full bg-gradient-to-br from-white/[0.02] to-transparent rounded-2xl border border-white/5 backdrop-blur-sm overflow-hidden">
-                {/* Grid pattern - Kalshi style */}
-                <div className="absolute inset-0 opacity-[0.03]" style={{
+            <div className="relative h-64 md:h-80 w-full bg-[#0A0A0A] rounded-2xl border border-white/5 overflow-hidden">
+                {/* Grid pattern - More subtle */}
+                <div className="absolute inset-0 opacity-[0.02]" style={{
                     backgroundImage: 'linear-gradient(#fff 1px, transparent 1px)',
                     backgroundSize: '100% 40px'
                 }} />
 
                 {/* Djinn watermark - Centered */}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 opacity-[0.12] select-none">
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 opacity-[0.05] select-none scale-75">
                     <div className="flex items-center gap-0">
                         <Image src="/star.png" alt="Djinn" width={140} height={140} className="-mr-3" />
                         <span className="text-5xl font-bold text-white" style={{ fontFamily: 'var(--font-adriane), serif' }}>Djinn</span>
                     </div>
                 </div>
 
-                {/* Volume Display - Bottom Left */}
-                <div className="absolute left-6 bottom-4 pointer-events-none z-10">
-                    <p className="text-gray-500 text-xs font-mono uppercase tracking-widest mb-1">24h Volume</p>
-                    <p className="text-white text-xl font-bold tracking-tight">$7,058,874</p>
-                </div>
-
                 <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={mergedData} margin={{ top: 20, right: 30, bottom: 20, left: 10 }}>
+                    <LineChart data={mergedData} margin={{ top: 20, right: 10, bottom: 5, left: -20 }}>
                         <XAxis
                             dataKey="time"
                             axisLine={false}
                             tickLine={false}
-                            tick={{ fill: '#666', fontSize: 10, fontWeight: 600, fontFamily: 'monospace' }}
+                            tick={{ fill: '#444', fontSize: 9, fontWeight: 500, fontFamily: 'monospace' }}
                             interval="preserveStartEnd"
-                            tickMargin={12}
+                            tickMargin={8}
                         />
 
                         <YAxis
-                            domain={[0, 'auto']}
+                            domain={[0, 100]}
                             axisLine={false}
                             tickLine={false}
-                            tick={{ fill: '#666', fontSize: 10, fontWeight: 600 }}
-                            tickFormatter={(value) => `${value}%`}
-                            width={45}
+                            tick={{ fill: '#444', fontSize: 9, fontWeight: 500 }}
+                            tickFormatter={(value) => `${value}`}
+                            width={35}
                         />
 
                         <Tooltip content={<CustomTooltip />} />
@@ -168,27 +171,28 @@ export default function MultiLineChart({ outcomes, hasPosition }: MultiLineChart
                         {outcomes.map((outcome, idx) => {
                             const color = OUTCOME_COLORS[idx % OUTCOME_COLORS.length];
                             const isHovered = hoveredLine === outcome.name;
-                            const isOtherHovered = hoveredLine !== null && !isHovered;
+                            const isSelected = selectedOutcome === outcome.name;
+                            // Dim others if one is hovered OR selected
+                            const isOtherDimmed = (hoveredLine !== null && !isHovered) || (selectedOutcome !== null && !isSelected && hoveredLine === null);
 
                             return (
                                 <Line
                                     key={outcome.name}
-                                    type="stepAfter" // Polymarket/Kalshi style often uses step or monotone. Monotone is smoother. Let's stick to monotone but maybe try cleaner curves.
+                                    type="monotone"
                                     dataKey={outcome.name}
                                     name={outcome.name}
                                     stroke={color}
-                                    strokeWidth={isHovered ? 4 : 2.5}
-                                    dot={renderCustomizedDot}
+                                    strokeWidth={isHovered || isSelected ? 3 : 1.5}
+                                    dot={false}
                                     activeDot={{
-                                        r: 6,
+                                        r: 5,
                                         fill: color,
-                                        stroke: '#fff',
+                                        stroke: '#000',
                                         strokeWidth: 2,
                                     }}
-                                    opacity={isOtherHovered ? 0.2 : 1}
+                                    opacity={isOtherDimmed ? 0.15 : 1}
                                     onMouseEnter={() => setHoveredLine(outcome.name)}
                                     onMouseLeave={() => setHoveredLine(null)}
-                                    // Make line smoother
                                     isAnimationActive={true}
                                 />
                             );
@@ -198,23 +202,23 @@ export default function MultiLineChart({ outcomes, hasPosition }: MultiLineChart
 
                 {/* Position indicator */}
                 {hasPosition && (
-                    <div className="absolute top-4 right-4 px-3 py-1.5 bg-black/80 backdrop-blur-md border border-[#F492B7]/40 rounded-lg flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full animate-pulse bg-[#F492B7]" style={{ boxShadow: '0 0 8px #F492B7' }} />
-                        <span className="text-[10px] font-black uppercase tracking-wider text-[#F492B7]">Position Active</span>
+                    <div className="absolute top-3 right-3 px-2 py-1 bg-black/60 backdrop-blur-sm border border-[#F492B7]/30 rounded flex items-center gap-1.5">
+                        <div className="w-1.5 h-1.5 rounded-full animate-pulse bg-[#F492B7]" style={{ boxShadow: '0 0 5px #F492B7' }} />
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#F492B7]">Active</span>
                     </div>
                 )}
             </div>
 
-            {/* Time period selector */}
-            <div className="flex items-center justify-between mt-4">
-                <div className="flex gap-1 bg-white/5 rounded-xl p-1">
+            {/* Time period selector - Minimalist */}
+            <div className="flex items-center justify-between mt-3 px-1">
+                <div className="flex gap-2">
                     {periods.map((period) => (
                         <button
                             key={period}
                             onClick={() => setActivePeriod(period)}
-                            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${activePeriod === period
-                                ? 'bg-[#F492B7] text-black'
-                                : 'text-gray-500 hover:text-white hover:bg-white/10'
+                            className={`text-[9px] font-bold uppercase tracking-widest transition-colors ${activePeriod === period
+                                ? 'text-[#F492B7]'
+                                : 'text-gray-600 hover:text-gray-400'
                                 }`}
                         >
                             {period}
@@ -232,12 +236,6 @@ export default function MultiLineChart({ outcomes, hasPosition }: MultiLineChart
                     <button className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-500 hover:text-white transition-all">
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                        </svg>
-                    </button>
-                    <button className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-500 hover:text-white transition-all">
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
                     </button>
                 </div>

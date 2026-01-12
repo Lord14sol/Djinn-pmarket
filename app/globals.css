@@ -172,3 +172,43 @@ body {
 .animate-slide-up {
   animation: slide-up 0.3s ease-out forwards;
 }
+
+/* StarIcon Animation */
+@keyframes floatNatural {
+  0% {
+    opacity: 0;
+    transform: translateY(5px) translateX(-50%);
+  }
+
+  20% {
+    opacity: 1;
+    transform: translateY(0px) translateX(-50%);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-30px) translateX(-50%);
+  }
+}
+
+.animate-saved {
+  animation: floatNatural 1.8s ease-out forwards;
+}
+
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(244, 146, 183, 0.2);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(244, 146, 183, 0.5);
+}

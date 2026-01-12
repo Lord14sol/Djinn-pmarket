@@ -7,6 +7,8 @@ import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { useCategory } from '@/lib/CategoryContext';
+import { useModal } from '@/lib/ModalContext';
+import OnboardingModal from './OnboardingModal';
 
 // --- ICONOS ---
 // Premium multi-layer animated fire for Trending
@@ -129,38 +131,48 @@ export default function Navbar() {
     const [userPfp, setUserPfp] = useState<string | null>(null);
     const [username, setUsername] = useState<string>("User");
     const [balance, setBalance] = useState<number>(0);
+    const { openCreateMarket } = useModal();
 
     // Hooks de Solana Wallet Adapter
     const { setVisible } = useWalletModal();
     const { connected, publicKey, disconnect } = useWallet();
     const { connection } = useConnection();
 
+    // State for Onboarding
+    const [showOnboarding, setShowOnboarding] = useState(false);
+
     // Cargar perfil (Local + Supabase + Balance)
-    useEffect(() => {
-        const loadData = async () => {
-            if (connected && publicKey) {
-                // 1. Balance
-                try {
-                    const bal = await connection.getBalance(publicKey);
-                    setBalance(bal / LAMPORTS_PER_SOL);
-                } catch (e) {
-                    console.error("Error loading balance", e);
-                }
-
-                // 2. Profile
-                try {
-                    const dbProfile = await import('@/lib/supabase-db').then(mod => mod.getProfile(publicKey.toBase58()));
-                    if (dbProfile) {
-                        if (dbProfile.avatar_url) setUserPfp(dbProfile.avatar_url);
-                        if (dbProfile.username) setUsername(dbProfile.username);
-                    }
-                } catch (err) {
-                    console.error("Error loading remote profile", err);
-                }
+    const loadProfile = async () => {
+        if (connected && publicKey) {
+            // 1. Balance
+            try {
+                const bal = await connection.getBalance(publicKey);
+                setBalance(bal / LAMPORTS_PER_SOL);
+            } catch (e) {
+                console.error("Error loading balance", e);
             }
-        };
 
-        loadData();
+            // 2. Profile
+            try {
+                // Dynamic import to avoid SSR issues with some libs
+                const { getProfile } = await import('@/lib/supabase-db');
+                const dbProfile = await getProfile(publicKey.toBase58());
+
+                if (dbProfile) {
+                    if (dbProfile.avatar_url) setUserPfp(dbProfile.avatar_url);
+                    if (dbProfile.username) setUsername(dbProfile.username);
+                } else {
+                    // 🎉 USER HAS NO PROFILE -> SHOW ONBOARDING
+                    setShowOnboarding(true);
+                }
+            } catch (err) {
+                console.error("Error loading remote profile", err);
+            }
+        }
+    };
+
+    useEffect(() => {
+        loadProfile();
     }, [connected, publicKey, connection]);
 
     return (
@@ -193,12 +205,12 @@ export default function Navbar() {
                 <div className="flex items-center gap-4">
                     <div className="hidden sm:flex items-center gap-4">
                         {/* Botón Create Market estilo principal */}
-                        <Link
-                            href="/?create=true"
+                        <button
+                            onClick={openCreateMarket}
                             className="bg-[#F492B7] text-black text-sm font-black py-3 px-6 rounded-xl shadow-[0_0_20px_rgba(244,146,183,0.3)] hover:scale-105 active:scale-95 transition-all uppercase tracking-wide"
                         >
                             Create a Market
-                        </Link>
+                        </button>
 
                         {!connected ? (
                             /* Desconectado */
@@ -261,16 +273,15 @@ export default function Navbar() {
                             )}
 
                             {/* Mobile Create Market */}
-                            <Link
-                                href="/?create=true"
-                                onClick={() => setIsOpen(false)}
-                                className="flex sm:hidden items-center gap-3 p-4 rounded-xl hover:bg-white/5 transition-colors group"
+                            <button
+                                onClick={() => { setIsOpen(false); openCreateMarket(); }}
+                                className="flex w-full sm:hidden items-center gap-3 p-4 rounded-xl hover:bg-white/5 transition-colors group text-left"
                             >
                                 <div className="text-green-400/80 group-hover:text-green-400 transition-colors">
                                     <span className="text-lg">✨</span>
                                 </div>
                                 <span className="text-sm font-bold text-gray-200 uppercase tracking-widest">Create Market</span>
-                            </Link>
+                            </button>
 
                             <Link
                                 href="/leaderboard"
@@ -338,6 +349,15 @@ export default function Navbar() {
                     ))}
                 </div>
             )}
+
+            <OnboardingModal
+                isOpen={showOnboarding}
+                onClose={() => setShowOnboarding(false)}
+                onProfileCreated={() => {
+                    setShowOnboarding(false);
+                    loadProfile();
+                }}
+            />
         </nav>
     );
 }

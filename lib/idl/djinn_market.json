@@ -1,6 +1,7 @@
 {
     "version": "0.1.0",
     "name": "djinn_market",
+    "address": "51TPDYh8oFCBCiCRFLvvtFpZvQd3Q4FyjLnDe9xxCsmv",
     "instructions": [
         {
             "name": "initializeProtocol",
@@ -37,7 +38,12 @@
                     "isSigner": false
                 },
                 {
-                    "name": "protocolState",
+                    "name": "yesTokenMint",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "noTokenMint",
                     "isMut": true,
                     "isSigner": false
                 },
@@ -47,12 +53,27 @@
                     "isSigner": true
                 },
                 {
+                    "name": "protocolState",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
                     "name": "protocolTreasury",
                     "isMut": true,
                     "isSigner": false
                 },
                 {
+                    "name": "tokenProgram",
+                    "isMut": false,
+                    "isSigner": false
+                },
+                {
                     "name": "systemProgram",
+                    "isMut": false,
+                    "isSigner": false
+                },
+                {
+                    "name": "rent",
                     "isMut": false,
                     "isSigner": false
                 }
@@ -63,8 +84,8 @@
                     "type": "string"
                 },
                 {
-                    "name": "description",
-                    "type": "string"
+                    "name": "feePercentage",
+                    "type": "u16"
                 },
                 {
                     "name": "resolutionTime",
@@ -73,7 +94,7 @@
             ]
         },
         {
-            "name": "placeTrade",
+            "name": "placeBet",
             "accounts": [
                 {
                     "name": "market",
@@ -81,29 +102,9 @@
                     "isSigner": false
                 },
                 {
-                    "name": "position",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "protocolState",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "trader",
+                    "name": "user",
                     "isMut": true,
                     "isSigner": true
-                },
-                {
-                    "name": "marketCreator",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "protocolTreasury",
-                    "isMut": true,
-                    "isSigner": false
                 },
                 {
                     "name": "yesTokenMint",
@@ -116,12 +117,12 @@
                     "isSigner": false
                 },
                 {
-                    "name": "traderYesAccount",
+                    "name": "userYesAccount",
                     "isMut": true,
                     "isSigner": false
                 },
                 {
-                    "name": "traderNoAccount",
+                    "name": "userNoAccount",
                     "isMut": true,
                     "isSigner": false
                 },
@@ -138,8 +139,10 @@
             ],
             "args": [
                 {
-                    "name": "outcome",
-                    "type": "bool"
+                    "name": "side",
+                    "type": {
+                        "defined": "MarketOutcome"
+                    }
                 },
                 {
                     "name": "amount",
@@ -156,30 +159,27 @@
                     "isSigner": false
                 },
                 {
-                    "name": "protocolState",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
                     "name": "authority",
                     "isMut": false,
                     "isSigner": true
                 },
                 {
-                    "name": "protocolTreasury",
+                    "name": "protocolState",
                     "isMut": true,
                     "isSigner": false
                 }
             ],
             "args": [
                 {
-                    "name": "winningOutcome",
-                    "type": "bool"
+                    "name": "outcome",
+                    "type": {
+                        "defined": "MarketOutcome"
+                    }
                 }
             ]
         },
         {
-            "name": "redeem",
+            "name": "claimReward",
             "accounts": [
                 {
                     "name": "market",
@@ -187,14 +187,39 @@
                     "isSigner": false
                 },
                 {
-                    "name": "position",
+                    "name": "user",
+                    "isMut": true,
+                    "isSigner": true
+                },
+                {
+                    "name": "yesTokenMint",
                     "isMut": true,
                     "isSigner": false
                 },
                 {
-                    "name": "user",
+                    "name": "noTokenMint",
                     "isMut": true,
-                    "isSigner": true
+                    "isSigner": false
+                },
+                {
+                    "name": "userYesAccount",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "userNoAccount",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "protocolTreasury",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "tokenProgram",
+                    "isMut": false,
+                    "isSigner": false
                 }
             ],
             "args": []
@@ -213,18 +238,6 @@
                     {
                         "name": "treasury",
                         "type": "publicKey"
-                    },
-                    {
-                        "name": "totalMarkets",
-                        "type": "u64"
-                    },
-                    {
-                        "name": "totalVolume",
-                        "type": "u64"
-                    },
-                    {
-                        "name": "totalFeesCollected",
-                        "type": "u64"
                     }
                 ]
             }
@@ -239,50 +252,40 @@
                         "type": "publicKey"
                     },
                     {
-                        "name": "protocolAuthority",
-                        "type": "publicKey"
-                    },
-                    {
                         "name": "title",
                         "type": "string"
                     },
                     {
-                        "name": "description",
-                        "type": "string"
-                    },
-                    {
-                        "name": "yesPool",
+                        "name": "totalLiquidity",
                         "type": "u64"
                     },
                     {
-                        "name": "noPool",
+                        "name": "totalSharesYes",
                         "type": "u64"
                     },
                     {
-                        "name": "totalYesShares",
+                        "name": "totalSharesNo",
                         "type": "u64"
                     },
                     {
-                        "name": "totalNoShares",
-                        "type": "u64"
+                        "name": "feePercentage",
+                        "type": "u16"
                     },
                     {
                         "name": "resolutionTime",
                         "type": "i64"
                     },
                     {
-                        "name": "resolved",
-                        "type": "bool"
-                    },
-                    {
-                        "name": "winningOutcome",
+                        "name": "status",
                         "type": {
-                            "option": "bool"
+                            "defined": "MarketStatus"
                         }
                     },
                     {
-                        "name": "creationFeePaid",
-                        "type": "u64"
+                        "name": "outcome",
+                        "type": {
+                            "defined": "MarketOutcome"
+                        }
                     },
                     {
                         "name": "bump",
@@ -290,27 +293,42 @@
                     }
                 ]
             }
+        }
+    ],
+    "types": [
+        {
+            "name": "MarketStatus",
+            "type": {
+                "kind": "enum",
+                "variants": [
+                    {
+                        "name": "Open"
+                    },
+                    {
+                        "name": "Resolved"
+                    },
+                    {
+                        "name": "Voided"
+                    }
+                ]
+            }
         },
         {
-            "name": "Position",
+            "name": "MarketOutcome",
             "type": {
-                "kind": "struct",
-                "fields": [
+                "kind": "enum",
+                "variants": [
                     {
-                        "name": "user",
-                        "type": "publicKey"
+                        "name": "None"
                     },
                     {
-                        "name": "market",
-                        "type": "publicKey"
+                        "name": "Yes"
                     },
                     {
-                        "name": "yesShares",
-                        "type": "u64"
+                        "name": "No"
                     },
                     {
-                        "name": "noShares",
-                        "type": "u64"
+                        "name": "Void"
                     }
                 ]
             }
@@ -319,61 +337,51 @@
     "errors": [
         {
             "code": 6000,
-            "name": "TitleTooLong",
-            "msg": "Title too long (max 200 characters)"
+            "name": "FeeTooHigh",
+            "msg": "Fee too high"
         },
         {
             "code": 6001,
-            "name": "DescriptionTooLong",
-            "msg": "Description too long (max 1000 characters)"
+            "name": "MarketClosed",
+            "msg": "Market closed"
         },
         {
             "code": 6002,
-            "name": "InvalidResolutionTime",
-            "msg": "Invalid resolution time"
+            "name": "MarketExpired",
+            "msg": "Market expired"
         },
         {
             "code": 6003,
-            "name": "MarketResolved",
-            "msg": "Market already resolved"
-        },
-        {
-            "code": 6004,
             "name": "InvalidAmount",
             "msg": "Invalid amount"
         },
         {
+            "code": 6004,
+            "name": "InvalidOutcome",
+            "msg": "Invalid outcome"
+        },
+        {
             "code": 6005,
-            "name": "TradingClosed",
-            "msg": "Trading is closed"
-        },
-        {
-            "code": 6006,
-            "name": "AlreadyResolved",
-            "msg": "Market already resolved"
-        },
-        {
-            "code": 6007,
             "name": "Unauthorized",
             "msg": "Unauthorized"
         },
         {
-            "code": 6008,
-            "name": "TooEarly",
-            "msg": "Too early to resolve"
+            "code": 6006,
+            "name": "AlreadyResolved",
+            "msg": "Already resolved"
         },
         {
-            "code": 6009,
+            "code": 6007,
             "name": "NotResolved",
-            "msg": "Market not resolved yet"
+            "msg": "Not resolved"
         },
         {
-            "code": 6010,
-            "name": "NoWinningShares",
-            "msg": "No winning shares to redeem"
+            "code": 6008,
+            "name": "NothingToClaim",
+            "msg": "Nothing to claim"
         }
     ],
     "metadata": {
-        "address": "BFgyP2Hba1kD6ZgzusZgSMuYmxnb6C1ne78sxvWxAHGk"
+        "address": "51TPDYh8oFCBCiCRFLvvtFpZvQd3Q4FyjLnDe9xxCsmv"
     }
 }

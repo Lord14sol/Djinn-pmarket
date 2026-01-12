@@ -1,14 +1,20 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useWallet } from '@solana/wallet-adapter-react';
 import Hero from '@/components/Hero';
 import MarketCard from '@/components/MarketCard';
 import { MarketGridSkeleton } from '@/components/ui/Skeletons';
 import { useCategory } from '@/lib/CategoryContext';
+import { getMarkets as getSupabaseMarkets } from '@/lib/supabase-db';
+import ActivePositionsWidget from '@/components/market/ActivePositionsWidget';
 
 
 export default function Home() {
   const { activeCategory, activeSubcategory } = useCategory();
+  const { publicKey } = useWallet();
+  const router = useRouter();
 
   // 1. Mercados iniciales con categorías
   const initialStaticMarkets = [
@@ -50,7 +56,7 @@ export default function Home() {
     },
     {
       id: 9,
-      title: "WHO WILL WIN THE WORLD CUP?",
+      title: "Who will win the World Cup?",
       icon: "🏆",
       type: 'multiple',
       category: 'Sports',
@@ -184,24 +190,80 @@ export default function Home() {
   const [markets, setMarkets] = useState<any[]>(initialStaticMarkets);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 2. Cargamos del LocalStorage al iniciar
+  // 2. Cargamos mercados de Supabase + fallback a estáticos
   useEffect(() => {
-    try {
-      const savedMarkets = localStorage.getItem('djinn_markets');
-      if (savedMarkets) {
-        const customMarkets = JSON.parse(savedMarkets);
-        setMarkets((prev) => {
+    const loadMarkets = async () => {
+      try {
+        // Intentar cargar de Supabase
+        const supabaseMarkets = await getSupabaseMarkets();
+
+        if (supabaseMarkets && supabaseMarkets.length > 0) {
+          // Transformar formato de Supabase a formato de UI
+          const formattedMarkets = supabaseMarkets.map((m, index) => ({
+            id: m.id || `sb-${index}`,
+            title: m.title,
+            icon: m.banner_url || '🔮',
+            chance: Math.round((m.total_yes_pool / (m.total_yes_pool + m.total_no_pool + 1)) * 100) || 50,
+            volume: `$${((m.total_yes_pool + m.total_no_pool) / 1000).toFixed(1)}K`,
+            type: 'binary',
+            category: m.category || 'Trending',
+            endDate: m.end_date ? new Date(m.end_date) : new Date('2026-12-31'),
+            slug: m.slug,
+            createdAt: m.created_at ? new Date(m.created_at).getTime() : Date.now(),
+            resolved: m.resolved,
+            winningOutcome: m.winning_outcome,
+            marketPDA: m.market_pda,
+            yesTokenMint: m.yes_token_mint,
+            noTokenMint: m.no_token_mint,
+            resolutionSource: m.resolution_source
+          }));
+
+          // Combinar con estáticos (Supabase primero, luego estáticos como fallback)
+          setMarkets([...formattedMarkets, ...initialStaticMarkets]);
+          console.log('✅ Loaded', formattedMarkets.length, 'markets from Supabase');
+        } else {
+          // Si Supabase está vacío, usar estáticos + localStorage
+          console.log('ℹ️ No markets in Supabase, using static data');
+          const savedMarkets = localStorage.getItem('djinn_markets'); // Check djinn_markets first (deprecated?)
+          const createdMarkets = localStorage.getItem('djinn_created_markets'); // Check newly created ones
+
+          let combinedCustom = [];
+          if (savedMarkets) combinedCustom.push(...JSON.parse(savedMarkets));
+          if (createdMarkets) combinedCustom.push(...JSON.parse(createdMarkets));
+
+          const staticIds = new Set(initialStaticMarkets.map(m => m.id));
+          const uniqueCustom = combinedCustom.filter((m: any) => !staticIds.has(m.id));
+          setMarkets([...uniqueCustom, ...initialStaticMarkets]);
+        }
+      } catch (e) {
+        console.error("Error loading markets from Supabase:", e);
+        // Fallback to static + localStorage
+        try {
+          const createdMarkets = localStorage.getItem('djinn_created_markets');
+          let customMarkets = [];
+          if (createdMarkets) customMarkets = JSON.parse(createdMarkets);
+
           const staticIds = new Set(initialStaticMarkets.map(m => m.id));
           const uniqueCustom = customMarkets.filter((m: any) => !staticIds.has(m.id));
-          return [...uniqueCustom, ...initialStaticMarkets];
-        });
+          setMarkets([...uniqueCustom, ...initialStaticMarkets]);
+        } catch (localError) {
+          console.error("Error with localStorage fallback:", localError);
+        }
+      } finally {
+        setTimeout(() => setIsLoading(false), 300);
       }
-    } catch (e) {
-      console.error("Error loading markets", e);
-    } finally {
-      // Small delay to show skeleton briefly
-      setTimeout(() => setIsLoading(false), 300);
-    }
+    };
+
+    loadMarkets();
+
+    // ESCUCHAR EVENTOS DE CREACIÓN GLOBAL
+    window.addEventListener('storage', loadMarkets);
+    window.addEventListener('market-created', loadMarkets); // Custom event just in case
+
+    return () => {
+      window.removeEventListener('storage', loadMarkets);
+      window.removeEventListener('market-created', loadMarkets);
+    };
   }, []);
 
   // 3. FUNCIÓN DE CREACIÓN PROTEGIDA
@@ -315,6 +377,24 @@ export default function Home() {
         )}
       </section>
 
+      {/* Active Positions Widget (Bottom Right - Same as Profile) */}
+      <ActivePositionsWidget
+        walletAddress={publicKey?.toBase58() || null}
+        onSell={(position) => {
+          router.push(`/market/${position.market_slug}`);
+        }}
+        onCollect={async (position) => {
+          try {
+            const { claimPayout } = await import('@/lib/supabase-db');
+            await claimPayout(position.id);
+            alert(`Claimed $${position.payout?.toFixed(2)}! Funds will be sent to your wallet.`);
+            window.location.reload();
+          } catch (e) {
+            console.error('Error claiming:', e);
+            alert('Error claiming payout.');
+          }
+        }}
+      />
 
     </div>
   );

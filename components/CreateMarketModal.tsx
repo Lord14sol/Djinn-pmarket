@@ -1,21 +1,18 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useWalletModal } from '@solana/wallet-adapter-react-ui';
+import { useWallet } from '@solana/wallet-adapter-react';
+import { useDjinnProtocol } from '@/hooks/useDjinnProtocol';
+import { supabase } from '@/lib/supabase';
+import { compressImage } from '@/lib/utils';
+import { checkMarketMilestones } from '@/lib/supabase-db'; // Direct import if possible, or dynamic
+import Link from 'next/link';
 
-// --- ICONOS MANTENIDOS ---
+// --- ICONOS ---
 const CloseIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-    </svg>
-);
-const PlusIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-    </svg>
-);
-const TrashIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
     </svg>
 );
 const SparkleIcon = () => (
@@ -25,114 +22,213 @@ const SparkleIcon = () => (
 );
 
 interface CreateMarketModalProps { isOpen: boolean; onClose: () => void; }
-type MarketType = 'binary' | 'multiple';
-const EMOJI_OPTIONS = ['🇦🇷', '₿', '💊', '🥱', '🎮', '🇨🇳', '☀️', '🇺🇸', '⚽', '🏈', '🏀', '🎾', '🏐', '⚾', '🎯', '🎲', '🎰', '🎪', '🎭', '🎨', '🎬', '🎹', '🎺', '🎻', '📱', '💻', '🖥️', '⌚', '📷', '📺', '🔬', '🔭', '⚗️', '🧬', '🚀', '✈️', '🚁', '⛵', '🏆', '💰', '🔥', '⚡', '💎'];
 
 export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModalProps) {
-    const [marketType, setMarketType] = useState<MarketType>('binary');
-    const [title, setTitle] = useState('');
-    const [description, setDescription] = useState('');
-    const [category, setCategory] = useState('Politics');
-    const [selectedEmoji, setSelectedEmoji] = useState('🎯');
-    const [endDate, setEndDate] = useState('');
-    const [resolutionSource, setResolutionSource] = useState('');
-    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-    const [participants, setParticipants] = useState<string[]>(['', '']);
+    const wallet = useWallet();
+    const { publicKey } = wallet;
+    const { setVisible } = useWalletModal();
+    const { createMarket: createMarketOnChain, isReady: isContractReady } = useDjinnProtocol();
 
-    const addParticipant = () => setParticipants([...participants, '']);
-    const removeParticipant = (index: number) => { if (participants.length > 2) setParticipants(participants.filter((_, i) => i !== index)); };
-    const updateParticipant = (index: number, value: string) => {
-        const newParticipants = [...participants];
-        newParticipants[index] = value;
-        setParticipants(newParticipants);
+    const [isLoading, setIsLoading] = useState(false);
+    const [marketType, setMarketType] = useState<'binary' | 'multiple'>('binary');
+    const [poolName, setPoolName] = useState('');
+    const [resolutionSource, setResolutionSource] = useState('');
+    const [mainImage, setMainImage] = useState<string | null>(null);
+    const [options, setOptions] = useState([
+        { id: 1, name: '' },
+        { id: 2, name: '' }
+    ]);
+
+    // Helpers
+    const handleImageUpload = (file: File) => {
+        const reader = new FileReader();
+        reader.onload = (e) => setMainImage(e.target?.result as string);
+        reader.readAsDataURL(file);
     };
 
-    const handleSubmit = () => {
-        const newMarket = {
-            id: Date.now().toString(),
-            question: title, // USAR QUESTION PARA MATCH CON EL PERFIL
-            type: marketType,
-            description,
-            category,
-            icon: selectedEmoji,
-            image: "https://images.unsplash.com/photo-1639762681485-074b7f938ba0?q=80&w=2832",
-            endDate,
-            resolutionSource,
-            participants: marketType === 'multiple' ? participants : ['Yes', 'No'],
-            timestamp: new Date().toISOString(),
-            status: 'LIVE'
-        };
+    const addOption = () => {
+        setOptions([...options, { id: options.length + 1, name: '' }]);
+    };
 
-        const existing = JSON.parse(localStorage.getItem('djinn_created_markets') || '[]');
-        localStorage.setItem('djinn_created_markets', JSON.stringify([newMarket, ...existing]));
+    const switchMode = (mode: 'binary' | 'multiple') => {
+        setMarketType(mode);
+        setOptions(mode === 'binary'
+            ? [{ id: 1, name: 'Yes' }, { id: 2, name: 'No' }]
+            : [{ id: 1, name: '' }, { id: 2, name: '' }, { id: 3, name: '' }]
+        );
+    };
 
-        // DISPARAR EL EVENTO PARA QUE EL PERFIL SE ENTERE
-        window.dispatchEvent(new Event('storage'));
+    // --- MAIN LOGIC (Ported from Hero.tsx) ---
+    const handleCreateMarket = async () => {
+        if (!publicKey) {
+            setVisible(true);
+            return;
+        }
+        if (!poolName) return alert("Please enter a question");
+        if (!resolutionSource) return alert("Please provide a Resolution Source (URL)");
 
-        onClose();
-        setTitle('');
-        setDescription('');
+        setIsLoading(true);
+
+        try {
+            console.log("🚀 Creating market on blockchain...");
+
+            // Generate slug
+            const slug = poolName.toLowerCase().trim()
+                .replace(/[^\w\s-]/g, '')
+                .replace(/[\s_-]+/g, '-')
+                .replace(/^-+|-+$/g, '') + '-' + Date.now().toString(36);
+
+            const resolutionTime = Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60); // 7 days
+            const finalBanner = mainImage ? await compressImage(mainImage) : "🔮";
+
+            let marketPDA = '';
+            let txSignature = '';
+            let yesTokenMint = '';
+            let noTokenMint = '';
+
+            // Try to create on blockchain (with timeout to prevent hanging)
+            if (isContractReady && wallet && publicKey) {
+                try {
+                    console.log("⛓️ Calling smart contract (15s timeout)...");
+
+                    // Add timeout wrapper to prevent indefinite hanging
+                    const timeoutPromise = new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error('Blockchain timeout')), 15000)
+                    );
+
+                    const contractPromise = createMarketOnChain(poolName, poolName, new Date(resolutionTime * 1000), 200);
+
+                    const result = await Promise.race([contractPromise, timeoutPromise]) as any;
+
+                    marketPDA = result.marketPda.toBase58();
+                    yesTokenMint = result.yesMintPda.toBase58();
+                    noTokenMint = result.noMintPda.toBase58();
+                    txSignature = result.tx;
+                    console.log("✅ Blockchain TX:", txSignature);
+                } catch (blockchainError: any) {
+                    console.warn("⚠️ Blockchain failed/timeout, saving locally:", blockchainError.message);
+                    marketPDA = `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                    txSignature = 'local_fallback';
+                }
+            } else {
+                console.log("ℹ️ Contract not ready or wallet not connected, saving locally");
+                marketPDA = `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                txSignature = 'local_fallback';
+            }
+
+            // SAVE TO SUPABASE
+            const { error: dbError } = await supabase.from('markets').insert({
+                slug,
+                title: poolName,
+                creator_wallet: publicKey.toString(),
+                end_date: new Date(resolutionTime * 1000).toISOString(),
+                market_pda: marketPDA,
+                yes_token_mint: yesTokenMint,
+                no_token_mint: noTokenMint,
+                tx_signature: txSignature,
+                banner_url: finalBanner,
+                total_yes_pool: 0,
+                total_no_pool: 0,
+                resolved: false,
+                resolution_source: resolutionSource
+            });
+
+            if (dbError) {
+                console.error('DB error:', dbError);
+            }
+
+            alert("✨ Market Created Successfully!");
+
+            // RESET
+            setPoolName('');
+            setResolutionSource('');
+            setMainImage(null);
+            setMarketType('binary');
+            setOptions([{ id: 1, name: '' }, { id: 2, name: '' }]);
+            // DISPARAR EL EVENTO PARA QUE EL PERFIL SE ENTERE
+            window.dispatchEvent(new Event('storage'));
+            window.dispatchEvent(new Event('market-created')); // Custom event for in-app refresh
+
+            onClose();
+
+            // Trigger Milestones
+            import('@/lib/supabase-db').then(mod => {
+                mod.checkMarketMilestones(publicKey.toString());
+            });
+
+            // Redirect or Refresh (Optional)
+            // window.location.reload(); 
+
+        } catch (error: any) {
+            console.error("❌ Error:", error);
+            alert(`Failed: ${error.message || 'Unknown error'}`);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="absolute inset-0 bg-black/95 backdrop-blur-md" onClick={onClose} />
-            <div className="relative bg-[#080808] border border-white/10 rounded-[32px] w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl animate-in zoom-in-95 duration-300">
-                <div className="sticky top-0 bg-[#080808]/80 border-b border-white/5 p-8 flex justify-between items-center z-10 backdrop-blur-xl">
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-[#F492B7]/10 flex items-center justify-center border border-[#F492B7]/20"><SparkleIcon /></div>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/95 backdrop-blur-xl" onClick={() => !isLoading && onClose()} />
+            <div className="relative bg-[#0B0E14] border border-white/10 rounded-[2rem] w-full max-w-2xl overflow-hidden shadow-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
+                <button onClick={onClose} disabled={isLoading} className="absolute top-6 right-6 md:top-8 md:right-8 text-gray-500 hover:text-white transition-colors disabled:opacity-50 z-10">
+                    <CloseIcon />
+                </button>
+
+                <div className="p-6 md:p-12 text-white">
+                    <h2 className="text-3xl font-black mb-6 text-center">Create New Market</h2>
+
+                    <div className="flex gap-2 mb-8 bg-white/5 p-1 rounded-xl w-fit mx-auto">
+                        <button onClick={() => switchMode('binary')} className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${marketType === 'binary' ? 'bg-[#F492B7] text-black' : 'text-gray-500 hover:text-white'}`}>Binary</button>
+                        <button onClick={() => switchMode('multiple')} className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${marketType === 'multiple' ? 'bg-[#F492B7] text-black' : 'text-gray-500 hover:text-white'}`}>Multiple</button>
+                    </div>
+
+                    <div className="space-y-6">
                         <div>
-                            <h2 className="text-4xl font-black text-white tracking-tighter uppercase">Summon Market</h2>
-                            <p className="text-[10px] text-gray-500 mt-1 uppercase font-black tracking-[0.3em]">Forge the future destiny</p>
+                            <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest block mb-2">Market Banner (Top Image)</label>
+                            <div className="w-full h-32 rounded-2xl border border-white/10 bg-white/5 flex items-center justify-center cursor-pointer overflow-hidden"
+                                onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.onchange = (e: any) => handleImageUpload(e.target.files[0]); input.click(); }}>
+                                {mainImage ? <img src={mainImage} className="w-full h-full object-cover" /> : <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Upload Banner</span>}
+                            </div>
                         </div>
+
+                        <input type="text" placeholder="Enter question..." className="w-full bg-black/40 border border-white/10 rounded-xl p-5 text-lg font-bold outline-none focus:border-[#F492B7]" value={poolName} onChange={(e) => setPoolName(e.target.value)} />
+
+                        <div className="space-y-1">
+                            <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest block ml-1">Resolution Source (URL)</label>
+                            <input type="text" placeholder="e.g. https://www.fifa.com/match/..." className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-sm font-bold outline-none focus:border-[#F492B7]" value={resolutionSource} onChange={(e) => setResolutionSource(e.target.value)} />
+                        </div>
+
+                        <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                                <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest">Outcomes</label>
+                                {marketType === 'multiple' && (
+                                    <button onClick={addOption} className="text-[#F492B7] text-[10px] font-black uppercase tracking-widest hover:text-[#ff6fb7]">+ Add Outcome</button>
+                                )}
+                            </div>
+                            <div className="max-h-48 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
+                                {options.map((option, index) => (
+                                    <div key={option.id} className="bg-white/5 p-4 rounded-xl border border-white/10">
+                                        <input type="text" placeholder={marketType === 'binary' ? (index === 0 ? "Yes" : "No") : "Outcome Name..."} className="w-full bg-transparent border-none text-white font-bold outline-none text-sm" value={option.name} onChange={(e) => {
+                                            const newOpts = [...options];
+                                            newOpts[index].name = e.target.value;
+                                            setOptions(newOpts);
+                                        }} />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={handleCreateMarket}
+                            disabled={isLoading}
+                            className="w-full bg-[#F492B7] text-black py-5 rounded-xl font-black text-lg uppercase shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                            {isLoading ? '⏳ CREATING ON SOLANA...' : 'CREATE MARKET'}
+                        </button>
                     </div>
-                    <button onClick={onClose} className="text-gray-500 hover:text-white p-3 hover:bg-white/5 rounded-2xl"><CloseIcon /></button>
-                </div>
-                <div className="p-10 space-y-10">
-                    <div>
-                        <label className="block text-[10px] font-black text-[#F492B7] uppercase tracking-[0.3em] mb-4 opacity-60">Architecture</label>
-                        <div className="grid grid-cols-2 gap-6">
-                            <button onClick={() => setMarketType('binary')} className={`group p-8 rounded-[2rem] border-2 transition-all duration-500 ${marketType === 'binary' ? 'bg-[#F492B7]/5 border-[#F492B7]' : 'bg-white/[0.02] border-white/5'}`}>
-                                <div className="text-5xl mb-4 group-hover:scale-110 transition-transform">🎯</div>
-                                <div className="text-xl font-black mb-2 uppercase tracking-tight">Binary Market</div>
-                            </button>
-                            <button onClick={() => setMarketType('multiple')} className={`group p-8 rounded-[2rem] border-2 transition-all duration-500 ${marketType === 'multiple' ? 'bg-[#F492B7]/5 border-[#F492B7]' : 'bg-white/[0.02] border-white/5'}`}>
-                                <div className="text-5xl mb-4 group-hover:scale-110 transition-transform">🏆</div>
-                                <div className="text-xl font-black mb-2 uppercase tracking-tight">Multiple Choice</div>
-                            </button>
-                        </div>
-                    </div>
-                    <div>
-                        <label className="block text-[10px] font-black text-gray-600 uppercase tracking-[0.3em] mb-4">The Prediction Question *</label>
-                        <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Will Bitcoin reach $150k in 2026?" className="w-full bg-white/[0.03] border border-white/10 rounded-2xl p-6 text-xl font-black text-white focus:border-[#F492B7] outline-none transition-all placeholder:opacity-20" />
-                    </div>
-                    {marketType === 'multiple' && (
-                        <div className="space-y-4">
-                            {participants.map((p, idx) => (
-                                <div key={idx} className="flex gap-4">
-                                    <input type="text" value={p} onChange={(e) => updateParticipant(idx, e.target.value)} placeholder={`Option ${idx + 1}`} className="flex-1 bg-white/[0.03] border border-white/10 rounded-xl p-5 text-white font-bold outline-none focus:border-[#F492B7]" />
-                                    {participants.length > 2 && <button onClick={() => removeParticipant(idx)} className="px-6 bg-red-500/10 text-red-500 rounded-xl font-black">-</button>}
-                                </div>
-                            ))}
-                            <button onClick={addParticipant} className="w-full py-4 border-2 border-dashed border-[#F492B7]/20 rounded-xl text-[#F492B7] font-black uppercase text-[10px] tracking-widest hover:bg-[#F492B7]/5 transition-all">+ Add Outcome Path</button>
-                        </div>
-                    )}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div>
-                            <label className="block text-[10px] font-black text-gray-600 uppercase tracking-[0.3em] mb-4">Fate Close Date *</label>
-                            <input type="datetime-local" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full bg-white/[0.03] border border-white/10 rounded-2xl p-6 text-white outline-none focus:border-[#F492B7]" />
-                        </div>
-                        <div>
-                            <label className="block text-[10px] font-black text-gray-600 uppercase tracking-[0.3em] mb-4">Oracle Source *</label>
-                            <input type="text" value={resolutionSource} onChange={(e) => setResolutionSource(e.target.value)} placeholder="Bloomberg, Reuters, On-chain" className="w-full bg-white/[0.03] border border-white/10 rounded-2xl p-6 text-white outline-none focus:border-[#F492B7]" />
-                        </div>
-                    </div>
-                </div>
-                <div className="sticky bottom-0 bg-[#080808] border-t border-white/5 p-10 flex gap-6 backdrop-blur-xl">
-                    <button onClick={onClose} className="flex-1 py-6 bg-white/5 border border-white/10 rounded-2xl text-white font-black uppercase text-xs tracking-widest hover:bg-white/10 transition-all">Cancel</button>
-                    <button onClick={handleSubmit} disabled={!title || !endDate} className="flex-1 py-6 bg-[#F492B7] text-black rounded-2xl font-black uppercase text-xs tracking-[0.3em] shadow-[0_0_50px_rgba(244,146,183,0.3)] hover:scale-[1.02] transition-all">Summon Market</button>
                 </div>
             </div>
         </div>

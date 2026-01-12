@@ -3,94 +3,118 @@
 import React, { useMemo } from 'react';
 
 interface OrderBookProps {
-    currentPrice: number; // 0-100
+    currentPrice: number;
     outcome: 'YES' | 'NO';
     lastOrder?: { price: number; shares: number; total: number; type: 'YES' | 'NO' } | null;
+    activityData?: {
+        username: string;
+        avatar_url?: string;
+        action: 'YES' | 'NO';
+        sol_amount: number;
+        shares: number;
+        amount: number;
+        created_at: string;
+    }[];
 }
 
-interface OrderRow {
-    price: number;
-    shares: number;
-    total: number;
-    type: 'ask' | 'bid';
-}
+export default function OrderBook({ currentPrice, outcome, lastOrder, activityData = [] }: OrderBookProps) {
+    // Filter by current outcome and limit to recent orders
+    const filteredActivity = useMemo(() => {
+        return activityData
+            .filter(a => a.action === outcome || (outcome === 'YES' && a.action === 'YES') || (outcome === 'NO' && a.action === 'NO'))
+            .slice(0, 10);
+    }, [activityData, outcome]);
 
-export default function OrderBook({ currentPrice, outcome, lastOrder }: OrderBookProps) {
-    // Generar libro de órdenes
-    // Estado local para evitar hydration mismatch con Math.random()
-    const [orders, setOrders] = React.useState<{ asks: OrderRow[]; bids: OrderRow[] }>({ asks: [], bids: [] });
+    // Separate buys (shares > 0) and sells (shares === 0)
+    const buys = filteredActivity.filter(a => a.shares > 0);
+    const sells = filteredActivity.filter(a => a.shares === 0);
 
-    React.useEffect(() => {
-        if (!lastOrder) return;
-        const newRow: OrderRow = {
-            price: Math.round(lastOrder.price),
-            shares: Math.floor(lastOrder.shares),
-            total: lastOrder.total,
-            type: lastOrder.type === 'YES' ? 'bid' : 'ask'
-        };
+    const maxAmount = Math.max(...filteredActivity.map(a => a.amount), 1);
 
-        setOrders(prev => {
-            const newAsks = newRow.type === 'ask' ? [newRow, ...prev.asks].slice(0, 10) : prev.asks;
-            const newBids = newRow.type === 'bid' ? [newRow, ...prev.bids].slice(0, 10) : prev.bids;
-            return { asks: newAsks, bids: newBids };
-        });
-    }, [lastOrder]);
-
-    React.useEffect(() => {
-        // Init empty
-    }, []);
-
-    const { asks, bids } = orders;
-
-    const maxShares = Math.max(...asks.map(a => a.shares), ...bids.map(b => b.shares));
+    if (filteredActivity.length === 0) {
+        return (
+            <div className="bg-[#0E0E0E] rounded-2xl border border-white/5 p-6 h-full flex items-center justify-center">
+                <div className="text-center">
+                    <p className="text-gray-600 text-sm">No orders yet</p>
+                    <p className="text-gray-700 text-xs mt-1">Be the first to trade!</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <div className="bg-[#0E0E0E] rounded-2xl border border-white/5 overflow-hidden flex flex-col h-full font-mono text-xs">
+        <div className="bg-[#0E0E0E] rounded-2xl border border-white/5 overflow-hidden flex flex-col h-full text-xs">
             {/* HEADERS */}
-            <div className="grid grid-cols-3 px-4 py-3 border-b border-white/5 text-gray-500 font-bold text-[10px] uppercase tracking-wider">
-                <div className="text-left">Price</div>
-                <div className="text-right">Shares</div>
-                <div className="text-right">Total</div>
+            <div className="grid grid-cols-4 px-4 py-3 border-b border-white/5 text-gray-500 font-bold text-[10px] uppercase tracking-wider">
+                <div className="text-left">User</div>
+                <div className="text-right">SOL</div>
+                <div className="text-right">USD</div>
+                <div className="text-right">Type</div>
             </div>
 
-            {/* ASKS (RED) */}
-            <div className="flex flex-col-reverse">
-                {asks.map((order, i) => (
-                    <div key={`ask-${i}`} className="relative grid grid-cols-3 px-4 py-1.5 hover:bg-white/5 transition-colors group">
-                        {/* Visual Bar */}
+            {/* ORDERS LIST */}
+            <div className="flex-1 overflow-y-auto max-h-72">
+                {filteredActivity.map((order, i) => {
+                    const isSell = order.shares === 0;
+                    const barWidth = (order.amount / maxAmount) * 100;
+
+                    return (
                         <div
-                            className="absolute top-0 right-0 h-full bg-red-500/10 transition-all duration-500"
-                            style={{ width: `${(order.shares / maxShares) * 100}%` }}
-                        />
+                            key={i}
+                            className="relative grid grid-cols-4 px-4 py-2 hover:bg-white/5 transition-colors items-center"
+                        >
+                            {/* Visual Bar */}
+                            <div
+                                className={`absolute top-0 left-0 h-full transition-all duration-300 ${isSell ? 'bg-red-500/10' : 'bg-[#10B981]/10'}`}
+                                style={{ width: `${barWidth}%` }}
+                            />
 
-                        <div className="relative z-10 text-red-500 font-bold">{order.price}¢</div>
-                        <div className="relative z-10 text-right text-gray-300">{order.shares.toLocaleString()}</div>
-                        <div className="relative z-10 text-right text-gray-500">${order.total.toFixed(2)}</div>
-                    </div>
-                ))}
+                            {/* User */}
+                            <div className="relative z-10 flex items-center gap-2">
+                                {order.avatar_url ? (
+                                    <img src={order.avatar_url} alt="" className="w-5 h-5 rounded-full" />
+                                ) : (
+                                    <div className="w-5 h-5 rounded-full bg-gradient-to-br from-[#F492B7] to-[#E056A0] flex items-center justify-center text-[8px] font-bold text-black">
+                                        {order.username?.slice(0, 1)?.toUpperCase() || '?'}
+                                    </div>
+                                )}
+                                <span className="text-white font-medium truncate text-[11px]">{order.username?.slice(0, 8) || 'Anon'}</span>
+                            </div>
+
+                            {/* SOL */}
+                            <div className="relative z-10 text-right">
+                                <span className="text-[#F492B7] font-bold">{order.sol_amount?.toFixed(2) || '0'}</span>
+                            </div>
+
+                            {/* USD */}
+                            <div className="relative z-10 text-right text-gray-400 font-medium">
+                                ${Math.round(order.amount)}
+                            </div>
+
+                            {/* Type */}
+                            <div className="relative z-10 text-right">
+                                <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${isSell ? 'bg-red-500/20 text-red-500' : 'bg-[#10B981]/20 text-[#10B981]'}`}>
+                                    {isSell ? 'SELL' : 'BUY'}
+                                </span>
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
 
-            {/* SPREAD INDICATOR */}
-            <div className="py-2 text-center text-[10px] text-gray-600 font-black border-y border-white/5 bg-white/[0.02]">
-                SPREAD: 2¢
-            </div>
-
-            {/* BIDS (GREEN) */}
-            <div className="flex flex-col">
-                {bids.map((order, i) => (
-                    <div key={`bid-${i}`} className="relative grid grid-cols-3 px-4 py-1.5 hover:bg-white/5 transition-colors group">
-                        {/* Visual Bar */}
-                        <div
-                            className="absolute top-0 right-0 h-full bg-[#10B981]/10 transition-all duration-500"
-                            style={{ width: `${(order.shares / maxShares) * 100}%` }}
-                        />
-
-                        <div className="relative z-10 text-[#10B981] font-bold">{order.price}¢</div>
-                        <div className="relative z-10 text-right text-gray-300">{order.shares.toLocaleString()}</div>
-                        <div className="relative z-10 text-right text-gray-500">${order.total.toFixed(2)}</div>
-                    </div>
-                ))}
+            {/* SUMMARY */}
+            <div className="py-2 px-4 text-center text-[10px] border-t border-white/5 bg-white/[0.02] flex justify-between">
+                <span className="text-gray-600">
+                    <span className="text-[#10B981] font-bold">{buys.length}</span> buys
+                </span>
+                <span className="text-gray-500 font-bold">
+                    {outcome} @ {currentPrice}¢
+                </span>
+                <span className="text-gray-600">
+                    <span className="text-red-500 font-bold">{sells.length}</span> sells
+                </span>
             </div>
         </div>
     );
 }
+

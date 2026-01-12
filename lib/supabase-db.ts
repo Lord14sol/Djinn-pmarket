@@ -280,42 +280,50 @@ export async function createActivity(activity: Omit<Activity, 'id' | 'created_at
     return { data, error: null };
 }
 
-// --- HOLDERS (Derived from Activity) ---
+// --- HOLDERS (Derived from Bets) ---
 export interface Holder {
     rank: number;
     name: string;
     avatar: string | null;
     shares: number;
     wallet_address: string;
+    side?: 'YES' | 'NO';
 }
 
 export async function getTopHolders(slug: string): Promise<Holder[]> {
-    // In a real production app, we would use a dedicated 'positions' table updated via triggers.
-    // For this prototype, we calculate holdings by summing up 'activity' shares for the market.
+    // Read from bets table - only active (unclaimed) positions
     const { data, error } = await supabase
-        .from('activity')
+        .from('bets')
         .select('*')
-        .eq('market_slug', slug);
+        .eq('market_slug', slug)
+        .eq('claimed', false);
 
     if (error || !data) return [];
 
-    const agg: Record<string, Holder> = {};
+    // Aggregate shares by wallet + side
+    const agg: Record<string, Holder & { side: string }> = {};
 
-    data.forEach(act => {
-        if (!agg[act.wallet_address]) {
-            agg[act.wallet_address] = {
+    data.forEach(bet => {
+        const key = `${bet.wallet_address}-${bet.side}`;
+        if (!agg[key]) {
+            agg[key] = {
                 rank: 0,
-                name: act.username,
-                avatar: act.avatar_url,
+                name: bet.wallet_address.slice(0, 6) + '...',
+                avatar: null,
                 shares: 0,
-                wallet_address: act.wallet_address
+                wallet_address: bet.wallet_address,
+                side: bet.side
             };
         }
-        // Simple accumulation logic
-        agg[act.wallet_address].shares += act.shares || 0;
+        // Accumulate shares for this position
+        agg[key].shares += bet.shares || 0;
     });
 
-    const sorted = Object.values(agg).sort((a, b) => b.shares - a.shares);
+    // Sort by shares descending and assign ranks
+    const sorted = Object.values(agg)
+        .filter(h => h.shares > 0)
+        .sort((a, b) => b.shares - a.shares);
+
     return sorted.map((h, i) => ({ ...h, rank: i + 1 }));
 }
 
@@ -376,6 +384,12 @@ export interface Market {
     total_no_pool: number;
     resolution_date?: string;
     created_at?: string;
+    // Blockchain fields
+    market_pda?: string;
+    yes_token_mint?: string;
+    no_token_mint?: string;
+    tx_signature?: string;
+    resolution_source?: string;
 }
 
 export async function createMarket(market: Partial<Market> & { slug: string; title: string; creator_wallet: string }) {
@@ -410,7 +424,7 @@ export async function getMarket(slug: string): Promise<Market | null> {
     return data;
 }
 
-export async function resolveMarket(slug: string, winningOutcome: 'YES' | 'NO') {
+export async function resolveMarket(slug: string, winningOutcome: 'YES' | 'NO' | 'VOID') {
     // 1. Update market as resolved
     const { error: marketError } = await supabase
         .from('markets')
@@ -545,6 +559,19 @@ export async function claimPayout(betId: string) {
         .eq('id', betId);
 
     if (error) console.error('Error claiming payout:', error);
+    return { error };
+}
+
+// Cancel/Refund a bet - marks as claimed so it disappears from active bets
+export async function cancelBet(walletAddress: string, marketSlug: string) {
+    const { error } = await supabase
+        .from('bets')
+        .update({ claimed: true, payout: 0 })
+        .eq('wallet_address', walletAddress)
+        .eq('market_slug', marketSlug)
+        .eq('claimed', false);
+
+    if (error) console.error('Error canceling bet:', error);
     return { error };
 }
 

@@ -2,220 +2,143 @@
 
 import { useState, useEffect } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { initializeProtocol, getProtocolStatePDA } from '@/lib/program';
-import { PROTOCOL_AUTHORITY } from '@/lib/program-config';
-import * as supabaseDb from '@/lib/supabase-db';
+import { useDjinnProtocol } from '../../hooks/useDjinnProtocol';
+import { supabase } from '../../lib/supabase';
+import { PublicKey } from '@solana/web3.js';
+import { resolveMarket as resolveMarketInDb } from '../../lib/supabase-db'; // Import DB function
+
+// Hardcoded Protocol Authority for simplicity (You can make this dynamic later)
+const PROTOCOL_AUTHORITY = "G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma";
 
 export default function AdminPage() {
-    const wallet = useWallet();
-    const [loading, setLoading] = useState(false);
-    const [status, setStatus] = useState<string>('');
-    const [error, setError] = useState<string>('');
-    const [markets, setMarkets] = useState<supabaseDb.Market[]>([]);
-    const [activeTab, setActiveTab] = useState<'protocol' | 'markets'>('markets');
+    const { publicKey } = useWallet();
+    const { resolveMarket } = useDjinnProtocol();
+    const [markets, setMarkets] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [resolvingId, setResolvingId] = useState<string | null>(null);
 
-    // Load markets on mount
+    // Fetch unresolved markets
     useEffect(() => {
-        loadMarkets();
+        const fetchMarkets = async () => {
+            const { data, error } = await supabase
+                .from('markets')
+                .select('*')
+                .eq('resolved', false)
+                .order('created_at', { ascending: false });
+
+            if (data) setMarkets(data);
+            setLoading(false);
+        };
+        fetchMarkets();
     }, []);
 
-    const loadMarkets = async () => {
-        const data = await supabaseDb.getMarkets();
-        setMarkets(data);
-    };
+    const handleResolve = async (market: any, outcome: 'yes' | 'no' | 'void') => {
+        if (!publicKey) return alert("Connect wallet");
+        if (publicKey.toString() !== PROTOCOL_AUTHORITY) return alert("Unauthorized: You are not the Protocol Authority");
 
-    const handleInitialize = async () => {
-        if (!wallet.publicKey) {
-            setError('Please connect your wallet first');
-            return;
+        if (!market.market_pda || market.market_pda.startsWith('local_')) {
+            return alert("Cannot resolve local/mock markets on-chain");
         }
 
-        if (wallet.publicKey.toBase58() !== PROTOCOL_AUTHORITY.toBase58()) {
-            setError('Only protocol authority can initialize');
-            return;
-        }
+        if (!confirm(`Are you sure you want to resolve "${market.title}" as ${outcome.toUpperCase()}?`)) return;
 
-        setLoading(true);
-        setError('');
-        setStatus('Initializing protocol...');
+        setResolvingId(market.id);
 
         try {
-            const result = await initializeProtocol(wallet);
-            setStatus(`✅ Protocol initialized! TX: ${result.signature}`);
-            console.log('Protocol State:', result.protocolState.toBase58());
-        } catch (err: any) {
-            setError(`Failed: ${err.message}`);
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
-    };
+            console.log(`Resolving market ${market.market_pda} as ${outcome.toUpperCase()}`);
 
-    const handleResolveMarket = async (slug: string, outcome: 'YES' | 'NO') => {
-        if (!wallet.publicKey || wallet.publicKey.toBase58() !== PROTOCOL_AUTHORITY.toBase58()) {
-            setError('Only protocol authority can resolve markets');
-            return;
-        }
+            // 1. Resolve on Blockchain
+            const tx = await resolveMarket(new PublicKey(market.market_pda), outcome);
+            console.log("Blockchain resolution tx:", tx);
 
-        setLoading(true);
-        setError('');
-        setStatus(`Resolving market "${slug}" as ${outcome}...`);
+            // 2. Resolve in Database & Calculate Payouts
+            const outcomeString = outcome.toUpperCase() as 'YES' | 'NO' | 'VOID';
+            const dbResult = await resolveMarketInDb(market.slug, outcomeString);
 
-        try {
-            const result = await supabaseDb.resolveMarket(slug, outcome);
-            if (result.error) {
-                setError(`Failed: ${result.error.message}`);
+            if (dbResult.error) {
+                console.error("DB Error:", dbResult.error);
+                alert("Blockchain Resolved, but DB update failed. Check console.");
             } else {
-                setStatus(`✅ Market resolved! Winner: ${outcome} | Pool: ${result.totalPool?.toFixed(4)} SOL | Winners: ${result.winningBets} | Losers: ${result.losingBets}`);
-                loadMarkets(); // Refresh
+                alert(`✅ Market Resolved Successfully!\n\nBlockchain TX: ${tx.slice(0, 10)}...\n\nPayouts Calculated:\nPool: ${dbResult.totalPool || 0} SOL\nWinning Bets: ${dbResult.winningBets || 0}`);
+
+                // Remove from list
+                setMarkets(markets.filter(m => m.id !== market.id));
             }
-        } catch (err: any) {
-            setError(`Failed: ${err.message}`);
+
+        } catch (error: any) {
+            console.error("Resolution Error:", error);
+            alert(`Failed: ${error.message}`);
         } finally {
-            setLoading(false);
+            setResolvingId(null);
         }
     };
 
-    const isAuthority = wallet.publicKey?.toBase58() === PROTOCOL_AUTHORITY.toBase58();
+    if (loading) return <div className="p-20 text-center text-white">Loading admin panel...</div>;
+
+    if (!publicKey || publicKey.toString() !== PROTOCOL_AUTHORITY) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] text-white">
+                <h1 className="text-4xl font-bold mb-4 text-red-500">ACCESS DENIED</h1>
+                <p>You are not the Protocol Authority.</p>
+                <div className="mt-8 p-4 bg-white/5 rounded-xl text-xs font-mono">
+                    Your Wallet: {publicKey?.toString() || "Not Connected"}
+                    <br />
+                    Required: {PROTOCOL_AUTHORITY}
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-purple-900 via-black to-blue-900 p-8">
-            <div className="max-w-6xl mx-auto">
-                <h1 className="text-4xl font-bold text-white mb-8">🔧 Admin Panel</h1>
+        <div className="container mx-auto px-4 py-12 text-white">
+            <h1 className="text-3xl font-black mb-8 flex items-center gap-3">
+                <span className="text-[#F492B7]">⚡</span> Admin Console
+            </h1>
 
-                {/* Wallet Status */}
-                <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 mb-6 border border-white/20">
-                    <h2 className="text-xl font-bold text-white mb-4">Wallet Status</h2>
-                    {wallet.publicKey ? (
-                        <div>
-                            <p className="text-green-400">✅ Connected: {wallet.publicKey.toBase58()}</p>
-                            {isAuthority ? (
-                                <p className="text-green-400 mt-2">✅ You are the protocol authority</p>
-                            ) : (
-                                <p className="text-yellow-400 mt-2">⚠️ You are NOT the protocol authority</p>
-                            )}
-                        </div>
-                    ) : (
-                        <p className="text-red-400">❌ Not connected</p>
-                    )}
-                </div>
+            <div className="space-y-6">
+                <h2 className="text-xl font-bold text-gray-400">Unresolved Markets ({markets.length})</h2>
 
-                {/* Tabs */}
-                <div className="flex gap-4 mb-6">
-                    <button
-                        onClick={() => setActiveTab('markets')}
-                        className={`px-6 py-3 rounded-xl font-bold transition ${activeTab === 'markets' ? 'bg-[#F492B7] text-black' : 'bg-white/10 text-white hover:bg-white/20'}`}
-                    >
-                        📊 Resolve Markets
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('protocol')}
-                        className={`px-6 py-3 rounded-xl font-bold transition ${activeTab === 'protocol' ? 'bg-[#F492B7] text-black' : 'bg-white/10 text-white hover:bg-white/20'}`}
-                    >
-                        ⚙️ Protocol Settings
-                    </button>
-                </div>
-
-                {/* Markets Tab */}
-                {activeTab === 'markets' && (
-                    <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-xl font-bold text-white">Markets ({markets.length})</h2>
-                            <button onClick={loadMarkets} className="px-4 py-2 bg-blue-500 rounded-lg text-white hover:bg-blue-600 transition">
-                                🔄 Refresh
-                            </button>
-                        </div>
-
-                        {markets.length === 0 ? (
-                            <p className="text-gray-400 text-center py-8">No markets found. Create one from the homepage!</p>
-                        ) : (
-                            <div className="space-y-4">
-                                {markets.map(market => (
-                                    <div key={market.slug} className={`bg-black/40 rounded-xl p-6 border ${market.resolved ? 'border-green-500/30' : 'border-white/10'}`}>
-                                        <div className="flex justify-between items-start mb-4">
-                                            <div>
-                                                <h3 className="text-lg font-bold text-white">{market.title}</h3>
-                                                <p className="text-gray-400 text-sm">Slug: {market.slug}</p>
-                                                <p className="text-gray-500 text-xs">Creator: {market.creator_wallet.slice(0, 8)}...</p>
-                                            </div>
-                                            {market.resolved ? (
-                                                <div className="px-4 py-2 bg-green-500/20 border border-green-500/30 rounded-lg">
-                                                    <span className="text-green-400 font-bold">✅ Resolved: {market.winning_outcome}</span>
-                                                </div>
-                                            ) : (
-                                                <div className="px-4 py-2 bg-yellow-500/20 border border-yellow-500/30 rounded-lg">
-                                                    <span className="text-yellow-400 font-bold">⏳ Active</span>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Pool Info */}
-                                        <div className="grid grid-cols-2 gap-4 mb-4">
-                                            <div className="bg-emerald-500/10 rounded-lg p-3 border border-emerald-500/20">
-                                                <p className="text-gray-400 text-xs">YES Pool</p>
-                                                <p className="text-emerald-400 font-bold">{market.total_yes_pool || 0} SOL</p>
-                                            </div>
-                                            <div className="bg-red-500/10 rounded-lg p-3 border border-red-500/20">
-                                                <p className="text-gray-400 text-xs">NO Pool</p>
-                                                <p className="text-red-400 font-bold">{market.total_no_pool || 0} SOL</p>
-                                            </div>
-                                        </div>
-
-                                        {/* Resolve Buttons */}
-                                        {!market.resolved && isAuthority && (
-                                            <div className="flex gap-4">
-                                                <button
-                                                    onClick={() => handleResolveMarket(market.slug, 'YES')}
-                                                    disabled={loading}
-                                                    className="flex-1 py-3 bg-emerald-500 text-white font-bold rounded-xl hover:bg-emerald-600 transition disabled:opacity-50"
-                                                >
-                                                    ✅ Resolve YES
-                                                </button>
-                                                <button
-                                                    onClick={() => handleResolveMarket(market.slug, 'NO')}
-                                                    disabled={loading}
-                                                    className="flex-1 py-3 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 transition disabled:opacity-50"
-                                                >
-                                                    ❌ Resolve NO
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
+                {markets.map((market) => (
+                    <div key={market.id} className="bg-white/5 border border-white/10 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-6">
+                        <div className="flex-1">
+                            <h3 className="text-xl font-bold mb-2">{market.title}</h3>
+                            <div className="flex gap-4 text-sm text-gray-400 font-mono">
+                                <span>Slug: {market.slug}</span>
+                                <span>PDA: {market.market_pda?.slice(0, 8)}...</span>
                             </div>
-                        )}
-                    </div>
-                )}
+                        </div>
 
-                {/* Protocol Tab */}
-                {activeTab === 'protocol' && (
-                    <div className="space-y-6">
-                        <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
-                            <h2 className="text-xl font-bold text-white mb-4">Initialize Protocol</h2>
-                            <p className="text-white/70 mb-4">
-                                This should only be done ONCE when deploying the protocol for the first time.
-                            </p>
+                        <div className="flex gap-4">
                             <button
-                                onClick={handleInitialize}
-                                disabled={loading || !wallet.publicKey}
-                                className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold hover:shadow-lg hover:shadow-purple-500/50 transition disabled:opacity-50 disabled:cursor-not-allowed text-white"
+                                onClick={() => handleResolve(market, 'yes')}
+                                disabled={!!resolvingId}
+                                className="px-6 py-3 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 hover:bg-emerald-500/30 font-bold transition-all disabled:opacity-50"
                             >
-                                {loading ? 'Initializing...' : 'Initialize Protocol'}
+                                {resolvingId === market.id ? 'Resolving... ' : 'Resolve YES'}
+                            </button>
+
+                            <button
+                                onClick={() => handleResolve(market, 'no')}
+                                disabled={!!resolvingId}
+                                className="px-6 py-3 rounded-xl bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/30 font-bold transition-all disabled:opacity-50"
+                            >
+                                {resolvingId === market.id ? 'Resolving... ' : 'Resolve NO'}
+                            </button>
+
+                            <button
+                                onClick={() => handleResolve(market, 'void')}
+                                disabled={!!resolvingId}
+                                className="px-6 py-3 rounded-xl bg-gray-500/20 text-gray-400 border border-gray-500/50 hover:bg-gray-500/30 font-bold transition-all disabled:opacity-50"
+                            >
+                                {resolvingId === market.id ? 'Resolving... ' : 'Resolve VOID'}
                             </button>
                         </div>
                     </div>
-                )}
+                ))}
 
-                {/* Status/Error Display */}
-                {status && (
-                    <div className="mt-6 bg-green-500/20 border border-green-500 rounded-lg p-4">
-                        <p className="text-green-300 font-mono text-sm break-all">{status}</p>
-                    </div>
-                )}
-
-                {error && (
-                    <div className="mt-6 bg-red-500/20 border border-red-500 rounded-lg p-4">
-                        <p className="text-red-300">{error}</p>
+                {markets.length === 0 && (
+                    <div className="text-center py-20 bg-white/5 rounded-3xl border border-white/10 text-gray-500">
+                        No unresolved markets found. Good job! 🎉
                     </div>
                 )}
             </div>

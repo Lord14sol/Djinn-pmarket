@@ -5,6 +5,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { SolanaProvider } from "@/components/SolanaProvider";
 import { CategoryProvider } from "@/lib/CategoryContext";
+import { ModalProvider } from "@/lib/ModalContext";
 import AchievementNotification from "@/components/achievements/AchievementNotification";
 
 const geistSans = Geist({
@@ -24,6 +25,7 @@ const adrianeStyle = Libre_Baskerville({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://djinn.markets'),
   title: "Djinn Markets | Prediction Markets on Solana",
   description: "Trade on the future. Create markets, bet on outcomes, earn rewards. The most premium prediction market experience on Solana.",
   keywords: ["prediction markets", "solana", "crypto", "betting", "djinn", "defi", "web3"],
@@ -60,6 +62,9 @@ export const metadata: Metadata = {
     apple: '/star.png',
   },
   manifest: "/manifest.json",
+};
+
+export const viewport = {
   themeColor: "#000000",
 };
 
@@ -75,12 +80,14 @@ export default function RootLayout({
       >
         <SolanaProvider>
           <CategoryProvider>
-            <Navbar />
-            <AchievementNotification />
-            <main className="pt-20 flex-grow">
-              {children}
-            </main>
-            <Footer />
+            <ModalProvider>
+              <Navbar />
+              <AchievementNotification />
+              <main className="pt-20 flex-grow">
+                {children}
+              </main>
+              <Footer />
+            </ModalProvider>
           </CategoryProvider>
         </SolanaProvider>
       </body>

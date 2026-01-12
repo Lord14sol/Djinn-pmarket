@@ -6,9 +6,9 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { compressImage } from '@/lib/utils';
 import HowItWorksModal from './HowItWorksModal';
-import { createMarketOnChain } from '@/lib/program';
-import { createMarketTokenMints } from '@/lib/token-utils';
+import { useDjinnProtocol } from '@/hooks/useDjinnProtocol';
 import { supabase } from '@/lib/supabase';
+import { useModal } from '@/lib/ModalContext';
 import Link from 'next/link';
 
 // --- ICONOS ---
@@ -43,243 +43,19 @@ interface SearchResult {
 
 const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
     const wallet = useWallet();
-    const { publicKey, signTransaction, signAllTransactions } = wallet;
+    const { publicKey } = wallet;
     const { setVisible } = useWalletModal();
-    const searchParams = useSearchParams();
     const router = useRouter();
+    const { openCreateMarket } = useModal();
 
-    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false);
-    const [isLoading, setIsLoading] = useState(false);
-
-    const [marketType, setMarketType] = useState<'binary' | 'multiple'>('binary');
-    const [poolName, setPoolName] = useState('');
-    const [mainImage, setMainImage] = useState<string | null>(null);
-    const [options, setOptions] = useState([
-        { id: 1, name: '' },
-        { id: 2, name: '' }
-    ]);
-
-    // Search state
-    const [searchQuery, setSearchQuery] = useState('');
-    const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-    const [showResults, setShowResults] = useState(false);
-    const [isSearching, setIsSearching] = useState(false);
-    const searchRef = useRef<HTMLDivElement>(null);
-
-    // Open modal when ?create=true is in URL (from navbar)
-    useEffect(() => {
-        if (searchParams.get('create') === 'true') {
-            setIsCreateModalOpen(true);
-            // Clean up URL
-            router.replace('/', { scroll: false });
-        }
-    }, [searchParams, router]);
-
-    // Search logic with debounce
-    useEffect(() => {
-        if (!searchQuery.trim()) {
-            setSearchResults([]);
-            return;
-        }
-
-        setIsSearching(true);
-        const timer = setTimeout(async () => {
-            const lowerQuery = searchQuery.toLowerCase();
-            const results: SearchResult[] = [];
-
-            // Search mock markets
-            MOCK_MARKETS.forEach(market => {
-                if (market.title.toLowerCase().includes(lowerQuery) ||
-                    market.category.toLowerCase().includes(lowerQuery)) {
-                    results.push({
-                        type: 'market',
-                        id: market.id,
-                        title: market.title,
-                        subtitle: market.category,
-                        icon: market.icon,
-                        url: `/market/${market.id}`
-                    });
-                }
-            });
-
-            // Search localStorage markets
-            try {
-                const createdMarkets = JSON.parse(localStorage.getItem('djinn_created_markets') || '[]');
-                createdMarkets.forEach((market: any) => {
-                    if (market.title?.toLowerCase().includes(lowerQuery)) {
-                        results.push({
-                            type: 'market',
-                            id: market.slug,
-                            title: market.title,
-                            subtitle: 'Created Market',
-                            icon: market.icon,
-                            url: `/market/${market.slug}`
-                        });
-                    }
-                });
-            } catch (e) { }
-
-            // Search profiles from Supabase by username
-            try {
-                const { searchProfiles } = await import('@/lib/supabase-db');
-                const profiles = await searchProfiles(searchQuery, 5);
-                profiles.forEach(profile => {
-                    results.push({
-                        type: 'profile',
-                        id: profile.wallet_address,
-                        title: profile.username,
-                        subtitle: `${profile.wallet_address.slice(0, 6)}...${profile.wallet_address.slice(-4)}`,
-                        icon: profile.avatar_url || undefined,
-                        url: `/profile/${profile.wallet_address}`
-                    });
-                });
-            } catch (e) {
-                console.error('Error searching profiles:', e);
-            }
-
-            // Search for wallet addresses (profiles) - if looks like wallet
-            if (/^[1-9A-HJ-NP-Za-km-z]{20,}$/.test(searchQuery)) {
-                // Only add if not already in results
-                if (!results.find(r => r.id === searchQuery)) {
-                    results.push({
-                        type: 'profile',
-                        id: searchQuery,
-                        title: `${searchQuery.slice(0, 6)}...${searchQuery.slice(-4)}`,
-                        subtitle: 'View Wallet Profile',
-                        url: `/profile/${searchQuery}`
-                    });
-                }
-            }
-
-            setSearchResults(results);
-            setIsSearching(false);
-        }, 300); // 300ms debounce
-
-        return () => clearTimeout(timer);
-    }, [searchQuery]);
-
-    // Close results on click outside
-    useEffect(() => {
-        const handleClickOutside = (e: MouseEvent) => {
-            if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
-                setShowResults(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
-
-    // --- FUNCIÓN DE CREACIÓN (SIMPLIFIED - SUPABASE ONLY FOR NOW) ---
-    const handleCreateMarket = async () => {
-        if (!publicKey) {
-            setVisible(true);
-            return;
-        }
-        if (!poolName) return alert("Please enter a question");
-
-        setIsLoading(true);
-
-        try {
-            console.log("🚀 Creating market...");
-
-            // Generate unique IDs
-            const resolutionTime = Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60);
-            const marketId = `market_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-            const slug = poolName.toLowerCase().trim()
-                .replace(/[^\w\s-]/g, '')
-                .replace(/[\s_-]+/g, '-')
-                .replace(/^-+|-+$/g, '');
-
-            // SAVE TO SUPABASE (without blockchain for now)
-            const finalBanner = mainImage ? await compressImage(mainImage) : "🔮";
-
-            const supabaseClient = supabase;
-            const { error: dbError } = await supabaseClient.from('markets').insert({
-                slug,
-                title: poolName,
-                creator_wallet: publicKey.toString(),
-                end_date: new Date(resolutionTime * 1000).toISOString(),
-                market_pda: marketId, // Using generated ID instead of blockchain PDA
-                yes_token_mint: `yes_${marketId}`,
-                no_token_mint: `no_${marketId}`,
-                tx_signature: `local_${Date.now()}`,
-                banner_url: finalBanner,
-            });
-
-            if (dbError) {
-                console.error('DB error:', dbError);
-                // Continue anyway - save locally
-            }
-
-            // UPDATE UI
-            const newMarket = {
-                id: Date.now(),
-                title: poolName,
-                icon: finalBanner,
-                type: marketType,
-                options: marketType === 'multiple' ? options : [
-                    { id: 1, name: 'Yes', chance: 50 },
-                    { id: 2, name: 'No', chance: 50 }
-                ],
-                chance: 50,
-                volume: "$0",
-                endDate: new Date(resolutionTime * 1000),
-                slug,
-                creator: publicKey.toString(),
-                createdAt: Date.now(),
-                marketPDA: marketId,
-                economics: { creationFee: 0.03, resolutionFee: 2.0 }
-            };
-
-            onMarketCreated(newMarket);
-
-            // RESET
-            setIsCreateModalOpen(false);
-            setPoolName('');
-            setMainImage(null);
-            setMarketType('binary');
-            setOptions([{ id: 1, name: '' }, { id: 2, name: '' }]);
-
-            // Trigger Achievement Milestones
-            import('@/lib/supabase-db').then(mod => {
-                mod.checkMarketMilestones(publicKey.toString());
-            });
-
-            alert(`✅ Market created successfully!`);
-
-        } catch (error: any) {
-            console.error("❌ Error:", error);
-            alert(`Failed: ${error.message || 'Unknown error'}`);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleImageUpload = (file: File) => {
-        const reader = new FileReader();
-        reader.onload = (e) => setMainImage(e.target?.result as string);
-        reader.readAsDataURL(file);
-    };
-
-    const addOption = () => {
-        setOptions([...options, { id: options.length + 1, name: '' }]);
-    };
-
-    const switchMode = (mode: 'binary' | 'multiple') => {
-        setMarketType(mode);
-        setOptions(mode === 'binary'
-            ? [{ id: 1, name: 'Yes' }, { id: 2, name: 'No' }]
-            : [{ id: 1, name: '' }, { id: 2, name: '' }, { id: 3, name: '' }]
-        );
-    };
 
     return (
         <>
             <section className="relative w-full min-h-[40vh] flex flex-col items-center justify-center px-4 pt-24 pb-6">
                 <div className="w-full max-w-3xl flex flex-col items-center gap-5">
                     {/* BARRA DE BÚSQUEDA FUNCIONAL */}
-                    <div ref={searchRef} className="relative group w-full">
+                    <div className="relative group w-full">
                         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                             <SearchIcon />
                         </div>
@@ -287,65 +63,17 @@ const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
                             type="text"
                             className="block w-full pl-12 pr-4 py-4 bg-[#1C1D25] border border-gray-800 rounded-2xl text-lg text-white outline-none focus:ring-2 focus:ring-[#F492B7]"
                             placeholder="Search for markets or profiles..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            onFocus={() => setShowResults(true)}
+                            readOnly
+                            onClick={() => alert("Search functionality coming in Phase 3!")}
                         />
-
-                        {/* Search Results Dropdown */}
-                        {showResults && searchQuery && (
-                            <div className="absolute top-full left-0 right-0 mt-2 bg-[#0A0A0A] border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50 max-h-80 overflow-y-auto">
-                                {searchResults.length > 0 ? (
-                                    <div className="p-2">
-                                        {searchResults.map((result, idx) => (
-                                            <Link
-                                                key={`${result.type}-${result.id}-${idx}`}
-                                                href={result.url}
-                                                onClick={() => { setShowResults(false); setSearchQuery(''); }}
-                                                className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-all group"
-                                            >
-                                                {/* Icon */}
-                                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg ${result.type === 'market'
-                                                    ? 'bg-[#F492B7]/10 border border-[#F492B7]/20'
-                                                    : 'bg-blue-500/10 border border-blue-500/20'
-                                                    }`}>
-                                                    {result.type === 'market' ? (
-                                                        result.icon || '📊'
-                                                    ) : (
-                                                        '👤'
-                                                    )}
-                                                </div>
-
-                                                {/* Content */}
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-bold text-white truncate group-hover:text-[#F492B7] transition-colors">
-                                                        {result.title}
-                                                    </p>
-                                                    <p className="text-xs text-gray-500">
-                                                        {result.type === 'market' ? '📊 Market' : '👤 Profile'} • {result.subtitle}
-                                                    </p>
-                                                </div>
-
-                                                {/* Arrow */}
-                                                <svg className="w-4 h-4 text-gray-600 group-hover:text-[#F492B7] transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                                </svg>
-                                            </Link>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="py-8 text-center">
-                                        <p className="text-gray-500 text-sm">No results found for "{searchQuery}"</p>
-                                        <p className="text-gray-600 text-xs mt-1">Try another search term or paste a wallet address</p>
-                                    </div>
-                                )}
-                            </div>
-                        )}
                     </div>
 
                     {/* BOTÓN PRINCIPAL */}
                     <div className="flex justify-center mt-1">
-                        <button onClick={() => setIsCreateModalOpen(true)} className="bg-[#F492B7] text-black text-xl font-black py-4 px-12 rounded-xl shadow-[0_0_30px_rgba(244,146,183,0.3)] hover:scale-105 active:scale-95 transition-all uppercase">
+                        <button
+                            onClick={openCreateMarket}
+                            className="bg-[#F492B7] text-black text-xl font-black py-4 px-12 rounded-xl shadow-[0_0_30px_rgba(244,146,183,0.3)] hover:scale-105 active:scale-95 transition-all uppercase"
+                        >
                             Create a Market
                         </button>
                     </div>
@@ -356,67 +84,6 @@ const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
                     </button>
                 </div>
             </section>
-
-            {/* MODAL DE CREACIÓN */}
-            {isCreateModalOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/95 backdrop-blur-xl" onClick={() => !isLoading && setIsCreateModalOpen(false)} />
-                    <div className="relative bg-[#0B0E14] border border-white/10 rounded-[2rem] w-full max-w-2xl overflow-hidden shadow-2xl">
-                        <button onClick={() => setIsCreateModalOpen(false)} disabled={isLoading} className="absolute top-8 right-8 text-gray-500 hover:text-white transition-colors disabled:opacity-50">
-                            <CloseIcon />
-                        </button>
-
-                        <div className="p-10 md:p-12 text-white">
-                            <h2 className="text-4xl text-white mb-8 font-bold tracking-tight">New Market</h2>
-
-                            <div className="flex gap-2 mb-8 bg-white/5 p-1 rounded-xl w-fit">
-                                <button onClick={() => switchMode('binary')} className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${marketType === 'binary' ? 'bg-[#F492B7] text-black' : 'text-gray-500 hover:text-white'}`}>Binary</button>
-                                <button onClick={() => switchMode('multiple')} className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${marketType === 'multiple' ? 'bg-[#F492B7] text-black' : 'text-gray-500 hover:text-white'}`}>Multiple</button>
-                            </div>
-
-                            <div className="space-y-6">
-                                <div>
-                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest block mb-2">Market Banner (Top Image)</label>
-                                    <div className="w-full h-32 rounded-2xl border border-white/10 bg-white/5 flex items-center justify-center cursor-pointer overflow-hidden"
-                                        onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.onchange = (e: any) => handleImageUpload(e.target.files[0]); input.click(); }}>
-                                        {mainImage ? <img src={mainImage} className="w-full h-full object-cover" /> : <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Upload Banner</span>}
-                                    </div>
-                                </div>
-
-                                <input type="text" placeholder="Enter question..." className="w-full bg-black/40 border border-white/10 rounded-xl p-5 text-lg font-bold outline-none focus:border-[#F492B7]" value={poolName} onChange={(e) => setPoolName(e.target.value)} />
-
-                                <div className="space-y-3">
-                                    <div className="flex justify-between items-center">
-                                        <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest">Outcomes</label>
-                                        {marketType === 'multiple' && (
-                                            <button onClick={addOption} className="text-[#F492B7] text-[10px] font-black uppercase tracking-widest hover:text-[#ff6fb7]">+ Add Outcome</button>
-                                        )}
-                                    </div>
-                                    <div className="max-h-48 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
-                                        {options.map((option, index) => (
-                                            <div key={option.id} className="bg-white/5 p-4 rounded-xl border border-white/10">
-                                                <input type="text" placeholder={marketType === 'binary' ? (index === 0 ? "Yes" : "No") : "Outcome Name..."} className="w-full bg-transparent border-none text-white font-bold outline-none text-sm" value={option.name} onChange={(e) => {
-                                                    const newOpts = [...options];
-                                                    newOpts[index].name = e.target.value;
-                                                    setOptions(newOpts);
-                                                }} />
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <button
-                                    onClick={handleCreateMarket}
-                                    disabled={isLoading}
-                                    className="w-full bg-[#F492B7] text-black py-5 rounded-xl font-black text-lg uppercase shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                >
-                                    {isLoading ? '⏳ CREATING ON SOLANA...' : 'CREATE MARKET'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             <HowItWorksModal
                 isOpen={isHowItWorksOpen}

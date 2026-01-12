@@ -255,22 +255,25 @@ export default function ProfilePage() {
         loadProfile();
     }, [isDefaultProfile, publicKey, profileSlug]);
 
-    // 3. LOAD ACTIVE BETS FROM SUPABASE
+    // 3. LOAD ACTIVE BETS FROM SUPABASE (using bets table, not activity)
     const loadActiveBets = async (walletAddress: string) => {
         try {
-            const activity = await supabaseDb.getActivity();
-            const userActivity = activity.filter((a: any) => a.wallet_address === walletAddress);
+            // Use the bets table which properly tracks claimed status
+            const bets = await supabaseDb.getUserBets(walletAddress);
 
-            // Transform activity into bet format
-            const bets = await Promise.all(userActivity.map(async (act: any) => {
+            // Filter only active (unclaimed) bets
+            const activeBets = bets.filter(bet => !bet.claimed);
+
+            // Transform bets into display format with profit calculation
+            const formattedBets = await Promise.all(activeBets.map(async (bet: any) => {
                 // Fetch current market price to calculate profit
-                const marketData = await supabaseDb.getMarketData(act.market_slug);
-                const currentPrice = marketData?.live_price || 50;
+                const marketData = await supabaseDb.getMarketData(bet.market_slug);
+                const currentPrice = marketData?.live_price || bet.entry_price || 50;
 
                 // Calculate based on YES/NO position
-                const purchasePrice = act.action === 'YES' ? currentPrice : (100 - currentPrice);
-                const invested = act.amount || 0;
-                const shares = act.shares || 0;
+                const purchasePrice = bet.side === 'YES' ? currentPrice : (100 - currentPrice);
+                const invested = bet.amount || 0;
+                const shares = bet.shares || 0;
 
                 // Simple profit calculation (shares value at current price - invested)
                 const currentValue = shares * (purchasePrice / 100);
@@ -278,17 +281,20 @@ export default function ProfilePage() {
                 const change = invested > 0 ? ((profit / invested) * 100).toFixed(1) : '0.0';
 
                 return {
-                    id: act.id || act.market_slug,
-                    title: act.market_title,
+                    id: bet.id || bet.market_slug,
+                    title: bet.market_slug.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
                     invested,
                     current: currentValue,
-                    side: act.action,
+                    side: bet.side,
                     change: `${profit >= 0 ? '+' : ''}${change}%`,
-                    profit
+                    profit,
+                    sol_amount: bet.sol_amount,
+                    market_slug: bet.market_slug,
+                    payout: bet.payout
                 };
             }));
 
-            setProfile(prev => ({ ...prev, activeBets: bets }));
+            setProfile(prev => ({ ...prev, activeBets: formattedBets }));
         } catch (error) {
             console.error('Error loading active bets:', error);
         }
@@ -648,17 +654,17 @@ function BetCard({ bet, onCashOut, router }: any) {
                     </div>
 
                     {/* Title */}
-                    <h4 onClick={() => router.push(`/market/${bet.id}`)} className="text-lg font-bold text-white mb-6 leading-tight hover:text-[#F492B7] cursor-pointer line-clamp-2">{bet.title}</h4>
+                    <h4 onClick={() => router.push(`/market/${bet.market_slug || bet.id}`)} className="text-lg font-bold text-white mb-6 leading-tight hover:text-[#F492B7] cursor-pointer line-clamp-2">{bet.title}</h4>
 
                     {/* Stats */}
                     <div className="grid grid-cols-2 gap-4 mb-4">
                         <div className="bg-white/5 rounded-xl p-3">
                             <p className="text-gray-500 text-[10px] uppercase tracking-widest mb-1">Invested</p>
-                            <p className="text-white text-xl font-black">${bet.invested.toFixed(2)}</p>
+                            <p className="text-white text-xl font-black">${Math.round(bet.invested)}</p>
                         </div>
                         <div className="bg-white/5 rounded-xl p-3">
                             <p className="text-gray-500 text-[10px] uppercase tracking-widest mb-1">Value</p>
-                            <p className="text-white text-xl font-black">${bet.current.toFixed(2)}</p>
+                            <p className="text-white text-xl font-black">${Math.round(bet.current)}</p>
                         </div>
                     </div>
 
@@ -667,14 +673,14 @@ function BetCard({ bet, onCashOut, router }: any) {
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <span className={`text-3xl ${isPositive ? 'text-[#10B981]' : 'text-red-500'}`}>{isPositive ? '↗' : '↘'}</span>
-                                <span className={`text-2xl font-black ${isPositive ? 'text-[#10B981]' : 'text-red-500'}`}>{isPositive ? '+' : ''}${bet.profit.toFixed(2)}</span>
+                                <span className={`text-2xl font-black ${isPositive ? 'text-[#10B981]' : 'text-red-500'}`}>{isPositive ? '+' : ''}${Math.round(bet.profit)}</span>
                             </div>
                             <span className={`text-xl font-black ${isPositive ? 'text-[#10B981]' : 'text-red-500'}`}>{bet.change}</span>
                         </div>
                     </div>
 
-                    {/* Cash Out button */}
-                    <button onClick={() => onCashOut(bet.id)} className="w-full bg-[#F492B7] text-black py-4 rounded-xl text-sm font-black uppercase tracking-wider hover:brightness-110 transition-all shadow-[0_0_20px_rgba(244,146,183,0.2)]">Cash Out</button>
+                    {/* Sell Shares button */}
+                    <button onClick={() => onCashOut(bet.id)} className="w-full bg-gradient-to-r from-[#F492B7] to-[#E056A0] text-black py-4 rounded-xl text-sm font-black uppercase tracking-wider hover:brightness-110 transition-all shadow-[0_0_20px_rgba(244,146,183,0.2)]">Sell Shares</button>
                 </div>
             </div>
 
