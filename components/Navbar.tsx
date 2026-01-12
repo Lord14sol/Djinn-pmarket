@@ -162,8 +162,16 @@ export default function Navbar() {
                     if (dbProfile.avatar_url) setUserPfp(dbProfile.avatar_url);
                     if (dbProfile.username) setUsername(dbProfile.username);
                 } else {
-                    // 🎉 USER HAS NO PROFILE -> SHOW ONBOARDING
-                    setShowOnboarding(true);
+                    // Auto-create profile with wallet address
+                    const { upsertProfile } = await import('@/lib/supabase-db');
+                    const newProfile = await upsertProfile({
+                        wallet_address: publicKey.toBase58(),
+                        username: publicKey.toBase58().slice(0, 8) + '...',
+                        bio: '',
+                        avatar_url: null,
+                        banner_url: null
+                    });
+                    if (newProfile?.username) setUsername(newProfile.username);
                 }
             } catch (err) {
                 console.error("Error loading remote profile", err);

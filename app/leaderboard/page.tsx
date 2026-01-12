@@ -160,7 +160,7 @@ export default function LeaderboardPage() {
                                                     <span className="text-base font-bold text-white group-hover:text-[#F492B7] transition-colors">
                                                         {djinn.user}
                                                     </span>
-                                                    {djinn.isYou && (
+                                                    {(djinn as any).isYou && (
                                                         <span className="text-[9px] bg-[#F492B7] text-black px-1.5 py-0.5 rounded font-black uppercase">You</span>
                                                     )}
                                                 </div>
