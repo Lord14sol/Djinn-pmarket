@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { OracleLog, subscribeToLogs } from '../../lib/oracle';
+import { Terminal as TerminalIcon, Pause, Play, Search, Brain, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 
 interface OracleTerminalProps {
     initialLogs: OracleLog[];
@@ -9,7 +10,7 @@ interface OracleTerminalProps {
 
 const TYPE_COLORS: Record<string, string> = {
     system: 'text-blue-400',
-    fetch: 'text-emerald-400',
+    fetch: 'text-cyan-400',
     analyze: 'text-yellow-400',
     suggest: 'text-purple-400',
     approve: 'text-emerald-400',
@@ -18,15 +19,15 @@ const TYPE_COLORS: Record<string, string> = {
     warning: 'text-orange-400',
 };
 
-const TYPE_ICONS: Record<string, string> = {
-    system: '⚙️',
-    fetch: '📡',
-    analyze: '🧠',
-    suggest: '💡',
-    approve: '✅',
-    reject: '❌',
-    error: '🚨',
-    warning: '⚠️',
+const TYPE_ICONS: Record<string, React.ReactNode> = {
+    system: <TerminalIcon className="w-4 h-4" />,
+    fetch: <Search className="w-4 h-4" />,
+    analyze: <Brain className="w-4 h-4" />,
+    suggest: <AlertTriangle className="w-4 h-4" />,
+    approve: <CheckCircle className="w-4 h-4" />,
+    reject: <XCircle className="w-4 h-4" />,
+    error: <XCircle className="w-4 h-4" />,
+    warning: <AlertTriangle className="w-4 h-4" />,
 };
 
 export function OracleTerminal({ initialLogs }: OracleTerminalProps) {
@@ -61,27 +62,35 @@ export function OracleTerminal({ initialLogs }: OracleTerminalProps) {
     };
 
     return (
-        <div className="relative">
+        <div className="border border-white/10 rounded-3xl overflow-hidden bg-gradient-to-br from-white/5 to-transparent">
             {/* Terminal Header */}
-            <div className="flex items-center justify-between px-5 py-3 bg-white/5 border border-white/10 border-b-0 rounded-t-2xl">
-                <div className="flex items-center gap-3">
-                    <div className="flex gap-1.5">
-                        <div className="w-3 h-3 rounded-full bg-red-500/80" />
-                        <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
-                        <div className="w-3 h-3 rounded-full bg-emerald-500/80" />
+            <div className="flex items-center justify-between px-6 py-4 bg-black/40 border-b border-white/10">
+                <div className="flex items-center gap-4">
+                    <div className="flex gap-2">
+                        <div className="w-3 h-3 rounded-full bg-red-500" />
+                        <div className="w-3 h-3 rounded-full bg-yellow-500" />
+                        <div className="w-3 h-3 rounded-full bg-emerald-500" />
                     </div>
-                    <span className="text-gray-400 font-mono text-sm ml-2">
-                        oracle.log
-                    </span>
+                    <div className="flex items-center gap-2">
+                        <TerminalIcon className="w-4 h-4 text-[#F492B7]" />
+                        <span className="text-white font-bold">Live Activity Feed</span>
+                    </div>
+                    {!isPaused && logs.length > 0 && (
+                        <div className="flex items-center gap-2 text-emerald-400 text-sm">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                            Live
+                        </div>
+                    )}
                 </div>
                 <button
                     onClick={() => setIsPaused(!isPaused)}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${isPaused
-                            ? 'bg-[#F492B7]/20 text-[#F492B7] border border-[#F492B7]/30'
-                            : 'bg-white/5 text-gray-400 hover:text-white border border-white/10'
+                    className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-xl transition-all ${isPaused
+                            ? 'bg-[#F492B7]/20 text-[#F492B7] border border-[#F492B7]/30 hover:bg-[#F492B7]/30'
+                            : 'bg-white/5 text-gray-400 hover:text-white border border-white/10 hover:border-white/20'
                         }`}
                 >
-                    {isPaused ? '▶ Resume' : '⏸ Pause'}
+                    {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+                    {isPaused ? 'Resume' : 'Pause'}
                 </button>
             </div>
 
@@ -90,38 +99,52 @@ export function OracleTerminal({ initialLogs }: OracleTerminalProps) {
                 ref={terminalRef}
                 onMouseEnter={() => setIsPaused(true)}
                 onMouseLeave={() => setIsPaused(false)}
-                className="h-[400px] overflow-y-auto bg-[#0a0d12] border border-white/10 border-t-0 rounded-b-2xl font-mono text-sm p-4"
+                className="h-[400px] overflow-y-auto bg-[#0a0d12] font-mono text-sm p-4"
             >
                 {logs.length === 0 ? (
-                    <div className="text-gray-500 flex items-center gap-2">
-                        <span className="animate-pulse">●</span>
-                        Waiting for oracle events...
+                    <div className="flex flex-col items-center justify-center h-full text-gray-500">
+                        <Search className="w-12 h-12 mb-4 opacity-50" />
+                        <p className="font-bold">No activity yet</p>
+                        <p className="text-xs mt-1">Start the bot to begin monitoring markets</p>
                     </div>
                 ) : (
                     logs.map((log) => (
-                        <div key={log.id} className="flex gap-3 py-1.5 hover:bg-white/5 rounded px-2 -mx-2 group">
+                        <div
+                            key={log.id}
+                            className="flex items-start gap-4 py-2 px-3 rounded-lg hover:bg-white/5 transition-colors group"
+                        >
                             {/* Timestamp */}
-                            <span className="text-gray-600 shrink-0">
+                            <span className="text-gray-600 shrink-0 font-mono">
                                 {formatTimestamp(log.created_at)}
                             </span>
 
                             {/* Type Icon */}
-                            <span className="shrink-0">
-                                {TYPE_ICONS[log.type] || '📋'}
+                            <span className={`shrink-0 ${TYPE_COLORS[log.type] || 'text-gray-400'}`}>
+                                {TYPE_ICONS[log.type] || <TerminalIcon className="w-4 h-4" />}
                             </span>
 
-                            {/* Source */}
-                            <span className="text-gray-500 shrink-0 w-16 truncate">
+                            {/* Source Badge */}
+                            <span className="shrink-0 px-2 py-0.5 rounded-md bg-white/10 text-gray-400 text-xs font-medium min-w-[60px] text-center">
                                 {log.source || 'system'}
                             </span>
 
                             {/* Message */}
-                            <span className={`${TYPE_COLORS[log.type] || 'text-gray-300'}`}>
+                            <span className={`${TYPE_COLORS[log.type] || 'text-gray-300'} flex-1`}>
                                 {log.message}
                             </span>
                         </div>
                     ))
                 )}
+            </div>
+
+            {/* Terminal Footer */}
+            <div className="px-6 py-3 bg-black/40 border-t border-white/10 flex items-center justify-between">
+                <span className="text-gray-500 text-xs">
+                    {logs.length} events • Auto-scrolling {isPaused ? 'paused' : 'enabled'}
+                </span>
+                <span className="text-gray-500 text-xs">
+                    Hover to pause • Updated in real-time via Supabase
+                </span>
             </div>
         </div>
     );
