@@ -210,14 +210,14 @@ export default function OraclePage() {
                         { id: 'terminal', label: 'Live Terminal', icon: Terminal },
                         { id: 'markets', label: 'Markets', icon: Eye },
                         { id: 'queue', label: 'Resolution Queue', icon: FileCheck },
-                        { id: 'config', label: 'Configuration', icon: Settings },
+                        // { id: 'config', label: 'Configuration', icon: Settings },
                     ].map(tab => (
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id as any)}
                             className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 ${activeTab === tab.id
-                                    ? 'bg-gradient-to-r from-[#F492B7]/20 to-[#F492B7]/30 text-[#F492B7] border border-[#F492B7]/40 shadow-[0_0_20px_rgba(244,146,183,0.15)]'
-                                    : 'bg-white/5 text-gray-400 hover:text-white border border-transparent hover:border-white/10'
+                                ? 'bg-gradient-to-r from-[#F492B7]/20 to-[#F492B7]/30 text-[#F492B7] border border-[#F492B7]/40 shadow-[0_0_20px_rgba(244,146,183,0.15)]'
+                                : 'bg-white/5 text-gray-400 hover:text-white border border-transparent hover:border-white/10'
                                 }`}
                         >
                             <tab.icon className="w-5 h-5" />
@@ -246,9 +246,9 @@ export default function OraclePage() {
                             onReject={handleReject}
                         />
                     )}
-                    {activeTab === 'config' && (
+                    {/* {activeTab === 'config' && (
                         <ConfigPanel onSave={handleSaveConfig} />
-                    )}
+                    )} */}
                 </div>
 
                 {/* Footer */}
