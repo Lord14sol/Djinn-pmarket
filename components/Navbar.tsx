@@ -125,7 +125,7 @@ const UserIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" fill="none" view
 const mainCategories = ["Trending", "New", "Earth", "Politics", "Crypto", "Sports", "Culture", "Tech", "Science", "Finance", "Climate", "Mentions", "Movies", "Social Media", "Space", "AI", "Gaming", "Music", "History"];
 const earthSubcategories = ["North America", "Central America", "South America", "Europe", "Africa", "Asia", "Oceania"];
 
-export default function Navbar() {
+function NavbarContent() {
     const [isOpen, setIsOpen] = useState(false);
     const { activeCategory, setActiveCategory, activeSubcategory, setActiveSubcategory } = useCategory();
     const [userPfp, setUserPfp] = useState<string | null>(null);
@@ -385,7 +385,7 @@ export default function Navbar() {
 }
 
 // 2. Export the wrapped component
-export default function Navbar() {
+function NavbarContent() {
     return (
         <React.Suspense fallback={<div className="h-20 bg-black/50 backdrop-blur-md border-b border-white/5" />}>
             <NavbarContent />
