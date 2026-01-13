@@ -395,23 +395,35 @@
                         "type": "string"
                     },
                     {
-                        "name": "totalLiquidity",
+                        "name": "virtualSolReserves",
                         "type": "u64"
                     },
                     {
-                        "name": "totalSharesYes",
+                        "name": "virtualShareReserves",
                         "type": "u64"
                     },
                     {
-                        "name": "totalSharesNo",
+                        "name": "creatorFeesClaimable",
                         "type": "u64"
                     },
                     {
-                        "name": "feePercentage",
-                        "type": "u16"
+                        "name": "totalVolume",
+                        "type": "u64"
+                    },
+                    {
+                        "name": "lastTradeSlot",
+                        "type": "u64"
+                    },
+                    {
+                        "name": "lastTrader",
+                        "type": "publicKey"
                     },
                     {
                         "name": "resolutionTime",
+                        "type": "i64"
+                    },
+                    {
+                        "name": "resolutionTimestamp",
                         "type": "i64"
                     },
                     {

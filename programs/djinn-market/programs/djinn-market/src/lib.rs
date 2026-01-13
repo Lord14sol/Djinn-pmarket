@@ -112,7 +112,7 @@ pub mod djinn_market {
             // 40 / 80 = 0.5. * 1e9 = 500_000_000.
             // Threshold 0.95 = 950_000_000.
             
-            if current_price_e9 >= 950_000_000 {
+            if current_price_e9 >= ENDGAME_THRESHOLD_BPS as u128 * 100_000 { // 9500 * 100,000 = 950M
                 // Endgame Zone
                 fee_rate = FEE_ENDGAME_TOTAL;
                 creator_rate = FEE_ENDGAME_CREATOR;
@@ -193,6 +193,7 @@ pub mod djinn_market {
         let seeds = &[
             b"market".as_ref(),
             market.creator.as_ref(),
+            market.title.as_bytes(),
             &[market.bump],
         ];
         let signer = &[&seeds[..]];
@@ -365,9 +366,28 @@ pub mod djinn_market {
         // SOL to release = Current SOL (x) - New SOL (x_new)
         let amount_sol_out_gross = (x - new_x) as u64;
 
-        // 2. Fees (Standard 2.5%)
-        let fee_rate = FEE_STD_TOTAL; 
-        let fee_creator_rate = FEE_STD_CREATOR;
+        // 1.5 Anti-Bot Check
+        let clock = Clock::get()?;
+        let current_slot = clock.slot;
+        
+        // 2. Fees (Standard 1.0%)
+        let mut fee_rate = FEE_STD_TOTAL; 
+        let mut fee_creator_rate = FEE_STD_CREATOR;
+
+        // Check if trading in same slot as last action (Buy or Sell)
+        if market.last_trade_slot == current_slot && market.last_trader == ctx.accounts.user.key() {
+             fee_rate = FEE_ANTIBOT; // 15%
+             fee_creator_rate = 0; // No creator fee for bots
+             msg!("Anti-Bot Penalty Applied on Sell!");
+        } else {
+            // Check for Endgame Mode
+            let current_price_e9 = (market.virtual_sol_reserves as u128 * 1_000_000_000) / market.virtual_share_reserves as u128;
+            if current_price_e9 >= ENDGAME_THRESHOLD_BPS as u128 * 100_000 {
+                fee_rate = FEE_ENDGAME_TOTAL;
+                fee_creator_rate = FEE_ENDGAME_CREATOR;
+                msg!("Endgame Fee Activated on Sell");
+            }
+        }
 
         let fee_total = (amount_sol_out_gross as u128 * fee_rate as u128 / BPS_DENOMINATOR as u128) as u64;
         let mut fee_creator = (amount_sol_out_gross as u128 * fee_creator_rate as u128 / BPS_DENOMINATOR as u128) as u64;
@@ -387,6 +407,8 @@ pub mod djinn_market {
         market.virtual_share_reserves = new_y as u64;
         market.total_volume += amount_sol_out_gross; 
         market.creator_fees_claimable += fee_creator; // Creator fee stays in market until claimed
+        market.last_trade_slot = current_slot;
+        market.last_trader = ctx.accounts.user.key();
 
         // 4. Burn User Shares
         let (mint_account, from_account) = match side {
@@ -481,8 +503,9 @@ pub struct InitializeProtocol<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(title: String)]
 pub struct CreateMarket<'info> {
-    #[account(init, payer = creator, space = Market::LEN, seeds = [b"market", creator.key().as_ref()], bump)]
+    #[account(init, payer = creator, space = Market::LEN, seeds = [b"market", creator.key().as_ref(), title.as_bytes()], bump)]
     pub market: Account<'info, Market>,
     
     #[account(init, payer = creator, seeds = [b"yes_mint", market.key().as_ref()], bump, mint::decimals = 9, mint::authority = market)]
