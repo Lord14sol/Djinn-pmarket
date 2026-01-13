@@ -311,6 +311,20 @@ export default function Navbar() {
                                 </div>
                                 <span className="text-sm font-bold text-gray-200 uppercase tracking-widest">Activity</span>
                             </Link>
+
+                            {/* Oracle Bot - Only visible to Protocol Authority */}
+                            {connected && publicKey?.toString() === "G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma" && (
+                                <Link
+                                    href="/oracle"
+                                    onClick={() => setIsOpen(false)}
+                                    className="flex items-center gap-3 p-4 rounded-xl hover:bg-[#00FF41]/10 transition-colors group border border-[#00FF41]/20"
+                                >
+                                    <div className="text-[#00FF41]/80 group-hover:text-[#00FF41] transition-colors">
+                                        <span className="text-lg">🤖</span>
+                                    </div>
+                                    <span className="text-sm font-bold text-[#00FF41] uppercase tracking-widest">Oracle Bot</span>
+                                </Link>
+                            )}
                         </div>
                         {connected && (
                             <div className="p-2 border-t border-white/5 bg-black/40">
