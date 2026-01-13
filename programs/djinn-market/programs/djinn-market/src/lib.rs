@@ -24,6 +24,46 @@ const FEE_ANTIBOT: u16 = 1500; // 15.0%
 const VIRTUAL_SOL_INIT: u64 = 40_000_000_000; // 40 SOL
 const ENDGAME_THRESHOLD_BPS: u64 = 9_500; // 0.95 SOL price
 
+// --- EVENTS ---
+#[event]
+pub struct MarketCreated {
+    pub market: Pubkey,
+    pub creator: Pubkey,
+    pub title: String,
+}
+
+#[event]
+pub struct Trade {
+    pub market: Pubkey,
+    pub user: Pubkey,
+    pub is_buy: bool,
+    pub side: MarketOutcome,
+    pub sol_amount: u64,
+    pub shares_amount: u64,
+    pub fee_total: u64,
+    pub price_e9: u64,
+}
+
+#[event]
+pub struct MarketResolved {
+    pub market: Pubkey,
+    pub outcome: MarketOutcome,
+}
+
+#[event]
+pub struct RewardClaimed {
+    pub market: Pubkey,
+    pub user: Pubkey,
+    pub amount: u64,
+}
+
+#[event]
+pub struct FeesClaimed {
+    pub market: Pubkey,
+    pub creator: Pubkey,
+    pub amount: u64,
+}
+
 #[program]
 pub mod djinn_market {
     use super::*;
@@ -72,6 +112,13 @@ pub mod djinn_market {
         market.virtual_share_reserves = VIRTUAL_SOL_INIT * 2; 
 
         msg!("Market created V2. Virtual Liquidity: {} SOL", VIRTUAL_SOL_INIT);
+        
+        emit!(MarketCreated {
+            market: market.key(),
+            creator: ctx.accounts.creator.key(),
+            title: market.title.clone(),
+        });
+
         Ok(())
     }
 
@@ -218,6 +265,19 @@ pub mod djinn_market {
         )?;
 
         msg!("Swap V2: {} SOL In -> {} Shares Out. Fees: {} ({} Creator)", amount_in, shares_out, fee_total, fee_creator);
+        
+        let current_price_e9 = (market.virtual_sol_reserves as u128 * 1_000_000_000) / market.virtual_share_reserves as u128;
+        emit!(Trade {
+            market: market.key(),
+            user: ctx.accounts.user.key(),
+            is_buy: true,
+            side: side,
+            sol_amount: amount_in,
+            shares_amount: shares_out,
+            fee_total,
+            price_e9: current_price_e9 as u64,
+        });
+
         Ok(())
     }
 
@@ -235,6 +295,11 @@ pub mod djinn_market {
         **ctx.accounts.creator.to_account_info().try_borrow_mut_lamports()? += amount;
         
         msg!("Creator claimed {} lamports", amount);
+        emit!(FeesClaimed {
+            market: market.key(),
+            creator: ctx.accounts.creator.key(),
+            amount: amount,
+        });
         Ok(())
     }
 
@@ -254,6 +319,10 @@ pub mod djinn_market {
         market.resolution_timestamp = Clock::get()?.unix_timestamp; // Set timelock start
 
         msg!("Market resolved to {:?}. Timelock started.", outcome);
+        emit!(MarketResolved {
+            market: market.key(),
+            outcome: outcome,
+        });
         Ok(())
     }
 
@@ -330,6 +399,11 @@ pub mod djinn_market {
         **ctx.accounts.protocol_treasury.try_borrow_mut_lamports()? += fee_resolution;
 
         msg!("Claimed {} (Fee {}). Burned {}", net_payout, fee_resolution, user_shares);
+        emit!(RewardClaimed {
+            market: market.key(),
+            user: ctx.accounts.user.key(),
+            amount: net_payout,
+        });
         Ok(())
     }
 
@@ -442,6 +516,19 @@ pub mod djinn_market {
 
         msg!("Sold {} shares for {} SOL (Fee: {} - Proto: {}, Creator: {})", 
             shares_amount, amount_sol_net, fee_total, fee_protocol, fee_creator);
+
+        let current_price_e9 = (market.virtual_sol_reserves as u128 * 1_000_000_000) / market.virtual_share_reserves as u128;
+        emit!(Trade {
+            market: market.key(),
+            user: ctx.accounts.user.key(),
+            is_buy: false,
+            side: side,
+            sol_amount: amount_sol_net,
+            shares_amount: shares_amount,
+            fee_total,
+            price_e9: current_price_e9 as u64,
+        });
+
         Ok(())
     }
 }

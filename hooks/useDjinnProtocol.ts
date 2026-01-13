@@ -41,6 +41,7 @@ export const useDjinnProtocol = () => {
                 [
                     Buffer.from("market"),
                     wallet.publicKey.toBuffer(),
+                    Buffer.from(title)
                 ],
                 program.programId
             );
@@ -58,7 +59,7 @@ export const useDjinnProtocol = () => {
             console.log("Creating market:", { title, feePercentage, endDate });
 
             const tx = await program.methods
-                .createMarket(title, feePercentage, new BN(endDate.getTime() / 1000))
+                .createMarket(title, new BN(endDate.getTime() / 1000))
                 .accounts({
                     market: marketPda,
                     yesTokenMint: yesMintPda,
