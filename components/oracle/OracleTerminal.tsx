@@ -85,8 +85,8 @@ export function OracleTerminal({ initialLogs }: OracleTerminalProps) {
                 <button
                     onClick={() => setIsPaused(!isPaused)}
                     className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-xl transition-all ${isPaused
-                            ? 'bg-[#F492B7]/20 text-[#F492B7] border border-[#F492B7]/30 hover:bg-[#F492B7]/30'
-                            : 'bg-white/5 text-gray-400 hover:text-white border border-white/10 hover:border-white/20'
+                        ? 'bg-[#F492B7]/20 text-[#F492B7] border border-[#F492B7]/30 hover:bg-[#F492B7]/30'
+                        : 'bg-white/5 text-gray-400 hover:text-white border border-white/10 hover:border-white/20'
                         }`}
                 >
                     {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
@@ -162,7 +162,25 @@ export function OracleTerminal({ initialLogs }: OracleTerminalProps) {
 
                                 switch (command) {
                                     case 'status':
-                                        responseMsg = 'SYSTEM ONLINE. Monitoring active. Connect via secure shell.';
+                                        // Mock status report based on active simulation
+                                        const statusReport = [
+                                            '⚡ ORACLE SYSTEM STATUS: ONLINE',
+                                            '--------------------------------',
+                                            '📡 ACTIVE SOURCES:',
+                                            '   [✓] Google Search (API v1)',
+                                            '   [✓] Yahoo FinanceStream',
+                                            '   [✓] DexScreener (Solana)',
+                                            '   [✓] Twitter/X Sentinel',
+                                            '',
+                                            '👀 ACTIVELY MONITORING:',
+                                            '   > Argentina vs France (Sports)',
+                                            '   > Bitcoin $100k (Crypto)',
+                                            '   > GTA 6 Delay (Gaming)',
+                                            '',
+                                            '🤖 AI AGENT: GEMINI-PRO (Latency: 120ms)',
+                                            '🔄 Next Fetch Cycle: 45s'
+                                        ].join('\n');
+                                        responseMsg = statusReport;
                                         break;
                                     case 'help':
                                         responseMsg = 'Available commands: status, help, scan <market_slug>, clear';

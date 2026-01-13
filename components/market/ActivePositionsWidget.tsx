@@ -5,6 +5,8 @@ import { X, ChevronUp, ChevronDown, Wallet, TrendingUp, Gift } from 'lucide-reac
 import Link from 'next/link';
 import Image from 'next/image';
 import * as supabaseDb from '@/lib/supabase-db';
+import { useDjinnProtocol } from '@/hooks/useDjinnProtocol';
+import { PublicKey } from '@solana/web3.js';
 
 interface Position {
     id: string;
@@ -40,46 +42,68 @@ export default function ActivePositionsWidget({
     const [loading, setLoading] = useState(true);
     const [refundingId, setRefundingId] = useState<string | null>(null);
 
-    // Direct refund handler
+    // --- PROTOCOL HOOK ---
+    const { sellShares } = useDjinnProtocol();
+
     const handleRefund = async (position: Position) => {
         if (!walletAddress) return;
 
-        if (!confirm(`Sell your ${position.side} position on "${position.market_title}" for ~$${Math.round(position.amount)}?`)) {
+        if (!confirm(`Sell your ${position.side} position on "${position.market_title}"? This will return SOL to your wallet based on the current curve price.`)) {
             return;
         }
 
         setRefundingId(position.id);
+
         try {
-            // Cancel the bet in DB
+            // 1. Fetch Market Details for Keys (PDA, Mints)
+            const marketData: any = await supabaseDb.getMarket(position.market_slug);
+
+            if (!marketData || !marketData.market_pda) {
+                console.error("Market data missing keys", marketData);
+                alert("Cannot sell: Market contract data not found (PDA missing).");
+                return;
+            }
+
+            console.log("Selling on market:", marketData);
+
+            // 2. Call On-Chain Sell
+            const tx = await sellShares(
+                new PublicKey(marketData.market_pda),
+                position.side.toLowerCase() as 'yes' | 'no',
+                position.shares,
+                new PublicKey(marketData.yes_token_mint || "So11111111111111111111111111111111111111112"),
+                new PublicKey(marketData.no_token_mint || "So11111111111111111111111111111111111111112")
+            );
+
+            console.log("✅ On-Chain Sell Success:", tx);
+
+            // 3. Update Supabase
+            // A. Cancel/Update Bet
             await supabaseDb.cancelBet(walletAddress, position.market_slug);
 
-            // Get user profile for proper username
+            // B. Log Activity
             const profile = await supabaseDb.getProfile(walletAddress);
-            const username = profile?.username || walletAddress.slice(0, 6) + '...';
-
-            // Log to activity (separate entry for sell)
             await supabaseDb.createActivity({
                 wallet_address: walletAddress,
-                username: username,
+                username: profile?.username || walletAddress.slice(0, 6),
                 avatar_url: profile?.avatar_url || null,
-                action: 'NO',
+                action: 'SELL' as any,
                 amount: position.amount,
                 sol_amount: position.sol_amount,
-                shares: 0, // 0 shares = SELL
+                shares: position.shares,
                 market_title: position.market_title,
                 market_slug: position.market_slug
             });
 
             // Remove from local state
             setPositions(prev => prev.filter(p => p.id !== position.id));
-
-            // Dispatch event for sync
             window.dispatchEvent(new Event('bet-updated'));
 
-            alert(`✅ Refund complete! ~${position.sol_amount.toFixed(4)} SOL returned.`);
-        } catch (error) {
+            alert(`✅ Sold! Shares burned and SOL returned to wallet.`);
+
+        } catch (error: any) {
             console.error('Refund error:', error);
-            alert('Error processing refund.');
+            alert(`Error processing sell: ${error.message || error}`);
         } finally {
             setRefundingId(null);
         }

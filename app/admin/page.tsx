@@ -1,4 +1,5 @@
 'use client';
+export const dynamic = "force-dynamic";
 
 import { useState, useEffect } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
@@ -6,11 +7,12 @@ import { useDjinnProtocol } from '../../hooks/useDjinnProtocol';
 import { supabase } from '../../lib/supabase';
 import { PublicKey } from '@solana/web3.js';
 import { resolveMarket as resolveMarketInDb } from '../../lib/supabase-db'; // Import DB function
+import { PROTOCOL_AUTHORITY } from '@/lib/program-config';
 
 // Hardcoded Protocol Authority for simplicity (You can make this dynamic later)
-const PROTOCOL_AUTHORITY = "G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma";
 
-export default function AdminPage() {
+// Separate component for content that uses hooks
+function AdminContent() {
     const { publicKey } = useWallet();
     const { resolveMarket } = useDjinnProtocol();
     const [markets, setMarkets] = useState<any[]>([]);
@@ -143,5 +145,15 @@ export default function AdminPage() {
                 )}
             </div>
         </div>
+    );
+}
+
+import React, { Suspense } from 'react';
+
+export default function AdminPage() {
+    return (
+        <Suspense fallback={<div className="p-20 text-center text-white">Loading Admin...</div>}>
+            <AdminContent />
+        </Suspense>
     );
 }

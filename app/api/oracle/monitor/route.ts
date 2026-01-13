@@ -30,14 +30,34 @@ export async function POST(request: Request) {
         // Ideally we should log to oracle_logs here too.
 
         // Lazy import oracle module to avoid circular deps if any, or just use raw insert
-        const { error: logError } = await supabase
-            .from('oracle_logs')
-            .insert({
-                type: 'system',
+        // Log the event
+        await supabase.from('oracle_logs').insert({
+            type: 'system',
+            source: 'system',
+            message: `Auto-monitoring enabled for market: ${slug}`,
+            metadata: { trigger: 'first_bet' }
+        });
+
+        // --- EXECUTE ORACLE BOT ---
+        try {
+            const { OracleBot } = await import('@/lib/oracle/bot');
+            const bot = new OracleBot();
+
+            // Fetch market title to use as question
+            const { data: market } = await supabase.from('markets').select('title').eq('slug', slug).single();
+            const question = market?.title || slug;
+
+            // Run analysis
+            await bot.analyzeMarket(slug, question);
+
+        } catch (botError) {
+            console.error("Oracle Bot execution failed:", botError);
+            await supabase.from('oracle_logs').insert({
+                type: 'error',
                 source: 'system',
-                message: `Auto-monitoring enabled for market: ${slug}`,
-                metadata: { trigger: 'first_bet' }
+                message: `Bot execution failed: ${String(botError)}`
             });
+        }
 
         return NextResponse.json({ success: true, message: `Monitoring enabled for ${slug}` });
     } catch (error) {

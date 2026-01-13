@@ -771,6 +771,30 @@ export default function MarketPage() {
                                 </span>
                             </div>
 
+                            {/* Bonding Curve Visualization for Detail Page */}
+                            <div className="mb-6 pt-4 border-t border-white/5">
+                                <div className="flex justify-between items-center mb-2">
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">Bonding Curve Progress</span>
+                                    <span className="text-[10px] font-mono font-bold text-teal-400">
+                                        {(() => {
+                                            // Calculate pseudo-percent based on volume or random for now if volume logic is complex
+                                            // In a real app, this would be `market.bondingCurvePercent`
+                                            const cleanVol = (staticMarketInfo.volume || '0').replace(/[$,]/g, ''); // Note: staticMarketInfo might not have volume, checking logic
+                                            return "~42%"; // Mock for detail page since we lack explicit volume prop here easily without refetch
+                                        })()}
+                                    </span>
+                                </div>
+                                <div className="w-full h-2.5 bg-black/40 rounded-full overflow-hidden border border-white/5">
+                                    <div
+                                        className="h-full bg-gradient-to-r from-cyan-900 via-cyan-500 to-teal-400 rounded-full relative shadow-[0_0_10px_rgba(45,212,191,0.3)]"
+                                        style={{ width: '42%' }}
+                                    >
+                                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full animate-[shimmer_2s_infinite]"></div>
+                                        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white rounded-full shadow-[0_0_8px_rgba(255,255,255,1)] animate-pulse"></div>
+                                    </div>
+                                </div>
+                            </div>
+
                             {/* Potential returns shown when amount entered */}
                             {amountNum > 0 && !isOverBalance && (
                                 <div className="mb-6 p-3 bg-gradient-to-br from-[#10B981]/10 to-transparent rounded-xl border border-[#10B981]/20">
@@ -878,13 +902,15 @@ export default function MarketPage() {
             />
 
             {/* Share Modal */}
-            {lastBetDetails && (
-                <ShareModal
-                    isOpen={showShareModal}
-                    onClose={() => setShowShareModal(false)}
-                    betDetails={lastBetDetails}
-                />
-            )}
+            {
+                lastBetDetails && (
+                    <ShareModal
+                        isOpen={showShareModal}
+                        onClose={() => setShowShareModal(false)}
+                        betDetails={lastBetDetails}
+                    />
+                )
+            }
 
             {/* Active Positions Widget (Bottom Right) */}
             <ActivePositionsWidget
@@ -909,7 +935,7 @@ export default function MarketPage() {
                     }
                 }}
             />
-        </div>
+        </div >
     );
 }
 

@@ -40,3 +40,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .env*.local
+
+# Security
+deploy-wallet.json
+*keypair.json
+*wallet.json
+*.so

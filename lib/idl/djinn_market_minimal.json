@@ -1,0 +1,46 @@
+{
+    "version": "0.1.0",
+    "name": "djinn_market",
+    "address": "3jFdWKdrrghdCrAdepVgjdMLDfDvvUxT7cwxCoYvqdaz",
+    "instructions": [
+        {
+            "name": "initializeProtocol",
+            "discriminator": [
+                188,
+                233,
+                252,
+                106,
+                134,
+                146,
+                202,
+                91
+            ],
+            "accounts": [
+                {
+                    "name": "protocolState",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "authority",
+                    "isMut": true,
+                    "isSigner": true
+                },
+                {
+                    "name": "treasury",
+                    "isMut": false,
+                    "isSigner": false
+                },
+                {
+                    "name": "systemProgram",
+                    "isMut": false,
+                    "isSigner": false
+                }
+            ],
+            "args": []
+        }
+    ],
+    "types": [],
+    "events": [],
+    "errors": []
+}

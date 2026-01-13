@@ -267,11 +267,38 @@ export async function getOracleStatus(): Promise<OracleStatus> {
     .filter(s => s.last_fetched)
     .sort((a, b) => new Date(b.last_fetched!).getTime() - new Date(a.last_fetched!).getTime())[0];
 
+  // Merge with default sources that might not be in DB yet
+  const dbSourceNames = new Set(sources.map(s => s.name));
+
+  const defaultSources = [
+    { name: 'yahoo', display_name: 'Yahoo Finance' },
+    { name: 'dexscreener', display_name: 'DexScreener' }
+  ];
+
+  const mergedSources = [...sources];
+
+  defaultSources.forEach(def => {
+    if (!dbSourceNames.has(def.name)) {
+      mergedSources.push({
+        id: 'system-' + def.name,
+        name: def.name,
+        display_name: def.display_name,
+        enabled: true, // Enabled by default in code
+        config: {},
+        last_fetched: null,
+        last_error: null,
+        fetch_count: 0,
+        error_count: 0,
+        fetch_interval_minutes: 15
+      });
+    }
+  });
+
   return {
     enabled: config.bot_enabled,
     last_run: lastFetch?.last_fetched || null,
     pending_suggestions: pendingCount.count || 0,
-    sources: sources.map(s => ({
+    sources: mergedSources.map(s => ({
       name: s.name,
       display_name: s.display_name,
       enabled: s.enabled,

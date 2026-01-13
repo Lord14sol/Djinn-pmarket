@@ -1,16 +1,20 @@
 import { PublicKey } from '@solana/web3.js';
 
-// Djinn Prediction Market Program ID (deployed on Devnet)
-export const PROGRAM_ID = new PublicKey('BFgyP2Hba1kD6ZgzusZgSMuYmxnb6C1ne78sxvWxAHGk');
+// Djinn Prediction Market Program ID (Matches Anchor.toml)
+// Djinn Prediction Market Program ID (Matches Anchor.toml)
+export const PROGRAM_ID = new PublicKey('9xXGnGG4hxwC4XTHavmy5BWAdb8MC2VJtTDMW9FfkGbg');
 
-// Fee constants (must match smart contract)
-export const MARKET_CREATION_FEE = 11_000_000; // ~$2 USD in lamports (0.011 SOL @ ~$180/SOL)
-export const TRADING_FEE_BPS = 10; // 0.1%
-export const RESOLUTION_FEE_BPS = 200; // 2%
+// Fee constants (Matches V2 Smart Contract)
+export const MARKET_CREATION_FEE = 50_000_000; // 0.05 SOL
+export const TRADING_FEE_BPS = 100; // 1.0% Standard (Blueprint)
+export const TRADING_FEE_ENDGAME_BPS = 10; // 0.1% Endgame (>0.95)
+export const TRADING_FEE_CREATOR_BPS = 50; // 0.5% Creator Share
+export const RESOLUTION_FEE_BPS = 200; // 2.0%
+
 export const BPS_DENOMINATOR = 10_000;
 
 // Protocol authority (your wallet address)
-export const PROTOCOL_AUTHORITY = new PublicKey('C31JQfZBVRsnvFqiNptD95rvbEx8fsuPwdZn62yEWx9X');
+export const PROTOCOL_AUTHORITY = new PublicKey('G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma');
 
 // Network configuration
 export const NETWORK = 'devnet';
@@ -29,7 +33,10 @@ export function splitTradingFee(fee: number, isCreator: boolean): { creatorFee: 
     if (isCreator) {
         return { creatorFee: 0, protocolFee: fee };
     }
-    const creatorShare = Math.floor(fee / 2);
+    // V2: Creator gets 1.0%, Protocol gets 1.5% (Total 2.5%)
+    // This helper might need accurate amount logic, but for simple split:
+    // Creator Share = (Fee / 2.5) * 1.0 = Fee * 0.4
+    const creatorShare = Math.floor(fee * 0.4);
     const protocolShare = fee - creatorShare;
     return { creatorFee: creatorShare, protocolFee: protocolShare };
 }

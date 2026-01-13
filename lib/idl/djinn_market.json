@@ -1,10 +1,24 @@
 {
     "version": "0.1.0",
     "name": "djinn_market",
-    "address": "51TPDYh8oFCBCiCRFLvvtFpZvQd3Q4FyjLnDe9xxCsmv",
+    "metadata": {
+        "address": "9xXGnGG4hxwC4XTHavmy5BWAdb8MC2VJtTDMW9FfkGbg",
+        "origin": "anchor",
+        "binary": "localnet"
+    },
     "instructions": [
         {
             "name": "initializeProtocol",
+            "discriminator": [
+                188,
+                233,
+                252,
+                106,
+                134,
+                146,
+                202,
+                91
+            ],
             "accounts": [
                 {
                     "name": "protocolState",
@@ -31,6 +45,16 @@
         },
         {
             "name": "createMarket",
+            "discriminator": [
+                103,
+                226,
+                97,
+                235,
+                200,
+                188,
+                251,
+                254
+            ],
             "accounts": [
                 {
                     "name": "market",
@@ -95,6 +119,16 @@
         },
         {
             "name": "placeBet",
+            "discriminator": [
+                222,
+                62,
+                67,
+                220,
+                63,
+                166,
+                126,
+                33
+            ],
             "accounts": [
                 {
                     "name": "market",
@@ -127,6 +161,11 @@
                     "isSigner": false
                 },
                 {
+                    "name": "protocolTreasury",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
                     "name": "tokenProgram",
                     "isMut": false,
                     "isSigner": false
@@ -147,11 +186,25 @@
                 {
                     "name": "amount",
                     "type": "u64"
+                },
+                {
+                    "name": "minSharesOut",
+                    "type": "u64"
                 }
             ]
         },
         {
             "name": "resolveMarket",
+            "discriminator": [
+                155,
+                23,
+                80,
+                173,
+                46,
+                74,
+                23,
+                239
+            ],
             "accounts": [
                 {
                     "name": "market",
@@ -180,6 +233,16 @@
         },
         {
             "name": "claimReward",
+            "discriminator": [
+                149,
+                95,
+                181,
+                242,
+                94,
+                90,
+                158,
+                162
+            ],
             "accounts": [
                 {
                     "name": "market",
@@ -223,6 +286,82 @@
                 }
             ],
             "args": []
+        },
+        {
+            "name": "sellShares",
+            "discriminator": [
+                184,
+                164,
+                169,
+                16,
+                231,
+                158,
+                199,
+                196
+            ],
+            "accounts": [
+                {
+                    "name": "market",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "user",
+                    "isMut": true,
+                    "isSigner": true
+                },
+                {
+                    "name": "yesTokenMint",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "noTokenMint",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "userYesAccount",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "userNoAccount",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "protocolTreasury",
+                    "isMut": true,
+                    "isSigner": false
+                },
+                {
+                    "name": "tokenProgram",
+                    "isMut": false,
+                    "isSigner": false
+                },
+                {
+                    "name": "systemProgram",
+                    "isMut": false,
+                    "isSigner": false
+                }
+            ],
+            "args": [
+                {
+                    "name": "side",
+                    "type": {
+                        "defined": "MarketOutcome"
+                    }
+                },
+                {
+                    "name": "sharesAmount",
+                    "type": "u64"
+                },
+                {
+                    "name": "minSolOut",
+                    "type": "u64"
+                }
+            ]
         }
     ],
     "accounts": [
@@ -380,8 +519,5 @@
             "name": "NothingToClaim",
             "msg": "Nothing to claim"
         }
-    ],
-    "metadata": {
-        "address": "51TPDYh8oFCBCiCRFLvvtFpZvQd3Q4FyjLnDe9xxCsmv"
-    }
+    ]
 }

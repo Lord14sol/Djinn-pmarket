@@ -77,10 +77,24 @@ export function ResolutionQueue({ suggestions, onApprove, onReject }: Resolution
                                 {s.market_title || s.market_slug}
                             </h3>
                             <div className="flex items-center gap-3 mt-3 flex-wrap">
+                                {/* Type Badge (Mocked for now) */}
+                                <span className="px-2 py-1 rounded-md bg-white/10 text-xs font-mono text-gray-400 border border-white/10 uppercase">
+                                    {s.market_title.includes('Multiple') || s.market_title.includes('Who') ? 'Multiple' : 'Binary'}
+                                </span>
+
                                 {/* Outcome Badge */}
                                 <span className={`px-3 py-1 rounded-full text-sm font-bold border ${getOutcomeStyles(s.suggested_outcome)}`}>
                                     {s.suggested_outcome}
                                 </span>
+
+                                {/* Monitoring Status */}
+                                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/40 border border-white/10">
+                                    <div className="relative flex h-2 w-2">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                    </div>
+                                    <span className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider">Live Monitoring</span>
+                                </div>
 
                                 {/* Confidence */}
                                 <span className={`px-3 py-1 rounded-full text-sm font-mono border ${getConfidenceColor(s.confidence)}`}>

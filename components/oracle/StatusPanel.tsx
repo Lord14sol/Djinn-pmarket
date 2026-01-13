@@ -41,8 +41,8 @@ export function StatusPanel({ status, onToggle, isLoading }: StatusPanelProps) {
                     <div className="relative">
                         <div
                             className={`w-24 h-24 rounded-2xl flex items-center justify-center transition-all duration-500 relative overflow-hidden ${status.enabled
-                                    ? 'bg-black/40 border-2 border-emerald-500/50 shadow-[0_0_40px_rgba(16,185,129,0.2)]'
-                                    : 'bg-black/40 border-2 border-gray-500/30'
+                                ? 'bg-black/40 border-2 border-emerald-500/50 shadow-[0_0_40px_rgba(16,185,129,0.2)]'
+                                : 'bg-black/40 border-2 border-gray-500/30'
                                 }`}
                         >
                             {/* Inner Circuits */}
@@ -72,8 +72,8 @@ export function StatusPanel({ status, onToggle, isLoading }: StatusPanelProps) {
                         </h2>
                         <div className="flex items-center gap-3 mt-2">
                             <span className={`text-xs font-bold font-mono px-3 py-1 rounded-md border ${status.enabled
-                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.1)]'
-                                    : 'bg-gray-500/10 text-gray-400 border-gray-500/20'
+                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.1)]'
+                                : 'bg-gray-500/10 text-gray-400 border-gray-500/20'
                                 }`}>
                                 {status.enabled ? 'SYSTEM_ONLINE' : 'SYSTEM_OFFLINE'}
                             </span>
@@ -90,8 +90,8 @@ export function StatusPanel({ status, onToggle, isLoading }: StatusPanelProps) {
                     onClick={onToggle}
                     disabled={isLoading}
                     className={`group px-8 py-4 rounded-xl font-bold font-mono text-sm transition-all duration-300 disabled:opacity-50 flex items-center gap-3 border hover:shadow-lg ${status.enabled
-                            ? 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20 hover:border-red-500/50'
-                            : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20 hover:border-emerald-500/50'
+                        ? 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20 hover:border-red-500/50'
+                        : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20 hover:border-emerald-500/50'
                         }`}
                 >
                     {isLoading ? (
@@ -151,10 +151,10 @@ export function StatusPanel({ status, onToggle, isLoading }: StatusPanelProps) {
                         <div
                             key={source.name}
                             className={`p-4 rounded-xl border transition-all duration-300 ${source.enabled && source.status === 'active'
-                                    ? 'bg-emerald-500/5 border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.05)]'
-                                    : source.enabled && source.status === 'error'
-                                        ? 'bg-red-500/5 border-red-500/20'
-                                        : 'bg-white/5 border-white/5 opacity-40 grayscale'
+                                ? 'bg-emerald-500/5 border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.05)]'
+                                : source.enabled && source.status === 'error'
+                                    ? 'bg-red-500/5 border-red-500/20'
+                                    : 'bg-white/5 border-white/5 opacity-40 grayscale'
                                 }`}
                         >
                             <div className="text-2xl mb-3 flex justify-center">
@@ -163,6 +163,8 @@ export function StatusPanel({ status, onToggle, isLoading }: StatusPanelProps) {
                                 {source.name === 'google' && <span className="text-blue-400">G</span>}
                                 {source.name === 'gemini' && <span className="text-blue-300">✦</span>}
                                 {source.name === 'openai' && <span className="text-green-400">🤖</span>}
+                                {source.name === 'yahoo' && <span className="text-violet-400 font-bold">Y!</span>}
+                                {source.name === 'dexscreener' && <span className="text-cyan-400">🦅</span>}
                             </div>
                             <div className="text-center">
                                 <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">

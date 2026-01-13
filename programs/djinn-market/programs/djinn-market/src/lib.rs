@@ -1,10 +1,28 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, MintTo, Burn};
 
-declare_id!("51TPDYh8oFCBCiCRFLvvtFpZvQd3Q4FyjLnDe9xxCsmv"); // Kept user's deployed ID
+declare_id!("9xXGnGG4hxwC4XTHavmy5BWAdb8MC2VJtTDMW9FfkGbg"); 
 
-const MARKET_CREATION_FEE: u64 = 20_000_000; // 0.02 SOL
+const MARKET_CREATION_FEE: u64 = 50_000_000; // 0.05 SOL
 const BPS_DENOMINATOR: u64 = 10_000;
+
+// G1 Treasury Wallet (Blueprint)
+// G1 Treasury Wallet (Blueprint)
+pub const G1_TREASURY_STR: &str = "G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma";
+
+// Fee Constants (Blueprint)
+const FEE_STD_TOTAL: u16 = 100; // 1.0% (Total Trading Fee)
+const FEE_STD_CREATOR: u16 = 50; // 0.5% (Half of Total)
+// Protocol gets remaining 0.5% (FEE_STD_TOTAL - FEE_STD_CREATOR)
+
+const FEE_ENDGAME_TOTAL: u16 = 10; // 0.1%
+const FEE_ENDGAME_CREATOR: u16 = 0; // 0.0%
+
+const FEE_RESOLUTION: u16 = 200; // 2.0% (Of Pot)
+const FEE_ANTIBOT: u16 = 1500; // 15.0%
+
+const VIRTUAL_SOL_INIT: u64 = 40_000_000_000; // 40 SOL
+const ENDGAME_THRESHOLD_BPS: u64 = 9_500; // 0.95 SOL price
 
 #[program]
 pub mod djinn_market {
@@ -21,12 +39,9 @@ pub mod djinn_market {
     pub fn create_market(
         ctx: Context<CreateMarket>,
         title: String,
-        fee_percentage: u16, // User requested dynamic fee
         resolution_time: i64,
     ) -> Result<()> {
-        require!(fee_percentage <= 1000, DjinnError::FeeTooHigh); // Max 10%
-
-        // Transfer creation fee
+        // Transfer creation fee (0.05 SOL)
         anchor_lang::system_program::transfer(
             CpiContext::new(
                 ctx.accounts.system_program.to_account_info(),
@@ -41,33 +56,114 @@ pub mod djinn_market {
         let market = &mut ctx.accounts.market;
         market.creator = ctx.accounts.creator.key();
         market.title = title;
-        market.total_liquidity = 0;
-        market.total_shares_yes = 0;
-        market.total_shares_no = 0;
-        market.fee_percentage = fee_percentage;
         market.resolution_time = resolution_time;
         market.status = MarketStatus::Open;
         market.outcome = MarketOutcome::None;
         market.bump = ctx.bumps.market;
+        
+        // V2 State Init
+        market.creator_fees_claimable = 0;
+        market.total_volume = 0;
+        market.resolution_timestamp = 0;
 
-        msg!("Market created with {}bps fee", fee_percentage);
+        // VIRTUAL AMM INIT (x * y = k)
+        // x = 40 SOL. Price = 0.5. y = 80 Shares.
+        market.virtual_sol_reserves = VIRTUAL_SOL_INIT;
+        market.virtual_share_reserves = VIRTUAL_SOL_INIT * 2; 
+
+        msg!("Market created V2. Virtual Liquidity: {} SOL", VIRTUAL_SOL_INIT);
         Ok(())
     }
 
-    /// Place a bet: User sends SOL, gets 1:1 Shares (Tokens)
+    /// Place a bet V2 (Bonding Curve Swap)
     pub fn place_bet(
         ctx: Context<PlaceBet>,
         side: MarketOutcome, 
-        amount: u64,
+        amount_in: u64, // SOL input
+        min_shares_out: u64, // Slippage Protection
     ) -> Result<()> {
         let market = &mut ctx.accounts.market;
         require!(market.status == MarketStatus::Open, DjinnError::MarketClosed);
         require!(Clock::get()?.unix_timestamp < market.resolution_time, DjinnError::MarketExpired);
-        require!(amount > 0, DjinnError::InvalidAmount);
+        require!(amount_in > 0, DjinnError::InvalidAmount);
+        require!(side == MarketOutcome::Yes || side == MarketOutcome::No, DjinnError::InvalidOutcome);
+
+        // 1. Anti-Bot Check
+        let clock = Clock::get()?;
+        let current_slot = clock.slot;
         
-        // 1. Transfer SOL to Market PDA (Escrow)
-        // Note: In a real app, you might send to a separate Vault account. 
-        // For simplicity/MVP, we send to the Market PDA itself (it can hold SOL).
+        let mut fee_rate = FEE_STD_TOTAL;
+        let mut creator_rate = FEE_STD_CREATOR;
+        let mut is_bot = false;
+
+        if market.last_trade_slot == current_slot && market.last_trader == ctx.accounts.user.key() {
+            // Same block, same trader -> Bot Penalty
+            fee_rate = FEE_ANTIBOT; // 15%
+            creator_rate = 0; // No creator fee for bots
+            is_bot = true;
+            msg!("Anti-Bot Penalty Applied!");
+        }
+
+        // 2. Determine Dynamic Fees (If not bot) by current price
+        // Price = x / y
+        // We use 1e9 precision for price to compare with bps
+        if !is_bot {
+            let current_price_e9 = (market.virtual_sol_reserves as u128 * 1_000_000_000) / market.virtual_share_reserves as u128; // gives price in lamports basically? No.
+            // 40 / 80 = 0.5. * 1e9 = 500_000_000.
+            // Threshold 0.95 = 950_000_000.
+            
+            if current_price_e9 >= 950_000_000 {
+                // Endgame Zone
+                fee_rate = FEE_ENDGAME_TOTAL;
+                creator_rate = FEE_ENDGAME_CREATOR;
+                msg!("Endgame Fee Activated");
+            }
+        }
+
+        // 3. Fee Split
+        let fee_total = (amount_in as u128 * fee_rate as u128 / BPS_DENOMINATOR as u128) as u64;
+        let mut fee_creator = (amount_in as u128 * creator_rate as u128 / BPS_DENOMINATOR as u128) as u64;
+        
+        // Blueprint: If Creator == G1, 100% to G1 (No Claimable)
+        if market.creator.to_string() == G1_TREASURY_STR {
+            fee_creator = 0;
+        }
+
+        let fee_protocol = fee_total - fee_creator; // If G1, this is 100%. If other, 50%.
+        let net_invested = amount_in - fee_total;
+
+        // 4. Bonding Curve Swap (Buy Shares)
+        // k = x * y
+        // new_x = x + net_invested
+        // new_y = k / new_x
+        // shares_out = y - new_y
+        
+        let x = market.virtual_sol_reserves as u128;
+        let y = market.virtual_share_reserves as u128;
+        let k = x * y;
+
+        let new_x = x + net_invested as u128;
+        let new_y = k / new_x;
+        
+        // Safety check to prevent depleting y to 0 (unlikely with this math but good practice)
+        require!(new_y > 0, DjinnError::MathError);
+
+        let shares_out = (y - new_y) as u64;
+        require!(shares_out >= min_shares_out, DjinnError::SlippageExceeded);
+
+        // 5. Update State
+        market.virtual_sol_reserves = new_x as u64;
+        market.virtual_share_reserves = new_y as u64;
+        market.creator_fees_claimable += fee_creator;
+        market.total_volume += amount_in;
+        market.last_trade_slot = current_slot;
+        market.last_trader = ctx.accounts.user.key();
+
+        // 6. Transfer SOL
+        // User -> Market (Net Invested + Creator Fee pending)
+        // User -> Treasury (Protocol Fee) - Optimization: Send Protocol Fee directly now
+        
+        // Transfer Net + Creator Fee to Market PDA
         anchor_lang::system_program::transfer(
             CpiContext::new(
                 ctx.accounts.system_program.to_account_info(),
@@ -76,10 +172,24 @@ pub mod djinn_market {
                     to: market.to_account_info(),
                 },
             ),
-            amount,
+            net_invested + fee_creator,
         )?;
 
-        // 2. Mint Shares (Tokens) 1:1
+        // Transfer Protocol Fee to Treasury
+        if fee_protocol > 0 {
+             anchor_lang::system_program::transfer(
+                CpiContext::new(
+                    ctx.accounts.system_program.to_account_info(),
+                    anchor_lang::system_program::Transfer {
+                        from: ctx.accounts.user.to_account_info(),
+                        to: ctx.accounts.protocol_treasury.to_account_info(),
+                    },
+                ),
+                fee_protocol,
+            )?;
+        }
+
+        // 7. Mint Shares
         let seeds = &[
             b"market".as_ref(),
             market.creator.as_ref(),
@@ -103,22 +213,30 @@ pub mod djinn_market {
                 },
                 signer,
             ),
-            amount,
+            shares_out,
         )?;
 
-        // 3. Update State
-        market.total_liquidity += amount;
-        match side {
-            MarketOutcome::Yes => market.total_shares_yes += amount,
-            MarketOutcome::No => market.total_shares_no += amount,
-            _ => {},
-        }
-
-        msg!("Bet placed: {} lamports on {:?}", amount, side);
+        msg!("Swap V2: {} SOL In -> {} Shares Out. Fees: {} ({} Creator)", amount_in, shares_out, fee_total, fee_creator);
         Ok(())
     }
 
-    /// Resolve Market: Admin sets winning outcome
+    /// Claim Creator Fees
+    pub fn claim_creator_fees(ctx: Context<ClaimCreatorFees>) -> Result<()> {
+        let market = &mut ctx.accounts.market;
+        require!(ctx.accounts.creator.key() == market.creator, DjinnError::Unauthorized);
+        
+        let amount = market.creator_fees_claimable;
+        require!(amount > 0, DjinnError::NothingToClaim);
+
+        market.creator_fees_claimable = 0;
+
+        **market.to_account_info().try_borrow_mut_lamports()? -= amount;
+        **ctx.accounts.creator.to_account_info().try_borrow_mut_lamports()? += amount;
+        
+        msg!("Creator claimed {} lamports", amount);
+        Ok(())
+    }
+
     pub fn resolve_market(
         ctx: Context<ResolveMarket>,
         outcome: MarketOutcome,
@@ -130,108 +248,63 @@ pub mod djinn_market {
         require!(market.status == MarketStatus::Open, DjinnError::AlreadyResolved);
         require!(outcome != MarketOutcome::None, DjinnError::InvalidOutcome);
 
-        market.outcome = outcome;
-        market.status = MarketStatus::Resolved; // or Claiming
+        market.outcome = outcome.clone(); // Now works because Copy
+        market.status = MarketStatus::Resolved; 
+        market.resolution_timestamp = Clock::get()?.unix_timestamp; // Set timelock start
 
-        msg!("Market resolved to {:?}", outcome);
+        msg!("Market resolved to {:?}. Timelock started.", outcome);
         Ok(())
     }
 
-    /// Claim Reward: Burn shares, calculating payout
+    /// Claim Reward V2 (Timelock + 2% Fee)
     pub fn claim_reward(ctx: Context<ClaimReward>) -> Result<()> {
         let market = &mut ctx.accounts.market;
         require!(market.status == MarketStatus::Resolved, DjinnError::NotResolved);
 
-        let user_shares_yes = ctx.accounts.user_yes_account.amount;
-        let user_shares_no = ctx.accounts.user_no_account.amount;
-        let total_shares_yes = market.total_shares_yes;
-        let total_shares_no = market.total_shares_no;
-        let total_pot = market.total_liquidity;
+        // Timelock Check (2 Hours = 7200 seconds)
+        let now = Clock::get()?.unix_timestamp;
+        require!(now >= market.resolution_timestamp + 7200, DjinnError::TimelockActive);
 
-        let mut payout: u64 = 0;
-        let mut burn_amount: u64 = 0;
-        let mut burn_mint_is_yes = false;
+        // let user_shares_yes = ctx.accounts.user_yes_account.amount; // Optimized out
+        // let user_shares_no = ctx.accounts.user_no_account.amount;
 
-        match market.outcome {
-            MarketOutcome::Yes => {
-                // EDGE CASE: If nobody bet YES, treating as VOID (Refund)
-                if total_shares_yes == 0 {
-                    // Start refund logic: User gets back their NO bets 1:1? 
-                    // No, if YES wins but nobody has YES, the NO bettors lost. 
-                    // But the money is stuck. 
-                    // Logic: Refund everyone their original deposit.
-                    // User holds NO shares -> gets 1:1 refund? No, they lost.
-                    // User holds YES shares -> 0.
-                    // If total_shares_yes is 0, then NO ONE can claim this block.
-                    // The pot belongs to... the protocol? Or we enable VOID mode.
-                    
-                    // Let's implement Strict Refund for THIS user's holdings (1:1) basically treating it as VOID.
-                    // If I hold YES, I get 1 SOL per share. (But I can't hold YES if total is 0).
-                    // If I hold NO, I get 1 SOL per share.
-                    burn_amount = user_shares_no; // Refund losing side too?
-                    payout = user_shares_no;
-                    burn_mint_is_yes = false;
-                } else {
-                    // Standard Win
-                    if user_shares_yes > 0 {
-                        burn_amount = user_shares_yes;
-                        burn_mint_is_yes = true;
+        // Simplified Payout for this MVP: 
+        // We will stick to PROPORTIONAL PAYOUT based on REAL POT.
+        // Payout = (MyShares / TotalWinningShares) * (RealPot).
+        
+        let total_lamports = market.to_account_info().lamports();
+        let rent = Rent::get()?.minimum_balance(Market::LEN);
+        let fees_pending = market.creator_fees_claimable;
+        
+        // Available Pot for Winners
+        let available_pot = total_lamports.saturating_sub(rent).saturating_sub(fees_pending);
 
-                        // Payout = (UserShares / TotalWinningShares) * (Pot - Fee)
-                        let fee = (total_pot as u128 * market.fee_percentage as u128 / BPS_DENOMINATOR as u128) as u64;
-                        let pot_after_fee = total_pot - fee;
+        let (user_shares, total_winning_shares, burn_mint_is_yes) = match market.outcome {
+             MarketOutcome::Yes => (
+                 ctx.accounts.user_yes_account.amount,
+                 ctx.accounts.yes_token_mint.supply,
+                 true,
+             ),
+             MarketOutcome::No => (
+                 ctx.accounts.user_no_account.amount,
+                 ctx.accounts.no_token_mint.supply,
+                 false,
+             ),
+             _ => return err!(DjinnError::InvalidOutcome),
+        };
 
-                        // Use u128 to prevent overflow
-                        payout = (user_shares_yes as u128 * pot_after_fee as u128 / total_shares_yes as u128) as u64;
+        require!(user_shares > 0, DjinnError::NothingToClaim);
+        require!(total_winning_shares > 0, DjinnError::MathError);
 
-                        // Transfer Fee to Treasury (Only done once ideally, but here done per claim implicitly by leaving dust)
-                        // Actually, we should transfer the fee-share for THIS claim to treasury now.
-                        let fee_share = (user_shares_yes as u128 * fee as u128 / total_shares_yes as u128) as u64;
-                        **market.to_account_info().try_borrow_mut_lamports()? -= fee_share;
-                        **ctx.accounts.protocol_treasury.try_borrow_mut_lamports()? += fee_share;
-                    }
-                }
-            },
-            MarketOutcome::No => {
-                if total_shares_no == 0 {
-                     // Void logic
-                     burn_amount = user_shares_yes; 
-                     payout = user_shares_yes;
-                     burn_mint_is_yes = true;
-                } else {
-                    if user_shares_no > 0 {
-                        burn_amount = user_shares_no;
-                        burn_mint_is_yes = false;
+        // Calculate Gross Payout
+        // (User / Total) * Pot
+        let gross_payout = (user_shares as u128 * available_pot as u128 / total_winning_shares as u128) as u64;
 
-                        let fee = (total_pot as u128 * market.fee_percentage as u128 / BPS_DENOMINATOR as u128) as u64;
-                        let pot_after_fee = total_pot - fee;
-                        payout = (user_shares_no as u128 * pot_after_fee as u128 / total_shares_no as u128) as u64;
-                        
-                        // Fee transfer
-                        let fee_share = (user_shares_no as u128 * fee as u128 / total_shares_no as u128) as u64;
-                        **market.to_account_info().try_borrow_mut_lamports()? -= fee_share;
-                        **ctx.accounts.protocol_treasury.try_borrow_mut_lamports()? += fee_share;
-                    }
-                }
-            },
-            MarketOutcome::Void => {
-                // Refund 1:1 for everyone
-                if user_shares_yes > 0 {
-                    burn_amount = user_shares_yes;
-                    payout = user_shares_yes;
-                    burn_mint_is_yes = true;
-                } else if user_shares_no > 0 {
-                    burn_amount = user_shares_no;
-                    payout = user_shares_no;
-                    burn_mint_is_yes = false;
-                }
-            },
-            _ => return err!(DjinnError::InvalidOutcome),
-        }
+        // Apply 2% Resolution Fee
+        let fee_resolution = (gross_payout as u128 * FEE_RESOLUTION as u128 / BPS_DENOMINATOR as u128) as u64;
+        let net_payout = gross_payout - fee_resolution;
 
-        require!(payout > 0, DjinnError::NothingToClaim);
-
-        // 1. Burn Shares
+        // Burn Shares
         let (mint_account, burn_from) = if burn_mint_is_yes {
              (&ctx.accounts.yes_token_mint, &ctx.accounts.user_yes_account)
         } else {
@@ -244,56 +317,146 @@ pub mod djinn_market {
                 Burn {
                     mint: mint_account.to_account_info(),
                     from: burn_from.to_account_info(),
-                    authority: ctx.accounts.user.to_account_info(), // User signs burn
+                    authority: ctx.accounts.user.to_account_info(),
                 },
             ),
-            burn_amount,
+            user_shares,
         )?;
 
-        // 2. Transfer SOL Payout
-        **market.to_account_info().try_borrow_mut_lamports()? -= payout;
-        **ctx.accounts.user.to_account_info().try_borrow_mut_lamports()? += payout;
+        // Transfer Checks
+        **market.to_account_info().try_borrow_mut_lamports()? -= net_payout + fee_resolution;
+        **ctx.accounts.user.to_account_info().try_borrow_mut_lamports()? += net_payout;
+        **ctx.accounts.protocol_treasury.try_borrow_mut_lamports()? += fee_resolution;
 
-        msg!("Claimed {} lamports, burned {} shares", payout, burn_amount);
+        msg!("Claimed {} (Fee {}). Burned {}", net_payout, fee_resolution, user_shares);
+        Ok(())
+    }
+
+    /// Sell Shares V2 (Bonding Curve Sell)
+    /// Inverse of Place Bet.
+    /// Input: Shares to burn.
+    /// Output: SOL returned.
+    pub fn sell_shares(
+        ctx: Context<SellShares>,
+        side: MarketOutcome,
+        shares_amount: u64,
+        min_sol_out: u64, // Slippage Protection
+    ) -> Result<()> {
+        let market = &mut ctx.accounts.market;
+        require!(market.status == MarketStatus::Open, DjinnError::MarketClosed);
+        require!(shares_amount > 0, DjinnError::InvalidAmount);
+        
+        // 1. Calculate Bonding Curve Swap (Sell Shares -> SOL)
+        // k = x * y
+        // y_current = market.virtual_share_reserves
+        // y_new = y_current + shares_amount (Wait, selling shares means we give shares BACK to curve? 
+        // NO. Minting = Curve CREATES shares. Selling = Curve DESTROYS shares?
+        // Let's look at Buy:
+        // Buy: User gives SOL (x increases). Curve gives Shares (y decreases).
+        // Sell: User gives Shares (y increases). Curve gives SOL (x decreases).
+        
+        let x = market.virtual_sol_reserves as u128;
+        let y = market.virtual_share_reserves as u128;
+        let k = x * y; // constant product
+
+        let new_y = y + shares_amount as u128;
+        let new_x = k / new_y;
+
+        // SOL to release = Current SOL (x) - New SOL (x_new)
+        let amount_sol_out_gross = (x - new_x) as u64;
+
+        // 2. Fees (Standard 2.5%)
+        let fee_rate = FEE_STD_TOTAL; 
+        let fee_creator_rate = FEE_STD_CREATOR;
+
+        let fee_total = (amount_sol_out_gross as u128 * fee_rate as u128 / BPS_DENOMINATOR as u128) as u64;
+        let mut fee_creator = (amount_sol_out_gross as u128 * fee_creator_rate as u128 / BPS_DENOMINATOR as u128) as u64;
+        
+        // Blueprint: If Creator == G1, 100% to G1 (No Claimable)
+        if market.creator.to_string() == G1_TREASURY_STR {
+            fee_creator = 0;
+        }
+
+        let fee_protocol = fee_total - fee_creator;
+        
+        let amount_sol_net = amount_sol_out_gross - fee_total;
+        require!(amount_sol_net >= min_sol_out, DjinnError::SlippageExceeded);
+
+        // 3. Update State
+        market.virtual_sol_reserves = new_x as u64;
+        market.virtual_share_reserves = new_y as u64;
+        market.total_volume += amount_sol_out_gross; 
+        market.creator_fees_claimable += fee_creator; // Creator fee stays in market until claimed
+
+        // 4. Burn User Shares
+        let (mint_account, from_account) = match side {
+            MarketOutcome::Yes => (&ctx.accounts.yes_token_mint, &ctx.accounts.user_yes_account),
+            MarketOutcome::No => (&ctx.accounts.no_token_mint, &ctx.accounts.user_no_account),
+            _ => return err!(DjinnError::InvalidOutcome),
+        };
+
+        token::burn(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                Burn {
+                    mint: mint_account.to_account_info(),
+                    from: from_account.to_account_info(),
+                    authority: ctx.accounts.user.to_account_info(),
+                },
+            ),
+            shares_amount,
+        )?;
+
+        // 5. Transfer SOL
+        // A. Market -> User (Net Amount)
+        **market.to_account_info().try_borrow_mut_lamports()? -= amount_sol_net;
+        **ctx.accounts.user.to_account_info().try_borrow_mut_lamports()? += amount_sol_net;
+
+        // B. Market -> Treasury (Protocol Fee) - Direct Transfer
+        if fee_protocol > 0 {
+             **market.to_account_info().try_borrow_mut_lamports()? -= fee_protocol;
+             **ctx.accounts.protocol_treasury.try_borrow_mut_lamports()? += fee_protocol;
+        }
+
+        msg!("Sold {} shares for {} SOL (Fee: {} - Proto: {}, Creator: {})", 
+            shares_amount, amount_sol_net, fee_total, fee_protocol, fee_creator);
         Ok(())
     }
 }
 
-// --- DATA STRUCTURES ---
+// --- DATA STRUCTURES (UPDATED V2) ---
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq, Debug)]
-pub enum MarketStatus {
-    Open,
-    Resolved,
-    Voided
-}
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum MarketStatus { Open, Resolved, Voided }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq, Debug)]
-pub enum MarketOutcome {
-    None,
-    Yes,
-    No,
-    Void
-}
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum MarketOutcome { None, Yes, No, Void }
 
 #[account]
 pub struct Market {
     pub creator: Pubkey,
     pub title: String,
-    pub total_liquidity: u64,
-    pub total_shares_yes: u64,
-    pub total_shares_no: u64,
-    pub fee_percentage: u16,   // e.g. 200 = 2.00%
+    
+    // V2 AMM State
+    pub virtual_sol_reserves: u64,
+    pub virtual_share_reserves: u64,
+    pub creator_fees_claimable: u64,
+    pub total_volume: u64,
+
+    // Anti-Bot
+    pub last_trade_slot: u64,
+    pub last_trader: Pubkey,
+
     pub resolution_time: i64,
+    pub resolution_timestamp: i64, // Settlement start
     pub status: MarketStatus,
     pub outcome: MarketOutcome,
     pub bump: u8,
 }
 
 impl Market {
-    // 8 + 32 + 204 + 8 + 8 + 8 + 2 + 8 + 1 + 1 + 1 = ~281 bytes. 
-    // Allowing extra space for safety.
-    pub const LEN: usize = 300; 
+    // Increased size for new fields approx
+    pub const LEN: usize = 400; 
 }
 
 #[account]
@@ -304,7 +467,7 @@ pub struct ProtocolState {
 
 impl ProtocolState { pub const LEN: usize = 8 + 32 + 32; }
 
-// --- ACCOUNTS ---
+// --- ACCOUNTS (UPDATED) ---
 
 #[derive(Accounts)]
 pub struct InitializeProtocol<'info> {
@@ -357,9 +520,20 @@ pub struct PlaceBet<'info> {
     pub user_yes_account: Account<'info, TokenAccount>,
     #[account(mut)]
     pub user_no_account: Account<'info, TokenAccount>,
+    
+    #[account(mut)]
+    pub protocol_treasury: AccountInfo<'info>, // Needed for direct protocol fee transfer
 
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ClaimCreatorFees<'info> {
+    #[account(mut)]
+    pub market: Account<'info, Market>,
+    #[account(mut)]
+    pub creator: Signer<'info>,
 }
 
 #[derive(Accounts)]
@@ -395,6 +569,32 @@ pub struct ClaimReward<'info> {
     pub token_program: Program<'info, Token>,
 }
 
+#[derive(Accounts)]
+pub struct SellShares<'info> {
+    #[account(mut)]
+    pub market: Account<'info, Market>,
+    
+    #[account(mut)]
+    pub user: Signer<'info>,
+    
+    #[account(mut)]
+    pub yes_token_mint: Account<'info, Mint>,
+    #[account(mut)]
+    pub no_token_mint: Account<'info, Mint>,
+
+    #[account(mut)]
+    pub user_yes_account: Account<'info, TokenAccount>,
+    #[account(mut)]
+    pub user_no_account: Account<'info, TokenAccount>,
+    
+    /// CHECK: Treasury
+    #[account(mut)]
+    pub protocol_treasury: AccountInfo<'info>,
+
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+}
+
 #[error_code]
 pub enum DjinnError {
     #[msg("Fee too high")] FeeTooHigh,
@@ -406,4 +606,7 @@ pub enum DjinnError {
     #[msg("Already resolved")] AlreadyResolved,
     #[msg("Not resolved")] NotResolved,
     #[msg("Nothing to claim")] NothingToClaim,
+    #[msg("Math Error")] MathError,
+    #[msg("Timelock Active: Wait 2 Hours")] TimelockActive,
+    #[msg("Slippage Exceeded")] SlippageExceeded,
 }

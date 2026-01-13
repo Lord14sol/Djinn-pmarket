@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import React from "react";
 import { Geist, Geist_Mono, Libre_Baskerville } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
@@ -79,16 +80,18 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} ${adrianeStyle.variable} antialiased bg-black text-white flex flex-col min-h-screen`}
       >
         <SolanaProvider>
-          <CategoryProvider>
-            <ModalProvider>
-              <Navbar />
-              <AchievementNotification />
-              <main className="pt-20 flex-grow">
-                {children}
-              </main>
-              <Footer />
-            </ModalProvider>
-          </CategoryProvider>
+          <React.Suspense fallback={null}>
+            <CategoryProvider>
+              <ModalProvider>
+                <Navbar />
+                <AchievementNotification />
+                <main className="pt-20 flex-grow">
+                  {children}
+                </main>
+                <Footer />
+              </ModalProvider>
+            </CategoryProvider>
+          </React.Suspense>
         </SolanaProvider>
       </body>
     </html>

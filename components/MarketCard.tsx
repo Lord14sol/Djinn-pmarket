@@ -103,63 +103,33 @@ const MarketCard = ({
                 className="bg-white/5 backdrop-blur-md rounded-[2.5rem] border border-white/5 shadow-[0_4px_24px_rgba(0,0,0,0.3)] flex flex-col transition-all duration-500 ease-out hover:-translate-y-3 hover:bg-white/10 hover:border-[#F492B7]/50 hover:shadow-[0_0_40px_rgba(244,146,183,0.25)] group relative overflow-hidden h-auto min-h-[500px] md:h-[600px] block"
             >
                 <Link href={`/market/${slug}`} className="w-full h-48 md:h-64 relative overflow-hidden bg-white/5 block">
-                    {typeof icon === 'string' && icon.startsWith('data:image') ? (
-                        <img src={icon} alt="" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                    {typeof icon === 'string' && (icon.startsWith('http') || icon.startsWith('/') || icon.startsWith('data:image')) ? (
+                        <div className="w-full h-full bg-black/40 flex items-center justify-center p-4">
+                            <img src={icon} alt="" className="w-full h-full object-contain transition-transform duration-700 group-hover:scale-105" />
+                        </div>
                     ) : (
                         <div className="w-full h-full flex items-center justify-center text-7xl opacity-20">{icon || '🔮'}</div>
                     )}
-                    <div className="absolute top-4 right-4 z-10">
+                    <div className="absolute top-0 right-0 z-20">
                         {resolved ? (
-                            <div className="bg-purple-600 text-white px-3 py-1 rounded-lg font-black text-xs border border-purple-400 shadow-[0_0_15px_rgba(147,51,234,0.5)] animate-pulse">
-                                RESOLVED: {winningOutcome}
+                            <div className="bg-purple-600 text-white px-6 py-2 rounded-bl-2xl font-black text-xs uppercase tracking-widest shadow-lg flex items-center gap-2">
+                                <span>Resolved</span>
                             </div>
                         ) : isNew ? (
-                            /* Badge NEW - Green sprout style */
-                            <div className="relative group">
-                                {/* Outer glow ring */}
-                                <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-400 via-green-500 to-emerald-600 rounded-lg blur opacity-75 group-hover:opacity-100 transition-opacity"></div>
-                                {/* Inner badge */}
-                                <div className="relative flex items-center gap-2 bg-black px-3 py-1.5 rounded-lg border border-emerald-500/50">
-                                    {/* Sprout icon */}
-                                    <svg className="w-3.5 h-3.5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M5.5 17a4.5 4.5 0 01-1.44-8.765 4.5 4.5 0 018.302-3.046 3.5 3.5 0 014.504 4.272A4 4 0 0115 17H5.5zm3.75-2.75a.75.75 0 001.5 0V9.66l1.95 2.1a.75.75 0 101.1-1.02l-3.25-3.5a.75.75 0 00-1.1 0l-3.25 3.5a.75.75 0 101.1 1.02l1.95-2.1v4.59z" clipRule="evenodd" />
-                                    </svg>
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">
-                                        New
-                                    </span>
-                                </div>
+                            /* Corner Label NEW - Green */
+                            <div className="bg-emerald-500 text-black px-6 py-2 rounded-bl-2xl font-black text-xs uppercase tracking-widest shadow-lg flex items-center gap-2">
+                                <span>New 🌱</span>
                             </div>
                         ) : (
-                            /* Badge TRENDING - FLOATING FIRE (no container) */
-                            <div className="relative w-6 h-7">
-                                {/* Radiating glow behind */}
-                                <div className="absolute inset-0 bg-gradient-to-t from-orange-500/50 via-amber-400/30 to-transparent rounded-full blur-md fire-glow" />
-
-                                {/* Fire element */}
-                                <div className="relative w-full h-full fire-flicker">
-                                    {/* Outer flame - red/orange */}
-                                    <div className="fire-dance absolute bottom-0 left-1/2 -translate-x-1/2 w-5 h-6 rounded-[50%_50%_50%_50%_/_60%_60%_40%_40%] bg-gradient-to-t from-red-600 via-orange-500 to-yellow-400" />
-
-                                    {/* Middle flame - orange */}
-                                    <div className="fire-dance-alt absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-5 rounded-[50%_50%_50%_50%_/_60%_60%_40%_40%] bg-gradient-to-t from-orange-500 via-amber-400 to-yellow-300" />
-
-                                    {/* Inner flame - yellow/white hot */}
-                                    <div className="fire-dance absolute bottom-0.5 left-1/2 -translate-x-1/2 w-2.5 h-3.5 rounded-[50%_50%_50%_50%_/_60%_60%_40%_40%] bg-gradient-to-t from-yellow-400 via-yellow-200 to-white" style={{ animationDelay: '0.1s' }} />
-
-                                    {/* Core - white hot */}
-                                    <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-2.5 rounded-full bg-white shadow-[0_0_8px_4px_rgba(255,255,255,0.9)]" />
-
-                                    {/* Sparks */}
-                                    <div className="fire-spark absolute bottom-5 left-0.5 w-1 h-1 rounded-full bg-yellow-200" />
-                                    <div className="fire-spark-2 absolute bottom-6 right-0 w-0.5 h-0.5 rounded-full bg-orange-200" />
-                                    <div className="fire-spark-3 absolute bottom-4 left-2.5 w-0.5 h-0.5 rounded-full bg-white" />
-                                </div>
+                            /* Corner Label TRENDING - Orange/Red */
+                            <div className="bg-gradient-to-r from-orange-500 to-red-500 text-white px-6 py-2 rounded-bl-2xl font-black text-xs uppercase tracking-widest shadow-lg flex items-center gap-2">
+                                <span>Hot 🔥</span>
                             </div>
                         )}
                     </div>
                 </Link>
 
-                <div className="p-8 flex flex-col flex-grow overflow-hidden">
+                <div className="p-8 pb-10 flex flex-col flex-grow">
                     <Link href={`/market/${slug}`} className="flex justify-between items-start gap-4 mb-2 group-hover:opacity-80 transition-opacity">
                         <h3 className="text-xl font-bold text-white leading-[1.2] tracking-tight group-hover:text-[#F492B7] transition-colors flex-1 line-clamp-2">
                             {title}
@@ -187,7 +157,7 @@ const MarketCard = ({
                         </a>
                     )}
 
-                    <div className="flex-grow overflow-hidden flex flex-col mt-4">
+                    <div className="flex-grow flex flex-col mt-4">
                         {resolved ? (
                             <div className="mt-auto mb-4 flex flex-col items-center justify-center p-4 bg-white/5 rounded-2xl border border-white/10">
                                 <div className="text-center mb-4">
@@ -230,7 +200,7 @@ const MarketCard = ({
                                 })}
                             </div>
                         ) : (
-                            <div className="grid grid-cols-2 gap-3 mt-auto mb-4">
+                            <div className="grid grid-cols-2 gap-3 mt-auto mb-6 pb-2">
                                 <button
                                     onClick={(e) => handleBetClick(e, 'no')}
                                     className="bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white font-black text-2xl rounded-[1.5rem] py-4 flex flex-col items-center justify-center transition-all duration-300 shadow-lg uppercase tracking-widest min-h-[100px]"
@@ -263,6 +233,69 @@ const MarketCard = ({
                             <StarIcon active={isStarred} onClick={(e) => { setIsStarred(!isStarred); }} />
                         </div>
                     </div>
+
+                    {/* Bonding Curve - Sleek Footer Style */}
+                    {!resolved && (
+                        <div className="mt-4 pt-3 border-t border-white/5">
+                            {/* Logic: Parse volume to determine curve progress */}
+                            {(() => {
+                                const cleanVol = String(volume || '0').replace(/[$,]/g, '');
+                                let percent = 0;
+                                if (cleanVol.includes('M')) percent = Math.min(98, 40 + parseFloat(cleanVol) * 5);
+                                else if (cleanVol.includes('K')) percent = Math.min(40, 5 + parseFloat(cleanVol) / 10);
+                                else if (parseFloat(cleanVol) > 0) percent = 5;
+
+                                // Mock random variance for visual interest if no real bonding curve data properly passed yet
+                                if (percent === 0 && volume !== '$0' && volume !== '0') {
+                                    // Use deterministic pseudo-random based on string length to avoid hydration mismatch
+                                    percent = 10 + (slug?.length || 0) % 40;
+                                }
+
+                                const isActive = percent > 0;
+
+                                return (
+                                    <div className="flex items-center gap-3 group/curve">
+                                        <div className="flex-1 relative">
+                                            {/* Background Track w/ Inner Shadow */}
+                                            <div className="w-full h-3 bg-black/60 rounded-full overflow-hidden border border-white/10 shadow-inner group-hover/curve:border-white/20 transition-colors">
+                                                {isActive ? (
+                                                    <div
+                                                        className="h-full bg-gradient-to-r from-[#F492B7] via-purple-500 to-purple-600 rounded-full relative shadow-[0_0_15px_rgba(244,146,183,0.5)] group-hover/curve:shadow-[0_0_20px_rgba(244,146,183,0.7)] transition-all duration-1000 ease-out"
+                                                        style={{ width: `${percent}%` }}
+                                                    >
+                                                        {/* Animated Stripes Background */}
+                                                        <div className="absolute inset-0 bg-[linear-gradient(45deg,rgba(255,255,255,0.1)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.1)_50%,rgba(255,255,255,0.1)_75%,transparent_75%,transparent)] bg-[length:12px_12px] animate-[slide_1s_linear_infinite] opacity-30"></div>
+
+                                                        {/* Shimmer overlay */}
+                                                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full animate-[shimmer_2s_infinite]"></div>
+
+                                                        {/* End glowing sparkle */}
+                                                        <div className="absolute right-0.5 top-1/2 -translate-y-1/2 w-2 h-2 bg-white rounded-full shadow-[0_0_10px_2px_rgba(255,255,255,0.8)] animate-pulse">
+                                                            <div className="absolute inset-0 bg-white rounded-full animate-ping opacity-50"></div>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="h-full w-full flex items-center justify-center opacity-30">
+                                                        <div className="w-full h-full bg-[repeating-linear-gradient(45deg,transparent,transparent_6px,rgba(255,255,255,0.1)_6px,rgba(255,255,255,0.1)_12px)]"></div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Percentage Label */}
+                                        <div className="flex flex-col items-end min-w-[40px]">
+                                            <span className={`text-[11px] font-mono font-black tabular-nums ${isActive ? 'text-[#F492B7] drop-shadow-[0_0_8px_rgba(244,146,183,0.5)]' : 'text-gray-600'}`}>
+                                                {isActive ? `${Math.round(percent)}%` : '0%'}
+                                            </span>
+                                            <span className="text-[8px] font-black uppercase text-gray-500 tracking-wider scale-75 origin-right">
+                                                {isActive ? 'Bonding' : 'Empty'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                    )}
                 </div>
 
 

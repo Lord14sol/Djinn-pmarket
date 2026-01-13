@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 
+import LostSOLLeaderboard from '@/components/LostSOLLeaderboard';
+
 // DATOS INICIALES (MOCK)
 const initialDjinns = [
     { user: 'Kch123', profit: 2055127, avatar: '🦁', slug: 'kch123' },
@@ -21,8 +23,22 @@ const biggestWins = [
     { rank: 3, user: 'DegenKing', market: 'Solana to $500', bet: '$120,000', profit: '$980,200', avatar: '🔱', slug: 'degenking' },
 ];
 
+const mockLosers = [
+    { rank: 1, wallet: 'Giga...4xKc', username: 'DiamondHandsRekt', totalLost: 42.5, lossCount: 12 },
+    { rank: 2, wallet: 'Dege...nPro', username: 'YOLOmaster2025', totalLost: 28.3, lossCount: 8 },
+    { rank: 3, wallet: 'Moon...boi1', username: 'BetItAll', totalLost: 19.7, lossCount: 15 },
+    { rank: 4, wallet: 'Ape...xWGMI', totalLost: 15.2, lossCount: 6 },
+    { rank: 5, wallet: 'Sol...Max99', totalLost: 12.8, lossCount: 4 },
+    { rank: 6, wallet: 'Pump...Dump', totalLost: 10.5, lossCount: 9 },
+    { rank: 7, wallet: 'Rekt...Again', totalLost: 8.9, lossCount: 7 },
+    { rank: 8, wallet: 'FOMO...King', totalLost: 7.2, lossCount: 5 },
+    { rank: 9, wallet: 'Paper...Hand', totalLost: 5.6, lossCount: 3 },
+    { rank: 10, wallet: 'NoLuck...Sol', totalLost: 4.1, lossCount: 2 },
+];
+
 export default function LeaderboardPage() {
     const [liveTraders, setLiveTraders] = useState<any[]>([]);
+    const [view, setView] = useState<'winners' | 'losers'>('winners');
 
     useEffect(() => {
         const syncLiveTraders = () => {
@@ -76,52 +92,77 @@ export default function LeaderboardPage() {
             <div className="max-w-[1400px] mx-auto">
 
                 {/* HEADER - MINIMAL */}
-                <div className="mb-20">
-                    <h1 className="text-4xl font-black tracking-tight">
+                <div className="mb-10 text-center">
+                    <h1 className="text-4xl font-black tracking-tight mb-2">
                         Leaderboard
                     </h1>
-                    <p className="text-gray-500 text-sm mt-2">Top traders by all-time profit</p>
-                </div>
+                    <p className="text-gray-500 text-sm">Review the most profitable (and least profitable) traders</p>
 
-                {/* PODIUM SECTION - OLYMPIC STYLE */}
-                <div className="relative mb-32 max-w-[1100px] mx-auto">
-                    {/* Background glow */}
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] bg-gradient-radial from-[#F492B7]/10 via-transparent to-transparent rounded-full blur-3xl pointer-events-none"></div>
-
-                    {/* Podium Container */}
-                    <div className="flex items-end justify-center gap-6 relative z-10">
-                        {/* RANK 2 - Silver */}
-                        {podium[0] && (
-                            <div className="flex flex-col items-center">
-                                <PodiumCard djinn={podium[0]} rank={2} />
-                                <div className="w-full h-24 bg-gradient-to-b from-[#1A1A1A] to-[#0D0D0D] rounded-b-2xl border-x border-b border-white/10 flex items-center justify-center mt-[-1px]">
-                                    <span className="text-6xl font-black text-gray-600/50">2</span>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* RANK 1 - Gold (Center, Tallest) */}
-                        {podium[1] && (
-                            <div className="flex flex-col items-center -mb-8 z-20">
-                                <PodiumCard djinn={podium[1]} rank={1} />
-                                <div className="w-full h-36 bg-gradient-to-b from-[#1A1A1A] to-[#0D0D0D] rounded-b-2xl border-x border-b border-[#F492B7]/30 flex items-center justify-center mt-[-1px] relative overflow-hidden">
-                                    <div className="absolute inset-0 bg-gradient-to-t from-[#F492B7]/10 to-transparent"></div>
-                                    <span className="text-8xl font-black text-[#F492B7]/30 relative z-10">1</span>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* RANK 3 - Bronze */}
-                        {podium[2] && (
-                            <div className="flex flex-col items-center">
-                                <PodiumCard djinn={podium[2]} rank={3} />
-                                <div className="w-full h-16 bg-gradient-to-b from-[#1A1A1A] to-[#0D0D0D] rounded-b-2xl border-x border-b border-white/10 flex items-center justify-center mt-[-1px]">
-                                    <span className="text-5xl font-black text-amber-900/30">3</span>
-                                </div>
-                            </div>
-                        )}
+                    {/* TOGGLE SWITCH */}
+                    <div className="inline-flex mt-8 p-1 bg-white/5 rounded-full border border-white/10">
+                        <button
+                            onClick={() => setView('winners')}
+                            className={`px-8 py-2 rounded-full text-xs font-black uppercase tracking-widest transition-all ${view === 'winners' ? 'bg-[#F492B7] text-black shadow-[0_0_15px_rgba(244,146,183,0.3)]' : 'text-gray-500 hover:text-white'}`}
+                        >
+                            <span className="mr-2">🏆</span> Winners
+                        </button>
+                        <button
+                            onClick={() => setView('losers')}
+                            className={`px-8 py-2 rounded-full text-xs font-black uppercase tracking-widest transition-all ${view === 'losers' ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.3)]' : 'text-gray-500 hover:text-white'}`}
+                        >
+                            <span className="mr-2">💀</span> Rekt
+                        </button>
                     </div>
                 </div>
+
+                {view === 'winners' ? (
+                    <>
+                        {/* PODIUM SECTION - OLYMPIC STYLE */}
+                        <div className="relative mb-32 max-w-[1100px] mx-auto">
+                            {/* Background glow */}
+                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] bg-gradient-radial from-[#F492B7]/10 via-transparent to-transparent rounded-full blur-3xl pointer-events-none"></div>
+
+                            {/* Podium Container */}
+                            <div className="flex items-end justify-center gap-6 relative z-10">
+                                {/* RANK 2 - Silver */}
+                                {podium[0] && (
+                                    <div className="flex flex-col items-center">
+                                        <PodiumCard djinn={podium[0]} rank={2} />
+                                        <div className="w-full h-24 bg-gradient-to-b from-[#1A1A1A] to-[#0D0D0D] rounded-b-2xl border-x border-b border-white/10 flex items-center justify-center mt-[-1px]">
+                                            <span className="text-6xl font-black text-gray-600/50">2</span>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* RANK 1 - Gold (Center, Tallest) */}
+                                {podium[1] && (
+                                    <div className="flex flex-col items-center -mb-8 z-20">
+                                        <PodiumCard djinn={podium[1]} rank={1} />
+                                        <div className="w-full h-36 bg-gradient-to-b from-[#1A1A1A] to-[#0D0D0D] rounded-b-2xl border-x border-b border-[#F492B7]/30 flex items-center justify-center mt-[-1px] relative overflow-hidden">
+                                            <div className="absolute inset-0 bg-gradient-to-t from-[#F492B7]/10 to-transparent"></div>
+                                            <span className="text-8xl font-black text-[#F492B7]/30 relative z-10">1</span>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* RANK 3 - Bronze */}
+                                {podium[2] && (
+                                    <div className="flex flex-col items-center">
+                                        <PodiumCard djinn={podium[2]} rank={3} />
+                                        <div className="w-full h-16 bg-gradient-to-b from-[#1A1A1A] to-[#0D0D0D] rounded-b-2xl border-x border-b border-white/10 flex items-center justify-center mt-[-1px]">
+                                            <span className="text-5xl font-black text-amber-900/30">3</span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </>
+                ) : (
+                    <div className="mb-20 max-w-[800px] mx-auto animate-in fade-in slide-in-from-bottom-5 duration-500">
+                        {/* Hall of Shame Component */}
+                        <LostSOLLeaderboard losers={mockLosers} />
+                    </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-12 relative z-10">
                     {/* LIST SECTION */}

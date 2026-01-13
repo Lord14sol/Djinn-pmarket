@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useWallet } from '@solana/wallet-adapter-react';
 import Hero from '@/components/Hero';
@@ -9,6 +9,7 @@ import { MarketGridSkeleton } from '@/components/ui/Skeletons';
 import { useCategory } from '@/lib/CategoryContext';
 import { getMarkets as getSupabaseMarkets } from '@/lib/supabase-db';
 import ActivePositionsWidget from '@/components/market/ActivePositionsWidget';
+import TheGreatPyramid from '@/components/TheGreatPyramid';
 
 
 export default function Home() {
@@ -346,16 +347,45 @@ export default function Home() {
     }
   };
 
+  // Calculate top market for The Great Pyramid
+  const topMarket = useMemo(() => {
+    if (markets.length === 0) return null;
+    const sorted = [...markets].sort((a, b) => {
+      const volA = parseFloat(a.volume?.replace(/[$,MK]/g, '') || '0');
+      const volB = parseFloat(b.volume?.replace(/[$,MK]/g, '') || '0');
+      return volB - volA;
+    });
+    const top = sorted[0];
+    return {
+      title: top.title,
+      slug: top.slug,
+      icon: top.icon || '🔮',
+      volume: top.volume || '$0',
+      betsCount: Math.floor(Math.random() * 5000) + 500, // Mock for now
+      chance: top.chance || 50,
+      endDate: top.endDate
+    };
+  }, [markets]);
+
+
+
   return (
     <div className="text-white font-sans selection:bg-[#F492B7] selection:text-black">
 
       {/* Hero Section con Callback para crear mercados */}
       <Hero onMarketCreated={handleCreateMarket} />
 
+      {/* The Great Pyramid - Top Market Showcase */}
+      {activeCategory === 'Trending' && topMarket && (
+        <TheGreatPyramid topMarket={topMarket} />
+      )}
+
       <section className="px-6 md:px-12 pb-20 max-w-[1600px] mx-auto mt-10">
-        <h2 className="text-3xl font-bold mb-8 tracking-tight text-white">
-          {getCategoryTitle()}
-        </h2>
+        {!(activeCategory === 'Trending' && topMarket) && (
+          <h2 className="text-3xl font-bold mb-8 tracking-tight text-white">
+            {getCategoryTitle()}
+          </h2>
+        )}
 
         {isLoading ? (
           <MarketGridSkeleton count={8} />
@@ -376,6 +406,8 @@ export default function Home() {
           </div>
         )}
       </section>
+
+
 
       {/* Active Positions Widget (Bottom Right - Same as Profile) */}
       <ActivePositionsWidget

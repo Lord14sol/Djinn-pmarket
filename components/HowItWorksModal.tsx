@@ -184,8 +184,8 @@ export default function HowItWorksModal({ isOpen, onClose }: { isOpen: boolean; 
 
                 {/* Action Buttons */}
                 <div className="flex gap-2">
-                    <div className="bg-gradient-to-r from-[#F492B7] to-[#ff6fb7] text-black text-[10px] font-black px-4 py-1.5 rounded-lg uppercase tracking-wide shadow-lg">
-                        💰 Sell & Profit
+                    <div className="bg-white/10 text-gray-400 text-[10px] font-black px-4 py-1.5 rounded-lg uppercase tracking-wide border border-white/10">
+                        🔒 Funds Locked
                     </div>
                     <div className="bg-white/10 text-gray-400 text-[10px] font-black px-3 py-1.5 rounded-lg uppercase border border-white/10">
                         Hold
@@ -304,12 +304,12 @@ export default function HowItWorksModal({ isOpen, onClose }: { isOpen: boolean; 
         },
         {
             title: "2) Buy YES or NO",
-            desc: "Pick any market. Think it'll happen? Buy YES. Think it won't? Buy NO. Prices move in real-time as traders bet.",
+            desc: "Pick a side. Prices are dynamic: If more people join your side, your payout multiplier decreases. Early birds get different risk profiles.",
             visual: <VisualBuyShares />
         },
         {
-            title: "3) Sell & Profit",
-            desc: "Sell anytime to lock in gains, or hold until the market resolves. Winners get paid, losers get nothing. Simple.",
+            title: "3) Wait & Win",
+            desc: "Funds are locked until the event ends. This is a Parimutuel pool: Winners split the ENTIRE pot. No dynamic selling, no paper hands. Pure glory.",
             visual: <VisualProfit />
         },
         {

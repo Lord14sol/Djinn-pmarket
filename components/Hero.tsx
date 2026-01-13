@@ -41,11 +41,13 @@ interface SearchResult {
     url: string;
 }
 
-const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
+// Search Component that uses searchParams
+const HeroContent = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
     const wallet = useWallet();
     const { publicKey } = wallet;
     const { setVisible } = useWalletModal();
     const router = useRouter();
+    const searchParams = useSearchParams(); // This is the cause of the build error if not suspended
     const { openCreateMarket } = useModal();
 
     const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false);
@@ -90,6 +92,14 @@ const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
                 onClose={() => setIsHowItWorksOpen(false)}
             />
         </>
+    );
+};
+
+const Hero = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
+    return (
+        <React.Suspense fallback={<div className="min-h-[40vh]"></div>}>
+            <HeroContent onMarketCreated={onMarketCreated} />
+        </React.Suspense>
     );
 };
 
