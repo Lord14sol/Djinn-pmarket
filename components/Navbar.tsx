@@ -383,3 +383,12 @@ export default function Navbar() {
         </nav>
     );
 }
+
+// 2. Export the wrapped component
+export default function Navbar() {
+    return (
+        <React.Suspense fallback={<div className="h-20 bg-black/50 backdrop-blur-md border-b border-white/5" />}>
+            <NavbarContent />
+        </React.Suspense>
+    );
+}
