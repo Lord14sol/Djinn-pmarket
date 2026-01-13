@@ -1,7 +1,7 @@
 'use client';
 
 import { OracleStatus } from '../../lib/oracle';
-import { RefreshCw, Sparkles, Power, Zap, Activity } from 'lucide-react';
+import { RefreshCw, Power, Zap, Activity, Cpu } from 'lucide-react';
 
 interface StatusPanelProps {
     status: OracleStatus;
@@ -27,134 +27,153 @@ export function StatusPanel({ status, onToggle, isLoading }: StatusPanelProps) {
     const activeSources = status.sources.filter(s => s.enabled);
 
     return (
-        <div className="border border-white/10 rounded-3xl bg-gradient-to-br from-[#F492B7]/5 via-transparent to-transparent backdrop-blur-sm overflow-hidden">
+        <div className="border border-white/10 rounded-3xl bg-gradient-to-br from-[#0D1117] to-[#161B22] shadow-2xl overflow-hidden relative group">
+            {/* Decorative Matrix Background Effect */}
+            <div className="absolute inset-0 opacity-10 pointer-events-none">
+                <div className="absolute top-0 left-1/4 w-px h-full bg-gradient-to-b from-transparent via-emerald-500/50 to-transparent animate-pulse" />
+                <div className="absolute top-0 right-1/4 w-px h-full bg-gradient-to-b from-transparent via-[#F492B7]/50 to-transparent animate-pulse delay-700" />
+            </div>
+
             {/* Main Status Header */}
-            <div className="p-6 flex items-center justify-between">
-                <div className="flex items-center gap-5">
-                    {/* Animated Status Indicator - Djinn Style */}
+            <div className="p-8 flex items-center justify-between relative z-10">
+                <div className="flex items-center gap-6">
+                    {/* Animated Status Indicator - Digital Processor Style */}
                     <div className="relative">
                         <div
-                            className={`w-20 h-20 rounded-2xl flex items-center justify-center transition-all duration-500 ${status.enabled
-                                    ? 'bg-gradient-to-br from-[#F492B7]/30 to-[#F492B7]/10 border-2 border-[#F492B7]/50 shadow-[0_0_30px_rgba(244,146,183,0.3)]'
-                                    : 'bg-gradient-to-br from-gray-500/20 to-gray-600/10 border-2 border-gray-500/30'
+                            className={`w-24 h-24 rounded-2xl flex items-center justify-center transition-all duration-500 relative overflow-hidden ${status.enabled
+                                    ? 'bg-black/40 border-2 border-emerald-500/50 shadow-[0_0_40px_rgba(16,185,129,0.2)]'
+                                    : 'bg-black/40 border-2 border-gray-500/30'
                                 }`}
                         >
+                            {/* Inner Circuits */}
+                            <div className="absolute inset-0 opacity-20 bg-[url('/grid.png')] bg-center opacity-30" />
+
                             {status.enabled ? (
-                                <Sparkles className="w-10 h-10 text-[#F492B7] animate-pulse" />
+                                <>
+                                    <div className="absolute inset-0 border-t border-emerald-500/30 animate-[scan_2s_linear_infinite]" />
+                                    <Cpu className="w-12 h-12 text-emerald-400 relative z-10 animate-pulse" />
+                                </>
                             ) : (
-                                <Power className="w-10 h-10 text-gray-400" />
+                                <Power className="w-10 h-10 text-gray-500 relative z-10" />
                             )}
                         </div>
-                        {status.enabled && (
-                            <>
-                                <div className="absolute -top-1 -right-1 w-5 h-5 bg-[#F492B7] rounded-full animate-ping opacity-75" />
-                                <div className="absolute -top-1 -right-1 w-5 h-5 bg-[#F492B7] rounded-full" />
-                            </>
-                        )}
+
+                        {/* Corner Accents */}
+                        <div className={`absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 rounded-tl ${status.enabled ? 'border-emerald-400' : 'border-gray-600'}`} />
+                        <div className={`absolute -top-1 -right-1 w-3 h-3 border-t-2 border-r-2 rounded-tr ${status.enabled ? 'border-emerald-400' : 'border-gray-600'}`} />
+                        <div className={`absolute -bottom-1 -left-1 w-3 h-3 border-b-2 border-l-2 rounded-bl ${status.enabled ? 'border-emerald-400' : 'border-gray-600'}`} />
+                        <div className={`absolute -bottom-1 -right-1 w-3 h-3 border-b-2 border-r-2 rounded-br ${status.enabled ? 'border-emerald-400' : 'border-gray-600'}`} />
                     </div>
 
                     <div>
-                        <h2 className="text-3xl font-black text-white flex items-center gap-3">
-                            Oracle Bot
-                            <span className={`text-sm font-black px-4 py-1.5 rounded-full transition-all ${status.enabled
-                                    ? 'bg-[#F492B7]/20 text-[#F492B7] border border-[#F492B7]/40 shadow-[0_0_15px_rgba(244,146,183,0.2)]'
-                                    : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
-                                }`}>
-                                {status.enabled ? '● LIVE' : '○ OFF'}
-                            </span>
+                        <h2 className="text-3xl font-black text-white flex items-center gap-3 tracking-tight">
+                            ORACLE_CORE
+                            <span className="text-xs font-mono text-gray-500">v1.0.4</span>
                         </h2>
-                        <p className="text-gray-400 text-sm mt-2 max-w-md">
-                            {status.enabled
-                                ? '✨ Actively monitoring markets and searching for resolution events'
-                                : 'Bot is paused — Start to begin monitoring markets'
-                            }
-                        </p>
+                        <div className="flex items-center gap-3 mt-2">
+                            <span className={`text-xs font-bold font-mono px-3 py-1 rounded-md border ${status.enabled
+                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.1)]'
+                                    : 'bg-gray-500/10 text-gray-400 border-gray-500/20'
+                                }`}>
+                                {status.enabled ? 'SYSTEM_ONLINE' : 'SYSTEM_OFFLINE'}
+                            </span>
+                            {status.enabled && (
+                                <span className="text-xs font-mono text-emerald-500/70 animate-pulse">
+                                    Processing market data...
+                                </span>
+                            )}
+                        </div>
                     </div>
                 </div>
 
                 <button
                     onClick={onToggle}
                     disabled={isLoading}
-                    className={`group px-10 py-5 rounded-2xl font-black text-lg transition-all duration-300 disabled:opacity-50 flex items-center gap-3 hover:scale-105 active:scale-95 ${status.enabled
-                            ? 'bg-gradient-to-r from-red-500/20 to-red-600/20 text-red-400 border-2 border-red-500/40 hover:border-red-500/60 hover:shadow-[0_0_20px_rgba(239,68,68,0.2)]'
-                            : 'bg-gradient-to-r from-[#F492B7]/20 to-[#F492B7]/30 text-[#F492B7] border-2 border-[#F492B7]/50 hover:border-[#F492B7]/80 hover:shadow-[0_0_30px_rgba(244,146,183,0.3)]'
+                    className={`group px-8 py-4 rounded-xl font-bold font-mono text-sm transition-all duration-300 disabled:opacity-50 flex items-center gap-3 border hover:shadow-lg ${status.enabled
+                            ? 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20 hover:border-red-500/50'
+                            : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20 hover:border-emerald-500/50'
                         }`}
                 >
                     {isLoading ? (
-                        <RefreshCw className="w-6 h-6 animate-spin" />
+                        <RefreshCw className="w-5 h-5 animate-spin" />
                     ) : status.enabled ? (
                         <>
-                            <Power className="w-6 h-6 group-hover:rotate-180 transition-transform duration-300" />
-                            Stop Bot
+                            <Power className="w-5 h-5" />
+                            TERMINATE_PROCESS
                         </>
                     ) : (
                         <>
-                            <Sparkles className="w-6 h-6 group-hover:scale-125 transition-transform duration-300" />
-                            Start Bot
+                            <Zap className="w-5 h-5" />
+                            INITIALIZE_CORE
                         </>
                     )}
                 </button>
             </div>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-3 divide-x divide-white/5 border-t border-white/5 bg-black/20">
-                <div className="p-5 text-center hover:bg-white/5 transition-colors cursor-default">
-                    <div className="text-3xl font-black text-white mb-1">
+            {/* Stats Grid - Non-clickable */}
+            <div className="grid grid-cols-3 divide-x divide-white/5 border-t border-white/5 bg-black/40">
+                <div className="p-6 text-center select-none backdrop-blur-sm">
+                    <div className="text-3xl font-black text-white mb-1 font-mono tracking-tighter">
                         {formatLastRun(status.last_run)}
                     </div>
-                    <div className="text-gray-500 text-xs font-bold uppercase tracking-wider">Last Check</div>
+                    <div className="text-gray-500 text-[10px] font-bold uppercase tracking-widest">Last Execution</div>
                 </div>
 
-                <div className="p-5 text-center hover:bg-white/5 transition-colors cursor-default">
-                    <div className="text-3xl font-black text-[#F492B7] mb-1">
+                <div className="p-6 text-center select-none backdrop-blur-sm">
+                    <div className="text-3xl font-black text-[#F492B7] mb-1 font-mono tracking-tighter">
                         {status.pending_suggestions}
                     </div>
-                    <div className="text-gray-500 text-xs font-bold uppercase tracking-wider">Pending</div>
+                    <div className="text-gray-500 text-[10px] font-bold uppercase tracking-widest">Pending Decisions</div>
                 </div>
 
-                <div className="p-5 text-center hover:bg-white/5 transition-colors cursor-default">
-                    <div className="text-3xl font-black text-white mb-1 flex items-center justify-center gap-2">
+                <div className="p-6 text-center select-none backdrop-blur-sm">
+                    <div className="text-3xl font-black text-white mb-1 font-mono tracking-tighter flex items-center justify-center gap-2">
                         {activeSources.length}
-                        <Activity className="w-5 h-5 text-emerald-400" />
+                        <Activity className="w-4 h-4 text-emerald-400" />
                     </div>
-                    <div className="text-gray-500 text-xs font-bold uppercase tracking-wider">Sources</div>
+                    <div className="text-gray-500 text-[10px] font-bold uppercase tracking-widest">Active Links</div>
                 </div>
             </div>
 
             {/* Data Sources */}
-            <div className="p-6 border-t border-white/5">
+            <div className="p-6 border-t border-white/5 bg-gradient-to-b from-[#161B22] to-[#0D1117]">
                 <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-white font-bold text-sm flex items-center gap-2 uppercase tracking-wider">
-                        <Zap className="w-4 h-4 text-[#F492B7]" />
-                        Data Sources
+                    <h3 className="text-gray-400 font-bold text-xs flex items-center gap-2 uppercase tracking-widest">
+                        <Zap className="w-3 h-3 text-emerald-400" />
+                        Neural Network Connections
                     </h3>
+                    <span className="text-[10px] text-gray-600 font-mono">
+                        SECURE ENCRYPTED
+                    </span>
                 </div>
                 <div className="grid grid-cols-5 gap-3">
                     {status.sources.map(source => (
                         <div
                             key={source.name}
-                            className={`group p-4 rounded-2xl text-center transition-all duration-300 cursor-pointer hover:scale-105 ${source.enabled && source.status === 'active'
-                                    ? 'bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/40 hover:shadow-[0_0_20px_rgba(52,211,153,0.2)]'
+                            className={`p-4 rounded-xl border transition-all duration-300 ${source.enabled && source.status === 'active'
+                                    ? 'bg-emerald-500/5 border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.05)]'
                                     : source.enabled && source.status === 'error'
-                                        ? 'bg-gradient-to-br from-red-500/20 to-red-600/10 border border-red-500/40'
-                                        : 'bg-white/5 border border-white/10 opacity-60 hover:opacity-100'
+                                        ? 'bg-red-500/5 border-red-500/20'
+                                        : 'bg-white/5 border-white/5 opacity-40 grayscale'
                                 }`}
                         >
-                            <div className="text-3xl mb-2 group-hover:scale-110 transition-transform">
-                                {source.name === 'twitter' && '𝕏'}
-                                {source.name === 'reddit' && '🔴'}
-                                {source.name === 'google' && '🔍'}
-                                {source.name === 'gemini' && '✨'}
-                                {source.name === 'openai' && '🤖'}
+                            <div className="text-2xl mb-3 flex justify-center">
+                                {source.name === 'twitter' && <span className="text-white">𝕏</span>}
+                                {source.name === 'reddit' && <span className="text-orange-500">🔴</span>}
+                                {source.name === 'google' && <span className="text-blue-400">G</span>}
+                                {source.name === 'gemini' && <span className="text-blue-300">✦</span>}
+                                {source.name === 'openai' && <span className="text-green-400">🤖</span>}
                             </div>
-                            <div className={`text-xs font-bold ${source.enabled ? 'text-white' : 'text-gray-500'
-                                }`}>
-                                {source.display_name}
-                            </div>
-                            <div className={`text-[10px] mt-1 font-medium ${source.status === 'active' ? 'text-emerald-400' :
-                                    source.status === 'error' ? 'text-red-400' : 'text-gray-500'
-                                }`}>
-                                {source.enabled ? (source.status === 'active' ? '● Connected' : source.status === 'error' ? '● Error' : '○ Ready') : '○ Disabled'}
+                            <div className="text-center">
+                                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                                    {source.display_name}
+                                </div>
+                                <div className={`text-[9px] font-mono flex items-center justify-center gap-1.5 ${source.enabled ? (source.status === 'active' ? 'text-emerald-400' : 'text-red-400') : 'text-gray-600'
+                                    }`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full ${source.enabled ? (source.status === 'active' ? 'bg-emerald-400 animate-pulse' : 'bg-red-400') : 'bg-gray-600'
+                                        }`} />
+                                    {source.enabled ? (source.status === 'active' ? 'ONLINE' : 'ERROR') : 'OFFLINE'}
+                                </div>
                             </div>
                         </div>
                     ))}

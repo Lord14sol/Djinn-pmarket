@@ -7,8 +7,9 @@ import { OracleTerminal } from '../../components/oracle/OracleTerminal';
 import { ResolutionQueue } from '../../components/oracle/ResolutionQueue';
 import { StatusPanel } from '../../components/oracle/StatusPanel';
 import { MarketMonitor } from '../../components/oracle/MarketMonitor';
+import { ConfigPanel } from '../../components/oracle/ConfigPanel';
 import { OracleStatus, OracleLog, ResolutionSuggestion } from '../../lib/oracle';
-import { ArrowLeft, Terminal, FileCheck, Eye, Shield } from 'lucide-react';
+import { ArrowLeft, Terminal, FileCheck, Eye, Shield, Settings } from 'lucide-react';
 
 // Protocol Authority wallet address
 const PROTOCOL_AUTHORITY = "G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma";
@@ -20,7 +21,7 @@ export default function OraclePage() {
     const [suggestions, setSuggestions] = useState<ResolutionSuggestion[]>([]);
     const [loading, setLoading] = useState(true);
     const [toggling, setToggling] = useState(false);
-    const [activeTab, setActiveTab] = useState<'terminal' | 'queue' | 'markets'>('terminal');
+    const [activeTab, setActiveTab] = useState<'terminal' | 'queue' | 'markets' | 'config'>('terminal');
 
     // Fetch all data
     const fetchData = useCallback(async () => {
@@ -65,8 +66,14 @@ export default function OraclePage() {
         }
     };
 
+    const handleSaveConfig = async (source: string, config: any) => {
+        // This part would need a new API route to actually save the keys
+        // For now we just log
+        console.log('Would save config:', source, config);
+        alert('Config saving not yet implemented in backend, but UI is ready!');
+    };
+
     const handleAddLink = async (slug: string) => {
-        // Log to terminal that we're searching
         console.log('Searching for market:', slug);
         // TODO: Trigger actual search
     };
@@ -110,7 +117,7 @@ export default function OraclePage() {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-[#0B0E14] via-[#12151f] to-[#0B0E14] flex items-center justify-center">
+            <div className="min-h-screen bg-[#0B0E14] flex items-center justify-center">
                 <div className="text-[#F492B7] font-bold text-xl animate-pulse flex items-center gap-3">
                     <span className="text-4xl">✨</span>
                     Initializing Oracle Bot...
@@ -121,7 +128,7 @@ export default function OraclePage() {
 
     if (!publicKey) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-[#0B0E14] via-[#12151f] to-[#0B0E14] flex flex-col items-center justify-center px-4">
+            <div className="min-h-screen bg-[#0B0E14] flex flex-col items-center justify-center px-4">
                 <div className="text-7xl mb-6">🔮</div>
                 <h1 className="text-4xl font-black text-white mb-4 text-center">
                     Oracle Access Required
@@ -135,7 +142,7 @@ export default function OraclePage() {
 
     if (!isAuthorized) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-[#0B0E14] via-[#12151f] to-[#0B0E14] flex flex-col items-center justify-center px-4">
+            <div className="min-h-screen bg-[#0B0E14] flex flex-col items-center justify-center px-4">
                 <div className="w-24 h-24 rounded-3xl bg-red-500/20 border-2 border-red-500/40 flex items-center justify-center mb-6">
                     <Shield className="w-12 h-12 text-red-400" />
                 </div>
@@ -163,7 +170,7 @@ export default function OraclePage() {
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-[#0B0E14] via-[#12151f] to-[#0B0E14]">
+        <div className="min-h-screen bg-[#0B0E14] bg-[url('/bg-grid.svg')] bg-fixed">
             {/* Header */}
             <div className="container mx-auto px-4 py-8">
                 <div className="flex items-center justify-between mb-8">
@@ -175,17 +182,14 @@ export default function OraclePage() {
                             <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
                             Markets
                         </Link>
-                        <div className="w-px h-6 bg-white/10" />
-                        <h1 className="text-3xl font-black text-white flex items-center gap-3">
-                            <span className="text-4xl">✨</span>
-                            <span>Oracle Bot</span>
-                            <span className="text-[#F492B7] text-sm font-black bg-[#F492B7]/10 px-3 py-1 rounded-full border border-[#F492B7]/30">
-                                BETA
-                            </span>
-                        </h1>
                     </div>
-                    <div className="text-gray-500 font-mono text-sm bg-white/5 px-4 py-2 rounded-xl">
-                        {new Date().toLocaleTimeString()}
+                    <div className="flex items-center gap-3">
+                        <div className="text-gray-500 font-mono text-xs bg-white/5 px-3 py-1.5 rounded-lg border border-white/5">
+                            Protocol Authority Connected
+                        </div>
+                        <div className="text-[#F492B7] font-mono text-sm font-bold bg-[#F492B7]/10 px-4 py-2 rounded-xl border border-[#F492B7]/20">
+                            {new Date().toLocaleTimeString()}
+                        </div>
                     </div>
                 </div>
 
@@ -202,41 +206,29 @@ export default function OraclePage() {
 
                 {/* Tabs */}
                 <div className="flex gap-2 mb-6">
-                    <button
-                        onClick={() => setActiveTab('terminal')}
-                        className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 ${activeTab === 'terminal'
-                                ? 'bg-gradient-to-r from-[#F492B7]/20 to-[#F492B7]/30 text-[#F492B7] border border-[#F492B7]/40 shadow-[0_0_20px_rgba(244,146,183,0.15)]'
-                                : 'bg-white/5 text-gray-400 hover:text-white border border-transparent hover:border-white/10'
-                            }`}
-                    >
-                        <Terminal className="w-5 h-5" />
-                        Live Terminal
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('markets')}
-                        className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 ${activeTab === 'markets'
-                                ? 'bg-gradient-to-r from-[#F492B7]/20 to-[#F492B7]/30 text-[#F492B7] border border-[#F492B7]/40 shadow-[0_0_20px_rgba(244,146,183,0.15)]'
-                                : 'bg-white/5 text-gray-400 hover:text-white border border-transparent hover:border-white/10'
-                            }`}
-                    >
-                        <Eye className="w-5 h-5" />
-                        Markets
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('queue')}
-                        className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 ${activeTab === 'queue'
-                                ? 'bg-gradient-to-r from-[#F492B7]/20 to-[#F492B7]/30 text-[#F492B7] border border-[#F492B7]/40 shadow-[0_0_20px_rgba(244,146,183,0.15)]'
-                                : 'bg-white/5 text-gray-400 hover:text-white border border-transparent hover:border-white/10'
-                            }`}
-                    >
-                        <FileCheck className="w-5 h-5" />
-                        Resolution Queue
-                        {suggestions.length > 0 && (
-                            <span className="px-2.5 py-1 bg-[#F492B7] text-black text-xs font-black rounded-full animate-pulse">
-                                {suggestions.length}
-                            </span>
-                        )}
-                    </button>
+                    {[
+                        { id: 'terminal', label: 'Live Terminal', icon: Terminal },
+                        { id: 'markets', label: 'Markets', icon: Eye },
+                        { id: 'queue', label: 'Resolution Queue', icon: FileCheck },
+                        { id: 'config', label: 'Configuration', icon: Settings },
+                    ].map(tab => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id as any)}
+                            className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 ${activeTab === tab.id
+                                    ? 'bg-gradient-to-r from-[#F492B7]/20 to-[#F492B7]/30 text-[#F492B7] border border-[#F492B7]/40 shadow-[0_0_20px_rgba(244,146,183,0.15)]'
+                                    : 'bg-white/5 text-gray-400 hover:text-white border border-transparent hover:border-white/10'
+                                }`}
+                        >
+                            <tab.icon className="w-5 h-5" />
+                            {tab.label}
+                            {tab.id === 'queue' && suggestions.length > 0 && (
+                                <span className="ml-1 px-2 py-0.5 bg-[#F492B7] text-black text-[10px] font-black rounded-full animate-pulse">
+                                    {suggestions.length}
+                                </span>
+                            )}
+                        </button>
+                    ))}
                 </div>
 
                 {/* Tab Content */}
@@ -254,11 +246,14 @@ export default function OraclePage() {
                             onReject={handleReject}
                         />
                     )}
+                    {activeTab === 'config' && (
+                        <ConfigPanel onSave={handleSaveConfig} />
+                    )}
                 </div>
 
                 {/* Footer */}
-                <div className="mt-12 text-center text-gray-600 text-sm">
-                    <p>Oracle Bot v1.0 • Monitoring markets 24/7 • Powered by Gemini AI</p>
+                <div className="mt-12 text-center text-gray-600 text-sm pb-8">
+                    <p>© 2025 Djinn Markets • Oracle Bot v1.0.4</p>
                 </div>
             </div>
         </div>
