@@ -522,6 +522,13 @@ export default function MarketPage() {
 
             // Sync with ActivePositionsWidget
             window.dispatchEvent(new Event('bet-updated'));
+
+            // --- TRIGGER ORACLE MONITORING ---
+            fetch('/api/oracle/monitor', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slug: effectiveSlug })
+            }).catch(err => console.error("Oracle trigger error", err));
         } catch (e) {
             console.error(e);
             alert("Transaction failed.");

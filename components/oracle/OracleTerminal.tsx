@@ -113,22 +113,18 @@ export function OracleTerminal({ initialLogs }: OracleTerminalProps) {
                             key={log.id}
                             className="flex items-start gap-4 py-2 px-3 rounded-lg hover:bg-white/5 transition-colors group"
                         >
-                            {/* Timestamp */}
                             <span className="text-gray-600 shrink-0 font-mono">
                                 {formatTimestamp(log.created_at)}
                             </span>
 
-                            {/* Type Icon */}
                             <span className={`shrink-0 ${TYPE_COLORS[log.type] || 'text-gray-400'}`}>
                                 {TYPE_ICONS[log.type] || <TerminalIcon className="w-4 h-4" />}
                             </span>
 
-                            {/* Source Badge */}
                             <span className="shrink-0 px-2 py-0.5 rounded-md bg-white/10 text-gray-400 text-xs font-medium min-w-[60px] text-center">
                                 {log.source || 'system'}
                             </span>
 
-                            {/* Message */}
                             <span className={`${TYPE_COLORS[log.type] || 'text-gray-300'} flex-1`}>
                                 {log.message}
                             </span>
@@ -137,14 +133,81 @@ export function OracleTerminal({ initialLogs }: OracleTerminalProps) {
                 )}
             </div>
 
-            {/* Terminal Footer */}
-            <div className="px-6 py-3 bg-black/40 border-t border-white/10 flex items-center justify-between">
-                <span className="text-gray-500 text-xs">
-                    {logs.length} events • Auto-scrolling {isPaused ? 'paused' : 'enabled'}
-                </span>
-                <span className="text-gray-500 text-xs">
-                    Hover to pause • Updated in real-time via Supabase
-                </span>
+            {/* Terminal Footer with Input */}
+            <div className="px-6 py-3 bg-black/40 border-t border-white/10">
+                <div className="flex items-center gap-2 mb-2">
+                    <span className="text-emerald-500 font-bold animate-pulse">{'>'}</span>
+                    <input
+                        type="text"
+                        placeholder="Enter command (e.g. 'status', 'help', 'scan <slug>')"
+                        className="w-full bg-transparent border-none outline-none text-emerald-400 font-mono text-sm placeholder-emerald-900/50"
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                const cmd = e.currentTarget.value.trim();
+                                if (!cmd) return;
+
+                                // Add command to logs
+                                const newLog = {
+                                    id: Math.random().toString(),
+                                    type: 'system',
+                                    source: 'user',
+                                    message: `> ${cmd}`,
+                                    created_at: new Date().toISOString()
+                                };
+                                setLogs(prev => [newLog as OracleLog, ...prev]);
+
+                                // Process Command (Mock logic for UI interaction)
+                                let responseMsg = '';
+                                const [command, arg] = cmd.toLowerCase().split(' ');
+
+                                switch (command) {
+                                    case 'status':
+                                        responseMsg = 'SYSTEM ONLINE. Monitoring active. Connect via secure shell.';
+                                        break;
+                                    case 'help':
+                                        responseMsg = 'Available commands: status, help, scan <market_slug>, clear';
+                                        break;
+                                    case 'clear':
+                                        setLogs([]);
+                                        e.currentTarget.value = '';
+                                        return;
+                                    case 'scan':
+                                        responseMsg = arg ? `Initiating deep scan for: ${arg}...` : 'Error: Missing market slug.';
+                                        if (arg) {
+                                            fetch('/api/oracle/monitor', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ slug: arg })
+                                            });
+                                        }
+                                        break;
+                                    case 'hello':
+                                        responseMsg = 'Hello, Protocol Authority. I am ready.';
+                                        break;
+                                    default:
+                                        responseMsg = `Command not recognized: ${command}`;
+                                }
+
+                                // Add response to logs
+                                setTimeout(() => {
+                                    setLogs(prev => [{
+                                        id: Math.random().toString(),
+                                        type: 'system',
+                                        source: 'oracle',
+                                        message: responseMsg,
+                                        created_at: new Date().toISOString()
+                                    } as OracleLog, ...prev]);
+                                }, 500);
+
+                                e.currentTarget.value = '';
+                            }
+                        }}
+                    />
+                </div>
+                <div className="flex justify-between text-xs text-gray-600 font-mono">
+                    <span>{logs.length} events logged</span>
+                    <span>{isPaused ? 'PAUSED' : 'LIVE'}</span>
+                </div>
             </div>
         </div>
     );
