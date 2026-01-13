@@ -6,7 +6,9 @@ import Link from 'next/link';
 import { OracleTerminal } from '../../components/oracle/OracleTerminal';
 import { ResolutionQueue } from '../../components/oracle/ResolutionQueue';
 import { StatusPanel } from '../../components/oracle/StatusPanel';
+import { MarketMonitor } from '../../components/oracle/MarketMonitor';
 import { OracleStatus, OracleLog, ResolutionSuggestion } from '../../lib/oracle';
+import { ArrowLeft, Terminal, FileCheck, Eye, Shield } from 'lucide-react';
 
 // Protocol Authority wallet address
 const PROTOCOL_AUTHORITY = "G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma";
@@ -18,7 +20,7 @@ export default function OraclePage() {
     const [suggestions, setSuggestions] = useState<ResolutionSuggestion[]>([]);
     const [loading, setLoading] = useState(true);
     const [toggling, setToggling] = useState(false);
-    const [activeTab, setActiveTab] = useState<'terminal' | 'queue'>('terminal');
+    const [activeTab, setActiveTab] = useState<'terminal' | 'queue' | 'markets'>('terminal');
 
     // Fetch all data
     const fetchData = useCallback(async () => {
@@ -63,6 +65,12 @@ export default function OraclePage() {
         }
     };
 
+    const handleAddLink = async (slug: string) => {
+        // Log to terminal that we're searching
+        console.log('Searching for market:', slug);
+        // TODO: Trigger actual search
+    };
+
     const handleApprove = async (id: string, marketSlug: string, outcome: string) => {
         if (!publicKey) return;
         const res = await fetch('/api/oracle/suggestions', {
@@ -104,7 +112,7 @@ export default function OraclePage() {
         return (
             <div className="min-h-screen bg-gradient-to-br from-[#0B0E14] via-[#12151f] to-[#0B0E14] flex items-center justify-center">
                 <div className="text-[#F492B7] font-bold text-xl animate-pulse flex items-center gap-3">
-                    <span className="text-3xl">🤖</span>
+                    <span className="text-4xl">✨</span>
                     Initializing Oracle Bot...
                 </div>
             </div>
@@ -114,7 +122,7 @@ export default function OraclePage() {
     if (!publicKey) {
         return (
             <div className="min-h-screen bg-gradient-to-br from-[#0B0E14] via-[#12151f] to-[#0B0E14] flex flex-col items-center justify-center px-4">
-                <div className="text-6xl mb-6">🔮</div>
+                <div className="text-7xl mb-6">🔮</div>
                 <h1 className="text-4xl font-black text-white mb-4 text-center">
                     Oracle Access Required
                 </h1>
@@ -128,11 +136,13 @@ export default function OraclePage() {
     if (!isAuthorized) {
         return (
             <div className="min-h-screen bg-gradient-to-br from-[#0B0E14] via-[#12151f] to-[#0B0E14] flex flex-col items-center justify-center px-4">
-                <div className="text-6xl mb-6">🚫</div>
+                <div className="w-24 h-24 rounded-3xl bg-red-500/20 border-2 border-red-500/40 flex items-center justify-center mb-6">
+                    <Shield className="w-12 h-12 text-red-400" />
+                </div>
                 <h1 className="text-4xl font-black text-red-400 mb-4 text-center">
                     Access Denied
                 </h1>
-                <p className="text-gray-400 text-center max-w-md mb-6">
+                <p className="text-gray-400 text-center max-w-md mb-8">
                     Only the Protocol Authority can access the Oracle Bot.
                 </p>
                 <div className="bg-white/5 border border-white/10 rounded-2xl p-6 font-mono text-xs max-w-md">
@@ -143,9 +153,10 @@ export default function OraclePage() {
                 </div>
                 <Link
                     href="/"
-                    className="mt-8 px-6 py-3 bg-[#F492B7]/20 text-[#F492B7] rounded-2xl font-bold hover:bg-[#F492B7]/30 transition-all border border-[#F492B7]/30"
+                    className="mt-8 px-8 py-4 bg-gradient-to-r from-[#F492B7]/20 to-[#F492B7]/30 text-[#F492B7] rounded-2xl font-bold hover:shadow-[0_0_30px_rgba(244,146,183,0.2)] hover:scale-105 active:scale-95 transition-all border border-[#F492B7]/40 flex items-center gap-2"
                 >
-                    ← Back to Markets
+                    <ArrowLeft className="w-5 h-5" />
+                    Back to Markets
                 </Link>
             </div>
         );
@@ -159,19 +170,21 @@ export default function OraclePage() {
                     <div className="flex items-center gap-4">
                         <Link
                             href="/"
-                            className="text-gray-400 hover:text-white transition-all"
+                            className="flex items-center gap-2 text-gray-400 hover:text-[#F492B7] transition-all group"
                         >
-                            ← Markets
+                            <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+                            Markets
                         </Link>
+                        <div className="w-px h-6 bg-white/10" />
                         <h1 className="text-3xl font-black text-white flex items-center gap-3">
-                            <span className="text-4xl">🤖</span>
+                            <span className="text-4xl">✨</span>
                             <span>Oracle Bot</span>
-                            <span className="text-[#F492B7] text-sm font-mono bg-[#F492B7]/10 px-3 py-1 rounded-full">
+                            <span className="text-[#F492B7] text-sm font-black bg-[#F492B7]/10 px-3 py-1 rounded-full border border-[#F492B7]/30">
                                 BETA
                             </span>
                         </h1>
                     </div>
-                    <div className="text-gray-500 font-mono text-sm">
+                    <div className="text-gray-500 font-mono text-sm bg-white/5 px-4 py-2 rounded-xl">
                         {new Date().toLocaleTimeString()}
                     </div>
                 </div>
@@ -191,23 +204,35 @@ export default function OraclePage() {
                 <div className="flex gap-2 mb-6">
                     <button
                         onClick={() => setActiveTab('terminal')}
-                        className={`px-6 py-3 rounded-2xl font-bold transition-all ${activeTab === 'terminal'
-                                ? 'bg-[#F492B7]/20 text-[#F492B7] border border-[#F492B7]/30'
-                                : 'bg-white/5 text-gray-400 hover:text-white border border-transparent'
+                        className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 ${activeTab === 'terminal'
+                                ? 'bg-gradient-to-r from-[#F492B7]/20 to-[#F492B7]/30 text-[#F492B7] border border-[#F492B7]/40 shadow-[0_0_20px_rgba(244,146,183,0.15)]'
+                                : 'bg-white/5 text-gray-400 hover:text-white border border-transparent hover:border-white/10'
                             }`}
                     >
-                        📟 Live Terminal
+                        <Terminal className="w-5 h-5" />
+                        Live Terminal
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('markets')}
+                        className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 ${activeTab === 'markets'
+                                ? 'bg-gradient-to-r from-[#F492B7]/20 to-[#F492B7]/30 text-[#F492B7] border border-[#F492B7]/40 shadow-[0_0_20px_rgba(244,146,183,0.15)]'
+                                : 'bg-white/5 text-gray-400 hover:text-white border border-transparent hover:border-white/10'
+                            }`}
+                    >
+                        <Eye className="w-5 h-5" />
+                        Markets
                     </button>
                     <button
                         onClick={() => setActiveTab('queue')}
-                        className={`px-6 py-3 rounded-2xl font-bold transition-all flex items-center gap-2 ${activeTab === 'queue'
-                                ? 'bg-[#F492B7]/20 text-[#F492B7] border border-[#F492B7]/30'
-                                : 'bg-white/5 text-gray-400 hover:text-white border border-transparent'
+                        className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 ${activeTab === 'queue'
+                                ? 'bg-gradient-to-r from-[#F492B7]/20 to-[#F492B7]/30 text-[#F492B7] border border-[#F492B7]/40 shadow-[0_0_20px_rgba(244,146,183,0.15)]'
+                                : 'bg-white/5 text-gray-400 hover:text-white border border-transparent hover:border-white/10'
                             }`}
                     >
-                        📋 Resolution Queue
+                        <FileCheck className="w-5 h-5" />
+                        Resolution Queue
                         {suggestions.length > 0 && (
-                            <span className="px-2 py-0.5 bg-[#F492B7] text-black text-xs font-bold rounded-full">
+                            <span className="px-2.5 py-1 bg-[#F492B7] text-black text-xs font-black rounded-full animate-pulse">
                                 {suggestions.length}
                             </span>
                         )}
@@ -216,9 +241,13 @@ export default function OraclePage() {
 
                 {/* Tab Content */}
                 <div className="min-h-[500px]">
-                    {activeTab === 'terminal' ? (
+                    {activeTab === 'terminal' && (
                         <OracleTerminal initialLogs={logs} />
-                    ) : (
+                    )}
+                    {activeTab === 'markets' && (
+                        <MarketMonitor onAddLink={handleAddLink} />
+                    )}
+                    {activeTab === 'queue' && (
                         <ResolutionQueue
                             suggestions={suggestions}
                             onApprove={handleApprove}
@@ -229,7 +258,7 @@ export default function OraclePage() {
 
                 {/* Footer */}
                 <div className="mt-12 text-center text-gray-600 text-sm">
-                    <p>Oracle Bot v1.0 • Monitoring markets 24/7</p>
+                    <p>Oracle Bot v1.0 • Monitoring markets 24/7 • Powered by Gemini AI</p>
                 </div>
             </div>
         </div>
