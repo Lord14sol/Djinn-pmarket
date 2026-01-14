@@ -883,6 +883,7 @@ dependencies = [
  "blake3",
  "borsh 0.10.3",
  "borsh-derive 0.10.3",
+ "solana-program",
 ]
 
 [[package]]

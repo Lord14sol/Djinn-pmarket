@@ -196,11 +196,13 @@ export default function Home() {
     const loadMarkets = async () => {
       try {
         // Intentar cargar de Supabase
+        // 1. Fetch Supabase
         const supabaseMarkets = await getSupabaseMarkets();
+        let finalMarkets: any[] = [];
 
+        // 2. Format Supabase Markets
         if (supabaseMarkets && supabaseMarkets.length > 0) {
-          // Transformar formato de Supabase a formato de UI
-          const formattedMarkets = supabaseMarkets.map((m, index) => ({
+          finalMarkets = supabaseMarkets.map((m, index) => ({
             id: m.id || `sb-${index}`,
             title: m.title,
             icon: m.banner_url || '🔮',
@@ -218,24 +220,41 @@ export default function Home() {
             noTokenMint: m.no_token_mint,
             resolutionSource: m.resolution_source
           }));
-
-          // Combinar con estáticos (Supabase primero, luego estáticos como fallback)
-          setMarkets([...formattedMarkets, ...initialStaticMarkets]);
-          console.log('✅ Loaded', formattedMarkets.length, 'markets from Supabase');
-        } else {
-          // Si Supabase está vacío, usar estáticos + localStorage
-          console.log('ℹ️ No markets in Supabase, using static data');
-          const savedMarkets = localStorage.getItem('djinn_markets'); // Check djinn_markets first (deprecated?)
-          const createdMarkets = localStorage.getItem('djinn_created_markets'); // Check newly created ones
-
-          let combinedCustom = [];
-          if (savedMarkets) combinedCustom.push(...JSON.parse(savedMarkets));
-          if (createdMarkets) combinedCustom.push(...JSON.parse(createdMarkets));
-
-          const staticIds = new Set(initialStaticMarkets.map(m => m.id));
-          const uniqueCustom = combinedCustom.filter((m: any) => !staticIds.has(m.id));
-          setMarkets([...uniqueCustom, ...initialStaticMarkets]);
         }
+
+        // 3. MERGE LOCAL STORAGE (Always check for pending markets)
+        const createdMarkets = localStorage.getItem('djinn_created_markets');
+        let localMarkets = [];
+        if (createdMarkets) {
+          try {
+            localMarkets = JSON.parse(createdMarkets);
+          } catch (e) { console.error("Error parsing local markets", e); }
+        }
+
+        // Dedupe: If local market slug/pda exists in Supabase, ignore local
+        const pdaSet = new Set(finalMarkets.map(m => m.marketPDA));
+        const slugSet = new Set(finalMarkets.map(m => m.slug));
+
+        const uniqueLocal = localMarkets.filter((m: any) =>
+          !pdaSet.has(m.marketPDA) && !slugSet.has(m.slug)
+        );
+
+        finalMarkets = [...uniqueLocal, ...finalMarkets];
+
+        // 4. Fallback/Static if empty
+        if (finalMarkets.length === 0) {
+          console.log('ℹ️ No markets found, using defaults');
+          finalMarkets = [...initialStaticMarkets];
+        } else {
+          // Append static if not enough? No, just keep static as "Trending" fillers if needed or separate
+          // For now, let's append static to ensure grid isn't empty, but dedupe
+          const existIds = new Set(finalMarkets.map(m => m.id));
+          const uniqueStatic = initialStaticMarkets.filter(m => !existIds.has(m.id));
+          finalMarkets = [...finalMarkets, ...uniqueStatic];
+        }
+
+        setMarkets(finalMarkets);
+        console.log(`✅ Loaded ${finalMarkets.length} markets (Supabase + Local + Static)`);
       } catch (e) {
         console.error("Error loading markets from Supabase:", e);
         // Fallback to static + localStorage
@@ -257,13 +276,22 @@ export default function Home() {
 
     loadMarkets();
 
+    const handleMarketCreated = (event: any) => {
+      if (event.detail) {
+        console.log("⚡ Optimistic UI Update: New Market", event.detail);
+        setMarkets(prev => [event.detail, ...prev]);
+      } else {
+        loadMarkets();
+      }
+    };
+
     // ESCUCHAR EVENTOS DE CREACIÓN GLOBAL
     window.addEventListener('storage', loadMarkets);
-    window.addEventListener('market-created', loadMarkets); // Custom event just in case
+    window.addEventListener('market-created', handleMarketCreated);
 
     return () => {
       window.removeEventListener('storage', loadMarkets);
-      window.removeEventListener('market-created', loadMarkets);
+      window.removeEventListener('market-created', handleMarketCreated);
     };
   }, []);
 
@@ -310,7 +338,9 @@ export default function Home() {
   // Ordenar: New por fecha, otros por volumen
   const sortedMarkets = [...filteredMarkets].sort((a, b) => {
     if (activeCategory === 'New') {
-      return (b.createdAt || 0) - (a.createdAt || 0);
+      const timeA = (a.createdAt || 0);
+      const timeB = (b.createdAt || 0);
+      return timeB - timeA; // Descending: Newest First
     }
     // Trending: ordenar por volumen
     const volA = parseFloat(a.volume?.replace(/[$,M]/g, '') || '0');

@@ -11,6 +11,7 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'rec
 import { Loader2 } from 'lucide-react';
 
 import * as supabaseDb from '@/lib/supabase-db';
+import { supabase } from '@/lib/supabase';
 import { PROGRAM_ID } from '@/lib/program-config';
 
 export default function ProfilePage() {
@@ -255,6 +256,60 @@ export default function ProfilePage() {
         loadProfile();
     }, [isDefaultProfile, publicKey, profileSlug]);
 
+    // 4. LOAD CREATED MARKETS (Explicit Fetch)
+    useEffect(() => {
+        const fetchCreatedMarkets = async () => {
+            // Determine whose profile we are viewing
+            let targetWallet = null;
+            if (isMyProfile && publicKey) targetWallet = publicKey.toBase58();
+            else if (targetWalletAddress) targetWallet = targetWalletAddress;
+
+            if (!targetWallet) return;
+
+            try {
+                // 1. Fetch from Supabase
+                const { data: sbMarkets } = await supabase
+                    .from('markets')
+                    .select('*')
+                    .eq('creator_wallet', targetWallet);
+
+                let finalCreated = sbMarkets || [];
+
+                // 2. Merge with Local Storage if it's MY profile
+                if (isMyProfile) {
+                    const localStr = localStorage.getItem('djinn_created_markets');
+                    if (localStr) {
+                        try {
+                            const localMarkets = JSON.parse(localStr);
+                            // Dedupe
+                            const existingIds = new Set(finalCreated.map((m: any) => m.slug));
+                            const uniqueLocal = localMarkets.filter((m: any) => !existingIds.has(m.slug));
+                            finalCreated = [...uniqueLocal, ...finalCreated];
+                        } catch (e) { console.error(e) }
+                    }
+                }
+
+                // Format for UI
+                const uiMarkets = finalCreated.map((m: any) => ({
+                    id: m.id,
+                    slug: m.slug,
+                    title: m.title,
+                    icon: m.banner_url || m.icon || '🔮',
+                    volume: m.volume || '$0', // TODO: Calculate real volume
+                    type: 'binary',
+                    createdAt: m.created_at || m.createdAt
+                }));
+
+                setProfile(prev => ({ ...prev, createdMarkets: uiMarkets }));
+
+            } catch (error) {
+                console.error("Error loading created markets", error);
+            }
+        };
+
+        fetchCreatedMarkets();
+    }, [isMyProfile, publicKey, targetWalletAddress]);
+
     // 3. LOAD ACTIVE BETS FROM SUPABASE (using bets table, not activity)
     const loadActiveBets = async (walletAddress: string) => {
         try {
@@ -492,7 +547,7 @@ export default function ProfilePage() {
 
                 {/* CREATED MARKETS */}
                 <div className="mt-32 mb-32 space-y-12">
-                    <h3 className="text-5xl font-black uppercase tracking-tighter">My Markets</h3>
+                    <h3 className="text-5xl font-black uppercase tracking-tighter">my markets</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
                         {profile.createdMarkets && profile.createdMarkets.length > 0 ? (
                             profile.createdMarkets.map((market: any) => (

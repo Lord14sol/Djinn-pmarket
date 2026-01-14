@@ -5,7 +5,7 @@ async function main() {
     const provider = anchor.AnchorProvider.env();
     anchor.setProvider(provider);
 
-    const PROGRAM_ID = new PublicKey("3jFdWKdrrghdCrAdepVgjdMLDfDvvUxT7cwxCoYvqdaz");
+    const PROGRAM_ID = new PublicKey("9xXGnGG4hxwC4XTHavmy5BWAdb8MC2VJtTDMW9FfkGbg");
     const adminWallet = new PublicKey("G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma");
 
     // Derive PDA using correct 'protocol' seed

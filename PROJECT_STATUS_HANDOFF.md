@@ -1,3 +1,83 @@
+# Djinn Prediction Market - Project Handoff & Status Report
+
+## 1. Project Overview
+**Name:** Djinn (Solana Prediction Market)
+**Type:** Binary Option Prediction Market (Yes/No) with Bonding Curve AMM.
+**Core Mechanics:** users buy "Shares" of Yes/No outcomes. Prices move dynamically based on liquidity (AMM).
+
+## 2. Tech Stack
+*   **Blockchain:** Solana (Devnet)
+*   **Smart Contract Framework:** Anchor (Rust)
+*   **Frontend:** Next.js 14 (App Router), TypeScript, TailwindCSS
+*   **Database:** Supabase (PostgreSQL)
+*   **Indexing:** Custom Node.js Indexer (`scripts/indexer.ts`) listening to on-chain events.
+*   **Wallet:** Solana Wallet Adapter (Phantom, etc.)
+
+## 3. Key Directory Structure
+*   `programs/djinn-market/` -> **Smart Contract (Rust/Anchor)**
+    *   `src/lib.rs` -> Main entry point. Contains instructions: `create_market`, `place_bet`, `sell_shares`, `resolve_market`.
+*   `app/` -> **Frontend Properties (Next.js)**
+    *   `app/page.tsx` -> Landing Page (Market List + "Quick Bet" Modal). **(Buying works here)**.
+    *   `app/market/[slug]/page.tsx` -> Detail Page for a specific market. **(Buying FAILS here)**.
+    *   `components/` -> UI Components (`OrderBook`, `ActivePositionsWidget`, etc.).
+*   `lib/` -> **Shared Logic**
+    *   `lib/supabase-db.ts` -> Supabase Client wrapper.
+    *   `lib/idl/djinn_market.json` -> Anchor IDL (Interface Definition Language).
+*   `scripts/` -> **Backend/Indexer**
+    *   `scripts/indexer.ts` -> Listens for `Trade`, `MarketCreated` events on Solana and pushes to Supabase `activity` table.
+
+## 4. Architecture Flow
+1.  **User Action:** User connects wallet and clicks "Buy Yes".
+2.  **Frontend Hook (`process`)**:
+    *   Calls `placeBet` in `hooks/useDjinnProtocol.ts`.
+    *   Constructs Transaction with: `Market PDA`, `User ATA`, `Vault ATAs` (Yes/No mints).
+    *   Sends to Solana.
+3.  **Smart Contract (`programs/djinn-market/src/lib.rs`)**:
+    *   Mints `Yes` tokens to User.
+    *   Mints `No` tokens to Vault (collateral).
+    *   Updates logic (Bonding curve price calculation).
+    *   Emits `Trade` event.
+4.  **Indexer (`scripts/indexer.ts`)**:
+    *   Detects `Trade` event.
+    *   Inserts row into Supabase `activity` table.
+5.  **Frontend (`page.tsx`)**:
+    *   Listens to Supabase `REALTIME` changes.
+    *   Updates Order Book and Charts.
+
+## 5. Recent Specific Changes (The Context for Claude)
+The following changes were *just* made to implement "Order Book" and "Achievements":
+1.  **Database Schema Changes**:
+    *   Added `order_type` ('BUY'/'SELL') to `activity` table.
+    *   Created `achievements` and `user_achievements` tables.
+2.  **Indexer Logic (`scripts/indexer.ts`)**:
+    *   Updated to read `isBuy` boolean from event log.
+    *   Writes `order_type` to Supabase.
+3.  **Market Page (`app/market/[slug]/page.tsx`)**:
+    *   **Refactored Tabs**: Renamed "Activity" -> "Order Book". removed "Holders".
+    *   **Logic Update**:
+        *   `handlePlaceBet` calls `useDjinnProtocol.placeBet`.
+        *   **CRITICAL**: Pass `minSharesOut: 0` (Slippage = 100%) to avoid "Entry Not Found" errors on volatile devnet.
+    *   **Optimized Performance**: `getActivity` now filters by specific market slugs to avoid timeouts.
+
+## 6. The Current Problem
+**Issue:** "Buying Shares" works perfectly on the Landing Page (Quick Bet), but **fails** when attempted on the `Market Detail Page` (`/market/[slug]`).
+
+**Suspected Causes to Check:**
+1.  **Market PDA Mismatch**: Is the `marketAccount` loaded in `page.tsx` derived from the *same* seeds (`[b"market", publisher_wallet, slug]`) as the one in the contract?
+2.  **Effect Dependencies**: Does `handlePlaceBet` have access to the fresh `marketAccount` state, or does it hold a stale/null object?
+3.  **Token Mint Mismatch**: Are `yes_token_mint` and `no_token_mint` correct, or are they undefined in the `marketAccount` state object?
+
+## 7. Configuration Details
+*   **Program ID:** `DSsD8nec3jFd...` (Check `Anchor.toml` and `lib/program-config.ts` matches).
+*   **Treasury Wallet:** `G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma`.
+*   **Seeds:**
+    *   Market: `b"market"`, `creator_key`, `slug_bytes` (title).
+    *   Protocol State: `b"protocol"`.
+
+## 8. File Contents to Analyze
+*   **`app/market/[slug]/page.tsx`**: The failing component.
+*   **`hooks/useDjinnProtocol.ts`**: The transaction builder.
+*   **`lib/supabase-db.ts`**: The data fetcher.
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, MintTo, Burn};
 use anchor_spl::associated_token::AssociatedToken;

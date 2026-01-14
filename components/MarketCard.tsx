@@ -312,7 +312,9 @@ const MarketCard = ({
                     volume,
                     marketPDA,
                     yesTokenMint,
-                    noTokenMint
+                    yesTokenMint,
+                    noTokenMint,
+                    slug
                 }}
                 outcome={selectedOutcome}
             />

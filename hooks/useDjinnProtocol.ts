@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { useAnchorWallet, useConnection } from '@solana/wallet-adapter-react';
 import { Program, AnchorProvider, Idl, BN, web3 } from '@project-serum/anchor';
 import { PublicKey, SystemProgram } from '@solana/web3.js';
-import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import idl from '../lib/idl/djinn_market.json';
 
 import { PROGRAM_ID } from '../lib/program-config';
@@ -132,6 +132,7 @@ export const useDjinnProtocol = () => {
                     userNoAccount: userNoATA,
                     protocolTreasury: treasuryKey,
                     tokenProgram: TOKEN_PROGRAM_ID,
+                    associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
                     systemProgram: SystemProgram.programId,
                 })
                 .instruction();

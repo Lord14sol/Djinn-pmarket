@@ -72,7 +72,8 @@ export default function ActivePositionsWidget({
                 position.side.toLowerCase() as 'yes' | 'no',
                 position.shares,
                 new PublicKey(marketData.yes_token_mint || "So11111111111111111111111111111111111111112"),
-                new PublicKey(marketData.no_token_mint || "So11111111111111111111111111111111111111112")
+                new PublicKey(marketData.no_token_mint || "So11111111111111111111111111111111111111112"),
+                0 // minSolOut
             );
 
             console.log("✅ On-Chain Sell Success:", tx);

@@ -232,12 +232,20 @@ export interface Activity {
     market_title: string;
     market_slug: string;
     created_at?: string;
+    order_type?: 'BUY' | 'SELL';
 }
 
-export async function getActivity(minAmount: number = 0, limit: number = 50): Promise<Activity[]> {
+export async function getActivity(minAmount: number = 0, limit: number = 50, marketSlugs: string[] = []): Promise<Activity[]> {
     let query = supabase
         .from('activity')
-        .select('*')
+        .select('*');
+
+    if (marketSlugs.length > 0) {
+        query = query.in('market_slug', marketSlugs);
+    }
+
+    // Apply order and limit after filtering
+    query = query
         .order('created_at', { ascending: false })
         .limit(limit);
 

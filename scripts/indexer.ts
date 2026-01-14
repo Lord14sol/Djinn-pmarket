@@ -1,11 +1,10 @@
-
-import * as anchor from "@project-serum/anchor";
-import { Program, BN } from "@project-serum/anchor";
-import { Connection, PublicKey } from "@solana/web3.js";
-import { supabase } from "../lib/supabase";
-import idl from "../lib/idl/djinn_market.json";
-import * as fs from 'fs';
-import * as path from 'path';
+const anchor = require("@project-serum/anchor");
+const { Program, BN } = require("@project-serum/anchor");
+const { Connection, PublicKey } = require("@solana/web3.js");
+const { supabase } = require("../lib/supabase");
+const idl = require("../lib/idl/djinn_market.json");
+const fs = require('fs');
+const path = require('path');
 
 // Setup Connection
 const ANCHOR_PROVIDER_URL = "https://api.devnet.solana.com";
@@ -33,11 +32,17 @@ program.addEventListener("MarketCreated", async (event, slot) => {
     const { market, creator, title } = event;
     const slug = title.toLowerCase().replace(/ /g, "-").replace(/[^\w-]/g, "") + "-" + Date.now().toString().slice(-4);
 
+    // Derive Mints
+    const [yesMint] = PublicKey.findProgramAddressSync([Buffer.from("yes_mint"), market.toBuffer()], PROGRAM_ID);
+    const [noMint] = PublicKey.findProgramAddressSync([Buffer.from("no_mint"), market.toBuffer()], PROGRAM_ID);
+
     const { error } = await supabase.from("markets").upsert({
         slug: slug,
         title: title,
         creator_wallet: creator.toBase58(),
         market_pda: market.toBase58(),
+        yes_token_mint: yesMint.toBase58(),
+        no_token_mint: noMint.toBase58(),
         resolved: false,
         created_at: new Date().toISOString()
     });
@@ -64,7 +69,8 @@ program.addEventListener("Trade", async (event, slot) => {
         sol_amount: solValue,
         shares: Number(sharesAmount) / 1_000_000_000,
         amount: solValue * 20, // Mock USD approx for UI
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        order_type: isBuy ? 'BUY' : 'SELL'
     });
 
     // B. Update Live Price in market_data

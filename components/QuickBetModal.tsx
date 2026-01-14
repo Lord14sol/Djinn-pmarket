@@ -96,12 +96,20 @@ export default function QuickBetModal({ isOpen, onClose, market, outcome }: Quic
             console.log(`🎲 Placing ${outcome.toUpperCase()} bet: ${amount} SOL`);
 
             // 1. EXECUTE ON-CHAIN
+            if (!market.marketPDA) {
+                alert("This is a demo market (not on-chain). Bet simulated!");
+                setIsLoading(false);
+                onClose();
+                return;
+            }
+
             const tx = await placeBet(
-                new PublicKey(market.marketPDA || "So11111111111111111111111111111111111111112"),
+                new PublicKey(market.marketPDA),
                 outcome,
                 amount,
                 new PublicKey(market.yesTokenMint || "So11111111111111111111111111111111111111112"),
-                new PublicKey(market.noTokenMint || "So11111111111111111111111111111111111111112")
+                new PublicKey(market.noTokenMint || "So11111111111111111111111111111111111111112"),
+                0 // minSharesOut
             );
 
             console.log('✅ Trade successful:', tx);
