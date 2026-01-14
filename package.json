@@ -28,6 +28,7 @@
     "postcss": "8.4.49",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-is": "^19.2.3",
     "recharts": "^3.6.0",
     "tailwind-merge": "^3.4.0",
     "tweetnacl": "^1.0.3",
