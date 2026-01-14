@@ -980,6 +980,15 @@ export default function MarketPage() {
                                         </div>
                                     </div>
                                 )}
+
+                                {tradeMode === 'SELL' && solBalance < 0.003 && (
+                                    <div className="mx-2 mt-2 p-2 bg-orange-500/10 border border-orange-500/20 rounded-lg flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
+                                        <AlertCircle className="w-4 h-4 text-orange-500" />
+                                        <span className="text-[10px] text-orange-400 font-bold">
+                                            Warning: Low SOL ({solBalance.toFixed(4)}). You need ~0.003 SOL for gas.
+                                        </span>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Percentage Selector for Sell Mode */}
@@ -995,12 +1004,12 @@ export default function MarketPage() {
                                                         const available = selectedSide === 'YES' ? myYesShares : myNoShares;
                                                         let val;
                                                         if (pct === 100) {
-                                                            // For 100%, use exact available but floor deeply to avoid any float expansion
-                                                            // subtracting a tiny epsilon to ensure on-chain match
-                                                            val = Math.floor(available * 1000000) / 1000000;
+                                                            // Ultra-safe 100%: Floor to 4 decimals to ensure valid contract call
+                                                            // and leave no potential for floating point over-estimation
+                                                            val = Math.floor(available * 10000) / 10000;
                                                         } else {
                                                             const shareAmount = available * (pct / 100);
-                                                            val = parseFloat(shareAmount.toFixed(6));
+                                                            val = parseFloat(shareAmount.toFixed(4));
                                                         }
                                                         setBetAmount(val.toString());
                                                     }}
