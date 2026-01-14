@@ -1,13 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-    console.error("Master, las llaves de Supabase no están configuradas correctamente.");
-    if (typeof window !== 'undefined') {
-        alert("⚠️ FALTAN LAS CLAVES DE SUPABASE \n\nAsegúrate de tener el archivo .env.local con NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY.\n\nSi ya lo creaste, REINICIA el servidor (Ctrl+C y npm run dev).");
-    }
+const isBuildPhase = typeof window === 'undefined' && (!supabaseUrl || !supabaseAnonKey);
+
+if (isBuildPhase) {
+    console.warn("⚠️ Building without Supabase keys. Using mock client to prevent crash.");
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// If missing keys (e.g. build time), provide a dummy URL to satisfy createClient
+// This prevents "Error: supabaseUrl is required" during 'npm run build'
+export const supabase = createClient(
+    supabaseUrl || 'https://placeholder.supabase.co',
+    supabaseAnonKey || 'placeholder-key'
+);
