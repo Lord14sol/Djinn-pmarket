@@ -7,6 +7,7 @@ import idl from '../lib/idl/djinn_market.json';
 
 import { PROGRAM_ID } from '../lib/program-config';
 
+const MASTER_TREASURY = new PublicKey("G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma");
 
 export const useDjinnProtocol = () => {
     const { connection } = useConnection();
@@ -24,19 +25,16 @@ export const useDjinnProtocol = () => {
         return new Program(idl as Idl, PROGRAM_ID, provider);
     }, [provider]);
 
-    const createMarket = useCallback(async (title: string, description: string, endDate: Date, feePercentage: number = 200) => {
+    const createMarket = useCallback(async (
+        title: string,
+        description: string,
+        endDate: Date,
+        initialBuyAmount: number = 0,
+        initialBuySide: 'yes' | 'no' = 'yes'
+    ) => {
         if (!program || !wallet) throw new Error("Wallet not connected");
 
         try {
-            const [protocolStatePda] = await PublicKey.findProgramAddress(
-                [Buffer.from("protocol")],
-                program.programId
-            );
-
-            // Fetch state or fallback (MVP)
-            const stateAccount = await program.account.protocolState.fetchNullable(protocolStatePda);
-            const treasuryKey = stateAccount ? (stateAccount as any).treasury : wallet.publicKey;
-
             const [marketPda] = await PublicKey.findProgramAddress(
                 [
                     Buffer.from("market"),
@@ -56,24 +54,71 @@ export const useDjinnProtocol = () => {
                 program.programId
             );
 
-            console.log("Creating market:", { title, feePercentage, endDate });
+            const { getAssociatedTokenAddress } = await import('@solana/spl-token');
+            const userYesATA = await getAssociatedTokenAddress(yesMintPda, wallet.publicKey);
+            const userNoATA = await getAssociatedTokenAddress(noMintPda, wallet.publicKey);
 
-            const tx = await program.methods
-                .createMarket(title, new BN(endDate.getTime() / 1000))
+            // 1. Create Market Instruction 
+            // (Standard 200k compute is enough for just creation, but we keep 600k for safety if bundled)
+            const modifyComputeUnits = web3.ComputeBudgetProgram.setComputeUnitLimit({
+                units: 600_000
+            });
+
+            const tx = new web3.Transaction();
+            tx.add(modifyComputeUnits);
+
+            const createIx = await program.methods
+                .createMarket(
+                    title,
+                    new BN(Math.floor(endDate.getTime() / 1000))
+                )
                 .accounts({
                     market: marketPda,
                     yesTokenMint: yesMintPda,
                     noTokenMint: noMintPda,
                     creator: wallet.publicKey,
-                    protocolState: protocolStatePda,
-                    protocolTreasury: treasuryKey,
+                    protocolTreasury: MASTER_TREASURY,
                     tokenProgram: TOKEN_PROGRAM_ID,
                     systemProgram: SystemProgram.programId,
                     rent: web3.SYSVAR_RENT_PUBKEY,
                 })
-                .rpc();
+                .instruction();
 
-            console.log("✅ Market created tx:", tx);
+            tx.add(createIx);
+
+            // 2. Initial Buy Instruction (Bundled)
+            if (initialBuyAmount > 0) {
+                const sideArg = initialBuySide === 'yes' ? { yes: {} } : { no: {} };
+                const initialBuyBN = new BN(Math.floor(initialBuyAmount * web3.LAMPORTS_PER_SOL));
+                const minSharesOut = new BN(0); // Slippage 100% allowed for initial buy (self)
+
+                const buyIx = await program.methods
+                    .placeBet(
+                        sideArg,
+                        initialBuyBN,
+                        minSharesOut
+                    )
+                    .accounts({
+                        market: marketPda,
+                        user: wallet.publicKey,
+                        yesTokenMint: yesMintPda,
+                        noTokenMint: noMintPda,
+                        userYesAccount: userYesATA,
+                        userNoAccount: userNoATA,
+                        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+                        protocolTreasury: MASTER_TREASURY,
+                        tokenProgram: TOKEN_PROGRAM_ID,
+                        systemProgram: SystemProgram.programId,
+                    })
+                    .instruction();
+
+                tx.add(buyIx);
+            }
+
+            // Send Transaction
+            if (!provider) throw new Error("Provider not available");
+            const signature = await provider.sendAndConfirm(tx);
+
             return { tx, marketPda, yesMintPda, noMintPda };
         } catch (error) {
             console.error("Error creating market:", error);
@@ -87,39 +132,33 @@ export const useDjinnProtocol = () => {
         amountSol: number,
         yesMint: PublicKey,
         noMint: PublicKey,
-        minSharesOut: number = 0 // Optional Slippage param
+        minSharesOut: number = 0
     ) => {
         if (!program || !wallet) throw new Error("Wallet not connected");
 
         try {
             const amountLamports = new BN(amountSol * web3.LAMPORTS_PER_SOL);
-            const minSharesBN = new BN(minSharesOut * 1_000_000_000); // 9 decimal precision for shares?
+            const minSharesBN = new BN(minSharesOut * 1_000_000_000);
 
-            // Import helper to get ATAs
             const { getAssociatedTokenAddress, createAssociatedTokenAccountIdempotentInstruction } = await import('@solana/spl-token');
 
             const userYesATA = await getAssociatedTokenAddress(yesMint, wallet.publicKey);
             const userNoATA = await getAssociatedTokenAddress(noMint, wallet.publicKey);
 
-            // Create Transaction to ensure ATAs exist + Place Bet
             const transaction = new web3.Transaction();
-
-            // Create ATAs idempotently
             transaction.add(
                 createAssociatedTokenAccountIdempotentInstruction(wallet.publicKey, userYesATA, wallet.publicKey, yesMint),
                 createAssociatedTokenAccountIdempotentInstruction(wallet.publicKey, userNoATA, wallet.publicKey, noMint)
             );
 
-            // Anchor Enum Argument
             const sideArg = side === 'yes' ? { yes: {} } : { no: {} };
 
-            // Get Treasury (Added for Fee logic)
             const [protocolStatePda] = await PublicKey.findProgramAddress(
                 [Buffer.from("protocol")],
                 program.programId
             );
             const stateAccount = await program.account.protocolState.fetchNullable(protocolStatePda);
-            const treasuryKey = stateAccount ? (stateAccount as any).treasury : new PublicKey("G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma");
+            const treasuryKey = stateAccount ? (stateAccount as any).treasury : MASTER_TREASURY;
 
             const placeBetIx = await program.methods
                 .placeBet(sideArg, amountLamports, minSharesBN)
@@ -141,7 +180,6 @@ export const useDjinnProtocol = () => {
 
             // @ts-ignore
             const txHash = await program.provider.sendAndConfirm(transaction);
-            console.log("✅ Bet placed:", txHash);
             return txHash;
 
         } catch (error) {
@@ -173,7 +211,6 @@ export const useDjinnProtocol = () => {
                 })
                 .rpc();
 
-            console.log("✅ Market resolved:", tx);
             return tx;
         } catch (error) {
             console.error("Error resolving market:", error);
@@ -189,20 +226,25 @@ export const useDjinnProtocol = () => {
         if (!program || !wallet) throw new Error("Wallet not connected");
 
         try {
-            const { getAssociatedTokenAddress } = await import('@solana/spl-token');
+            const { getAssociatedTokenAddress, createAssociatedTokenAccountIdempotentInstruction } = await import('@solana/spl-token');
             const userYesATA = await getAssociatedTokenAddress(yesMint, wallet.publicKey);
             const userNoATA = await getAssociatedTokenAddress(noMint, wallet.publicKey);
 
-            // Get Treasury (for fee safety, though usually done in resolve, current contract does it in claim)
             const [protocolStatePda] = await PublicKey.findProgramAddress(
                 [Buffer.from("protocol")],
                 program.programId
             );
             const stateAccount = await program.account.protocolState.fetchNullable(protocolStatePda);
-            const treasuryKey = stateAccount ? (stateAccount as any).treasury : wallet.publicKey;
+            const treasuryKey = stateAccount ? (stateAccount as any).treasury : MASTER_TREASURY;
 
+            const transaction = new web3.Transaction();
+            // Ensure ATAs exist (needed for contract validation even if empty)
+            transaction.add(
+                createAssociatedTokenAccountIdempotentInstruction(wallet.publicKey, userYesATA, wallet.publicKey, yesMint),
+                createAssociatedTokenAccountIdempotentInstruction(wallet.publicKey, userNoATA, wallet.publicKey, noMint)
+            );
 
-            const tx = await program.methods
+            const claimIx = await program.methods
                 .claimReward()
                 .accounts({
                     market: marketPda,
@@ -213,9 +255,14 @@ export const useDjinnProtocol = () => {
                     userNoAccount: userNoATA,
                     protocolTreasury: treasuryKey,
                     tokenProgram: TOKEN_PROGRAM_ID,
+                    systemProgram: SystemProgram.programId,
                 })
-                .rpc();
+                .instruction();
 
+            transaction.add(claimIx);
+
+            // @ts-ignore
+            const tx = await program.provider.sendAndConfirm(transaction);
             console.log("✅ Reward claimed:", tx);
             return tx;
         } catch (error) {
@@ -224,7 +271,6 @@ export const useDjinnProtocol = () => {
         }
     }, [program, wallet]);
 
-    // Use standard Connection to get balance if needed, as Position PDA is gone
     const getUserBalance = useCallback(async (mint: PublicKey) => {
         if (!wallet || !mint) return 0;
         const { getAssociatedTokenAddress } = await import('@solana/spl-token');
@@ -240,39 +286,43 @@ export const useDjinnProtocol = () => {
     const sellShares = useCallback(async (
         marketPda: PublicKey,
         side: 'yes' | 'no',
-        sharesAmount: number, // Raw number of shares (not lamports)
+        sharesAmount: number,
         yesMint: PublicKey,
         noMint: PublicKey,
-        minSolOut: number = 0 // Optional Slippage param
+        minSolOut: number = 0
     ) => {
         if (!program || !wallet) throw new Error("Wallet not connected");
 
         try {
-            // Need to convert float shares to raw u64 based on decimals?
-            // "Mint decimals = 9".
-            const sharesRaw = new BN(sharesAmount * 1_000_000_000); // 9 decimals
-            const minSolBN = new BN(minSolOut * web3.LAMPORTS_PER_SOL);
+            // Robust Rounding for BN
+            const sharesRaw = new BN(Math.floor(sharesAmount * 1_000_000_000));
+            const minSolBN = new BN(Math.floor(minSolOut * web3.LAMPORTS_PER_SOL));
 
-            const { getAssociatedTokenAddress } = await import('@solana/spl-token');
+            if (sharesRaw.isZero()) throw new Error("Amount too small to sell");
+
+            const { getAssociatedTokenAddress, createAssociatedTokenAccountIdempotentInstruction } = await import('@solana/spl-token');
             const userYesATA = await getAssociatedTokenAddress(yesMint, wallet.publicKey);
             const userNoATA = await getAssociatedTokenAddress(noMint, wallet.publicKey);
 
+            const transaction = new web3.Transaction();
+            // Ensure BOTH ATAs exist for the contract to validate them
+            transaction.add(
+                createAssociatedTokenAccountIdempotentInstruction(wallet.publicKey, userYesATA, wallet.publicKey, yesMint),
+                createAssociatedTokenAccountIdempotentInstruction(wallet.publicKey, userNoATA, wallet.publicKey, noMint)
+            );
+
             const sideArg = side === 'yes' ? { yes: {} } : { no: {} };
 
-            console.log(`Selling ${sharesAmount} shares (${sharesRaw.toString()}) of ${side}`);
+            console.log(`Selling ${sharesAmount} shares of ${side}`);
 
-            // Get Treasury
             const [protocolStatePda] = await PublicKey.findProgramAddress(
                 [Buffer.from("protocol")],
                 program.programId
             );
-            // Fetch state or fallback
-            // Note: If protocol isn't initialized, this might fail or we default. 
-            // Assuming initialized since we are betting.
             const stateAccount = await program.account.protocolState.fetchNullable(protocolStatePda);
-            const treasuryKey = stateAccount ? (stateAccount as any).treasury : new PublicKey("G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma");
+            const treasuryKey = stateAccount ? (stateAccount as any).treasury : MASTER_TREASURY;
 
-            const tx = await program.methods
+            const sellIx = await program.methods
                 .sellShares(sideArg, sharesRaw, minSolBN)
                 .accounts({
                     market: marketPda,
@@ -285,8 +335,12 @@ export const useDjinnProtocol = () => {
                     tokenProgram: TOKEN_PROGRAM_ID,
                     systemProgram: SystemProgram.programId,
                 })
-                .rpc();
+                .instruction();
 
+            transaction.add(sellIx);
+
+            // @ts-ignore
+            const tx = await program.provider.sendAndConfirm(transaction);
             console.log("✅ Shares sold:", tx);
             return tx;
         } catch (error) {

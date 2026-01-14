@@ -330,11 +330,45 @@ export default function MarketPage() {
 
             // Load User's Position from DB (to persist Sell button after refresh)
             if (publicKey) {
+                // 1. Try DB first
                 const userBets = await supabaseDb.getUserBets(publicKey.toBase58());
                 const myBet = userBets.find(b => b.market_slug === effectiveSlug && !b.claimed);
+
                 if (myBet) {
                     setMyHeldPosition(myBet.side);
                     setMyHeldAmount(`$${myBet.amount.toFixed(2)}`);
+                } else if (marketInfo && marketInfo.yes_token_mint && marketInfo.no_token_mint) {
+                    // 2. Fallback: Check On-Chain Balance directly (if DB is slow/indexer off)
+                    try {
+                        console.log("⚠️ DB missed position, checking on-chain...");
+                        const { getAssociatedTokenAddress } = await import('@solana/spl-token');
+                        const yesMint = new PublicKey(marketInfo.yes_token_mint);
+                        const noMint = new PublicKey(marketInfo.no_token_mint);
+
+                        const yesAta = await getAssociatedTokenAddress(yesMint, publicKey);
+                        const noAta = await getAssociatedTokenAddress(noMint, publicKey);
+
+                        // Fetch concurrently
+                        const [yesBal, noBal] = await Promise.all([
+                            connection.getTokenAccountBalance(yesAta).then(r => r.value.uiAmount || 0).catch(() => 0),
+                            connection.getTokenAccountBalance(noAta).then(r => r.value.uiAmount || 0).catch(() => 0)
+                        ]);
+
+                        if (yesBal > 0) {
+                            console.log("✅ Found YES balance on-chain:", yesBal);
+                            setMyHeldPosition('YES');
+                            // Approx Value: Shares * (Price/100) * SolPrice (Very rough, but enables UI)
+                            const val = yesBal * ((dbData?.live_price || 50) / 100) * solPrice;
+                            setMyHeldAmount(`$${val.toFixed(2)}`);
+                        } else if (noBal > 0) {
+                            console.log("✅ Found NO balance on-chain:", noBal);
+                            setMyHeldPosition('NO');
+                            const val = noBal * ((100 - (dbData?.live_price || 50)) / 100) * solPrice;
+                            setMyHeldAmount(`$${val.toFixed(2)}`);
+                        }
+                    } catch (e) {
+                        console.warn("On-chain check failed:", e);
+                    }
                 }
             }
         };

@@ -342,7 +342,14 @@ export default function Home() {
       const timeB = (b.createdAt || 0);
       return timeB - timeA; // Descending: Newest First
     }
-    // Trending: ordenar por volumen
+    // Trending: Order by "Freshness" (< 1 hour) then Volume
+    const isNewA = (Date.now() - (a.createdAt || 0)) < 3600000; // 1 hour
+    const isNewB = (Date.now() - (b.createdAt || 0)) < 3600000;
+
+    if (isNewA && !isNewB) return -1;
+    if (!isNewA && isNewB) return 1;
+
+    // Standard Volume Sort
     const volA = parseFloat(a.volume?.replace(/[$,M]/g, '') || '0');
     const volB = parseFloat(b.volume?.replace(/[$,M]/g, '') || '0');
     return volB - volA;
@@ -381,6 +388,12 @@ export default function Home() {
   const topMarket = useMemo(() => {
     if (markets.length === 0) return null;
     const sorted = [...markets].sort((a, b) => {
+      // Trending Boost for New Markets
+      const isNewA = (Date.now() - (a.createdAt || 0)) < 3600000;
+      const isNewB = (Date.now() - (b.createdAt || 0)) < 3600000;
+      if (isNewA && !isNewB) return -1;
+      if (!isNewA && isNewB) return 1;
+
       const volA = parseFloat(a.volume?.replace(/[$,MK]/g, '') || '0');
       const volB = parseFloat(b.volume?.replace(/[$,MK]/g, '') || '0');
       return volB - volA;

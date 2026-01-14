@@ -77,11 +77,6 @@
                     "isSigner": true
                 },
                 {
-                    "name": "protocolState",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
                     "name": "protocolTreasury",
                     "isMut": true,
                     "isSigner": false
@@ -282,6 +277,11 @@
                 },
                 {
                     "name": "tokenProgram",
+                    "isMut": false,
+                    "isSigner": false
+                },
+                {
+                    "name": "systemProgram",
                     "isMut": false,
                     "isSigner": false
                 }

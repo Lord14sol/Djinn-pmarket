@@ -44,18 +44,27 @@ export default function TheGreatPyramid({ topMarket }: TheGreatPyramidProps) {
 
                 <div className="relative z-10 flex flex-col md:flex-row items-stretch">
 
-                    {/* LEFT SIDE: Visual / Icon */}
-                    <div className="w-full md:w-[400px] bg-white/[0.02] border-r border-white/5 p-10 flex flex-col items-center justify-center relative overflow-hidden">
-                        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/40"></div>
+                    {/* LEFT SIDE: Visual / Icon - FULL BLEED HBO STYLE */}
+                    <div className="w-full md:w-[400px] bg-black border-r border-white/5 flex flex-col items-center justify-center relative overflow-hidden group">
 
-                        {/* Huge Icon */}
-                        <div className="relative z-10 w-40 h-40 md:w-48 md:h-48 rounded-[2rem] bg-gradient-to-br from-[#1F1F1F] to-black border border-white/10 flex items-center justify-center text-8xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] group-hover:scale-105 transition-transform duration-500 ease-out">
-                            {typeof topMarket.icon === 'string' && topMarket.icon.startsWith('data:image') ? (
-                                <img src={topMarket.icon} alt="" className="w-full h-full object-cover rounded-[2rem]" />
-                            ) : (
-                                <span className="drop-shadow-2xl filter block">{topMarket.icon || '🔮'}</span>
-                            )}
-                        </div>
+                        {typeof topMarket.icon === 'string' && topMarket.icon.startsWith('data:image') ? (
+                            <>
+                                {/* 1. Blurred Backdrop */}
+                                <img src={topMarket.icon} alt="" className="absolute inset-0 w-full h-full object-cover opacity-50 blur-2xl scale-125 pointer-events-none" />
+                                {/* 2. Main Image (No Crop) */}
+                                <div className="absolute inset-0 flex items-center justify-center p-8 z-10">
+                                    <img src={topMarket.icon} alt="" className="w-full h-full object-contain drop-shadow-[0_20px_50px_rgba(0,0,0,0.5)] group-hover:scale-105 transition-transform duration-700" />
+                                </div>
+                            </>
+                        ) : (
+                            /* Fallback for Emoji/Text Icons: Keep them centered but larger */
+                            <div className="relative z-10 w-full h-full flex items-center justify-center bg-gradient-to-br from-[#1F1F1F] to-black">
+                                <span className="text-9xl drop-shadow-2xl filter block scale-150">{topMarket.icon || '🔮'}</span>
+                            </div>
+                        )}
+
+                        {/* Overlay Gradient for Text Readability if needed */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent pointer-events-none"></div>
                     </div>
 
                     {/* RIGHT SIDE: Content */}

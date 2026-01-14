@@ -81,7 +81,7 @@ pub mod djinn_market {
         title: String,
         resolution_time: i64,
     ) -> Result<()> {
-        // Transfer creation fee (0.05 SOL)
+         // 1. Charge Creation Fee (0.05 SOL)
         anchor_lang::system_program::transfer(
             CpiContext::new(
                 ctx.accounts.system_program.to_account_info(),
@@ -92,6 +92,9 @@ pub mod djinn_market {
             ),
             MARKET_CREATION_FEE,
         )?;
+
+        // Verify Treasury Address Manual Check (Security)
+        require_keys_eq!(ctx.accounts.protocol_treasury.key(), G1_TREASURY, DjinnError::Unauthorized);
 
         let market = &mut ctx.accounts.market;
         market.creator = ctx.accounts.creator.key();
@@ -107,7 +110,6 @@ pub mod djinn_market {
         market.resolution_timestamp = 0;
 
         // VIRTUAL AMM INIT (x * y = k)
-        // x = 40 SOL. Price = 0.5. y = 80 Shares.
         market.virtual_sol_reserves = VIRTUAL_SOL_INIT;
         market.virtual_share_reserves = VIRTUAL_SOL_INIT * 2; 
 
@@ -131,7 +133,7 @@ pub mod djinn_market {
         execute_place_bet(ctx, side, amount_in, min_shares_out)
     }
 
-#[inline(never)]
+    #[inline(never)]
 pub fn execute_place_bet(
     ctx: Context<PlaceBet>,
     side: MarketOutcome, 
@@ -374,7 +376,7 @@ pub fn execute_place_bet(
             user_shares,
         )?;
 
-        // Transfer Checks
+        // MANUALLY TRANSFER SOL (PDA IS OWNER)
         **market.to_account_info().try_borrow_mut_lamports()? -= net_payout + fee_resolution;
         **ctx.accounts.user.to_account_info().try_borrow_mut_lamports()? += net_payout;
         **ctx.accounts.protocol_treasury.try_borrow_mut_lamports()? += fee_resolution;
@@ -474,6 +476,7 @@ pub fn execute_sell_shares(
         shares_amount,
     )?;
 
+    // MANUALLY TRANSFER SOL (PDA IS OWNER)
     **market.to_account_info().try_borrow_mut_lamports()? -= amount_sol_net;
     **ctx.accounts.user.to_account_info().try_borrow_mut_lamports()? += amount_sol_net;
 
@@ -567,11 +570,10 @@ pub struct CreateMarket<'info> {
 
     #[account(mut)]
     pub creator: Signer<'info>,
-    #[account(mut)]
-    pub protocol_state: Box<Account<'info, ProtocolState>>,
-    /// CHECK: Treasury
+    /// CHECK: Treasury verified by constraint inside function
     #[account(mut)]
     pub protocol_treasury: AccountInfo<'info>,
+
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
     pub rent: Sysvar<'info, Rent>,
@@ -652,6 +654,7 @@ pub struct ClaimReward<'info> {
     pub protocol_treasury: AccountInfo<'info>,
     
     pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
