@@ -109,7 +109,7 @@ export default function MarketPage() {
     const [userProfile, setUserProfile] = useState({ username: "Guest", avatarUrl: null as string | null });
     const [betAmount, setBetAmount] = useState('');
     const [selectedSide, setSelectedSide] = useState<'YES' | 'NO'>('YES');
-    const [bottomTab, setBottomTab] = useState<'ORDERBOOK' | 'COMMENTS'>('COMMENTS');
+    const [bottomTab, setBottomTab] = useState<'ORDERBOOK' | 'COMMENTS' | 'HOLDERS'>('COMMENTS');
     const [chartData, setChartData] = useState<any[]>([]); // For Single Outcome
     const [activityList, setActivityList] = useState<any[]>([]);
     const [holders, setHolders] = useState<any[]>([]);
@@ -118,9 +118,10 @@ export default function MarketPage() {
     const [selectedOutcomeName, setSelectedOutcomeName] = useState<string | null>(null);
 
     // My Position
-    const [myHeldPosition, setMyHeldPosition] = useState<'YES' | 'NO' | null>(null);
-    const [myHeldAmount, setMyHeldAmount] = useState<string | null>(null);
-    const [myHeldShares, setMyHeldShares] = useState<number>(0);
+    // My Position (Refactored for Simultaneous Holdings)
+    const [myYesShares, setMyYesShares] = useState<number>(0);
+    const [myNoShares, setMyNoShares] = useState<number>(0);
+    // Legacy support for display if needed, but we rely on shares mainly now
     const [lastOrder, setLastOrder] = useState<any>(null);
 
     // Toast & Share Modal State
@@ -331,50 +332,36 @@ export default function MarketPage() {
             setHolders(topHolders);
 
             // Load User's Position from DB (to persist Sell button after refresh)
-            if (publicKey) {
-                // 1. Try DB first
-                const userBets = await supabaseDb.getUserBets(publicKey.toBase58());
-                const myBet = userBets.find(b => b.market_slug === effectiveSlug && !b.claimed);
+            // 1. Try DB first (Optimized: Check all bets for this user in this market)
+            const userBets = await supabaseDb.getUserBets(publicKey.toBase58());
+            const myBetsForSlug = userBets.filter(b => b.market_slug === effectiveSlug && !b.claimed);
 
-                if (myBet) {
-                    setMyHeldPosition(myBet.side);
-                    setMyHeldAmount(`$${myBet.amount.toFixed(2)}`);
-                    setMyHeldShares(myBet.shares || 0);
-                } else if (marketInfo && marketInfo.yes_token_mint && marketInfo.no_token_mint) {
-                    // 2. Fallback: Check On-Chain Balance directly (if DB is slow/indexer off)
-                    try {
-                        console.log("⚠️ DB missed position, checking on-chain...");
-                        const { getAssociatedTokenAddress } = await import('@solana/spl-token');
-                        const yesMint = new PublicKey(marketInfo.yes_token_mint);
-                        const noMint = new PublicKey(marketInfo.no_token_mint);
+            // Aggregate from DB
+            const dbYes = myBetsForSlug.filter(b => b.side === 'YES').reduce((acc, b) => acc + (b.shares || 0), 0);
+            const dbNo = myBetsForSlug.filter(b => b.side === 'NO').reduce((acc, b) => acc + (b.shares || 0), 0);
 
-                        const yesAta = await getAssociatedTokenAddress(yesMint, publicKey);
-                        const noAta = await getAssociatedTokenAddress(noMint, publicKey);
+            setMyYesShares(dbYes);
+            setMyNoShares(dbNo);
 
-                        // Fetch concurrently
-                        const [yesBal, noBal] = await Promise.all([
-                            connection.getTokenAccountBalance(yesAta).then(r => r.value.uiAmount || 0).catch(() => 0),
-                            connection.getTokenAccountBalance(noAta).then(r => r.value.uiAmount || 0).catch(() => 0)
-                        ]);
+            // 2. On-Chain Fallback (Always run this if market is live to be accurate)
+            if (marketInfo && marketInfo.yes_token_mint && marketInfo.no_token_mint) {
+                try {
+                    const { getAssociatedTokenAddress } = await import('@solana/spl-token');
+                    const yesMint = new PublicKey(marketInfo.yes_token_mint);
+                    const noMint = new PublicKey(marketInfo.no_token_mint);
 
-                        if (yesBal > 0) {
-                            console.log("✅ Found YES balance on-chain:", yesBal);
-                            setMyHeldPosition('YES');
-                            // Approx Value: Shares * (Price/100) * SolPrice (Very rough, but enables UI)
-                            const val = yesBal * ((dbData?.live_price || 50) / 100) * solPrice;
-                            setMyHeldAmount(`$${val.toFixed(2)}`);
-                            setMyHeldShares(yesBal);
-                        } else if (noBal > 0) {
-                            console.log("✅ Found NO balance on-chain:", noBal);
-                            setMyHeldPosition('NO');
-                            const val = noBal * ((100 - (dbData?.live_price || 50)) / 100) * solPrice;
-                            setMyHeldAmount(`$${val.toFixed(2)}`);
-                            setMyHeldShares(noBal);
-                        }
-                    } catch (e) {
-                        console.warn("On-chain check failed:", e);
-                    }
-                }
+                    const yesAta = await getAssociatedTokenAddress(yesMint, publicKey);
+                    const noAta = await getAssociatedTokenAddress(noMint, publicKey);
+
+                    const [yesBal, noBal] = await Promise.all([
+                        connection.getTokenAccountBalance(yesAta).then(r => r.value.uiAmount || 0).catch(() => 0),
+                        connection.getTokenAccountBalance(noAta).then(r => r.value.uiAmount || 0).catch(() => 0)
+                    ]);
+
+                    if (yesBal > 0) setMyYesShares(yesBal);
+                    if (noBal > 0) setMyNoShares(noBal);
+
+                } catch (e) { console.warn("On-chain check failed:", e); }
             }
         };
 
@@ -535,10 +522,13 @@ export default function MarketPage() {
 
             // 5. Update UI State
             setSolBalance(prev => prev - amountNum);
-            setMyHeldPosition(selectedSide);
-            setMyHeldAmount(`$${usdValueInTrading.toFixed(2)}`);
-            // Add new shares to existing shares if side matches, or reset if not (though logic prevents cross-betting usually)
-            setMyHeldShares(prev => (selectedSide === myHeldPosition ? prev : 0) + sim.sharesReceived);
+
+            // Update specific share count
+            if (selectedSide === 'YES') {
+                setMyYesShares(prev => prev + sim.sharesReceived);
+            } else {
+                setMyNoShares(prev => prev + sim.sharesReceived);
+            }
 
             setLastBetDetails({
                 outcomeName: selectedOutcomeName || staticMarketInfo.title,
@@ -588,8 +578,12 @@ export default function MarketPage() {
             await handlePlaceBet();
         } else {
             // --- SELL LOGIC ---
-            if (myHeldPosition !== selectedSide) {
+            const availableShares = selectedSide === 'YES' ? myYesShares : myNoShares;
+            if (availableShares <= 0) {
                 return alert(`You don't hold any ${selectedSide} PREDICTIONS to sell!`);
+            }
+            if (parseFloat(betAmount) > availableShares) {
+                return alert(`Insufficient shares! You only have ${availableShares.toFixed(2)}.`);
             }
 
             setIsPending(true);
@@ -665,11 +659,13 @@ export default function MarketPage() {
 
                 // 4. Update UI Local State
                 setSolBalance(prev => prev + netSolReturn);
-                // If sold full amount, clear position (Approximation)
-                // Ideally we check if sharesToSell >= myHeldAmount (parsed). 
-                // For MVP, if they use 'Max', we clear it. Since we don't know if it was Max here easily without parsing,
-                // we'll just set it to null if it looks like a full sell or refresh from chain.
-                // Let's trigger a refresh.
+
+                // Update specific share count
+                if (selectedSide === 'YES') {
+                    setMyYesShares(prev => Math.max(0, prev - sharesToSell));
+                } else {
+                    setMyNoShares(prev => Math.max(0, prev - sharesToSell));
+                }
 
                 setLastBetDetails({
                     outcomeName: selectedOutcomeName || staticMarketInfo.title,
@@ -768,14 +764,14 @@ export default function MarketPage() {
                                             <span className="text-5xl font-black tracking-tighter transition-colors" style={{ color: chartColor }}>{livePrice.toFixed(1)}%</span>
                                             <span className="text-xl font-bold text-gray-500">chance</span>
                                         </div>
-                                        {myHeldPosition && (
+                                        {(myYesShares > 0 || myNoShares > 0) && (
                                             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-[#10B981]/20 to-[#10B981]/10 border border-[#10B981]/30">
                                                 <div className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
                                                 <span className="text-[10px] font-black uppercase text-[#10B981] tracking-wide">Your Position Active</span>
                                             </div>
                                         )}
                                     </div>
-                                    <MarketChart data={chartData} color={chartColor} hasPosition={!!myHeldPosition} />
+                                    <MarketChart data={chartData} color={chartColor} hasPosition={myYesShares > 0 || myNoShares > 0} />
                                 </>
                             )}
                         </div>
@@ -785,6 +781,7 @@ export default function MarketPage() {
                             <div className="flex items-center gap-6 mb-6 border-b border-white/5 pb-2">
                                 <TabButton label="Comments" icon={<Activity size={14} />} active={bottomTab === 'COMMENTS'} onClick={() => setBottomTab('COMMENTS')} />
                                 <TabButton label="Order Book" icon={<Activity size={14} />} active={bottomTab === 'ORDERBOOK'} onClick={() => setBottomTab('ORDERBOOK')} />
+                                <TabButton label="Share Holders" icon={<Users size={14} />} active={bottomTab === 'HOLDERS'} onClick={() => setBottomTab('HOLDERS')} />
                             </div>
 
                             {bottomTab === 'COMMENTS' && (
@@ -792,48 +789,93 @@ export default function MarketPage() {
                                     marketSlug={effectiveSlug}
                                     publicKey={publicKey ? publicKey.toBase58() : null}
                                     userProfile={userProfile}
-                                    myHeldPosition={myHeldPosition}
-                                    myHeldAmount={myHeldAmount}
                                 />
                             )}
 
                             {bottomTab === 'ORDERBOOK' && (
                                 <div className="bg-[#0E0E0E] rounded-[2rem] border border-white/5 overflow-hidden">
-                                    <div className="grid grid-cols-4 px-6 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500 border-b border-white/5">
-                                        <span>Trader</span>
-                                        <span className="text-center">Side</span>
-                                        <span className="text-right">Value</span>
-                                        <span className="text-right">Time</span>
+                                    <div className="grid grid-cols-5 px-6 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500 border-b border-white/5">
+                                        <span className="col-span-1">Trader</span>
+                                        <span className="text-center col-span-1">Side</span>
+                                        <span className="text-center col-span-1">Shares</span>
+                                        <span className="text-right col-span-1">Value</span>
+                                        <span className="text-right col-span-1">Time</span>
                                     </div>
                                     <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
                                         {activityList.length === 0 ? (
                                             <div className="p-8 text-center text-gray-600 italic">No orders yet</div>
                                         ) : (
                                             activityList.map((act, i) => (
-                                                <div key={i} className="grid grid-cols-4 items-center px-6 py-4 border-b border-white/5 hover:bg-white/5 transition-colors group">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-8 h-8 rounded-full bg-[#1A1A1A] flex items-center justify-center border border-white/10 overflow-hidden">
+                                                <div key={i} className="grid grid-cols-5 items-center px-6 py-4 border-b border-white/5 hover:bg-white/5 transition-colors group">
+                                                    <div className="flex items-center gap-3 col-span-1">
+                                                        <div className="w-8 h-8 rounded-full bg-[#1A1A1A] flex items-center justify-center border border-white/10 overflow-hidden shrink-0">
                                                             {act.avatar_url ? <img src={act.avatar_url} className="w-full h-full object-cover" /> : <span className="text-sm">🧞</span>}
                                                         </div>
-                                                        <div className="flex flex-col">
+                                                        <div className="flex flex-col overflow-hidden">
                                                             <div className="flex items-center gap-1 cursor-pointer" onClick={() => navigator.clipboard.writeText(act.wallet_address)}>
-                                                                <span className="text-xs font-bold text-white group-hover:text-[#F492B7] transition-colors font-mono">
-                                                                    {act.username || `${act.wallet_address.slice(0, 4)}...${act.wallet_address.slice(-4)}`}
+                                                                <span className="text-xs font-bold text-white group-hover:text-[#F492B7] transition-colors font-mono truncate">
+                                                                    {act.username || `${act.wallet_address.slice(0, 4)}...`}
                                                                 </span>
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    <div className="text-center">
-                                                        <span className={`text-[10px] font-black uppercase px-2 py-1 rounded ${(act.order_type === 'BUY' || !act.order_type) ? (act.action === 'YES' ? 'bg-[#10B981]/20 text-[#10B981]' : 'bg-red-500/20 text-red-500') : 'bg-white/10 text-gray-400'}`}>
+                                                    <div className="text-center col-span-1">
+                                                        <span className={`text-[10px] font-black uppercase px-2 py-1 rounded whitespace-nowrap ${(act.order_type === 'BUY' || !act.order_type) ? (act.action === 'YES' ? 'bg-[#10B981]/20 text-[#10B981]' : 'bg-red-500/20 text-red-500') : 'bg-white/10 text-gray-400'}`}>
                                                             {act.order_type || 'BUY'} {act.action}
                                                         </span>
                                                     </div>
-                                                    <div className="text-right">
+                                                    <div className="text-center col-span-1">
+                                                        <span className="text-xs font-mono text-gray-300">{act.shares?.toFixed(2) || '0.00'}</span>
+                                                    </div>
+                                                    <div className="text-right col-span-1">
                                                         <div className="text-sm font-black text-white">${act.amount?.toFixed(2)}</div>
                                                         <div className="text-[10px] font-mono text-gray-600">{act.sol_amount?.toFixed(3)} SOL</div>
                                                     </div>
-                                                    <div className="text-right text-[10px] font-mono text-gray-500">
+                                                    <div className="text-right text-[10px] font-mono text-gray-500 col-span-1">
                                                         {timeAgo(act.created_at)}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {bottomTab === 'HOLDERS' && (
+                                <div className="bg-[#0E0E0E] rounded-[2rem] border border-white/5 overflow-hidden">
+                                    <div className="grid grid-cols-4 px-6 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500 border-b border-white/5">
+                                        <span>Rank</span>
+                                        <span>Trader</span>
+                                        <span className="text-center">Side</span>
+                                        <span className="text-right">Shares Owned</span>
+                                    </div>
+                                    <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
+                                        {holders.length === 0 ? (
+                                            <div className="p-8 text-center text-gray-600 italic">No holders yet</div>
+                                        ) : (
+                                            holders.map((h, i) => (
+                                                <div key={i} className="grid grid-cols-4 items-center px-6 py-4 border-b border-white/5 hover:bg-white/5 transition-colors group">
+                                                    <div className="flex items-center gap-2">
+                                                        {h.rank === 1 && <span className="text-lg">🥇</span>}
+                                                        {h.rank === 2 && <span className="text-lg">🥈</span>}
+                                                        {h.rank === 3 && <span className="text-lg">🥉</span>}
+                                                        {h.rank > 3 && <span className="text-sm font-bold text-gray-600 w-6 text-center">#{h.rank}</span>}
+                                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-full bg-[#1A1A1A] flex items-center justify-center border border-white/10 overflow-hidden shrink-0">
+                                                            {h.avatar ? <img src={h.avatar} className="w-full h-full object-cover" /> : <span className="text-sm">🧞</span>}
+                                                        </div>
+                                                        <span className="text-xs font-bold text-white group-hover:text-[#F492B7] transition-colors font-mono truncate">
+                                                            {h.name || `${h.wallet_address.slice(0, 4)}...`}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-center">
+                                                        <span className={`text-[10px] font-black uppercase px-2 py-1 rounded ${h.side === 'YES' ? 'bg-[#10B981]/20 text-[#10B981]' : 'bg-red-500/20 text-red-500'}`}>
+                                                            {h.side || 'YES'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <span className="text-sm font-bold text-white font-mono">{h.shares?.toFixed(2) || '0.00'}</span>
                                                     </div>
                                                 </div>
                                             ))
@@ -924,40 +966,55 @@ export default function MarketPage() {
                                 </div>
                                 {/* POTENTIAL PAYOUT DISPLAY */}
                                 {tradeMode === 'BUY' && amountNum > 0 && (
-                                    <div className="mt-2 flex justify-between items-center px-2 animate-in fade-in slide-in-from-top-1">
-                                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Potential Payout</span>
-                                        <div className="text-right">
-                                            <span className="block text-sm font-black text-[#10B981]">{potentialSolPayout.toFixed(4)} SOL</span>
-                                            <span className="text-[10px] font-bold text-[#10B981] opacity-75">+{potentialRoi.toFixed(0)}% ROI</span>
+                                    <div className="mt-3 flex justify-between items-end px-2 animate-in fade-in slide-in-from-top-1 bg-white/5 p-3 rounded-xl border border-white/5">
+                                        <div className="flex flex-col gap-1">
+                                            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Est. Shares</span>
+                                            <span className="text-lg font-black text-[#10B981] leading-none">{estimatedShares.toFixed(2)}</span>
+                                        </div>
+                                        <div className="text-right flex flex-col gap-1">
+                                            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Potential Payout</span>
+                                            <div className="flex flex-col items-end">
+                                                <span className="block text-2xl font-black text-[#10B981] leading-none mb-1">{potentialSolPayout.toFixed(4)} <span className="text-sm">SOL</span></span>
+                                                <span className="text-sm font-bold text-[#10B981] bg-[#10B981]/10 px-2 py-0.5 rounded-lg">+{potentialRoi.toFixed(0)}% ROI</span>
+                                            </div>
                                         </div>
                                     </div>
                                 )}
                             </div>
 
                             {/* Percentage Selector for Sell Mode */}
-                            {tradeMode === 'SELL' && myHeldPosition === selectedSide && (
-                                <div className="mb-4">
-                                    <div className="flex justify-between items-center bg-white/5 rounded-lg p-1">
-                                        {[25, 50, 75, 100].map((pct) => (
-                                            <button
-                                                key={pct}
-                                                onClick={() => {
-                                                    const shareAmount = myHeldShares * (pct / 100);
-                                                    // Allow decimals, up to 6 places to avoid float issues but keep precision
-                                                    const val = parseFloat(shareAmount.toFixed(6));
-                                                    setBetAmount(val.toString());
-                                                }}
-                                                className="flex-1 py-1 text-[10px] font-bold text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors"
-                                            >
-                                                {pct}%
-                                            </button>
-                                        ))}
+                            {tradeMode === 'SELL' && (
+                                (selectedSide === 'YES' && myYesShares > 0) || (selectedSide === 'NO' && myNoShares > 0)
+                            ) && (
+                                    <div className="mb-4">
+                                        <div className="flex justify-between items-center bg-white/5 rounded-lg p-1">
+                                            {[25, 50, 75, 100].map((pct) => (
+                                                <button
+                                                    key={pct}
+                                                    onClick={() => {
+                                                        const available = selectedSide === 'YES' ? myYesShares : myNoShares;
+                                                        let val;
+                                                        if (pct === 100) {
+                                                            // For 100%, use exact available but floor deeply to avoid any float expansion
+                                                            // subtracting a tiny epsilon to ensure on-chain match
+                                                            val = Math.floor(available * 1000000) / 1000000;
+                                                        } else {
+                                                            const shareAmount = available * (pct / 100);
+                                                            val = parseFloat(shareAmount.toFixed(6));
+                                                        }
+                                                        setBetAmount(val.toString());
+                                                    }}
+                                                    className="flex-1 py-1 text-[10px] font-bold text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors"
+                                                >
+                                                    {pct}%
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <div className="text-right mt-1">
+                                            <span className="text-[9px] text-gray-600 font-mono">Available: {selectedSide === 'YES' ? myYesShares : myNoShares} shares</span>
+                                        </div>
                                     </div>
-                                    <div className="text-right mt-1">
-                                        <span className="text-[9px] text-gray-600 font-mono">Available: {Math.floor(myHeldShares)} shares</span>
-                                    </div>
-                                </div>
-                            )}
+                                )}
 
                             {/* ACTION BUTTON */}
                             <button
