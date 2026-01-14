@@ -120,6 +120,7 @@ export default function MarketPage() {
     // My Position
     const [myHeldPosition, setMyHeldPosition] = useState<'YES' | 'NO' | null>(null);
     const [myHeldAmount, setMyHeldAmount] = useState<string | null>(null);
+    const [myHeldShares, setMyHeldShares] = useState<number>(0);
     const [lastOrder, setLastOrder] = useState<any>(null);
 
     // Toast & Share Modal State
@@ -133,6 +134,7 @@ export default function MarketPage() {
         marketTitle: string;
         probability: number;
         username: string;
+        type: 'BUY' | 'SELL';
     } | null>(null);
 
     const [marketAccount, setMarketAccount] = useState<any>(null);
@@ -337,6 +339,7 @@ export default function MarketPage() {
                 if (myBet) {
                     setMyHeldPosition(myBet.side);
                     setMyHeldAmount(`$${myBet.amount.toFixed(2)}`);
+                    setMyHeldShares(myBet.shares || 0);
                 } else if (marketInfo && marketInfo.yes_token_mint && marketInfo.no_token_mint) {
                     // 2. Fallback: Check On-Chain Balance directly (if DB is slow/indexer off)
                     try {
@@ -360,11 +363,13 @@ export default function MarketPage() {
                             // Approx Value: Shares * (Price/100) * SolPrice (Very rough, but enables UI)
                             const val = yesBal * ((dbData?.live_price || 50) / 100) * solPrice;
                             setMyHeldAmount(`$${val.toFixed(2)}`);
+                            setMyHeldShares(yesBal);
                         } else if (noBal > 0) {
                             console.log("✅ Found NO balance on-chain:", noBal);
                             setMyHeldPosition('NO');
                             const val = noBal * ((100 - (dbData?.live_price || 50)) / 100) * solPrice;
                             setMyHeldAmount(`$${val.toFixed(2)}`);
+                            setMyHeldShares(noBal);
                         }
                     } catch (e) {
                         console.warn("On-chain check failed:", e);
@@ -414,6 +419,13 @@ export default function MarketPage() {
 
     const potentialProfit = estimatedShares - usdValueInTrading;
     const chartColor = selectedSide === 'YES' ? '#10b981' : '#EF4444';
+
+    // Potential Payout Calculation (SOL)
+    // If I bet 1 SOL at 50% odds, I get ~2 SOL payout. Payout = Amount / Probability.
+    // Probability is 0-1 (e.g. 0.5).
+    const probabilityDecimal = Math.max(0.01, currentPriceForSide / 100);
+    const potentialSolPayout = amountNum > 0 ? (amountNum / probabilityDecimal) : 0;
+    const potentialRoi = amountNum > 0 ? ((potentialSolPayout - amountNum) / amountNum) * 100 : 0;
 
     // Auto-refresh SOL Price every 30s
     useEffect(() => {
@@ -523,14 +535,22 @@ export default function MarketPage() {
 
             // 5. Update UI State
             setSolBalance(prev => prev - amountNum);
+            setMyHeldPosition(selectedSide);
+            setMyHeldAmount(`$${usdValueInTrading.toFixed(2)}`);
+            // Add new shares to existing shares if side matches, or reset if not (though logic prevents cross-betting usually)
+            setMyHeldShares(prev => (selectedSide === myHeldPosition ? prev : 0) + sim.sharesReceived);
+
             setLastBetDetails({
                 outcomeName: selectedOutcomeName || staticMarketInfo.title,
                 side: selectedSide,
                 solAmount: amountNum,
+                solAmount: amountNum,
                 usdAmount: usdValueInTrading,
                 marketTitle: staticMarketInfo.title,
                 probability: livePrice,
-                username: userProfile.username
+                username: userProfile.username,
+                type: 'BUY',
+                imageUrl: marketAccount?.icon || (typeof staticMarketInfo.icon === 'string' && staticMarketInfo.icon.startsWith('http') ? staticMarketInfo.icon : undefined)
             });
             setShowPurchaseToast(true);
             setIsSuccess(true);
@@ -550,30 +570,164 @@ export default function MarketPage() {
     };
 
 
+    // --- NEW STATE FOR TRADING ---
+    const [tradeMode, setTradeMode] = useState<'BUY' | 'SELL'>('BUY');
+
+    // ... (Keep existing calculations)
+    // Dynamic Input Label & Calculation
+    const inputLabel = tradeMode === 'BUY' ? 'USD' : 'Shares';
+    const inputSubtext = tradeMode === 'BUY' ? '≈SOL' : 'Qty';
+
+    // Handler to toggle logic
+    const handleTrade = async () => {
+        console.log(`🖱️ ${tradeMode} Button Clicked.`);
+        if (!publicKey) return alert("Please connect wallet");
+        if (parseFloat(betAmount) <= 0) return alert("Enter an amount");
+
+        if (tradeMode === 'BUY') {
+            await handlePlaceBet();
+        } else {
+            // --- SELL LOGIC ---
+            if (myHeldPosition !== selectedSide) {
+                return alert(`You don't hold any ${selectedSide} PREDICTIONS to sell!`);
+            }
+
+            setIsPending(true);
+            try {
+                const isRealMarket = marketAccount?.market_pda && !marketAccount.market_pda.startsWith('local_');
+                const sharesToSell = parseFloat(betAmount);
+
+                // Estimate Value & Fee
+                const currentPrice = selectedSide === 'YES' ? livePrice : (100 - livePrice); // Probability %
+                // Assuming 1 Share ~= 1 Risk Unit. Value ~= Shares * Probability.
+                // In this simplified AMM, we just estimate SOL return.
+                const estimatedSolReturn = sharesToSell * (currentPrice / 100);
+                const feeParam = 0.025; // 2.5%
+                const feeAmount = estimatedSolReturn * feeParam;
+                const netSolReturn = estimatedSolReturn - feeAmount;
+
+                if (isRealMarket) {
+                    console.log("🔗 Executing On-Chain Sell...");
+                    const tx = await sellShares(
+                        new PublicKey(marketAccount.market_pda),
+                        selectedSide.toLowerCase() as 'yes' | 'no',
+                        sharesToSell,
+                        new PublicKey(marketAccount.yes_token_mint),
+                        new PublicKey(marketAccount.no_token_mint),
+                        0 // minSolOut (Slippage)
+                    );
+                    console.log("✅ Sell TX:", tx);
+                } else {
+                    console.log("🔮 Simulated Sell");
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+
+                // --- COMMON UPDATES ---
+                // 1. Calculate Sell Impact (Negative)
+                // Impact Logic: Buying X amount moves price Y. Selling X should move price -Y.
+                const usdValue = sharesToSell * (currentPrice / 100) * solPrice;
+                const virtualShareReserves = INITIAL_VIRTUAL_SOL / (currentPrice / 100);
+                const sim = simulateBuy(estimatedSolReturn, {
+                    virtualSolReserves: INITIAL_VIRTUAL_SOL,
+                    virtualShareReserves: virtualShareReserves,
+                    realSolReserves: 0,
+                    totalSharesMinted: 0
+                });
+
+                // For Sell, we INVERT the impact.
+                // If I Sell YES -> Price YES Goes DOWN. Impact is Negative.
+                // If I Sell NO -> Price NO Goes DOWN -> Price YES Goes UP. Impact is Positive.
+                const impactMagnitude = sim.priceImpact;
+                const impactSigned = selectedSide === 'YES' ? -impactMagnitude : impactMagnitude;
+
+                // 2. Update Price
+                const newPrice = updateExectutionPrices(effectiveSlug, impactSigned);
+                await supabaseDb.updateMarketPrice(effectiveSlug, newPrice, -usdValue);
+
+                // 3. Log Activity
+                const profile = await supabaseDb.getProfile(publicKey.toBase58());
+                const sellActivity = {
+                    wallet_address: publicKey.toBase58(),
+                    username: profile?.username || userProfile.username,
+                    avatar_url: profile?.avatar_url || userProfile.avatarUrl,
+                    action: selectedSide,
+                    order_type: 'SELL',
+                    amount: usdValue,
+                    sol_amount: estimatedSolReturn,
+                    shares: sharesToSell,
+                    market_title: staticMarketInfo.title,
+                    market_slug: effectiveSlug,
+                    created_at: new Date().toISOString()
+                };
+                // @ts-ignore
+                await supabaseDb.createActivity(sellActivity);
+                setActivityList(prev => [sellActivity, ...prev]);
+
+                // 4. Update UI Local State
+                setSolBalance(prev => prev + netSolReturn);
+                // If sold full amount, clear position (Approximation)
+                // Ideally we check if sharesToSell >= myHeldAmount (parsed). 
+                // For MVP, if they use 'Max', we clear it. Since we don't know if it was Max here easily without parsing,
+                // we'll just set it to null if it looks like a full sell or refresh from chain.
+                // Let's trigger a refresh.
+
+                setLastBetDetails({
+                    outcomeName: selectedOutcomeName || staticMarketInfo.title,
+                    side: selectedSide,
+                    solAmount: netSolReturn,
+                    usdAmount: usdValue,
+                    marketTitle: staticMarketInfo.title,
+                    probability: livePrice,
+                    username: userProfile.username,
+                    type: 'SELL',
+                    imageUrl: marketAccount?.icon || (typeof staticMarketInfo.icon === 'string' && staticMarketInfo.icon.startsWith('http') ? staticMarketInfo.icon : undefined)
+                });
+
+                setShowPurchaseToast(true);
+                setIsSuccess(true);
+                setBetAmount('');
+
+                // Trigger Refreshes
+                window.dispatchEvent(new Event('bet-updated'));
+
+            } catch (error: any) {
+                console.error("Sell Error:", error);
+                alert(`Sell Failed: ${error.message}`);
+            } finally {
+                setIsPending(false);
+                setTimeout(() => setIsSuccess(false), 3000);
+            }
+        }
+    };
+
+    // Replaces handlePlaceBet used in render
+    // ...
+
     return (
         <div className="min-h-screen bg-black text-white font-sans pb-32">
+            {/* ... Navbar & Header ... */}
             <Navbar />
             <div className="max-w-7xl mx-auto pt-32 px-4 md:px-6 relative z-10">
 
                 {/* HEADER */}
                 <div className="flex flex-col md:flex-row items-center gap-6 mb-10">
                     <div className="w-20 h-20 md:w-24 md:h-24 bg-[#0E0E0E] rounded-2xl border border-white/10 flex items-center justify-center text-5xl shadow-2xl overflow-hidden">
-                        {typeof staticMarketInfo.icon === 'string' && staticMarketInfo.icon.startsWith('data:') ? <img src={staticMarketInfo.icon} className="w-full h-full object-cover" /> : staticMarketInfo.icon}
+                        {(marketAccount?.icon || (typeof staticMarketInfo.icon === 'string' && (staticMarketInfo.icon.startsWith('http') || staticMarketInfo.icon.startsWith('data:')))) ?
+                            <img src={marketAccount?.icon || staticMarketInfo.icon} className="w-full h-full object-cover" />
+                            : staticMarketInfo.icon}
                     </div>
                     <div className="flex-1 text-center md:text-left">
-                        <h1 className="text-2xl md:text-4xl font-black tracking-tight mb-2 leading-tight">{staticMarketInfo.title}</h1>
-                        <p className="text-gray-500 text-sm font-medium">{staticMarketInfo.description}</p>
+                        <h1 className="text-2xl md:text-4xl font-black tracking-tight mb-2 leading-tight">{marketAccount?.title || staticMarketInfo.title}</h1>
+                        <p className="text-gray-500 text-sm font-medium">{marketAccount?.description || staticMarketInfo.description}</p>
                     </div>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                    {/* LEFT COLUMN */}
+                    {/* LEFT COLUMN (Keep as is) */}
                     <div className="lg:col-span-8 space-y-6">
-
                         {/* CHART CARD */}
                         <div className="bg-[#0A0A0A] border border-white/10 rounded-[2rem] p-6 shadow-2xl relative overflow-hidden min-h-[400px]">
                             {isMultiOutcome ? (
-                                /* Multi-outcome: Chart first, then outcomes list */
                                 <>
                                     <div className="flex justify-between items-start mb-4">
                                         <div className="flex items-center gap-3">
@@ -588,18 +742,15 @@ export default function MarketPage() {
                                         )}
                                     </div>
 
-                                    {/* Multi-line chart with all outcomes */}
                                     <MultiLineChart
                                         outcomes={chartSeries.map(s => ({
                                             ...s,
-                                            // Pass current probability for legend styling
                                             chance: marketOutcomes.find(o => o.title === s.name)?.chance || 0
                                         }))}
                                         hasPosition={!!myHeldPosition}
                                         selectedOutcome={selectedOutcomeName}
                                     />
 
-                                    {/* Outcomes list BELOW the chart */}
                                     <div className="mt-6 pt-6 border-t border-white/10">
                                         <h3 className="text-sm font-black uppercase text-gray-500 mb-4 tracking-wider">Select an outcome to trade</h3>
                                         <OutcomeList
@@ -611,7 +762,6 @@ export default function MarketPage() {
                                     </div>
                                 </>
                             ) : (
-                                /* Single outcome chart */
                                 <>
                                     <div className="flex justify-between items-start mb-2">
                                         <div className="flex items-baseline gap-3">
@@ -630,7 +780,7 @@ export default function MarketPage() {
                             )}
                         </div>
 
-                        {/* TABS & CONTENT */}
+                        {/* TABS & CONTENT (Keep as is) */}
                         <div>
                             <div className="flex items-center gap-6 mb-6 border-b border-white/5 pb-2">
                                 <TabButton label="Comments" icon={<Activity size={14} />} active={bottomTab === 'COMMENTS'} onClick={() => setBottomTab('COMMENTS')} />
@@ -661,14 +811,9 @@ export default function MarketPage() {
                                         ) : (
                                             activityList.map((act, i) => (
                                                 <div key={i} className="grid grid-cols-4 items-center px-6 py-4 border-b border-white/5 hover:bg-white/5 transition-colors group">
-                                                    {/* Trader */}
                                                     <div className="flex items-center gap-3">
                                                         <div className="w-8 h-8 rounded-full bg-[#1A1A1A] flex items-center justify-center border border-white/10 overflow-hidden">
-                                                            {act.avatar_url ? (
-                                                                <img src={act.avatar_url} className="w-full h-full object-cover" alt="User" />
-                                                            ) : (
-                                                                <span className="text-sm">🧞</span>
-                                                            )}
+                                                            {act.avatar_url ? <img src={act.avatar_url} className="w-full h-full object-cover" /> : <span className="text-sm">🧞</span>}
                                                         </div>
                                                         <div className="flex flex-col">
                                                             <div className="flex items-center gap-1 cursor-pointer" onClick={() => navigator.clipboard.writeText(act.wallet_address)}>
@@ -678,24 +823,15 @@ export default function MarketPage() {
                                                             </div>
                                                         </div>
                                                     </div>
-
-                                                    {/* Side / Type */}
                                                     <div className="text-center">
-                                                        <span className={`text-[10px] font-black uppercase px-2 py-1 rounded ${(act.order_type === 'BUY' || !act.order_type) // Backwards compat
-                                                            ? (act.action === 'YES' ? 'bg-[#10B981]/20 text-[#10B981]' : 'bg-red-500/20 text-red-500')
-                                                            : 'bg-white/10 text-gray-400' // SELL
-                                                            }`}>
+                                                        <span className={`text-[10px] font-black uppercase px-2 py-1 rounded ${(act.order_type === 'BUY' || !act.order_type) ? (act.action === 'YES' ? 'bg-[#10B981]/20 text-[#10B981]' : 'bg-red-500/20 text-red-500') : 'bg-white/10 text-gray-400'}`}>
                                                             {act.order_type || 'BUY'} {act.action}
                                                         </span>
                                                     </div>
-
-                                                    {/* Value */}
                                                     <div className="text-right">
                                                         <div className="text-sm font-black text-white">${act.amount?.toFixed(2)}</div>
                                                         <div className="text-[10px] font-mono text-gray-600">{act.sol_amount?.toFixed(3)} SOL</div>
                                                     </div>
-
-                                                    {/* Time */}
                                                     <div className="text-right text-[10px] font-mono text-gray-500">
                                                         {timeAgo(act.created_at)}
                                                     </div>
@@ -708,11 +844,9 @@ export default function MarketPage() {
                         </div>
                     </div>
 
-                    {/* RIGHT COLUMN: TRADING & ORDER BOOK */}
+                    {/* RIGHT COLUMN: TRADING */}
                     <div className="lg:col-span-4 space-y-6">
-                        {/* TRADING PANEL */}
                         <div className="bg-[#0E0E0E] border border-white/10 rounded-[2.5rem] p-6 shadow-2xl">
-                            {/* Header with selected outcome indicator */}
                             <div className="flex justify-between mb-4 items-center">
                                 <h3 className="text-[10px] font-black uppercase tracking-widest text-white opacity-40">Trade</h3>
                                 <div className="flex items-center gap-3">
@@ -726,7 +860,23 @@ export default function MarketPage() {
                                 </div>
                             </div>
 
-                            {/* YES/NO Buttons - show outcome name in multi-outcome mode */}
+                            {/* NEW: BUY / SELL TOGGLE */}
+                            <div className="mb-6 p-1 bg-white/5 rounded-xl flex">
+                                <button
+                                    onClick={() => setTradeMode('BUY')}
+                                    className={`flex-1 py-3 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${tradeMode === 'BUY' ? 'bg-[#10B981] text-black shadow-lg shadow-[#10B981]/20' : 'text-gray-500 hover:text-white'}`}
+                                >
+                                    Buy
+                                </button>
+                                <button
+                                    onClick={() => setTradeMode('SELL')}
+                                    className={`flex-1 py-3 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${tradeMode === 'SELL' ? 'bg-[#EF4444] text-white shadow-lg shadow-[#EF4444]/20' : 'text-gray-500 hover:text-white'}`}
+                                >
+                                    Sell
+                                </button>
+                            </div>
+
+                            {/* YES/NO Buttons */}
                             {isMultiOutcome ? (
                                 <div className="mb-6">
                                     <div className="bg-[#0E0E0E] rounded-2xl border border-white/10 p-4 flex items-center justify-between group hover:border-[#F492B7]/50 transition-colors">
@@ -745,254 +895,98 @@ export default function MarketPage() {
                             ) : (
                                 <div className="grid grid-cols-2 gap-3 mb-6">
                                     <button onClick={() => setSelectedSide('YES')} className={`p-4 rounded-2xl border transition-all ${selectedSide === 'YES' ? 'bg-emerald-500/10 border-emerald-500' : 'bg-white/5 border-white/5'}`}>
-                                        <span className={`block text-xs font-black uppercase mb-1 ${selectedSide === 'YES' ? 'text-emerald-500' : 'text-gray-500'}`}>
-                                            YES
-                                        </span>
+                                        <span className={`block text-xs font-black uppercase mb-1 ${selectedSide === 'YES' ? 'text-emerald-500' : 'text-gray-500'}`}>YES</span>
                                         <span className="block text-2xl font-black text-white">{livePrice.toFixed(0)}¢</span>
                                     </button>
                                     <button onClick={() => setSelectedSide('NO')} className={`p-4 rounded-2xl border transition-all ${selectedSide === 'NO' ? 'bg-red-500/10 border-red-500' : 'bg-white/5 border-white/5'}`}>
-                                        <span className={`block text-xs font-black uppercase mb-1 ${selectedSide === 'NO' ? 'text-red-500' : 'text-gray-500'}`}>
-                                            NO
-                                        </span>
+                                        <span className={`block text-xs font-black uppercase mb-1 ${selectedSide === 'NO' ? 'text-red-500' : 'text-gray-500'}`}>NO</span>
                                         <span className="block text-2xl font-black text-white">{(100 - livePrice).toFixed(0)}¢</span>
                                     </button>
                                 </div>
                             )}
 
+                            {/* INPUT FIELD */}
                             <div className="mb-4 relative group">
-                                <div className="absolute inset-0 bg-gradient-to-r from-[#F492B7]/20 to-[#9D4EDD]/20 blur-xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-500"></div>
-                                <div className="relative flex items-center bg-[#0B0E14] border border-white/10 rounded-2xl p-4 transition-all focus-within:border-[#F492B7]/50 focus-within:shadow-[0_0_20px_rgba(244,146,183,0.15)]">
-                                    <span className="text-gray-500 text-2xl font-black mr-2 select-none">$</span>
+                                <div className={`absolute inset-0 bg-gradient-to-r ${tradeMode === 'BUY' ? 'from-[#10B981]/20 to-emerald-600/20' : 'from-red-500/20 to-orange-500/20'} blur-xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-500`}></div>
+                                <div className="relative flex items-center bg-[#0B0E14] border border-white/10 rounded-2xl p-4 transition-all focus-within:border-white/30">
+                                    <span className="text-gray-500 text-2xl font-black mr-2 select-none">{tradeMode === 'BUY' ? '$' : '#'}</span>
                                     <input
                                         type="number"
                                         value={betAmount}
                                         onChange={(e) => setBetAmount(e.target.value)}
-                                        placeholder="0.00"
+                                        placeholder={tradeMode === 'BUY' ? "0.00" : "0"}
                                         className="w-full bg-transparent text-white text-4xl font-black outline-none placeholder:text-gray-800 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     />
                                     <div className="flex flex-col items-end pointer-events-none">
-                                        <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">USD</span>
-                                        <span className="text-[9px] text-gray-600 font-mono">≈SOL</span>
+                                        <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">{inputLabel}</span>
+                                        <span className="text-[9px] text-gray-600 font-mono">{inputSubtext}</span>
                                     </div>
                                 </div>
-                            </div>
-                            <div className="mb-6 text-right px-2">
-                                <span className="text-xs font-bold text-gray-500">
-                                    ≈ ${usdValueInTrading.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
-                                </span>
-                            </div>
-
-                            {/* Bonding Curve Visualization for Detail Page */}
-                            <div className="mb-6 pt-4 border-t border-white/5">
-                                <div className="flex justify-between items-center mb-2">
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">Bonding Curve Progress</span>
-                                    <span className="text-[10px] font-mono font-bold text-teal-400">
-                                        {(() => {
-                                            // Calculate pseudo-percent based on volume or random for now if volume logic is complex
-                                            // In a real app, this would be `market.bondingCurvePercent`
-                                            const cleanVol = (staticMarketInfo.volume || '0').replace(/[$,]/g, ''); // Note: staticMarketInfo might not have volume, checking logic
-                                            return "~42%"; // Mock for detail page since we lack explicit volume prop here easily without refetch
-                                        })()}
-                                    </span>
-                                </div>
-                                <div className="w-full h-2.5 bg-black/40 rounded-full overflow-hidden border border-white/5">
-                                    <div
-                                        className="h-full bg-gradient-to-r from-cyan-900 via-cyan-500 to-teal-400 rounded-full relative shadow-[0_0_10px_rgba(45,212,191,0.3)]"
-                                        style={{ width: '42%' }}
-                                    >
-                                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full animate-[shimmer_2s_infinite]"></div>
-                                        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white rounded-full shadow-[0_0_8px_rgba(255,255,255,1)] animate-pulse"></div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Potential returns shown when amount entered */}
-                            {amountNum > 0 && !isOverBalance && (
-                                <div className="mb-6 p-3 bg-gradient-to-br from-[#10B981]/10 to-transparent rounded-xl border border-[#10B981]/20">
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-[10px] font-bold text-gray-400">If {selectedSide} wins</span>
+                                {/* POTENTIAL PAYOUT DISPLAY */}
+                                {tradeMode === 'BUY' && amountNum > 0 && (
+                                    <div className="mt-2 flex justify-between items-center px-2 animate-in fade-in slide-in-from-top-1">
+                                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Potential Payout</span>
                                         <div className="text-right">
-                                            <span className="text-lg font-black text-[#10B981]">+${potentialProfit.toFixed(2)}</span>
-                                            <span className="block text-[9px] text-gray-500">{estimatedShares.toFixed(0)} shares</span>
+                                            <span className="block text-sm font-black text-[#10B981]">{potentialSolPayout.toFixed(4)} SOL</span>
+                                            <span className="text-[10px] font-bold text-[#10B981] opacity-75">+{potentialRoi.toFixed(0)}% ROI</span>
                                         </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Percentage Selector for Sell Mode */}
+                            {tradeMode === 'SELL' && myHeldPosition === selectedSide && (
+                                <div className="mb-4">
+                                    <div className="flex justify-between items-center bg-white/5 rounded-lg p-1">
+                                        {[25, 50, 75, 100].map((pct) => (
+                                            <button
+                                                key={pct}
+                                                onClick={() => {
+                                                    const shareAmount = myHeldShares * (pct / 100);
+                                                    // Allow decimals, up to 6 places to avoid float issues but keep precision
+                                                    const val = parseFloat(shareAmount.toFixed(6));
+                                                    setBetAmount(val.toString());
+                                                }}
+                                                className="flex-1 py-1 text-[10px] font-bold text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors"
+                                            >
+                                                {pct}%
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="text-right mt-1">
+                                        <span className="text-[9px] text-gray-600 font-mono">Available: {Math.floor(myHeldShares)} shares</span>
                                     </div>
                                 </div>
                             )}
 
+                            {/* ACTION BUTTON */}
                             <button
-                                onClick={handlePlaceBet}
-                                disabled={isPending || amountNum <= 0 || isOverBalance}
-                                className={`w-full py-5 rounded-2xl font-black text-xl uppercase tracking-widest transition-all relative overflow-hidden group hover:scale-[1.02] active:scale-[0.98]
-                                    ${isPending ? 'bg-gray-800 cursor-not-allowed text-gray-500' :
-                                        isSuccess ? 'bg-[#10B981] text-white' :
-                                            isOverBalance ? 'bg-red-900/50 border border-red-500 text-red-500 cursor-not-allowed' :
-                                                'bg-gradient-to-r from-[#F492B7] to-[#9D4EDD] text-white shadow-[0_0_30px_rgba(244,146,183,0.3)] hover:shadow-[0_0_50px_rgba(244,146,183,0.6)]'
+                                onClick={handleTrade}
+                                disabled={isPending || isSuccess}
+                                className={`w-full py-5 rounded-2xl font-black text-lg uppercase tracking-widest shadow-xl transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden group ${isSuccess ? 'bg-[#10B981] text-black' :
+                                    tradeMode === 'BUY' ? 'bg-[#10B981] text-black hover:bg-emerald-400' : 'bg-[#EF4444] text-white hover:bg-red-600'
                                     }`}
                             >
                                 {isPending ? (
-                                    <span className="flex items-center justify-center gap-3">
-                                        <Loader2 className="animate-spin" size={24} />
-                                        <span className="animate-pulse">Signing...</span>
-                                    </span>
+                                    <div className="flex items-center justify-center gap-2">
+                                        <Loader2 className="animate-spin" /> Processing...
+                                    </div>
                                 ) : isSuccess ? (
-                                    <span className="flex items-center justify-center gap-2">
-                                        <CheckCircle2 size={24} /> <span>Sent!</span>
-                                    </span>
+                                    <div className="flex items-center justify-center gap-2">
+                                        <CheckCircle2 /> {tradeMode === 'BUY' ? 'Order Filled' : 'Sold!'}
+                                    </div>
                                 ) : (
-                                    <span className="text-white drop-shadow-md">Buy Shares</span>
+                                    <span>
+                                        {tradeMode === 'BUY' ? `Buy ${selectedSide}` : `Sell ${selectedSide}`}
+                                    </span>
                                 )}
                             </button>
-
-                            {/* REDEEM / SELL SECTION - ALWAYS VISIBLE */}
-                            <div className="mt-8 pt-6 border-t border-white/5">
-                                <div className="flex justify-between items-center mb-4">
-                                    <h3 className="font-bold text-gray-500 text-[10px] uppercase tracking-widest">Your Position</h3>
-                                    {myHeldPosition ? (
-                                        <div className="text-right">
-                                            <span className={`block text-sm font-black ${myHeldPosition === 'YES' ? 'text-green-500' : 'text-red-500'}`}>
-                                                Holding {myHeldPosition}
-                                            </span>
-                                            <span className="text-[10px] text-gray-400">{myHeldAmount}</span>
-                                        </div>
-                                    ) : (
-                                        <span className="text-[10px] text-gray-600 font-mono">No active position</span>
-                                    )}
-                                </div>
-
-                                {true && (
-                                    <div className="mt-3">
-                                        <button
-                                            onClick={async () => {
-                                                if (!myHeldPosition) return;
-                                                if (!confirm("Are you sure you want to sell your entire position? This will return SOL to your wallet.")) return;
-
-                                                setIsPending(true);
-                                                try {
-                                                    console.log("🔥 Initiating Sell...");
-
-                                                    const isRealMarket = marketAccount?.market_pda && !marketAccount.market_pda.startsWith('local_') && marketAccount.yes_token_mint;
-                                                    const amountToSellUSD = parseFloat(myHeldAmount?.replace('$', '') || '0');
-                                                    let sharesSold = 0;
-
-                                                    if (isRealMarket) {
-                                                        // --- ON-CHAIN SELL ---
-                                                        // 1. Get User's Token Balance (Shares)
-                                                        // We need to know exactly how many shares to burn.
-                                                        const mintToSell = myHeldPosition.toLowerCase() === 'yes'
-                                                            ? new PublicKey(marketAccount.yes_token_mint)
-                                                            : new PublicKey(marketAccount.no_token_mint);
-
-                                                        const { getAssociatedTokenAddress } = await import('@solana/spl-token');
-                                                        const userAta = await getAssociatedTokenAddress(mintToSell, publicKey!);
-
-                                                        let sharesBalance = 0;
-                                                        try {
-                                                            const bal = await connection.getTokenAccountBalance(userAta);
-                                                            sharesBalance = bal.value.uiAmount || 0;
-                                                        } catch (e) {
-                                                            console.warn("No ATA found or balance 0");
-                                                            sharesBalance = 0;
-                                                        }
-
-                                                        if (sharesBalance <= 0) {
-                                                            alert("You don't have any shares to sell on-chain.");
-                                                            setIsPending(false);
-                                                            return;
-                                                        }
-
-                                                        console.log(`Selling ${sharesBalance} shares...`);
-
-                                                        // 2. Calculate Sell Impact
-                                                        // This is now done after the real/simulated check, as it's common.
-                                                        // The virtualLiquidity and priceImpact calculation is moved to common updates.
-
-                                                        // 3. EXECUTE ON-CHAIN SELL
-                                                        const tx = await sellShares(
-                                                            new PublicKey(marketAccount.market_pda),
-                                                            myHeldPosition.toLowerCase() as 'yes' | 'no',
-                                                            sharesBalance, // Pass exact share amount
-                                                            new PublicKey(marketAccount.yes_token_mint),
-                                                            new PublicKey(marketAccount.no_token_mint),
-                                                            0 // minSolOut
-                                                        ).catch(err => { throw err; });
-
-                                                        console.log("✅ Sell confirmed:", tx);
-                                                        sharesSold = sharesBalance;
-
-                                                    } else {
-                                                        // --- SIMULATED SELL ---
-                                                        console.log("🔮 Executing Simulated Sell...");
-                                                        await new Promise(r => setTimeout(r, 1000));
-                                                        sharesSold = 0; // Unknown in simulation without tracking
-                                                    }
-
-                                                    // --- COMMON UPDATES ---
-                                                    // 2. Calculate Sell Impact
-                                                    const virtualLiquidity = 1000000;
-                                                    const priceImpact = (amountToSellUSD / virtualLiquidity) * 50;
-
-                                                    // 3. Update Price State (Pari-Mutuel Inverse)
-                                                    const newPrice = updateExectutionPrices(effectiveSlug, -priceImpact);
-
-                                                    // 4. Update DB Price
-                                                    await supabaseDb.updateMarketPrice(effectiveSlug, newPrice, -amountToSellUSD);
-
-                                                    // 5. Log Activity (SELL)
-                                                    const profile = await supabaseDb.getProfile(publicKey?.toBase58() || '');
-
-                                                    const sellActivity = {
-                                                        wallet_address: publicKey?.toBase58() || 'anon',
-                                                        username: profile?.username || userProfile.username || 'Trader',
-                                                        avatar_url: profile?.avatar_url || userProfile.avatarUrl,
-                                                        action: myHeldPosition,
-                                                        order_type: 'SELL',
-                                                        amount: amountToSellUSD,
-                                                        sol_amount: amountToSellUSD / solPrice,
-                                                        shares: sharesSold,
-                                                        market_title: staticMarketInfo.title,
-                                                        market_slug: effectiveSlug,
-                                                        created_at: new Date().toISOString()
-                                                    };
-                                                    // @ts-ignore
-                                                    await supabaseDb.createActivity(sellActivity);
-
-                                                    // Immediate local update
-                                                    setActivityList(prev => [sellActivity, ...prev]);
-
-                                                    // 6. Cancel Bet in DB (Mark as sold)
-                                                    await supabaseDb.cancelBet(publicKey?.toBase58() || '', effectiveSlug);
-
-                                                    // 7. Refund UI
-                                                    setSolBalance(prev => prev + (amountToSellUSD / solPrice));
-                                                    setMyHeldPosition(null);
-                                                    setMyHeldAmount(null);
-
-                                                    // Sync
-                                                    window.dispatchEvent(new Event('bet-updated'));
-
-                                                    alert("Position Sold! Funds returned to wallet.");
-                                                } catch (e: any) {
-                                                    console.error("Error selling:", e);
-                                                    alert(`Error processing sell: ${e.message || JSON.stringify(e)}`);
-                                                } finally {
-                                                    setIsPending(false);
-                                                }
-                                            }}
-                                            className="w-full py-3 rounded-xl border border-red-500/20 text-red-500 font-bold text-xs uppercase hover:bg-red-500/10 transition-colors flex items-center justify-center gap-2"
-                                        >
-                                            Sell Shares
-                                        </button>
-                                        <p className="text-[9px] text-gray-600 text-center mt-2">
-                                            Market fee (2.5%) applies. Funds returned to Solana wallet.
-                                        </p>
-                                    </div>
-                                )}
-                            </div>
-
+                            <p className="text-[9px] text-gray-600 text-center mt-2">
+                                {tradeMode === 'SELL' ? "Market fee (2.5%) applies. Funds returned to Solana wallet." : "Secure transaction via Djinn Protocol"}
+                            </p>
                         </div>
                     </div>
                 </div>
-
 
                 {/* Purchase Toast Notification */}
                 <PurchaseToast
@@ -1006,29 +1000,24 @@ export default function MarketPage() {
                 />
 
                 {/* Share Modal */}
-                {
-                    lastBetDetails && (
-                        <ShareModal
-                            isOpen={showShareModal}
-                            onClose={() => setShowShareModal(false)}
-                            betDetails={lastBetDetails}
-                        />
-                    )
-                }
+                {lastBetDetails && (
+                    <ShareModal
+                        isOpen={showShareModal}
+                        onClose={() => setShowShareModal(false)}
+                        betDetails={lastBetDetails}
+                    />
+                )}
 
                 {/* Active Positions Widget (Bottom Right) */}
                 <ActivePositionsWidget
                     walletAddress={publicKey?.toBase58() || null}
                     currentSlug={effectiveSlug}
                     onSell={(position) => {
-                        // Navigate to the market if not current
                         if (position.market_slug !== effectiveSlug) {
                             window.location.href = `/market/${position.market_slug}`;
                         }
-                        // Otherwise, the sell button in trading panel handles it
                     }}
                     onCollect={async (position) => {
-                        // Claim the payout
                         try {
                             await supabaseDb.claimPayout(position.id);
                             alert(`Claimed $${position.payout?.toFixed(2)}! Funds will be sent to your wallet.`);
@@ -1038,26 +1027,11 @@ export default function MarketPage() {
                             alert('Error claiming payout.');
                         }
                     }}
-
                 />
-
-                {/* DEBUG INFO - REMOVE IN PROD */}
-                <div className="fixed bottom-0 left-0 bg-black/90 text-green-500 text-[10px] p-2 z-[100] max-w-sm font-mono border-t border-green-500">
-                    <details>
-                        <summary>Debug: Market State</summary>
-                        <pre>{JSON.stringify({
-                            isReal: marketAccount?.market_pda && !marketAccount.market_pda.startsWith('local_') && marketAccount.yes_token_mint,
-                            pda: marketAccount?.market_pda,
-                            creator: marketAccount?.creator_wallet,
-                            slug: effectiveSlug
-                        }, null, 2)}</pre>
-                    </details>
-                </div>
             </div>
         </div>
     );
 }
-
 
 
 function TabButton({ label, icon, active, onClick }: any) { return <button onClick={onClick} className={`flex items-center gap-2 text-xs font-black uppercase tracking-widest transition-colors pb-2 ${active ? 'text-white border-b-2 border-[#F492B7]' : 'text-gray-600 hover:text-gray-400'}`}>{icon} {label}</button>; }

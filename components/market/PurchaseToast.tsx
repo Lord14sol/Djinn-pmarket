@@ -14,6 +14,8 @@ interface PurchaseToastProps {
         solAmount: number;
         usdAmount: number;
         marketTitle: string;
+        type: 'BUY' | 'SELL';
+        imageUrl?: string; // Added imageUrl
     } | null;
 }
 
@@ -37,11 +39,16 @@ export default function PurchaseToast({ isVisible, onClose, onShare, betDetails 
 
     if (!isVisible || !betDetails) return null;
 
+    const isSell = betDetails.type === 'SELL';
+    const accentColor = isSell ? '#EF4444' : '#10B981';
+    const bgColor = isSell ? 'bg-red-500/20' : 'bg-[#10B981]/20';
+    const textColor = isSell ? 'text-red-500' : 'text-[#10B981]';
+
     return (
         <div className={`fixed bottom-6 right-6 z-50 transition-all duration-300 ${show ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}`}>
             <div className="bg-[#0E0E0E] border border-white/10 rounded-2xl p-5 shadow-2xl w-80 relative overflow-hidden">
                 {/* Glow Effect */}
-                <div className="absolute -top-20 -right-20 w-40 h-40 bg-[#10B981]/20 rounded-full blur-3xl pointer-events-none" />
+                <div className={`absolute -top-20 -right-20 w-40 h-40 rounded-full blur-3xl pointer-events-none ${isSell ? 'bg-red-500/20' : 'bg-[#10B981]/20'}`} />
 
                 {/* Close Button */}
                 <button
@@ -53,12 +60,16 @@ export default function PurchaseToast({ isVisible, onClose, onShare, betDetails 
 
                 {/* Header */}
                 <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-full bg-[#10B981]/20 flex items-center justify-center">
-                        <CheckCircle2 size={20} className="text-[#10B981]" />
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${bgColor} overflow-hidden border border-white/20`}>
+                        {betDetails.imageUrl ? (
+                            <img src={betDetails.imageUrl} alt="Market" className="w-full h-full object-cover" />
+                        ) : (
+                            <CheckCircle2 size={20} className={textColor} />
+                        )}
                     </div>
                     <div>
-                        <p className="text-white font-bold text-sm">Bet Placed!</p>
-                        <p className="text-gray-500 text-xs">Position confirmed</p>
+                        <p className="text-white font-bold text-sm">{isSell ? 'Sold Successfully!' : 'Bet Placed!'}</p>
+                        <p className="text-gray-500 text-xs">{isSell ? '+ SOL Received' : 'Position confirmed'}</p>
                     </div>
                 </div>
 
@@ -71,10 +82,13 @@ export default function PurchaseToast({ isVisible, onClose, onShare, betDetails 
                     </div>
                     <p className="text-white font-bold text-sm truncate mb-2">{betDetails.marketTitle}</p>
                     <div className="flex items-center justify-between text-xs">
-                        <span className="text-gray-500">Amount</span>
+                        <span className="text-gray-500">{isSell ? 'Received' : 'Amount'}</span>
                         <div className="text-right">
-                            <span className="text-[#F492B7] font-bold">{betDetails.solAmount.toFixed(4)} SOL</span>
-                            <span className="text-gray-600 ml-1">(${betDetails.usdAmount.toFixed(2)})</span>
+                            {/* Make SOL prominent for Sells */}
+                            <span className={`${isSell ? 'text-[#10B981]' : 'text-[#F492B7]'} font-bold`}>
+                                {isSell ? '+' : ''}{betDetails.solAmount.toFixed(4)} SOL
+                            </span>
+                            {!isSell && <span className="text-gray-600 ml-1">(${betDetails.usdAmount.toFixed(2)})</span>}
                         </div>
                     </div>
                 </div>
@@ -85,7 +99,7 @@ export default function PurchaseToast({ isVisible, onClose, onShare, betDetails 
                     className="w-full py-3 rounded-xl bg-gradient-to-r from-[#F492B7] to-[#E056A0] text-black font-black text-sm uppercase flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
                 >
                     <Image src="/star.png" alt="Djinn" width={16} height={16} />
-                    Share Your Bet
+                    {isSell ? 'Share Profit' : 'Share Your Bet'}
                     <ExternalLink size={14} />
                 </button>
 
