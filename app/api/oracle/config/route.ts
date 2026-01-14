@@ -2,12 +2,17 @@ import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
 // Initialize Supabase admin client to bypass RLS when saving secure config
-const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY! // In prod, use SERVICE_ROLE_KEY for true security, but ANON works if RLS allows or for MVP
-);
+// MOVED INSIDE HANDLER to prevent build-time crash if env vars missing
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
+    const supabaseAdmin = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+
+
     try {
         const { source, config, wallet } = await request.json();
 
