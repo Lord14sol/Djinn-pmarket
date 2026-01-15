@@ -96,10 +96,17 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
             console.log("🚀 Creating market on blockchain...");
 
             // Generate slug
-            const slug = poolName.toLowerCase().trim()
+            // Reduce seed length to max 32 bytes (Solana Limit)
+            // Timestamp (~8 chars) + Dash (1) = 9 chars.
+            // Max name length = 32 - 9 = 23. We use 20 for safety.
+            const timestamp = Date.now().toString(36);
+            const sanitizedName = poolName.toLowerCase().trim()
                 .replace(/[^\w\s-]/g, '')
                 .replace(/[\s_-]+/g, '-')
-                .replace(/^-+|-+$/g, '') + '-' + Date.now().toString(36);
+                .replace(/^-+|-+$/g, '')
+                .slice(0, 20); // TRUNCATE HERE
+
+            const slug = `${sanitizedName}-${timestamp}`;
 
             const resolutionTime = Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60); // 7 days
             const finalBanner = mainImage ? await compressImage(mainImage) : "🔮";
