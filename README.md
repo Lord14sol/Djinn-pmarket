@@ -1,8 +1,8 @@
 # 🔮 Djinn - Solana Prediction Market
 
-**Djinn** es un prediction market descentralizado en Solana donde los usuarios pueden apostar sobre el resultado de eventos futuros.
+**Djinn** is the next-generation decentralized prediction market built on Solana. High-frequency trading, real-time resolution, and a premium user experience.
 
-> **Djinn** (جن) - En la mitología árabe, un djinn es un ser sobrenatural con poderes para ver el futuro. Nuestro prediction market te da ese poder: predice el futuro y gana.
+> *Belief market. Truth has a price. The future is yours.*
 
 ---
 
@@ -273,30 +273,24 @@ Visita `http://localhost:3003`
 
 ---
 
-## 🤝 Contribuir
+## 🌐 Socials
 
-Este es un proyecto personal en desarrollo. Si quieres contribuir:
-1. Fork el repo
-2. Crea un branch (`git checkout -b feature/AmazingFeature`)
-3. Commit tus cambios (`git commit -m 'Add AmazingFeature'`)
-4. Push al branch (`git push origin feature/AmazingFeature`)
-5. Abre un Pull Request
+Stay updated on our latest developments:
+- **X (Twitter):** [@Djinnmarket](https://x.com/Djinnmarket)
 
 ---
 
-## 📝 Licencia
+## 🔒 Legal
 
-MIT License - ver [LICENSE](LICENSE)
-
----
-
-## 👤 Autor
-
-**Lord14sol**
-- GitHub: [@Lord14sol](https://github.com/Lord14sol)
-- Proyecto: [Djinn Prediction Market](https://github.com/Lord14sol/Djinn-pmarket)
+**Djinn** is a proprietary software. All rights reserved.
+Unauthorized copying, modification, distribution, or use of this software is strictly prohibited.
 
 ---
+
+## 👤 Team
+
+**Djinn Startup**
+- Lead Developer: [@Lord14sol](https://github.com/Lord14sol)
 
 ## 🙏 Agradecimientos
 
