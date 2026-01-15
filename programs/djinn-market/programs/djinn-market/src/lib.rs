@@ -147,28 +147,24 @@ pub mod djinn_market {
         let clock = Clock::get()?;
         let current_slot = clock.slot;
         
-        let mut fee_rate = FEE_STD_TOTAL;
-        let mut creator_rate = FEE_STD_CREATOR;
-        let mut is_bot = false;
+        let mut effective_fee_rate = FEE_STD_TOTAL;
+        let mut effective_creator_rate = FEE_STD_CREATOR;
 
+        // Anti-Bot Logic (Same slot + Same trader = Penalty)
         if market.last_trade_slot == current_slot && market.last_trader == ctx.accounts.user.key() {
-            fee_rate = FEE_ANTIBOT;
-            creator_rate = 0;
-            is_bot = true;
+            effective_fee_rate = FEE_ANTIBOT; // 15%
+            effective_creator_rate = 0;
             msg!("Anti-Bot Penalty Applied!");
         }
 
-        if !is_bot {
-            let current_price_e9 = (market.virtual_sol_reserves as u128 * 1_000_000_000) / market.virtual_share_reserves as u128;
-            if current_price_e9 >= ENDGAME_THRESHOLD_BPS as u128 * 100_000 {
-                fee_rate = FEE_ENDGAME_TOTAL;
-                creator_rate = FEE_ENDGAME_CREATOR;
-                msg!("Endgame Fee Activated");
-            }
+        if market.last_trade_slot == current_slot && market.last_trader == ctx.accounts.user.key() {
+            effective_fee_rate = FEE_ANTIBOT; // 15%
+            effective_creator_rate = 0;
+            msg!("Anti-Bot Penalty Applied!");
         }
 
-        let fee_total = (amount_in as u128 * fee_rate as u128 / BPS_DENOMINATOR as u128) as u64;
-        let mut fee_creator = (amount_in as u128 * creator_rate as u128 / BPS_DENOMINATOR as u128) as u64;
+        let fee_total = (amount_in as u128 * effective_fee_rate as u128 / BPS_DENOMINATOR as u128) as u64;
+        let mut fee_creator = (amount_in as u128 * effective_creator_rate as u128 / BPS_DENOMINATOR as u128) as u64;
         
         if market.creator == G1_TREASURY {
             fee_creator = 0;
@@ -189,11 +185,10 @@ pub mod djinn_market {
         let shares_out = (y - new_y) as u64;
         require!(shares_out >= min_shares_out, DjinnError::SlippageExceeded);
 
-        // --- ANTI-WHALE CHECK ---
-        let user_token_account = if side == MarketOutcome::Yes { &ctx.accounts.user_yes_account } else { &ctx.accounts.user_no_account };
-        let current_balance = user_token_account.amount; 
-        
-        require!(current_balance + shares_out <= WHALE_LIMIT, DjinnError::WhaleLimitExceeded); 
+        // --- ANTI-WHALE CHECK REMOVED ---
+        // User requested: "Let them buy whatever they want... but charge more fees"
+        // We now rely on the Progressive Whale Tax (20%) to discourage monopolies.
+        // require!(current_balance + shares_out <= WHALE_LIMIT, DjinnError::WhaleLimitExceeded);  
 
         market.virtual_sol_reserves = new_x as u64;
         market.virtual_share_reserves = new_y as u64;
@@ -397,7 +392,47 @@ pub mod djinn_market {
         let new_y = y + shares_amount as u128;
         let new_x = k / new_y;
 
-        let amount_sol_out_gross = (x - new_x) as u64;
+        let mut amount_sol_out_gross = (x - new_x) as u64;
+
+        // 🛡️ SECURITY FIX: LIQUIDITY HOSTAGE PROTECTION
+        // If bonding curve returns dust (< 1000 lamports) but user is selling real shares,
+        // fallback to "Fair Share" of the Virtual Reserves.
+        if amount_sol_out_gross < 1000 && shares_amount > 0 {
+             let (mint_supply, _decimals) = match side {
+                MarketOutcome::Yes => (ctx.accounts.yes_token_mint.supply, ctx.accounts.yes_token_mint.decimals),
+                MarketOutcome::No => (ctx.accounts.no_token_mint.supply, ctx.accounts.no_token_mint.decimals),
+                _ => (0, 0),
+             };
+             
+             if mint_supply > 0 {
+                  // Payout = (Shares / Supply) * Virtual SOL
+                  let fair_share_payout = (shares_amount as u128 * market.virtual_sol_reserves as u128 / mint_supply as u128) as u64;
+                  if fair_share_payout > amount_sol_out_gross {
+                      amount_sol_out_gross = fair_share_payout;
+                      msg!("🛡️ Anti-Hostage Triggered: Using Fair Share Payout ({} lamports)", fair_share_payout);
+                  }
+             }
+        }
+
+        // 🛡️ SECURITY FIX: LIQUIDITY HOSTAGE PROTECTION
+        // If bonding curve returns dust (< 1000 lamports) but user is selling real shares,
+        // fallback to "Fair Share" of the Virtual Reserves.
+        if amount_sol_out_gross < 1000 && shares_amount > 0 {
+             let (mint_supply, _decimals) = match side {
+                MarketOutcome::Yes => (ctx.accounts.yes_token_mint.supply, ctx.accounts.yes_token_mint.decimals),
+                MarketOutcome::No => (ctx.accounts.no_token_mint.supply, ctx.accounts.no_token_mint.decimals),
+                _ => (0, 0),
+             };
+             
+             if mint_supply > 0 {
+                  // Payout = (Shares / Supply) * Virtual SOL
+                  let fair_share_payout = (shares_amount as u128 * market.virtual_sol_reserves as u128 / mint_supply as u128) as u64;
+                  if fair_share_payout > amount_sol_out_gross {
+                      amount_sol_out_gross = fair_share_payout;
+                      msg!("🛡️ Anti-Hostage Triggered: Using Fair Share Payout ({} lamports)", fair_share_payout);
+                  }
+             }
+        }
 
         let clock = Clock::get()?;
         let current_slot = clock.slot;

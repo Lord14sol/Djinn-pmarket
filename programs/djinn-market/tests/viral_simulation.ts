@@ -124,7 +124,7 @@ describe("Viral Mechanics Simulation (The 'Degen' Test)", () => {
         let totalVolume = 0;
         for (const [i, normie] of normies.entries()) {
             const bet = 0.01 + Math.random() * 0.04; // 0.01 - 0.05 SOL
-            const amount = new anchor.BN(bet * LAMPORTS_PER_SOL);
+            const amount = new anchor.BN(Math.floor(bet * LAMPORTS_PER_SOL).toString());
 
             try {
                 await program.methods.placeBet({ yes: {} } as any, amount, new anchor.BN(0))
@@ -151,11 +151,10 @@ describe("Viral Mechanics Simulation (The 'Degen' Test)", () => {
 
     it("Step 4: The Dump (Profit Taking)", async () => {
         // Creator checks value
-        const shares = await getBalance(yesMintPda, degenCreator.publicKey);
+        const initialShares = await getBalance(yesMintPda, degenCreator.publicKey);
 
         // Sell 100%
-        await program.methods.sellShares({ yes: {} } as any, new anchor.BN(shares * LAMPORTS_PER_SOL), new anchor.BN(0)) // Shares has 9 decimals? Wait, getBalance usually returns float?
-            // Wait, my helper below returns float. Need BN for instruction.
+        await program.methods.sellShares({ yes: {} } as any, new anchor.BN(Math.floor(initialShares * LAMPORTS_PER_SOL).toString()), new anchor.BN(0))
             .accounts({
                 market: marketPda,
                 user: degenCreator.publicKey,

@@ -9,7 +9,7 @@ anchor_version = "0.28.0"
 solana_version = "1.18.20"
 
 [programs.localnet]
-djinn_market = "DSsD8neGhs9Ae9gVuWjmUfVckEvw36GamNboxWQCNqKQ"
+djinn_market = "CMA2yM8ZUEiJ2t9cYNYShGaH2TbvcxPh2ZKbotm8wUHL"
 
 [programs.devnet]
 djinn_market = "CMA2yM8ZUEiJ2t9cYNYShGaH2TbvcxPh2ZKbotm8wUHL"
