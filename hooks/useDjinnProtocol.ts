@@ -64,7 +64,7 @@ export const useDjinnProtocol = () => {
                 units: 600_000
             });
             const addPriorityFee = web3.ComputeBudgetProgram.setComputeUnitPrice({
-                microLamports: 10000
+                microLamports: 50000 // Increased to ensure propagation
             });
 
             const tx = new web3.Transaction();
