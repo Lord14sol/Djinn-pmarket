@@ -152,7 +152,7 @@ export const useDjinnProtocol = () => {
             const transaction = new web3.Transaction();
             transaction.add(
                 web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
-                web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 10000 }), // Priority Fee
+                web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50000 }), // Priority Fee
                 createAssociatedTokenAccountIdempotentInstruction(wallet.publicKey, userYesATA, wallet.publicKey, yesMint),
                 createAssociatedTokenAccountIdempotentInstruction(wallet.publicKey, userNoATA, wallet.publicKey, noMint)
             );
@@ -314,7 +314,7 @@ export const useDjinnProtocol = () => {
             // Ensure BOTH ATAs exist for the contract to validate them
             transaction.add(
                 web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
-                web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 10000 }),
+                web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50000 }),
                 createAssociatedTokenAccountIdempotentInstruction(wallet.publicKey, userYesATA, wallet.publicKey, yesMint),
                 createAssociatedTokenAccountIdempotentInstruction(wallet.publicKey, userNoATA, wallet.publicKey, noMint)
             );

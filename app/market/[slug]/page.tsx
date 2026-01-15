@@ -530,14 +530,14 @@ export default function MarketPage() {
                 // --- SIMULATED BUY ---
                 console.log("🔮 Executing Simulated Buy (Demo Market)...");
                 const reason = !marketAccount?.market_pda ? "Missing Market PDA" :
-                    marketAccount.market_pda.startsWith('local_') ? "Local/Demo Market" :
+                    marketAccount.market_pda.startsWith('local_') ? "Old/Local Market (Create NEW one)" :
                         !marketAccount.yes_token_mint ? "Missing Token Mints" : "Unknown";
 
                 setDjinnToast({
                     isVisible: true,
                     type: 'INFO',
-                    title: 'Demo Mode',
-                    message: `Market is simulated (${reason}). Transactions are off-chain.`
+                    title: 'Demo/Local Market',
+                    message: `This market is offline/local (${reason}). To use real SOL, please Create a NEW Market.`
                 });
 
                 // Simulate delay
