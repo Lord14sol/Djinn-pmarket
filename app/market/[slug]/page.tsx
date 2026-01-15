@@ -1116,9 +1116,10 @@ export default function MarketPage() {
                                                         const available = selectedSide === 'YES' ? myYesShares : myNoShares;
                                                         let val;
                                                         if (pct === 100) {
-                                                            // Ultra-safe 100%: Floor to 4 decimals to ensure valid contract call
-                                                            // and leave no potential for floating point over-estimation
-                                                            val = Math.floor(available * 10000) / 10000;
+                                                            // Ultra-safe 100%: Fetch raw, floor, and subtract 1 atomic unit to prevent "insufficient funds"
+                                                            // due to floating point micro-jitters.
+                                                            const raw = Math.floor(available * 1_000_000_000);
+                                                            val = (raw > 0 ? raw - 1 : 0) / 1_000_000_000;
                                                         } else {
                                                             const shareAmount = available * (pct / 100);
                                                             val = parseFloat(shareAmount.toFixed(4));
