@@ -177,7 +177,7 @@ Profit: 20 - 10 = 10 SOL (100% ROI)
 | Database | 30% | 🟡 LocalStorage (Moving to Supabase) |
 | Comments & Social | 80% | 🟡 Local State |
 | **Smart Contract** | **20%** | 🟡 Implemented (Not Connected) |
-| Frontend ↔ SC Integration | 0% | ❌ Pendiente |
+| Frontend ↔ SC Integration | 60% | 🟡 In Progress (Trade & Holders Connected) |
 | Escrow System | 0% | ❌ Pendiente |
 | Oracle/Resolution | 10% | ❌ Manual (Mock) |
 
@@ -250,9 +250,9 @@ Visita `http://localhost:3003`
 - [ ] Escrow accounts
 - [ ] Deploy a devnet
 
-### ❌ Fase 3: Integration (Pendiente)
-- [ ] Conectar frontend con SC
-- [ ] Actualizar funciones de trading
+### 🟡 Fase 3: Integration (En Progreso)
+- [x] Conectar frontend con SC (Partial)
+- [x] Actualizar funciones de trading (Holders, Trade Widget)
 - [ ] Integrar resolución
 - [ ] Testing end-to-end
 

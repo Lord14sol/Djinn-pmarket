@@ -111,7 +111,7 @@ export default function MarketPage() {
     const [userProfile, setUserProfile] = useState({ username: "Guest", avatarUrl: null as string | null });
     const [betAmount, setBetAmount] = useState('');
     const [selectedSide, setSelectedSide] = useState<'YES' | 'NO'>('YES');
-    const [bottomTab, setBottomTab] = useState<'ORDERBOOK' | 'COMMENTS' | 'HOLDERS'>('COMMENTS');
+    const [bottomTab, setBottomTab] = useState<'ORDERBOOK' | 'COMMENTS' | 'HOLDERS' | 'ACTIVITY'>('COMMENTS');
     const [chartData, setChartData] = useState<any[]>([]); // For Single Outcome
     const [activityList, setActivityList] = useState<any[]>([]);
     const [holders, setHolders] = useState<any[]>([]);
@@ -602,6 +602,12 @@ export default function MarketPage() {
             // 5. Update UI State
             setSolBalance(prev => prev - amountNum);
 
+            // Force refresh holders with delay
+            setTimeout(() => {
+                supabaseDb.getTopHolders(effectiveSlug).then(setHolders);
+            }, 1000);
+            setSolBalance(prev => prev - amountNum);
+
             // Update specific share count
             if (selectedSide === 'YES') {
                 setMyYesShares(prev => prev + sim.sharesReceived);
@@ -730,6 +736,14 @@ export default function MarketPage() {
                 const newPrice = updateExectutionPrices(effectiveSlug, impactSigned);
                 await supabaseDb.updateMarketPrice(effectiveSlug, newPrice, -usdValue);
 
+                // 2b. Reduce Bet Position in DB
+                await supabaseDb.reduceBetPosition(
+                    publicKey.toBase58(),
+                    effectiveSlug,
+                    selectedSide,
+                    sharesToSell
+                );
+
                 // 3. Log Activity
                 const profile = await supabaseDb.getProfile(publicKey.toBase58());
                 const sellActivity = {
@@ -786,6 +800,9 @@ export default function MarketPage() {
 
                 // Trigger Refreshes
                 window.dispatchEvent(new Event('bet-updated'));
+                setTimeout(() => {
+                    supabaseDb.getTopHolders(effectiveSlug).then(setHolders);
+                }, 1000);
 
             } catch (error: any) {
                 console.error("Sell Error:", error);
@@ -819,9 +836,9 @@ export default function MarketPage() {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
                     {/* LEFT COLUMN (Keep as is) */}
-                    <div className="lg:col-span-8 space-y-6">
+                    <div className="md:col-span-8 space-y-6">
                         {/* CHART CARD */}
                         <div className="bg-[#0A0A0A] border border-white/10 rounded-[2rem] p-6 shadow-2xl relative overflow-hidden min-h-[400px]">
                             {isMultiOutcome ? (
@@ -890,117 +907,164 @@ export default function MarketPage() {
                         <div>
                             <div className="flex items-center gap-6 mb-6 border-b border-white/5 pb-2">
                                 <TabButton label="Comments" icon={<Activity size={14} />} active={bottomTab === 'COMMENTS'} onClick={() => setBottomTab('COMMENTS')} />
-                                <TabButton label="Order Book" icon={<Activity size={14} />} active={bottomTab === 'ORDERBOOK'} onClick={() => setBottomTab('ORDERBOOK')} />
-                                <TabButton label="Share Holders" icon={<Users size={14} />} active={bottomTab === 'HOLDERS'} onClick={() => setBottomTab('HOLDERS')} />
+                                <TabButton label="Holders" icon={<Users size={14} />} active={bottomTab === 'HOLDERS'} onClick={() => setBottomTab('HOLDERS')} />
+                                <TabButton label="Activity" icon={<Activity size={14} />} active={bottomTab === 'ACTIVITY'} onClick={() => setBottomTab('ACTIVITY')} />
                             </div>
+                        </div>
 
-                            {bottomTab === 'COMMENTS' && (
-                                <CommentsSection
-                                    marketSlug={effectiveSlug}
-                                    publicKey={publicKey ? publicKey.toBase58() : null}
-                                    userProfile={userProfile}
-                                    myHeldPosition={myHeldSide}
-                                    myHeldAmount={myHeldAmountStr}
-                                />
-                            )}
+                        {bottomTab === 'COMMENTS' && (
+                            <CommentsSection
+                                marketSlug={effectiveSlug}
+                                publicKey={publicKey ? publicKey.toBase58() : null}
+                                userProfile={userProfile}
+                                myHeldPosition={myHeldSide}
+                                myHeldAmount={myHeldAmountStr}
+                            />
+                        )}
 
-                            {bottomTab === 'ORDERBOOK' && (
-                                <div className="bg-[#0E0E0E] rounded-[2rem] border border-white/5 overflow-hidden">
-                                    <div className="grid grid-cols-5 px-6 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500 border-b border-white/5">
-                                        <span className="col-span-1">Trader</span>
-                                        <span className="text-center col-span-1">Side</span>
-                                        <span className="text-center col-span-1">Shares</span>
-                                        <span className="text-right col-span-1">Value</span>
-                                        <span className="text-right col-span-1">Time</span>
-                                    </div>
-                                    <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
-                                        {activityList.length === 0 ? (
-                                            <div className="p-8 text-center text-gray-600 italic">No orders yet</div>
-                                        ) : (
-                                            activityList.map((act, i) => (
-                                                <div key={i} className="grid grid-cols-5 items-center px-6 py-4 border-b border-white/5 hover:bg-white/5 transition-colors group">
-                                                    <div className="flex items-center gap-3 col-span-1">
-                                                        <div className="w-8 h-8 rounded-full bg-[#1A1A1A] flex items-center justify-center border border-white/10 overflow-hidden shrink-0">
-                                                            {act.avatar_url ? <img src={act.avatar_url} className="w-full h-full object-cover" /> : <span className="text-sm">🧞</span>}
+                        {bottomTab === 'ACTIVITY' && (
+                            <div className="bg-[#0E0E0E] rounded-[2rem] border border-white/5 overflow-hidden">
+                                <div className="grid grid-cols-5 px-6 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500 border-b border-white/5">
+                                    <span className="col-span-1">Trader</span>
+                                    <span className="text-center col-span-1">Side</span>
+                                    <span className="text-center col-span-1">Shares</span>
+                                    <span className="text-right col-span-1">Value</span>
+                                    <span className="text-right col-span-1">Time</span>
+                                </div>
+                                <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
+                                    {activityList.length === 0 ? (
+                                        <div className="p-8 text-center text-gray-600 italic">No orders yet</div>
+                                    ) : (
+                                        activityList.map((act, i) => (
+                                            <div key={i} className="grid grid-cols-5 items-center px-6 py-4 border-b border-white/5 hover:bg-white/5 transition-colors group">
+                                                <div className="flex items-center gap-3 col-span-1">
+                                                    <div className="w-8 h-8 rounded-full bg-[#1A1A1A] flex items-center justify-center border border-white/10 overflow-hidden shrink-0">
+                                                        {act.avatar_url ? <img src={act.avatar_url} className="w-full h-full object-cover" /> : <span className="text-sm">🧞</span>}
+                                                    </div>
+                                                    <div className="flex flex-col overflow-hidden">
+                                                        <div className="flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity" onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            window.location.href = `/profile/${act.username || act.wallet_address}`;
+                                                        }}>
+                                                            <span className="text-xs font-bold text-white group-hover:text-[#F492B7] transition-colors font-mono truncate">
+                                                                {act.username || `${act.wallet_address.slice(0, 4)}...`}
+                                                            </span>
                                                         </div>
-                                                        <div className="flex flex-col overflow-hidden">
-                                                            <div className="flex items-center gap-1 cursor-pointer" onClick={() => navigator.clipboard.writeText(act.wallet_address)}>
-                                                                <span className="text-xs font-bold text-white group-hover:text-[#F492B7] transition-colors font-mono truncate">
-                                                                    {act.username || `${act.wallet_address.slice(0, 4)}...`}
-                                                                </span>
+                                                    </div>
+                                                </div>
+                                                <div className="text-center col-span-1">
+                                                    <span className={`text-[10px] font-black uppercase px-2 py-1 rounded whitespace-nowrap ${(act.order_type === 'BUY' || !act.order_type) ? (act.action === 'YES' ? 'bg-[#10B981]/20 text-[#10B981]' : 'bg-red-500/20 text-red-500') : 'bg-white/10 text-gray-400'}`}>
+                                                        {act.order_type || 'BUY'} {act.action}
+                                                    </span>
+                                                </div>
+                                                <div className="text-center col-span-1">
+                                                    <span className="text-xs font-mono text-gray-300">{act.shares?.toFixed(2) || '0.00'}</span>
+                                                </div>
+                                                <div className="text-right col-span-1">
+                                                    <div className="text-sm font-black text-white">${act.amount?.toFixed(2)}</div>
+                                                    <div className="text-[10px] font-mono text-gray-600">{act.sol_amount?.toFixed(3)} SOL</div>
+                                                </div>
+                                                <div className="text-right text-[10px] font-mono text-gray-500 col-span-1">
+                                                    {timeAgo(act.created_at)}
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {bottomTab === 'HOLDERS' && (
+                            <div className="grid lg:grid-cols-2 gap-12">
+                                {/* YES HOLDERS */}
+                                <div>
+                                    <div className="mb-4">
+                                        <h3 className="text-sm font-bold text-white mb-2">Yes holders</h3>
+                                        <div className="h-0.5 w-full bg-white/10" />
+                                    </div>
+                                    <div className="space-y-0">
+                                        {holders.filter(h => h.yesShares > 0.1).sort((a, b) => b.yesShares - a.yesShares).length === 0 ? (
+                                            <div className="py-6 text-gray-500 text-sm italic">No holders</div>
+                                        ) : (
+                                            holders.filter(h => h.yesShares > 0.1).sort((a, b) => b.yesShares - a.yesShares).map((h, i) => (
+                                                <div key={i} className="flex items-center justify-between py-3 border-b border-white/5 group hover:bg-white/5 hover:px-2 rounded transition-all -mx-2 px-2 cursor-pointer" onClick={() => window.location.href = `/profile/${h.name === h.wallet_address.slice(0, 6) + '...' ? h.wallet_address : h.name}`}>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="relative">
+                                                            <div className="w-8 h-8 rounded-full bg-[#1A1A1A] overflow-hidden">
+                                                                {h.avatar ? <img src={h.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-gradient-to-br from-purple-500 to-indigo-600" />}
+                                                            </div>
+                                                            {/* Rank Badge */}
+                                                            <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold border border-[#0B0E14] 
+                                                                    ${i === 0 ? 'bg-gradient-to-br from-yellow-300 to-amber-500 text-black' :
+                                                                    i === 1 ? 'bg-gradient-to-br from-gray-300 to-gray-400 text-black' :
+                                                                        i === 2 ? 'bg-gradient-to-br from-orange-300 to-amber-700 text-white' :
+                                                                            'bg-gray-800 text-gray-400'}`}>
+                                                                {i + 1}
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <div className="text-sm font-bold text-white group-hover:text-[#F492B7] transition-colors truncat max-w-[120px]">
+                                                                {h.name}
+                                                            </div>
+                                                            <div className="text-xs font-medium text-[#10B981] font-mono">
+                                                                {h.yesShares.toLocaleString(undefined, { maximumFractionDigits: 0 })} shares
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    <div className="text-center col-span-1">
-                                                        <span className={`text-[10px] font-black uppercase px-2 py-1 rounded whitespace-nowrap ${(act.order_type === 'BUY' || !act.order_type) ? (act.action === 'YES' ? 'bg-[#10B981]/20 text-[#10B981]' : 'bg-red-500/20 text-red-500') : 'bg-white/10 text-gray-400'}`}>
-                                                            {act.order_type || 'BUY'} {act.action}
-                                                        </span>
-                                                    </div>
-                                                    <div className="text-center col-span-1">
-                                                        <span className="text-xs font-mono text-gray-300">{act.shares?.toFixed(2) || '0.00'}</span>
-                                                    </div>
-                                                    <div className="text-right col-span-1">
-                                                        <div className="text-sm font-black text-white">${act.amount?.toFixed(2)}</div>
-                                                        <div className="text-[10px] font-mono text-gray-600">{act.sol_amount?.toFixed(3)} SOL</div>
-                                                    </div>
-                                                    <div className="text-right text-[10px] font-mono text-gray-500 col-span-1">
-                                                        {timeAgo(act.created_at)}
-                                                    </div>
                                                 </div>
                                             ))
                                         )}
                                     </div>
                                 </div>
-                            )}
 
-                            {bottomTab === 'HOLDERS' && (
-                                <div className="bg-[#0E0E0E] rounded-[2rem] border border-white/5 overflow-hidden">
-                                    <div className="grid grid-cols-4 px-6 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500 border-b border-white/5">
-                                        <span>Rank</span>
-                                        <span>Trader</span>
-                                        <span className="text-center">Side</span>
-                                        <span className="text-right">Shares Owned</span>
+                                {/* NO HOLDERS */}
+                                <div>
+                                    <div className="mb-4">
+                                        <h3 className="text-sm font-bold text-white mb-2">No holders</h3>
+                                        <div className="h-0.5 w-full bg-white/10" />
                                     </div>
-                                    <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
-                                        {holders.length === 0 ? (
-                                            <div className="p-8 text-center text-gray-600 italic">No holders yet</div>
+                                    <div className="space-y-0">
+                                        {holders.filter(h => h.noShares > 0.1).sort((a, b) => b.noShares - a.noShares).length === 0 ? (
+                                            <div className="py-6 text-gray-500 text-sm italic">No holders</div>
                                         ) : (
-                                            holders.map((h, i) => (
-                                                <div key={i} className="grid grid-cols-4 items-center px-6 py-4 border-b border-white/5 hover:bg-white/5 transition-colors group">
-                                                    <div className="flex items-center gap-2">
-                                                        {h.rank === 1 && <span className="text-lg">🥇</span>}
-                                                        {h.rank === 2 && <span className="text-lg">🥈</span>}
-                                                        {h.rank === 3 && <span className="text-lg">🥉</span>}
-                                                        {h.rank > 3 && <span className="text-sm font-bold text-gray-600 w-6 text-center">#{h.rank}</span>}
-                                                    </div>
+                                            holders.filter(h => h.noShares > 0.1).sort((a, b) => b.noShares - a.noShares).map((h, i) => (
+                                                <div key={i} className="flex items-center justify-between py-3 border-b border-white/5 group hover:bg-white/5 hover:px-2 rounded transition-all -mx-2 px-2 cursor-pointer" onClick={() => window.location.href = `/profile/${h.name === h.wallet_address.slice(0, 6) + '...' ? h.wallet_address : h.name}`}>
                                                     <div className="flex items-center gap-3">
-                                                        <div className="w-8 h-8 rounded-full bg-[#1A1A1A] flex items-center justify-center border border-white/10 overflow-hidden shrink-0">
-                                                            {h.avatar ? <img src={h.avatar} className="w-full h-full object-cover" /> : <span className="text-sm">🧞</span>}
+                                                        <div className="relative">
+                                                            <div className="w-8 h-8 rounded-full bg-[#1A1A1A] overflow-hidden">
+                                                                {h.avatar ? <img src={h.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-gradient-to-br from-pink-500 to-rose-600" />}
+                                                            </div>
+                                                            {/* Rank Badge */}
+                                                            <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold border border-[#0B0E14] 
+                                                                    ${i === 0 ? 'bg-gradient-to-br from-yellow-300 to-amber-500 text-black' :
+                                                                    i === 1 ? 'bg-gradient-to-br from-gray-300 to-gray-400 text-black' :
+                                                                        i === 2 ? 'bg-gradient-to-br from-orange-300 to-amber-700 text-white' :
+                                                                            'bg-gray-800 text-gray-400'}`}>
+                                                                {i + 1}
+                                                            </div>
                                                         </div>
-                                                        <span className="text-xs font-bold text-white group-hover:text-[#F492B7] transition-colors font-mono truncate">
-                                                            {h.name || `${h.wallet_address.slice(0, 4)}...`}
-                                                        </span>
-                                                    </div>
-                                                    <div className="text-center">
-                                                        <span className={`text-[10px] font-black uppercase px-2 py-1 rounded ${h.side === 'YES' ? 'bg-[#10B981]/20 text-[#10B981]' : 'bg-red-500/20 text-red-500'}`}>
-                                                            {h.side || 'YES'}
-                                                        </span>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <span className="text-sm font-bold text-white font-mono">{h.shares?.toFixed(2) || '0.00'}</span>
+                                                        <div>
+                                                            <div className="text-sm font-bold text-white group-hover:text-[#F492B7] transition-colors truncate max-w-[120px]">
+                                                                {h.name}
+                                                            </div>
+                                                            <div className="text-xs font-medium text-red-500 font-mono">
+                                                                {h.noShares.toLocaleString(undefined, { maximumFractionDigits: 0 })} shares
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             ))
                                         )}
                                     </div>
                                 </div>
-                            )}
-                        </div>
+                            </div>
+                        )}
                     </div>
 
-                    {/* RIGHT COLUMN: TRADING */}
-                    <div className="lg:col-span-4 space-y-6">
-                        <div className="bg-[#0E0E0E] border border-white/10 rounded-[2.5rem] p-6 shadow-2xl">
+
+                    {/* RIGHT COLUMN: TRADING (Sticky) */}
+                    <div className="md:col-span-4 space-y-6 sticky top-24 h-fit z-20">
+                        <div className="bg-[#0E0E0E] border border-white/10 rounded-[2.5rem] p-4 shadow-2xl">
                             <div className="flex justify-between mb-4 items-center">
                                 <h3 className="text-[10px] font-black uppercase tracking-widest text-white opacity-40">Trade</h3>
                                 <div className="flex items-center gap-3">
@@ -1108,31 +1172,49 @@ export default function MarketPage() {
                                 (selectedSide === 'YES' && myYesShares > 0) || (selectedSide === 'NO' && myNoShares > 0)
                             ) && (
                                     <div className="mb-4">
-                                        <div className="flex justify-between items-center bg-white/5 rounded-lg p-1">
+                                        <div className="flex justify-end gap-2 mb-4">
                                             {[25, 50, 75, 100].map((pct) => (
                                                 <button
                                                     key={pct}
                                                     onClick={() => {
-                                                        const available = selectedSide === 'YES' ? myYesShares : myNoShares;
+                                                        let available = 0;
+                                                        if (tradeMode === 'BUY') available = solBalance;
+                                                        else available = selectedSide === 'YES' ? myYesShares : myNoShares;
+
                                                         let val;
-                                                        if (pct === 100) {
-                                                            // Ultra-safe 100%: Fetch raw, floor, and subtract 1 atomic unit to prevent "insufficient funds"
-                                                            // due to floating point micro-jitters.
-                                                            const raw = Math.floor(available * 1_000_000_000);
-                                                            val = (raw > 0 ? raw - 1 : 0) / 1_000_000_000;
+                                                        // For SELL: available is Shares.
+                                                        // For BUY: available is SOL.
+
+                                                        if (tradeMode === 'BUY') {
+                                                            // Reserve for gas if 100%
+                                                            if (pct === 100) {
+                                                                val = Math.max(0, available - 0.025); // Reserve 0.025 SOL
+                                                            } else {
+                                                                val = available * (pct / 100);
+                                                            }
+                                                            // Round to 4 decimals
+                                                            val = Math.floor(val * 10000) / 10000;
+                                                            setBetAmount(val.toString());
                                                         } else {
-                                                            const shareAmount = available * (pct / 100);
-                                                            val = parseFloat(shareAmount.toFixed(4));
+                                                            // SELL logic
+                                                            if (pct === 100) {
+                                                                // Ensure smooth string without scientific notation for huge numbers
+                                                                // Logic: use available directly, but handle precision
+                                                                setBetAmount(available.toString());
+                                                            } else {
+                                                                const shareAmount = available * (pct / 100);
+                                                                val = parseFloat(shareAmount.toFixed(4));
+                                                                setBetAmount(val.toString());
+                                                            }
                                                         }
-                                                        setBetAmount(val.toString());
                                                     }}
-                                                    className="flex-1 py-1 text-[10px] font-bold text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors"
+                                                    className="px-3 py-1.5 text-[10px] font-bold text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors bg-white/5 border border-white/5"
                                                 >
                                                     {pct}%
                                                 </button>
                                             ))}
                                         </div>
-                                        <div className="text-right mt-1">
+                                        <div className="text-right -mt-2 mb-4">
                                             <span className="text-[9px] text-gray-600 font-mono">Available: {selectedSide === 'YES' ? myYesShares.toFixed(2) : myNoShares.toFixed(2)} shares</span>
                                         </div>
                                     </div>
@@ -1157,13 +1239,13 @@ export default function MarketPage() {
                                             <div className="flex justify-between text-[10px] uppercase font-bold text-gray-500 mb-1">
                                                 <span>Gross Value</span>
                                                 <span className="text-white">
-                                                    {(parseFloat(betAmount) * (selectedSide === 'YES' ? livePrice : (100 - livePrice)) / 100).toFixed(4)} SOL
+                                                    {(parseFloat(betAmount) * (selectedSide === 'YES' ? livePrice : (100 - livePrice)) / 100).toFixed(3)} SOL
                                                 </span>
                                             </div>
                                             <div className="flex justify-between text-[10px] uppercase font-bold text-gray-500 mb-1">
                                                 <span>Market Fee (2.5%)</span>
                                                 <span className="text-red-400">
-                                                    -{(parseFloat(betAmount) * (selectedSide === 'YES' ? livePrice : (100 - livePrice)) / 100 * 0.025).toFixed(4)} SOL
+                                                    -{(parseFloat(betAmount) * (selectedSide === 'YES' ? livePrice : (100 - livePrice)) / 100 * 0.025).toFixed(3)} SOL
                                                 </span>
                                             </div>
                                             <div className="flex justify-between text-[10px] uppercase font-bold text-gray-500 mb-1">
@@ -1174,7 +1256,7 @@ export default function MarketPage() {
                                             <div className="flex justify-between text-[10px] uppercase font-black text-gray-400">
                                                 <span>Net Receive</span>
                                                 <span className="text-[#F492B7] text-xs">
-                                                    ≈ {(parseFloat(betAmount) * (selectedSide === 'YES' ? livePrice : (100 - livePrice)) / 100 * 0.975).toFixed(4)} SOL
+                                                    ≈ {(parseFloat(betAmount) * (selectedSide === 'YES' ? livePrice : (100 - livePrice)) / 100 * 0.975).toFixed(3)} SOL
                                                 </span>
                                             </div>
                                         </>
@@ -1273,7 +1355,9 @@ export default function MarketPage() {
                     actionLabel={djinnToast.actionLabel}
                 />
             </div>
-        </div >
+
+        </div>
+
     );
 }
 

@@ -281,9 +281,10 @@ export interface Holder {
     rank: number;
     name: string;
     avatar: string | null;
-    shares: number;
+    yesShares: number;
+    noShares: number;
+    totalShares: number;
     wallet_address: string;
-    side?: 'YES' | 'NO';
 }
 
 export async function getTopHolders(slug: string): Promise<Holder[]> {
@@ -296,29 +297,53 @@ export async function getTopHolders(slug: string): Promise<Holder[]> {
 
     if (error || !data) return [];
 
-    // Aggregate shares by wallet + side
-    const agg: Record<string, Holder & { side: string }> = {};
+    // Aggregate shares by wallet ONLY (merge sides)
+    const agg: Record<string, Holder> = {};
+    const wallets: string[] = [];
 
     data.forEach(bet => {
-        const key = `${bet.wallet_address}-${bet.side}`;
+        const key = bet.wallet_address;
         if (!agg[key]) {
             agg[key] = {
                 rank: 0,
-                name: bet.wallet_address.slice(0, 6) + '...',
+                name: bet.wallet_address.slice(0, 6) + '...', // Default layout
                 avatar: null,
-                shares: 0,
-                wallet_address: bet.wallet_address,
-                side: bet.side
+                yesShares: 0,
+                noShares: 0,
+                totalShares: 0,
+                wallet_address: bet.wallet_address
             };
+            wallets.push(bet.wallet_address);
         }
-        // Accumulate shares for this position
-        agg[key].shares += bet.shares || 0;
+
+        const shares = bet.shares || 0;
+        if (bet.side === 'YES') {
+            agg[key].yesShares += shares;
+        } else {
+            agg[key].noShares += shares;
+        }
+        agg[key].totalShares += shares;
     });
 
-    // Sort by shares descending and assign ranks
+    // Fetch profiles for these wallets to correct the names
+    if (wallets.length > 0) {
+        const { data: profiles } = await supabase
+            .from('profiles')
+            .select('wallet_address, username, avatar_url')
+            .in('wallet_address', wallets);
+
+        profiles?.forEach(p => {
+            if (agg[p.wallet_address]) {
+                if (p.username) agg[p.wallet_address].name = p.username;
+                if (p.avatar_url) agg[p.wallet_address].avatar = p.avatar_url;
+            }
+        });
+    }
+
+    // Sort by TOTAL shares descending and assign ranks
     const sorted = Object.values(agg)
-        .filter(h => h.shares > 0)
-        .sort((a, b) => b.shares - a.shares);
+        .filter(h => h.totalShares > 0.001)
+        .sort((a, b) => b.totalShares - a.totalShares);
 
     return sorted.map((h, i) => ({ ...h, rank: i + 1 }));
 }
@@ -505,31 +530,28 @@ export interface Bet {
 }
 
 export async function createBet(bet: Omit<Bet, 'id' | 'payout' | 'claimed' | 'created_at'>) {
-    // 1. Check if an active (claimed=false) bet already exists for this user/market/side
-    const { data: existingBet, error: fetchError } = await supabase
+    // 1. Check if ANY active bets exist (could be multiple due to bugs)
+    const { data: existingBets, error: fetchError } = await supabase
         .from('bets')
         .select('*')
         .eq('wallet_address', bet.wallet_address)
-        .eq('market_slug', bet.market_slug) // Assuming bets have market_slug
+        .eq('market_slug', bet.market_slug)
         .eq('side', bet.side)
-        .eq('claimed', false)
-        .single();
+        .eq('claimed', false);
 
-    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 = JSON object requested, multiple (or no) results returned
+    if (fetchError) {
         console.error('Error checking existing bet:', fetchError);
     }
 
-    // 2. If exists, UPDATE it
-    if (existingBet) {
+    // 2. If exists, UPDATE the FIRST one (or merge? simplest is update first, ignore others for now, reduceBetPosition cleans them)
+    if (existingBets && existingBets.length > 0) {
+        const existingBet = existingBets[0]; // Pick first
+
         const newAmount = Number(existingBet.amount) + Number(bet.amount);
         const newSolAmount = Number(existingBet.sol_amount) + Number(bet.sol_amount);
         const newShares = Number(existingBet.shares) + Number(bet.shares);
 
-        // Calculate weighted average entry price
-        // (Old Total Val + New Total Val) / Total Shares? 
-        // Or just re-derive from total amount / total shares?
-        // Let's use straightforward weighted avg:
-        // (old_shares * old_price + new_shares * new_price) / new_total_shares
+        // Weighted Avg Entry Price
         const weightedPrice = ((Number(existingBet.shares) * Number(existingBet.entry_price)) + (Number(bet.shares) * Number(bet.entry_price))) / newShares;
 
         const { data, error } = await supabase
@@ -571,6 +593,78 @@ export async function createBet(bet: Omit<Bet, 'id' | 'payout' | 'claimed' | 'cr
 
         return { data, error };
     }
+}
+
+export async function reduceBetPosition(wallet: string, marketSlug: string, side: 'YES' | 'NO', sharesToRemove: number) {
+    // 1. Get ALL active bets (handling potential duplicates)
+    const { data: existingBets, error: fetchError } = await supabase
+        .from('bets')
+        .select('*')
+        .eq('wallet_address', wallet)
+        .eq('market_slug', marketSlug)
+        .eq('side', side)
+        .eq('claimed', false)
+        .order('created_at', { ascending: true }); // FIFO
+
+    if (fetchError || !existingBets || existingBets.length === 0) {
+        console.error("Error finding bet to sell:", fetchError);
+        return { error: fetchError || "Bet not found" };
+    }
+
+    let remainingToRemove = sharesToRemove;
+
+    // 2. Iterate and reduce/delete
+    const idsToDelete: string[] = [];
+    let updateTarget: { id: string, payload: any } | null = null;
+
+    for (const bet of existingBets) {
+        if (remainingToRemove <= 0) break;
+
+        const currentShares = Number(bet.shares);
+
+        if (currentShares <= remainingToRemove + 0.000001) {
+            // Mark for deletion
+            remainingToRemove -= currentShares;
+            idsToDelete.push(bet.id!); // Non-null assertion if interface allows
+        } else {
+            // Partial sell of this row
+            const newShares = currentShares - remainingToRemove;
+
+            // Linear reduction of amounts
+            const ratio = currentShares > 0 ? (newShares / currentShares) : 0;
+            const newAmount = bet.amount * ratio;
+            const newSolAmount = bet.sol_amount * ratio;
+
+            updateTarget = {
+                id: bet.id!,
+                payload: {
+                    shares: newShares,
+                    amount: newAmount,
+                    sol_amount: newSolAmount
+                }
+            };
+            remainingToRemove = 0;
+        }
+    }
+
+    // 3. Execute Batch Operations
+    const promises = [];
+
+    if (idsToDelete.length > 0) {
+        promises.push(supabase.from('bets').delete().in('id', idsToDelete));
+    }
+
+    if (updateTarget) {
+        promises.push(supabase
+            .from('bets')
+            .update(updateTarget.payload)
+            .eq('id', updateTarget.id)
+        );
+    }
+
+    await Promise.all(promises);
+
+    return { success: true };
 }
 
 export async function getUserBets(walletAddress: string): Promise<Bet[]> {
