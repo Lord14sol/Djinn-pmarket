@@ -18,6 +18,7 @@ import OutcomeList, { Outcome } from '@/components/market/OutcomeList';
 import PurchaseToast from '@/components/market/PurchaseToast';
 import ShareModal from '@/components/market/ShareModal';
 import ActivePositionsWidget from '@/components/market/ActivePositionsWidget';
+import DjinnToast, { DjinnToastType } from '@/components/ui/DjinnToast';
 import * as supabaseDb from '@/lib/supabase-db';
 
 // Utils
@@ -105,6 +106,7 @@ export default function MarketPage() {
     const [solBalance, setSolBalance] = useState<number>(0);
     const [livePrice, setLivePrice] = useState<number>(50);
     const [isPending, setIsPending] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
     const [userProfile, setUserProfile] = useState({ username: "Guest", avatarUrl: null as string | null });
     const [betAmount, setBetAmount] = useState('');
@@ -121,6 +123,11 @@ export default function MarketPage() {
     // My Position (Refactored for Simultaneous Holdings)
     const [myYesShares, setMyYesShares] = useState<number>(0);
     const [myNoShares, setMyNoShares] = useState<number>(0);
+
+    // Derived State
+    const myHeldSide = myYesShares > myNoShares ? 'YES' : (myNoShares > 0 ? 'NO' : null);
+    const myHeldAmountStr = (myYesShares + myNoShares).toFixed(2);
+
     // Legacy support for display if needed, but we rely on shares mainly now
     const [lastOrder, setLastOrder] = useState<any>(null);
 
@@ -136,7 +143,22 @@ export default function MarketPage() {
         probability: number;
         username: string;
         type: 'BUY' | 'SELL';
+        imageUrl?: string;
     } | null>(null);
+
+    // New Djinn Toast State
+    const [djinnToast, setDjinnToast] = useState<{
+        isVisible: boolean;
+        type: DjinnToastType;
+        title?: string;
+        message: string;
+        actionLink?: string;
+        actionLabel?: string;
+    }>({
+        isVisible: false,
+        type: 'INFO',
+        message: ''
+    });
 
     const [marketAccount, setMarketAccount] = useState<any>(null);
 
@@ -266,6 +288,41 @@ export default function MarketPage() {
 
     // ...
 
+    // Manual Refresh for User (in case of indexer lag)
+    const refreshBalances = async () => {
+        setIsLoading(true);
+        if (!marketAccount || !publicKey || !marketAccount.yes_token_mint || !marketAccount.no_token_mint) {
+            setIsLoading(false);
+            return;
+        }
+        try {
+            const { getAssociatedTokenAddress } = await import('@solana/spl-token');
+            const yesMint = new PublicKey(marketAccount.yes_token_mint);
+            const noMint = new PublicKey(marketAccount.no_token_mint);
+
+            const yesAta = await getAssociatedTokenAddress(yesMint, publicKey);
+            const noAta = await getAssociatedTokenAddress(noMint, publicKey);
+
+            const [yesBal, noBal] = await Promise.all([
+                connection.getTokenAccountBalance(yesAta).then(r => r.value.uiAmount || 0).catch(() => 0),
+                connection.getTokenAccountBalance(noAta).then(r => r.value.uiAmount || 0).catch(() => 0)
+            ]);
+
+            console.log("Manual Refresh Balance:", { yesBal, noBal });
+            setMyYesShares(yesBal);
+            setMyNoShares(noBal);
+
+            // Re-fetch bets to update history if needed
+            const userBets = await supabaseDb.getUserBets(publicKey.toBase58());
+            const myBetsForSlug = userBets.filter(b => b.market_slug === effectiveSlug && !b.claimed);
+            // We trust on-chain more, but DB sync happens eventually
+        } catch (e) {
+            console.error("Manual Refresh Failed:", e);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     // Initial Load
     useEffect(() => {
         const fetchSolPrice = async () => {
@@ -333,18 +390,20 @@ export default function MarketPage() {
 
             // Load User's Position from DB (to persist Sell button after refresh)
             // 1. Try DB first (Optimized: Check all bets for this user in this market)
-            const userBets = await supabaseDb.getUserBets(publicKey.toBase58());
-            const myBetsForSlug = userBets.filter(b => b.market_slug === effectiveSlug && !b.claimed);
+            if (publicKey) {
+                const userBets = await supabaseDb.getUserBets(publicKey.toBase58());
+                const myBetsForSlug = userBets.filter(b => b.market_slug === effectiveSlug && !b.claimed);
 
-            // Aggregate from DB
-            const dbYes = myBetsForSlug.filter(b => b.side === 'YES').reduce((acc, b) => acc + (b.shares || 0), 0);
-            const dbNo = myBetsForSlug.filter(b => b.side === 'NO').reduce((acc, b) => acc + (b.shares || 0), 0);
+                // Aggregate from DB
+                const dbYes = myBetsForSlug.filter(b => b.side === 'YES').reduce((acc, b) => acc + (b.shares || 0), 0);
+                const dbNo = myBetsForSlug.filter(b => b.side === 'NO').reduce((acc, b) => acc + (b.shares || 0), 0);
 
-            setMyYesShares(dbYes);
-            setMyNoShares(dbNo);
+                setMyYesShares(dbYes);
+                setMyNoShares(dbNo);
+            }
 
             // 2. On-Chain Fallback (Always run this if market is live to be accurate)
-            if (marketInfo && marketInfo.yes_token_mint && marketInfo.no_token_mint) {
+            if (marketInfo && marketInfo.yes_token_mint && marketInfo.no_token_mint && publicKey) {
                 try {
                     const { getAssociatedTokenAddress } = await import('@solana/spl-token');
                     const yesMint = new PublicKey(marketInfo.yes_token_mint);
@@ -364,6 +423,10 @@ export default function MarketPage() {
                 } catch (e) { console.warn("On-chain check failed:", e); }
             }
         };
+
+
+
+
 
         loadMarketData();
 
@@ -431,13 +494,22 @@ export default function MarketPage() {
         // DEBUG: Trace execution
         console.log("🖱️ Buy Button Clicked. Amount:", amountNum, "Balance:", solBalance);
 
-        if (!publicKey) return alert("Please connect wallet");
-        if (amountNum <= 0) return alert("Enter an amount");
-        if (isOverBalance) return alert("Insufficient SOL");
+        if (!publicKey) return setDjinnToast({ isVisible: true, type: 'ERROR', message: "Please connect wallet" });
+        if (amountNum <= 0) return setDjinnToast({ isVisible: true, type: 'ERROR', message: "Enter an amount" });
+        if (isOverBalance) {
+            setDjinnToast({
+                isVisible: true,
+                type: 'ERROR',
+                title: 'Insufficient Funds',
+                message: `You need ${amountNum} SOL but only have ${solBalance.toFixed(4)} SOL.`,
+            });
+            return;
+        }
 
         setIsPending(true);
 
         try {
+            let txSignature = '';
             // Check if REAL or SIMULATED
             const isRealMarket = marketAccount?.market_pda && !marketAccount.market_pda.startsWith('local_') && marketAccount.yes_token_mint;
 
@@ -453,13 +525,20 @@ export default function MarketPage() {
                     0 // minSharesOut
                 );
                 console.log("✅ Buy TX:", tx);
+                txSignature = tx;
             } else {
                 // --- SIMULATED BUY ---
                 console.log("🔮 Executing Simulated Buy (Demo Market)...");
                 const reason = !marketAccount?.market_pda ? "Missing Market PDA" :
                     marketAccount.market_pda.startsWith('local_') ? "Local/Demo Market" :
                         !marketAccount.yes_token_mint ? "Missing Token Mints" : "Unknown";
-                alert(`DEBUG: Mode = Simulated. Reason: ${reason}`);
+
+                setDjinnToast({
+                    isVisible: true,
+                    type: 'INFO',
+                    title: 'Demo Mode',
+                    message: `Market is simulated (${reason}). Transactions are off-chain.`
+                });
 
                 // Simulate delay
                 await new Promise(r => setTimeout(r, 1000));
@@ -534,7 +613,6 @@ export default function MarketPage() {
                 outcomeName: selectedOutcomeName || staticMarketInfo.title,
                 side: selectedSide,
                 solAmount: amountNum,
-                solAmount: amountNum,
                 usdAmount: usdValueInTrading,
                 marketTitle: staticMarketInfo.title,
                 probability: livePrice,
@@ -542,7 +620,19 @@ export default function MarketPage() {
                 type: 'BUY',
                 imageUrl: marketAccount?.icon || (typeof staticMarketInfo.icon === 'string' && staticMarketInfo.icon.startsWith('http') ? staticMarketInfo.icon : undefined)
             });
-            setShowPurchaseToast(true);
+            // setShowPurchaseToast(true); // Disable old toast for now if we want purely new one, or keep both? User asked for "mini pop up message in djinn style ux"
+            // Let's keep the old one for "Share" functionality but ADD the new one for "Transaction Successful + Link"
+            // Actually, the request says "link to the transacccion to click". The old toast had share.
+            // Let's show the new Toast for the TX confirmation immediately.
+            setDjinnToast({
+                isVisible: true,
+                type: 'SUCCESS',
+                title: 'SUCCESS',
+                message: `Successfully bought ${sim.sharesReceived.toFixed(2)} ${selectedSide} shares.`,
+                actionLink: txSignature ? `https://solscan.io/tx/${txSignature}?cluster=devnet` : undefined,
+                actionLabel: 'View on Solscan'
+            });
+
             setIsSuccess(true);
             setBetAmount('');
 
@@ -552,7 +642,7 @@ export default function MarketPage() {
 
         } catch (error: any) {
             console.error("Error placing bet:", error);
-            alert(`Failed: ${error.message || 'Unknown error'}`);
+            setDjinnToast({ isVisible: true, type: 'ERROR', title: 'Bet Failed', message: error.message || 'Unknown error' });
         } finally {
             setIsPending(false);
             setTimeout(() => setIsSuccess(false), 3000);
@@ -571,8 +661,8 @@ export default function MarketPage() {
     // Handler to toggle logic
     const handleTrade = async () => {
         console.log(`🖱️ ${tradeMode} Button Clicked.`);
-        if (!publicKey) return alert("Please connect wallet");
-        if (parseFloat(betAmount) <= 0) return alert("Enter an amount");
+        if (!publicKey) return setDjinnToast({ isVisible: true, type: 'ERROR', message: "Please connect wallet" });
+        if (parseFloat(betAmount) <= 0) return setDjinnToast({ isVisible: true, type: 'ERROR', message: "Enter an amount" });
 
         if (tradeMode === 'BUY') {
             await handlePlaceBet();
@@ -580,14 +670,15 @@ export default function MarketPage() {
             // --- SELL LOGIC ---
             const availableShares = selectedSide === 'YES' ? myYesShares : myNoShares;
             if (availableShares <= 0) {
-                return alert(`You don't hold any ${selectedSide} PREDICTIONS to sell!`);
+                return setDjinnToast({ isVisible: true, type: 'ERROR', message: `You don't hold any ${selectedSide} PREDICTIONS to sell!` });
             }
             if (parseFloat(betAmount) > availableShares) {
-                return alert(`Insufficient shares! You only have ${availableShares.toFixed(2)}.`);
+                return setDjinnToast({ isVisible: true, type: 'ERROR', message: `Insufficient shares! You only have ${availableShares.toFixed(2)}.` });
             }
 
             setIsPending(true);
             try {
+                let txSignature = '';
                 const isRealMarket = marketAccount?.market_pda && !marketAccount.market_pda.startsWith('local_');
                 const sharesToSell = parseFloat(betAmount);
 
@@ -611,6 +702,7 @@ export default function MarketPage() {
                         0 // minSolOut (Slippage)
                     );
                     console.log("✅ Sell TX:", tx);
+                    txSignature = tx;
                 } else {
                     console.log("🔮 Simulated Sell");
                     await new Promise(r => setTimeout(r, 1000));
@@ -679,7 +771,16 @@ export default function MarketPage() {
                     imageUrl: marketAccount?.icon || (typeof staticMarketInfo.icon === 'string' && staticMarketInfo.icon.startsWith('http') ? staticMarketInfo.icon : undefined)
                 });
 
-                setShowPurchaseToast(true);
+                // setShowPurchaseToast(true);
+                setDjinnToast({
+                    isVisible: true,
+                    type: 'SUCCESS',
+                    title: 'SUCCESS',
+                    message: `Sold ${sharesToSell.toFixed(2)} ${selectedSide} shares for ${netSolReturn.toFixed(4)} SOL.`,
+                    actionLink: txSignature ? `https://solscan.io/tx/${txSignature}?cluster=devnet` : undefined,
+                    actionLabel: 'View on Solscan'
+                });
+
                 setIsSuccess(true);
                 setBetAmount('');
 
@@ -770,7 +871,16 @@ export default function MarketPage() {
                                                 <span className="text-[10px] font-black uppercase text-[#10B981] tracking-wide">Your Position Active</span>
                                             </div>
                                         )}
+                                        {/* Refresh Balance Button */}
+                                        <button
+                                            onClick={refreshBalances}
+                                            className="p-1.5 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                                            title="Refresh Wallet Balance"
+                                        >
+                                            <Loader2 size={12} className={isLoading ? 'animate-spin' : ''} />
+                                        </button>
                                     </div>
+
                                     <MarketChart data={chartData} color={chartColor} hasPosition={myYesShares > 0 || myNoShares > 0} />
                                 </>
                             )}
@@ -789,6 +899,8 @@ export default function MarketPage() {
                                     marketSlug={effectiveSlug}
                                     publicKey={publicKey ? publicKey.toBase58() : null}
                                     userProfile={userProfile}
+                                    myHeldPosition={myHeldSide}
+                                    myHeldAmount={myHeldAmountStr}
                                 />
                             )}
 
@@ -1020,10 +1132,54 @@ export default function MarketPage() {
                                             ))}
                                         </div>
                                         <div className="text-right mt-1">
-                                            <span className="text-[9px] text-gray-600 font-mono">Available: {selectedSide === 'YES' ? myYesShares : myNoShares} shares</span>
+                                            <span className="text-[9px] text-gray-600 font-mono">Available: {selectedSide === 'YES' ? myYesShares.toFixed(2) : myNoShares.toFixed(2)} shares</span>
                                         </div>
                                     </div>
                                 )}
+
+                            {/* FEE & RETURN BREAKDOWN */}
+                            {amountNum > 0 && (
+                                <div className="mb-4 bg-white/5 rounded-xl p-3 border border-white/5">
+                                    {tradeMode === 'BUY' ? (
+                                        <>
+                                            <div className="flex justify-between text-[10px] uppercase font-bold text-gray-500 mb-1">
+                                                <span>Est. Shares</span>
+                                                <span className="text-white">{estimatedShares.toFixed(2)}</span>
+                                            </div>
+                                            <div className="flex justify-between text-[10px] uppercase font-bold text-gray-500">
+                                                <span>Potential Payout</span>
+                                                <span className="text-[#10B981]">{potentialSolPayout.toFixed(3)} SOL</span>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="flex justify-between text-[10px] uppercase font-bold text-gray-500 mb-1">
+                                                <span>Gross Value</span>
+                                                <span className="text-white">
+                                                    {(parseFloat(betAmount) * (selectedSide === 'YES' ? livePrice : (100 - livePrice)) / 100).toFixed(4)} SOL
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between text-[10px] uppercase font-bold text-gray-500 mb-1">
+                                                <span>Market Fee (2.5%)</span>
+                                                <span className="text-red-400">
+                                                    -{(parseFloat(betAmount) * (selectedSide === 'YES' ? livePrice : (100 - livePrice)) / 100 * 0.025).toFixed(4)} SOL
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between text-[10px] uppercase font-bold text-gray-500 mb-1">
+                                                <span>Network Fee</span>
+                                                <span className="text-gray-400">~0.00005 SOL</span>
+                                            </div>
+                                            <div className="border-t border-white/10 my-2"></div>
+                                            <div className="flex justify-between text-[10px] uppercase font-black text-gray-400">
+                                                <span>Net Receive</span>
+                                                <span className="text-[#F492B7] text-xs">
+                                                    ≈ {(parseFloat(betAmount) * (selectedSide === 'YES' ? livePrice : (100 - livePrice)) / 100 * 0.975).toFixed(4)} SOL
+                                                </span>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            )}
 
                             {/* ACTION BUTTON */}
                             <button
@@ -1039,7 +1195,7 @@ export default function MarketPage() {
                                     </div>
                                 ) : isSuccess ? (
                                     <div className="flex items-center justify-center gap-2">
-                                        <CheckCircle2 /> {tradeMode === 'BUY' ? 'Order Filled' : 'Sold!'}
+                                        <CheckCircle2 /> <span style={{ fontFamily: 'var(--font-adriane), serif' }} className="text-xl pt-1">SUCCESS!</span>
                                     </div>
                                 ) : (
                                     <span>
@@ -1086,16 +1242,37 @@ export default function MarketPage() {
                     onCollect={async (position) => {
                         try {
                             await supabaseDb.claimPayout(position.id);
-                            alert(`Claimed $${position.payout?.toFixed(2)}! Funds will be sent to your wallet.`);
-                            window.location.reload();
+                            setDjinnToast({
+                                isVisible: true,
+                                type: 'SUCCESS',
+                                title: 'Payout Claimed!',
+                                message: `Successfully claimed $${position.payout?.toFixed(2)}.`,
+                            });
+                            setTimeout(() => window.location.reload(), 2000);
                         } catch (e) {
                             console.error('Error claiming:', e);
-                            alert('Error claiming payout.');
+                            setDjinnToast({
+                                isVisible: true,
+                                type: 'ERROR',
+                                title: 'Claim Failed',
+                                message: 'Could not claim payout. Please try again.'
+                            });
                         }
                     }}
                 />
+
+                {/* Djinn Toast */}
+                <DjinnToast
+                    isVisible={djinnToast.isVisible}
+                    onClose={() => setDjinnToast(prev => ({ ...prev, isVisible: false }))}
+                    type={djinnToast.type}
+                    title={djinnToast.title}
+                    message={djinnToast.message}
+                    actionLink={djinnToast.actionLink}
+                    actionLabel={djinnToast.actionLabel}
+                />
             </div>
-        </div>
+        </div >
     );
 }
 
