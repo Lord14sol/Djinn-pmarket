@@ -136,9 +136,10 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                     txSignature = result.tx;
                     console.log("✅ Blockchain TX:", txSignature);
                 } catch (blockchainError: any) {
-                    console.warn("⚠️ Blockchain failed/timeout, saving locally:", blockchainError.message);
-                    marketPDA = `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-                    txSignature = 'local_fallback';
+                    console.error("⚠️ Blockchain failed:", blockchainError);
+                    alert(`Blockchain Error: ${blockchainError.message}`); // Keep alert for critical failures if toast context not available, or assume alert is fine for now as requested by user to see error. 
+                    // Actually user hates alerts, but effectively we want to STOP.
+                    throw blockchainError;
                 }
             } else {
                 console.log("ℹ️ Contract not ready or wallet not connected, saving locally");
