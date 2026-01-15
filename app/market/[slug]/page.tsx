@@ -458,24 +458,48 @@ export default function MarketPage() {
         };
     }, [effectiveSlug, marketOutcomes, publicKey]);
 
-    // CALCULATIONS
+    // CALCULATIONS (Real-Time CPMM Simulation)
     const amountNum = parseFloat(betAmount) || 0;
     const isOverBalance = amountNum > solBalance;
     const currentPriceForSide = selectedSide === 'YES' ? livePrice : (100 - livePrice);
 
-    // Fix: Calculate shares based on USD value, not SOL amount directly
+    // Derived value for DB/UI
     const usdValueInTrading = amountNum * solPrice;
-    const estimatedShares = usdValueInTrading > 0 ? (usdValueInTrading / (currentPriceForSide / 100)) : 0;
 
-    const potentialProfit = estimatedShares - usdValueInTrading;
+    // Run Simulation for PREVIEW (Exact same logic as 'handlePlaceBet')
+    let estimatedShares = 0;
+    let effectivePrice = 0;
+    let potentialSolPayout = 0;
+    let potentialRoi = 0;
+
+    if (amountNum > 0) {
+        // 1. Setup Virtual Reserves based on current probability
+        const safePrice = Math.max(0.01, Math.min(0.99, currentPriceForSide / 100));
+        const virtualShareReserves = INITIAL_VIRTUAL_SOL / safePrice;
+
+        // 2. Simulate
+        const sim = simulateBuy(amountNum, {
+            virtualSolReserves: INITIAL_VIRTUAL_SOL,
+            virtualShareReserves: virtualShareReserves,
+            realSolReserves: 0,
+            totalSharesMinted: 0
+        });
+
+        estimatedShares = sim.sharesReceived;
+
+        // 3. Derived Stats
+        // Effective Price per Share = Cost / Shares
+        effectivePrice = estimatedShares > 0 ? (amountNum / estimatedShares) : safePrice;
+
+        // Potential Payout = Shares * 1 SOL (If 1 Share pays 1 SOL)
+        // NOTE: In this simplified AMM, 1 Share = Claim to 1 SOL of the winning pool? 
+        // Standard Binary Options: 1 Order = 1 Share = 1 SOL payout on win. 
+        potentialSolPayout = estimatedShares;
+
+        potentialRoi = ((potentialSolPayout - amountNum) / amountNum) * 100;
+    }
+
     const chartColor = selectedSide === 'YES' ? '#10b981' : '#EF4444';
-
-    // Potential Payout Calculation (SOL)
-    // If I bet 1 SOL at 50% odds, I get ~2 SOL payout. Payout = Amount / Probability.
-    // Probability is 0-1 (e.g. 0.5).
-    const probabilityDecimal = Math.max(0.01, currentPriceForSide / 100);
-    const potentialSolPayout = amountNum > 0 ? (amountNum / probabilityDecimal) : 0;
-    const potentialRoi = amountNum > 0 ? ((potentialSolPayout - amountNum) / amountNum) * 100 : 0;
 
     // Auto-refresh SOL Price every 30s
     useEffect(() => {
@@ -602,11 +626,10 @@ export default function MarketPage() {
             // 5. Update UI State
             setSolBalance(prev => prev - amountNum);
 
-            // Force refresh holders with delay
-            setTimeout(() => {
-                supabaseDb.getTopHolders(effectiveSlug).then(setHolders);
-            }, 1000);
-            setSolBalance(prev => prev - amountNum);
+            // SYNC FIX: Wait for DB propagation then update holders immediately
+            await new Promise(r => setTimeout(r, 500));
+            const updatedHolders = await supabaseDb.getTopHolders(effectiveSlug);
+            setHolders(updatedHolders);
 
             // Update specific share count
             if (selectedSide === 'YES') {
@@ -626,10 +649,7 @@ export default function MarketPage() {
                 type: 'BUY',
                 imageUrl: marketAccount?.icon || (typeof staticMarketInfo.icon === 'string' && staticMarketInfo.icon.startsWith('http') ? staticMarketInfo.icon : undefined)
             });
-            // setShowPurchaseToast(true); // Disable old toast for now if we want purely new one, or keep both? User asked for "mini pop up message in djinn style ux"
-            // Let's keep the old one for "Share" functionality but ADD the new one for "Transaction Successful + Link"
-            // Actually, the request says "link to the transacccion to click". The old toast had share.
-            // Let's show the new Toast for the TX confirmation immediately.
+
             setDjinnToast({
                 isVisible: true,
                 type: 'SUCCESS',
@@ -736,13 +756,17 @@ export default function MarketPage() {
                 const newPrice = updateExectutionPrices(effectiveSlug, impactSigned);
                 await supabaseDb.updateMarketPrice(effectiveSlug, newPrice, -usdValue);
 
-                // 2b. Reduce Bet Position in DB
+                // 2b. Reduce Bet Position in DB (Wait for this!)
                 await supabaseDb.reduceBetPosition(
                     publicKey.toBase58(),
                     effectiveSlug,
                     selectedSide,
                     sharesToSell
                 );
+
+                // SYNC FIX: Immediately refresh holders after DB update
+                const updatedHolders = await supabaseDb.getTopHolders(effectiveSlug);
+                setHolders(updatedHolders);
 
                 // 3. Log Activity
                 const profile = await supabaseDb.getProfile(publicKey.toBase58());
@@ -1220,50 +1244,81 @@ export default function MarketPage() {
                                     </div>
                                 )}
 
-                            {/* FEE & RETURN BREAKDOWN */}
-                            {amountNum > 0 && (
-                                <div className="mb-4 bg-white/5 rounded-xl p-3 border border-white/5">
-                                    {tradeMode === 'BUY' ? (
+                            {/* Trade Inputs */}
+                            <div className="space-y-4 mb-6">
+                                <div>
+                                    <div className="flex justify-between text-xs text-gray-400 mb-1">
+                                        <span>Amount ({inputSubtext})</span>
+                                        <span className="flex items-center gap-1">
+                                            <Wallet size={10} />
+                                            {tradeMode === 'BUY' ? `${solBalance.toFixed(3)} SOL` : `${selectedSide === 'YES' ? myYesShares.toFixed(2) : myNoShares.toFixed(2)} Shares`}
+                                        </span>
+                                    </div>
+                                    <div className="relative">
+                                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-djinn-neon-blue">
+                                            {tradeMode === 'BUY' ? <DollarSign size={16} /> : <Activity size={16} />}
+                                        </div>
+                                        <input
+                                            type="number"
+                                            value={betAmount}
+                                            onChange={(e) => setBetAmount(e.target.value)}
+                                            className="w-full bg-[#0F1115] border border-gray-800 rounded-lg py-3 pl-10 pr-16 text-white placeholder-gray-600 focus:outline-none focus:border-djinn-neon-blue transition-colors font-mono"
+                                            placeholder="0.00"
+                                        />
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500 font-bold">
+                                            {inputLabel}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Transaction Summary */}
+                                <div className="bg-[#0F1115]/50 rounded-lg p-3 space-y-2 text-xs">
+                                    {/* BUY MODE SUMMARY */}
+                                    {tradeMode === 'BUY' && (
                                         <>
-                                            <div className="flex justify-between text-[10px] uppercase font-bold text-gray-500 mb-1">
+                                            <div className="flex justify-between items-center text-gray-400">
                                                 <span>Est. Shares</span>
-                                                <span className="text-white">{estimatedShares.toFixed(2)}</span>
+                                                <span className="text-white font-mono">{estimatedShares.toFixed(2)}</span>
                                             </div>
-                                            <div className="flex justify-between text-[10px] uppercase font-bold text-gray-500">
+                                            <div className="flex justify-between items-center text-gray-400">
+                                                <span>Avg. Price</span>
+                                                <span className="text-white font-mono">{effectivePrice.toFixed(4)} SOL</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-gray-400">
                                                 <span>Potential Payout</span>
-                                                <span className="text-[#10B981]">{potentialSolPayout.toFixed(3)} SOL</span>
+                                                <span className="text-[#10b981] font-black italic tracking-wide">{potentialSolPayout.toFixed(2)} SOL</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-gray-400">
+                                                <span>ROI</span>
+                                                <span className="text-[#10b981] font-black italic tracking-wide">+{potentialRoi.toFixed(0)}%</span>
                                             </div>
                                         </>
-                                    ) : (
+                                    )}
+
+                                    {/* SELL MODE SUMMARY */}
+                                    {tradeMode === 'SELL' && (
                                         <>
-                                            <div className="flex justify-between text-[10px] uppercase font-bold text-gray-500 mb-1">
-                                                <span>Gross Value</span>
-                                                <span className="text-white">
-                                                    {(parseFloat(betAmount) * (selectedSide === 'YES' ? livePrice : (100 - livePrice)) / 100).toFixed(3)} SOL
-                                                </span>
+                                            <div className="flex justify-between items-center text-gray-400">
+                                                <span>Value</span>
+                                                <span className="text-white font-mono">{(parseFloat(betAmount || '0') * (currentPriceForSide / 100)).toFixed(4)} SOL</span>
                                             </div>
-                                            <div className="flex justify-between text-[10px] uppercase font-bold text-gray-500 mb-1">
-                                                <span>Market Fee (2.5%)</span>
-                                                <span className="text-red-400">
-                                                    -{(parseFloat(betAmount) * (selectedSide === 'YES' ? livePrice : (100 - livePrice)) / 100 * 0.025).toFixed(3)} SOL
-                                                </span>
+                                            {/* Hidden Fees as requested */}
+                                            {/* 
+                                            <div className="flex justify-between items-center text-gray-400">
+                                                <span>Market Fee</span>
+                                                <span className="text-red-400 font-mono">-{((parseFloat(betAmount || '0') * (currentPriceForSide / 100)) * 0.025).toFixed(4)} SOL</span>
                                             </div>
-                                            <div className="flex justify-between text-[10px] uppercase font-bold text-gray-500 mb-1">
-                                                <span>Network Fee</span>
-                                                <span className="text-gray-400">~0.00005 SOL</span>
-                                            </div>
-                                            <div className="border-t border-white/10 my-2"></div>
-                                            <div className="flex justify-between text-[10px] uppercase font-black text-gray-400">
-                                                <span>Net Receive</span>
-                                                <span className="text-[#F492B7] text-xs">
-                                                    ≈ {(parseFloat(betAmount) * (selectedSide === 'YES' ? livePrice : (100 - livePrice)) / 100 * 0.975).toFixed(3)} SOL
+                                            */}
+                                            <div className="pt-2 mt-2 border-t border-gray-800/50 flex justify-between items-center">
+                                                <span className="text-gray-300 font-bold">SOL Receive</span>
+                                                <span className="text-[#10b981] font-black italic text-sm tracking-wide">
+                                                    {((parseFloat(betAmount || '0') * (currentPriceForSide / 100)) * 0.975).toFixed(4)} SOL
                                                 </span>
                                             </div>
                                         </>
                                     )}
                                 </div>
-                            )}
-
+                            </div>
                             {/* ACTION BUTTON */}
                             <button
                                 onClick={handleTrade}

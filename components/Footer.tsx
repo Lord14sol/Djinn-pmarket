@@ -1,5 +1,6 @@
 import React from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 
 const SocialIcon = ({ children }: { children: React.ReactNode }) => (
     <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-gray-400 hover:bg-[#F492B7] hover:text-black transition-all duration-300 cursor-pointer hover:scale-110 hover:shadow-[0_0_15px_rgba(244,146,183,0.4)]">
@@ -38,8 +39,8 @@ export default function Footer() {
                     <ul className="flex flex-col gap-4 text-sm text-gray-400 font-medium">
                         <li className="hover:text-[#F492B7] cursor-pointer w-max transition-colors">Documentation</li>
                         <li className="hover:text-[#F492B7] cursor-pointer w-max transition-colors">Help Center</li>
-                        <li className="hover:text-[#F492B7] cursor-pointer w-max transition-colors">Terms of Service</li>
-                        <li className="hover:text-[#F492B7] cursor-pointer w-max transition-colors">Privacy Policy</li>
+                        <li><Link href="/legal" className="hover:text-[#F492B7] cursor-pointer w-max transition-colors">Terms of Service</Link></li>
+                        <li><Link href="/legal" className="hover:text-[#F492B7] cursor-pointer w-max transition-colors">Privacy Policy</Link></li>
                     </ul>
                 </div>
 

@@ -4,17 +4,21 @@
 resolution = true
 skip-lint = false
 
+[toolchain]
+anchor_version = "0.28.0"
+solana_version = "1.18.20"
+
 [programs.localnet]
 djinn_market = "DSsD8neGhs9Ae9gVuWjmUfVckEvw36GamNboxWQCNqKQ"
 
 [programs.devnet]
-djinn_market = "9xXGnGG4hxwC4XTHavmy5BWAdb8MC2VJtTDMW9FfkGbg"
+djinn_market = "CMA2yM8ZUEiJ2t9cYNYShGaH2TbvcxPh2ZKbotm8wUHL"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "devnet"
+cluster = "Localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
@@ -22,3 +26,6 @@ test = "npx ts-mocha -p ./tsconfig.json -t 1000000 \"tests/**/*.ts\""
 
 [build]
 bootloader = "https://github.com/coral-xyz/sealevel-tools/releases/download/v0.3.0/sealevel-tools.tar.gz"
+
+[test.validator]
+startup_wait = 200000
