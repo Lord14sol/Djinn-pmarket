@@ -1,4 +1,4 @@
-#  DJINN PROTOCOL
+#  Djinn.world
 ### The Infinite Pool Prediction Engine on Solana
 
 **DJINN** is a decentralized, non-custodial prediction protocol that reimagines events as tradable assets using **Asymptotic S-Curve Bonding Curves**. Unlike traditional binary markets, DJINN allows for infinite speculative upside by merging the "Jackpot" mechanics of lottery pools with the precision of DeFi.
