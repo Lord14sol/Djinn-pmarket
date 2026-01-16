@@ -156,7 +156,10 @@ describe("Djinn Protocol: THE JUDGMENT DAY (Devnet Edition)", () => {
                     aiOracle: provider.wallet.publicKey,
                     apiOracle: provider.wallet.publicKey,
                     daoMultisig: creator.publicKey, // Mock
-                    authority: provider.wallet.publicKey
+                    authority: provider.wallet.publicKey,
+                    marketVault: vaultPda,
+                    protocolTreasury: G1_TREASURY_PUBKEY,
+                    systemProgram: anchor.web3.SystemProgram.programId
                 })
                 .signers([]).rpc();
         } catch (e) {

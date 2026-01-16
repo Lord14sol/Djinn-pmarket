@@ -305,9 +305,40 @@ pub mod djinn_market {
 
         require!(ai_vote == winning_outcome, DjinnError::AIVoteMismatch);
         require!(api_vote == winning_outcome, DjinnError::APIVoteMismatch);
-        require!(ctx.accounts.dao_multisig.approvals >= 2, DjinnError::InsufficientDAOApprovals);
-
+        require!(ctx.accounts.dao_multisig.approvals >= 2, DjinnError::InsufficientDAOApprovals);       
         require!((winning_outcome as usize) < market.outcomes.len(), DjinnError::InvalidOutcomeIndex);
+
+        // --- ATOMIC FEE EXTRACTION (2%) ---
+        let current_vault = market.global_vault;
+        let resolution_fee = current_vault
+            .checked_mul(RESOLUTION_FEE_BPS).unwrap()
+            .checked_div(BPS_DENOMINATOR).unwrap();
+
+        if resolution_fee > 0 {
+             let market_key = market.key();
+             let seeds = &[
+                b"market_vault",
+                market_key.as_ref(),
+                &[market.vault_bump],
+             ];
+             let signer = &[&seeds[..]];
+
+             // Vault -> Treasury (Resolution Fee)
+             anchor_lang::system_program::transfer(
+                CpiContext::new_with_signer(
+                    ctx.accounts.system_program.to_account_info(),
+                    anchor_lang::system_program::Transfer {
+                        from: ctx.accounts.market_vault.to_account_info(),
+                        to: ctx.accounts.protocol_treasury.to_account_info(),
+                    },
+                    signer,
+                ),
+                resolution_fee as u64,
+            )?;
+            
+            // Deduct from Vault State
+            market.global_vault = market.global_vault.checked_sub(resolution_fee).unwrap();
+        }
 
         market.status = MarketStatus::Resolved;
         market.winning_outcome = Some(winning_outcome);
@@ -360,7 +391,7 @@ pub mod djinn_market {
         require!(user_pos.outcome_index == winning_index, DjinnError::NotWinner);
 
         let numerator = market.global_vault
-            .checked_mul(98).unwrap()
+            // Fee already extracted in resolve_market. Distribute 100% of the remainder.
             .checked_mul(user_pos.shares).unwrap();
         
         let denominator = winner_shares
@@ -557,6 +588,13 @@ pub struct ResolveMarket<'info> {
     pub api_oracle: Signer<'info>,
     pub dao_multisig: Box<Account<'info, Multisig>>,
     pub authority: Signer<'info>,
+    #[account(mut)]
+    /// CHECK: Vault
+    pub market_vault: AccountInfo<'info>,
+    #[account(mut)]
+    /// CHECK: Treasury
+    pub protocol_treasury: AccountInfo<'info>,
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
