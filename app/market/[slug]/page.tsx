@@ -12,8 +12,7 @@ import { simulateBuy, estimatePayoutInternal, INITIAL_VIRTUAL_SOL } from '@/lib/
 
 // Components
 import PrettyChart from '@/components/market/PrettyChart';
-import TradingViewProChart from '@/components/market/TradingViewProChart';
-import ChartSwitcher from '@/components/market/ChartSwitcher';
+// TradingView & Switcher REMOVED
 import CommentsSection from '@/components/market/CommentsSection';
 import OutcomeList, { Outcome } from '@/components/market/OutcomeList';
 import PurchaseToast from '@/components/market/PurchaseToast';
@@ -50,12 +49,12 @@ const marketDisplayData: Record<string, any> = {
 
 
 // Generate chart data for single outcome with Bonding Curve "Origin" logic
+// Generate chart data for single outcome with Bonding Curve "Origin" logic
 const generateChartData = (currentPrice: number) => {
     const data = [];
     const points = 50;
-    // Bonding curve often starts at a lower baseline (e.g. 5% or 10%) or 50/50
-    // To show "growth", we'll start from a lower point and curve up/down towards the current price
-    const startValue = 10; // 10% baseline for a new market
+    // "Zero-Start" Logic: Start strictly at 0 (or close to it) and curve up
+    const startValue = 0.5; // Starts at effectively 0 (0.5 for visibility line)
 
     for (let i = 0; i < points; i++) {
         const date = new Date();
@@ -63,170 +62,68 @@ const generateChartData = (currentPrice: number) => {
 
         // Exponential growth simulation: value = start + (current - start) * (i/points)^shape
         const progress = i / (points - 1);
-        const curveFactor = Math.pow(progress, 0.7); // Slight curve
+        const curveFactor = Math.pow(progress, 2.5); // Steep exponential "Explosion" curve
         const baseValue = startValue + (currentPrice - startValue) * curveFactor;
 
-        // Add micro-variance for visual interest
-        const variance = Math.sin(i * 0.5) * 0.5;
+        // Add micro-variance for visual interest (less variance at 0)
+        const variance = Math.sin(i * 0.5) * (0.5 * progress);
 
         data.push({
-            time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            value: Math.max(1, Math.min(99, baseValue + variance))
+            date: date.getTime(), // Visx expects number/Date
+            value: Math.max(0, baseValue + variance)
         });
     }
     return data;
 };
 
-// Generate chart data for multi-outcome (all options starting from origin)
-const generateMultiOutcomeChartData = (options: { name: string; chance: number }[]) => {
-    const points = 50;
-    return options.map(opt => ({
-        name: opt.name,
-        data: Array.from({ length: points }, (_, i) => {
-            const date = new Date();
-            date.setHours(date.getHours() - (points - i));
+// ... (Multi-outcome generator removed or simplified if unused, but let's keep consistent)
 
-            const startValue = 1; // Multi-outcomes usually start very low (e.g. 1%)
-            const progress = i / (points - 1);
-            const curveFactor = Math.pow(progress, 0.8);
-            const baseValue = startValue + (opt.chance - startValue) * curveFactor;
-
-            const variance = Math.sin(i * 0.3) * 1;
-            return {
-                time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                value: Math.max(0.5, Math.min(99, baseValue + variance))
-            };
-        })
-    }));
-};
-
-export default function MarketPage() {
+// --- PAGE COMPONENT ---
+export default function Page() {
+    // Hooks
     const params = useParams();
-    const slug = params.slug as string;
+    const slug = params?.slug as string || '';
+    const { publicKey, signTransaction } = useWallet();
     const { connection } = useConnection();
-    const { publicKey } = useWallet();
-    const { placeBet, sellShares, program } = useDjinnProtocol();
-
-    // Derived Market Info
-    const staticMarketInfo = marketDisplayData[slug] || { title: slug, icon: "🔮", description: "Market info..." };
+    const { placeBet, sellShares, marketAccount, isLoading: isContractLoading } = useDjinnProtocol(slug);
 
     // --- STATE ---
-    // 1. Outcomes State (Prices & Chances)
+    // Market Data
     const [marketOutcomes, setMarketOutcomes] = useState<Outcome[]>([]);
-    // 2. Chart Series State (Stable History)
-    const [chartSeries, setChartSeries] = useState<{ name: string; data: { time: string; value: number }[] }[]>([]);
-
-    const [selectedOutcomeId, setSelectedOutcomeId] = useState<string | null>(null);
-    const isMultiOutcome = marketOutcomes.length > 0;
-
-    // The slug used for DB access (persistence key)
-    const effectiveSlug = selectedOutcomeId || slug;
-
-    // Standard State
-    const [solPrice, setSolPrice] = useState<number>(0);
-    const [solBalance, setSolBalance] = useState<number>(0);
+    const [selectedOutcomeId, setSelectedOutcomeId] = useState<string>('');
+    const [selectedOutcomeName, setSelectedOutcomeName] = useState<string>('');
     const [livePrice, setLivePrice] = useState<number>(50);
-    const [isPending, setIsPending] = useState(false);
+    const [chartSeries, setChartSeries] = useState<any[]>([]);
+    const [chartData, setChartData] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [isSuccess, setIsSuccess] = useState(false);
-    const [userProfile, setUserProfile] = useState({ username: "Guest", avatarUrl: null as string | null });
-    const [betAmount, setBetAmount] = useState('');
-    const [selectedSide, setSelectedSide] = useState<'YES' | 'NO'>('YES');
-    const [bottomTab, setBottomTab] = useState<'ORDERBOOK' | 'COMMENTS' | 'HOLDERS' | 'ACTIVITY'>('COMMENTS');
-    const [chartData, setChartData] = useState<any[]>([]); // For Single Outcome
-    const [activityList, setActivityList] = useState<any[]>([]);
-    const [holders, setHolders] = useState<any[]>([]);
+    const [solPrice, setSolPrice] = useState<number>(145);
 
-    // Multi-outcome Name tracking
-    const [selectedOutcomeName, setSelectedOutcomeName] = useState<string | null>(null);
-
-    // My Position
-    // My Position (Refactored for Simultaneous Holdings)
+    // User Data
+    const [solBalance, setSolBalance] = useState<number>(0);
     const [myYesShares, setMyYesShares] = useState<number>(0);
     const [myNoShares, setMyNoShares] = useState<number>(0);
+    const [holders, setHolders] = useState<any[]>([]);
+    const [activityList, setActivityList] = useState<any[]>([]);
+    const [userProfile, setUserProfile] = useState({ username: '', avatarUrl: '' });
 
-    // Derived State
-    const myHeldSide = myYesShares > myNoShares ? 'YES' : (myNoShares > 0 ? 'NO' : null);
-    const myHeldAmountStr = (myYesShares + myNoShares).toFixed(2);
-
-    // Legacy support for display if needed, but we rely on shares mainly now
-    const [lastOrder, setLastOrder] = useState<any>(null);
-
-    // Toast & Share Modal State
-    const [showPurchaseToast, setShowPurchaseToast] = useState(false);
-    const [showShareModal, setShowShareModal] = useState(false);
-    const [viewMode, setViewMode] = useState<'pretty' | 'pro'>('pretty');
-
-    const generateOhlcData = (currentPrice: number, days: number = 30) => {
-        const data = [];
-        const now = Date.now();
-        const dayInMs = 86400000;
-
-        // Probability drift
-        let probability = 0.5;
-
-        for (let i = days; i >= 0; i--) {
-            // Unix timestamp in seconds
-            const timestamp = Math.floor((now - i * dayInMs) / 1000) as unknown as string;
-
-            // Simulate realistic price movement
-            const volatility = 0.05;
-            const drift = (currentPrice - probability) / (i + 1);
-            const randomWalk = (Math.random() - 0.5) * volatility;
-
-            probability = Math.max(0.01, Math.min(0.99, probability + drift + randomWalk));
-
-            const open = probability;
-            const close = Math.max(0.01, Math.min(0.99, probability + (Math.random() - 0.5) * 0.02));
-            const high = Math.max(open, close) + Math.random() * 0.03;
-            const low = Math.min(open, close) - Math.random() * 0.03;
-
-            data.push({
-                time: timestamp,
-                open: parseFloat(open.toFixed(2)),
-                high: parseFloat((Math.min(0.99, high)).toFixed(2)),
-                low: parseFloat((Math.max(0.01, low)).toFixed(2)),
-                close: parseFloat(close.toFixed(2))
-            });
-            probability = close;
-        }
-
-        // Ensure strictly unique timestamps
-        const uniqueData = data.filter((item, index, self) =>
-            index === self.findIndex((t) => t.time === item.time)
-        );
-
-        return uniqueData;
-    };
+    // UI State
+    const [betAmount, setBetAmount] = useState('');
+    const [selectedSide, setSelectedSide] = useState<'YES' | 'NO'>('YES');
+    const [isPending, setIsPending] = useState(false);
+    const [isSuccess, setIsSuccess] = useState(false);
+    const [djinnToast, setDjinnToast] = useState<{ isVisible: boolean; type: DjinnToastType; title?: string; message: string; actionLink?: string; actionLabel?: string }>({ isVisible: false, type: 'INFO', message: '' });
     const [lastTradeEvent, setLastTradeEvent] = useState<{ amount: number; side: 'YES' | 'NO' } | null>(null);
 
-    const [lastBetDetails, setLastBetDetails] = useState<{
-        outcomeName: string;
-        side: 'YES' | 'NO';
-        solAmount: number;
-        usdAmount: number;
-        marketTitle: string;
-        probability: number;
-        username: string;
-        type: 'BUY' | 'SELL';
-        imageUrl?: string;
-    } | null>(null);
+    const [isMaxSell, setIsMaxSell] = useState(false);
+    const [showPurchaseToast, setShowPurchaseToast] = useState(false);
+    const [showShareModal, setShowShareModal] = useState(false);
+    const [lastBetDetails, setLastBetDetails] = useState<any>(null);
+    const [bottomTab, setBottomTab] = useState<'COMMENTS' | 'HOLDERS' | 'ACTIVITY'>('COMMENTS');
 
-    // New Djinn Toast State
-    const [djinnToast, setDjinnToast] = useState<{
-        isVisible: boolean;
-        type: DjinnToastType;
-        title?: string;
-        message: string;
-        actionLink?: string;
-        actionLabel?: string;
-    }>({
-        isVisible: false,
-        type: 'INFO',
-        message: ''
-    });
-
-    const [marketAccount, setMarketAccount] = useState<any>(null);
+    // Derived
+    const isMultiOutcome = (MULTI_OUTCOMES[slug] || []).length > 0;
+    const staticMarketInfo = marketDisplayData[slug] || { title: 'Unknown Market', icon: '❓', description: 'Market not found' };
+    const effectiveSlug = slug;
 
     // --- INITIALIZATION ---
     useEffect(() => {
@@ -240,21 +137,44 @@ export default function MarketPage() {
             setLivePrice(initialOutcomes[0].yesPrice);
 
             // Generate Initial Stable Chart History for all outcomes
-            const initialSeries = initialOutcomes.map(o => ({
-                name: o.title,
-                data: Array.from({ length: 50 }, (_, i) => {
-                    const date = new Date();
-                    date.setHours(date.getHours() - (50 - i));
-                    const variance = Math.sin(i * 0.2) * 2;
-                    return {
-                        time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                        value: Math.max(1, Math.min(99, o.chance + variance))
-                    };
-                })
-            }));
+            // Standardize colors: YES = Blue (#3b82f6), NO = Red (#ef4444)
+            const initialSeries = initialOutcomes.map((o) => {
+                const isYes = o.title.toUpperCase() === 'YES';
+                const color = isYes ? '#3b82f6' : '#ef4444'; // Blue/Red
+
+                return {
+                    name: o.title,
+                    color: color,
+                    data: Array.from({ length: 50 }, (_, i) => {
+                        const date = new Date();
+                        date.setHours(date.getHours() - (50 - i));
+
+                        // "Cold Start" Logic: 50% baseline as requested
+                        const baseVal = o.chance || 50;
+
+                        // Small variance to show it's "live" but stable
+                        const variance = Math.sin(i * 0.5) * 1;
+
+                        return {
+                            date: date.getTime(),
+                            value: Math.max(1, Math.min(99, baseVal + variance))
+                        };
+                    })
+                };
+            });
+            // Ensure we have both YES and NO if only one exists (simulate the inverse)
+            if (initialSeries.length === 1 && initialOutcomes[0].title === 'YES') {
+                initialSeries.push({
+                    name: 'NO',
+                    color: '#ef4444',
+                    data: initialSeries[0].data.map(d => ({ ...d, value: 100 - d.value }))
+                });
+            }
+
             setChartSeries(initialSeries);
         } else {
-            // Single market init handled in "Load Market Data" effect
+            // Single Market Init
+            setChartData(generateChartData(50));
         }
     }, [slug]);
 
@@ -264,7 +184,7 @@ export default function MarketPage() {
             // Single market logic
             setLivePrice(prev => {
                 const newP = Math.max(1, Math.min(99, prev + priceDelta));
-                setChartData(cPrev => [...cPrev.slice(1), { time: new Date().toLocaleTimeString(), value: newP }]);
+                setChartData(cPrev => [...cPrev.slice(1), { date: Date.now(), value: newP }]);
                 return newP;
             });
             return Math.max(1, Math.min(99, livePrice + priceDelta));
@@ -289,7 +209,6 @@ export default function MarketPage() {
 
         const newOutcomes = [...marketOutcomes];
         const newSeries = [...chartSeries];
-        const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
         // Update Target
         newOutcomes[targetIndex] = { ...newOutcomes[targetIndex], chance: Math.round(newTargetPrice), yesPrice: Math.round(newTargetPrice) };
@@ -317,7 +236,7 @@ export default function MarketPage() {
             const sIndex = newSeries.findIndex(s => s.name === o.title);
             if (sIndex !== -1) {
                 const newData = [...newSeries[sIndex].data];
-                newData.push({ time: nowTime, value: o.chance });
+                newData.push({ date: Date.now(), value: o.chance });
                 if (newData.length > 50) newData.shift();
                 newSeries[sIndex] = { ...newSeries[sIndex], data: newData };
             }
@@ -409,6 +328,8 @@ export default function MarketPage() {
             });
         }
     }, [publicKey]);
+
+
 
     // Update Balance
     useEffect(() => {
@@ -503,19 +424,17 @@ export default function MarketPage() {
                 setChartData(prev => {
                     const newData = [...prev];
                     const date = new Date();
-                    newData.push({ time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), value: newPrice });
+                    newData.push({ date: date.getTime(), value: newPrice });
                     if (newData.length > 50) newData.shift();
                     return newData;
                 });
             }
         });
 
-        const activitySub = supabaseDb.subscribeToActivity((payload) => {
-            if (payload.new?.market_slug === effectiveSlug) {
-                setActivityList(prev => [payload.new, ...prev]);
-                // Refresh holders on new activity
-                supabaseDb.getTopHolders(effectiveSlug).then(setHolders);
-            }
+        const activitySub = supabaseDb.subscribeToActivity(effectiveSlug, (payload) => {
+            setActivityList(prev => [payload.new, ...prev]);
+            // Refresh holders on new activity
+            supabaseDb.getTopHolders(effectiveSlug).then(setHolders);
         });
 
         return () => {
@@ -529,41 +448,32 @@ export default function MarketPage() {
     const isOverBalance = amountNum > solBalance;
     const currentPriceForSide = selectedSide === 'YES' ? livePrice : (100 - livePrice);
 
-    // Derived value for DB/UI
+    // User Position Helper
+    const myHeldSide = myYesShares > 0.001 ? 'YES' : (myNoShares > 0.001 ? 'NO' : null);
+    const myHeldAmount = myHeldSide === 'YES' ? myYesShares : myNoShares;
+    const myHeldAmountStr = (myHeldAmount || 0).toFixed(2);
+
+    // Trading Preview Calculations
+    const safePrice = Math.max(0.01, Math.min(0.99, currentPriceForSide / 100)); // 0.01 to 0.99
+    const virtualShareReserves = INITIAL_VIRTUAL_SOL / safePrice;
+
+    // Simulate purely for display
+    const previewSim = simulateBuy(amountNum, {
+        virtualSolReserves: INITIAL_VIRTUAL_SOL,
+        virtualShareReserves: virtualShareReserves,
+        realSolReserves: 0,
+        totalSharesMinted: 0
+    });
+
+    const estimatedShares = previewSim.sharesReceived;
+    const effectivePrice = previewSim.averagePrice;
+
+    const potentialSolPayout = estimatePayoutInternal(estimatedShares);
+    const potentialRoi = amountNum > 0 ? ((potentialSolPayout - amountNum) / amountNum) * 100 : 0;
+
     const usdValueInTrading = amountNum * solPrice;
 
-    // Run Simulation for PREVIEW (Exact same logic as 'handlePlaceBet')
-    let estimatedShares = 0;
-    let effectivePrice = 0;
-    let potentialSolPayout = 0;
-    let potentialRoi = 0;
 
-    if (amountNum > 0) {
-        // 1. Setup Virtual Reserves based on current probability
-        const safePrice = Math.max(0.01, Math.min(0.99, currentPriceForSide / 100));
-        const virtualShareReserves = INITIAL_VIRTUAL_SOL / safePrice;
-
-        // 2. Simulate
-        const sim = simulateBuy(amountNum, {
-            virtualSolReserves: INITIAL_VIRTUAL_SOL,
-            virtualShareReserves: virtualShareReserves,
-            realSolReserves: 0,
-            totalSharesMinted: 0
-        });
-
-        estimatedShares = sim.sharesReceived;
-
-        // 3. Derived Stats
-        // Effective Price per Share = Cost / Shares
-        effectivePrice = estimatedShares > 0 ? (amountNum / estimatedShares) : safePrice;
-
-        // Potential Payout = Shares * 1 SOL (If 1 Share pays 1 SOL)
-        // NOTE: In this simplified AMM, 1 Share = Claim to 1 SOL of the winning pool? 
-        // Standard Binary Options: 1 Order = 1 Share = 1 SOL payout on win. 
-        potentialSolPayout = estimatedShares;
-
-        potentialRoi = ((potentialSolPayout - amountNum) / amountNum) * 100;
-    }
 
     const chartColor = selectedSide === 'YES' ? '#10b981' : '#EF4444';
 
@@ -701,7 +611,14 @@ export default function MarketPage() {
             } else {
                 setMyNoShares(prev => prev + sim.sharesReceived);
             }
-            setLastTradeEvent({ amount: usdValueInTrading, side: selectedSide });
+
+            // Trigger Bubble with calculated USD amount
+            // usdValueInTrading is already calculated at component level and is safe to use here
+            setLastTradeEvent({
+                amount: usdValueInTrading,
+                side: selectedSide
+            });
+
             setTimeout(() => setLastTradeEvent(null), 3000);
             setLastBetDetails({
                 outcomeName: selectedOutcomeName || staticMarketInfo.title,
@@ -744,40 +661,55 @@ export default function MarketPage() {
     // --- NEW STATE FOR TRADING ---
     const [tradeMode, setTradeMode] = useState<'BUY' | 'SELL'>('BUY');
 
+    // Reset when side or mode changes
+    useEffect(() => {
+        setBetAmount('');
+        setIsMaxSell(false);
+    }, [selectedSide, tradeMode]);
+
     // ... (Keep existing calculations)
     // Dynamic Input Label & Calculation
-    const inputLabel = tradeMode === 'BUY' ? 'USD' : 'Shares';
-    const inputSubtext = tradeMode === 'BUY' ? '≈SOL' : 'Qty';
+    const inputLabel = 'SOL';
+    const inputSubtext = tradeMode === 'BUY' ? 'Amount to Spend' : 'Value to Extract';
 
     // Handler to toggle logic
     const handleTrade = async () => {
         console.log(`🖱️ ${tradeMode} Button Clicked.`);
         if (!publicKey) return setDjinnToast({ isVisible: true, type: 'ERROR', message: "Please connect wallet" });
-        if (parseFloat(betAmount) <= 0) return setDjinnToast({ isVisible: true, type: 'ERROR', message: "Enter an amount" });
+        const amountVal = parseFloat(betAmount);
+        if (isNaN(amountVal) || amountVal <= 0) return setDjinnToast({ isVisible: true, type: 'ERROR', message: "Enter a valid amount" });
 
         if (tradeMode === 'BUY') {
             await handlePlaceBet();
         } else {
-            // --- SELL LOGIC ---
+            // --- SELL LOGIC (SOL Input -> Shares) ---
+            const currentPrice = selectedSide === 'YES' ? livePrice : (100 - livePrice);
+            const priceRatio = currentPrice / 100;
+            const sharesToSell = amountVal / priceRatio; // Convert SOL input to Shares
+
             const availableShares = selectedSide === 'YES' ? myYesShares : myNoShares;
-            if (availableShares <= 0) {
-                return setDjinnToast({ isVisible: true, type: 'ERROR', message: `You don't hold any ${selectedSide} PREDICTIONS to sell!` });
+
+            // Allow small buffer for floating point issues or just cap it
+            if (sharesToSell > availableShares * 1.001) { // 0.1% tolerance
+                if (sharesToSell > availableShares + 0.01) {
+                    return setDjinnToast({ isVisible: true, type: 'ERROR', message: `Insufficient shares! You need ${sharesToSell.toFixed(2)} shares to get ${amountVal} SOL` });
+                }
             }
-            if (parseFloat(betAmount) > availableShares) {
-                return setDjinnToast({ isVisible: true, type: 'ERROR', message: `Insufficient shares! You only have ${availableShares.toFixed(2)}.` });
+
+            // Cap at exact balance if close (MAX handling)
+            const finalSharesToSell = (sharesToSell >= availableShares || isMaxSell) ? availableShares : sharesToSell;
+
+            if (finalSharesToSell <= 0) {
+                return setDjinnToast({ isVisible: true, type: 'ERROR', message: `You don't hold any ${selectedSide} PREDICTIONS to sell!` });
             }
 
             setIsPending(true);
             try {
                 let txSignature = '';
                 const isRealMarket = marketAccount?.market_pda && !marketAccount.market_pda.startsWith('local_');
-                const sharesToSell = parseFloat(betAmount);
 
                 // Estimate Value & Fee
-                const currentPrice = selectedSide === 'YES' ? livePrice : (100 - livePrice); // Probability %
-                // Assuming 1 Share ~= 1 Risk Unit. Value ~= Shares * Probability.
-                // In this simplified AMM, we just estimate SOL return.
-                const estimatedSolReturn = sharesToSell * (currentPrice / 100);
+                const estimatedSolReturn = finalSharesToSell * priceRatio; // Should match input roughly
                 const feeParam = 0.025; // 2.5%
                 const feeAmount = estimatedSolReturn * feeParam;
                 const netSolReturn = estimatedSolReturn - feeAmount;
@@ -787,10 +719,11 @@ export default function MarketPage() {
                     const tx = await sellShares(
                         new PublicKey(marketAccount.market_pda),
                         selectedSide.toLowerCase() as 'yes' | 'no',
-                        sharesToSell,
+                        finalSharesToSell,
                         new PublicKey(marketAccount.yes_token_mint),
                         new PublicKey(marketAccount.no_token_mint),
-                        0 // minSolOut (Slippage)
+                        0, // minSolOut (Slippage)
+                        isMaxSell // ✅ PASS MAX FLAG
                     );
                     console.log("✅ Sell TX:", tx);
                     txSignature = tx;
@@ -802,7 +735,7 @@ export default function MarketPage() {
                 // --- COMMON UPDATES ---
                 // 1. Calculate Sell Impact (Negative)
                 // Impact Logic: Buying X amount moves price Y. Selling X should move price -Y.
-                const usdValue = sharesToSell * (currentPrice / 100) * solPrice;
+                const usdValue = finalSharesToSell * (currentPrice / 100) * solPrice;
                 const virtualShareReserves = INITIAL_VIRTUAL_SOL / (currentPrice / 100);
                 const sim = simulateBuy(estimatedSolReturn, {
                     virtualSolReserves: INITIAL_VIRTUAL_SOL,
@@ -812,8 +745,6 @@ export default function MarketPage() {
                 });
 
                 // For Sell, we INVERT the impact.
-                // If I Sell YES -> Price YES Goes DOWN. Impact is Negative.
-                // If I Sell NO -> Price NO Goes DOWN -> Price YES Goes UP. Impact is Positive.
                 const impactMagnitude = sim.priceImpact;
                 const impactSigned = selectedSide === 'YES' ? -impactMagnitude : impactMagnitude;
 
@@ -826,7 +757,7 @@ export default function MarketPage() {
                     publicKey.toBase58(),
                     effectiveSlug,
                     selectedSide,
-                    sharesToSell
+                    finalSharesToSell
                 );
 
                 // SYNC FIX: Immediately refresh holders after DB update
@@ -843,7 +774,7 @@ export default function MarketPage() {
                     order_type: 'SELL',
                     amount: usdValue,
                     sol_amount: estimatedSolReturn,
-                    shares: sharesToSell,
+                    shares: finalSharesToSell,
                     market_title: staticMarketInfo.title,
                     market_slug: effectiveSlug,
                     created_at: new Date().toISOString()
@@ -857,9 +788,9 @@ export default function MarketPage() {
 
                 // Update specific share count
                 if (selectedSide === 'YES') {
-                    setMyYesShares(prev => Math.max(0, prev - sharesToSell));
+                    setMyYesShares(prev => Math.max(0, prev - finalSharesToSell));
                 } else {
-                    setMyNoShares(prev => Math.max(0, prev - sharesToSell));
+                    setMyNoShares(prev => Math.max(0, prev - finalSharesToSell));
                 }
 
                 setLastBetDetails({
@@ -874,12 +805,11 @@ export default function MarketPage() {
                     imageUrl: marketAccount?.icon || (typeof staticMarketInfo.icon === 'string' && staticMarketInfo.icon.startsWith('http') ? staticMarketInfo.icon : undefined)
                 });
 
-                // setShowPurchaseToast(true);
                 setDjinnToast({
                     isVisible: true,
                     type: 'SUCCESS',
                     title: 'SUCCESS',
-                    message: `Sold ${sharesToSell.toFixed(2)} ${selectedSide} shares for ${netSolReturn.toFixed(4)} SOL.`,
+                    message: `Sold ${finalSharesToSell.toFixed(2)} ${selectedSide} shares for ${netSolReturn.toFixed(4)} SOL.`,
                     actionLink: txSignature ? `https://solscan.io/tx/${txSignature}?cluster=devnet` : undefined,
                     actionLabel: 'View on Solscan'
                 });
@@ -930,94 +860,50 @@ export default function MarketPage() {
                     <div className="md:col-span-8 space-y-6">
                         {/* CHART CARD */}
                         <div className="bg-[#0A0A0A] border border-white/10 rounded-[2rem] p-6 shadow-2xl relative overflow-hidden min-h-[400px]">
-                            {isMultiOutcome ? (
-                                <>
-                                    <div className="flex justify-between items-start mb-4">
+                            {/* Header Info */}
+                            <div className="flex justify-between items-start mb-6">
+                                <div className="flex items-baseline gap-3">
+                                    {isMultiOutcome ? (
                                         <div className="flex items-center gap-3">
-                                            <span className="text-xl font-black tracking-tight text-white">All Outcomes</span>
+                                            <span className="text-xl font-black tracking-tight text-white">Market Overview</span>
                                             <span className="text-xs font-bold text-gray-500 bg-white/5 px-2 py-1 rounded">{marketOutcomes.length} options</span>
                                         </div>
-                                        {myHeldPosition && (
-                                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-[#10B981]/20 to-[#10B981]/10 border border-[#10B981]/30">
-                                                <div className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
-                                                <span className="text-[10px] font-black uppercase text-[#10B981] tracking-wide">Your Position Active</span>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <MultiLineChart
-                                        outcomes={chartSeries.map(s => ({
-                                            ...s,
-                                            chance: marketOutcomes.find(o => o.title === s.name)?.chance || 0
-                                        }))}
-                                        hasPosition={!!myHeldPosition}
-                                        selectedOutcome={selectedOutcomeName}
-                                    />
-
-                                    <div className="mt-6 pt-6 border-t border-white/10">
-                                        <h3 className="text-sm font-black uppercase text-gray-500 mb-4 tracking-wider">Select an outcome to trade</h3>
-                                        <OutcomeList
-                                            outcomes={marketOutcomes}
-                                            selectedId={selectedOutcomeId}
-                                            onSelect={setSelectedOutcomeId}
-                                            onBuyClick={handleOutcomeBuyClick}
-                                        />
-                                    </div>
-                                </>
-                            ) : (
-                                <>
-                                    <div className="flex justify-between items-start mb-2">
-                                        <div className="flex items-baseline gap-3">
-                                            <span className="text-5xl font-black tracking-tighter transition-colors" style={{ color: chartColor }}>{livePrice.toFixed(1)}%</span>
+                                    ) : (
+                                        <>
+                                            <span className="text-5xl font-black tracking-tighter transition-colors" style={{ color: chartColor }}>{(livePrice ?? 50).toFixed(1)}%</span>
                                             <span className="text-xl font-bold text-gray-500">chance</span>
-                                        </div>
-                                        {(myYesShares > 0 || myNoShares > 0) && (
-                                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-[#10B981]/20 to-[#10B981]/10 border border-[#10B981]/30">
-                                                <div className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
-                                                <span className="text-[10px] font-black uppercase text-[#10B981] tracking-wide">Your Position Active</span>
-                                            </div>
-                                        )}
+                                        </>
+                                    )}
+                                </div>
+                                {(myYesShares > 0 || myNoShares > 0) && (
+                                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-[#10B981]/20 to-[#10B981]/10 border border-[#10B981]/30">
+                                        <div className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
+                                        <span className="text-[10px] font-black uppercase text-[#10B981] tracking-wide">Your Position Active</span>
                                     </div>
-                                    <div className="flex justify-between items-center mb-6 px-1">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-2 h-2 rounded-full bg-[#F492B7] shadow-[0_0_10px_#F492B7] animate-pulse" />
-                                            <h3 className="text-white font-black text-[10px] uppercase tracking-widest opacity-40">Market Terminal</h3>
-                                        </div>
-                                        <ChartSwitcher
-                                            viewMode={viewMode}
-                                            onToggle={() => setViewMode(prev => prev === 'pretty' ? 'pro' : 'pretty')}
-                                        />
-                                    </div>
+                                )}
+                            </div>
 
-                                    <div className="min-h-[400px]">
-                                        {viewMode === 'pretty' ? (
-                                            <PrettyChart
-                                                series={isMultiOutcome ? chartSeries.map(s => ({
-                                                    name: s.name,
-                                                    color: s.color,
-                                                    data: s.data.map((d, i) => ({ date: i * 86400 * 1000, value: d.value }))
-                                                })) : [
-                                                    {
-                                                        name: 'YES',
-                                                        color: '#10B981',
-                                                        data: chartData.map((d, i) => ({ date: i * 86400 * 1000, value: d.value }))
-                                                    },
-                                                    {
-                                                        name: 'NO',
-                                                        color: '#EF4444',
-                                                        data: chartData.map((d, i) => ({ date: i * 86400 * 1000, value: 100 - d.value }))
-                                                    }
-                                                ]}
-                                                trigger={lastTradeEvent}
-                                            />
-                                        ) : (
-                                            <TradingViewProChart
-                                                data={generateOhlcData(livePrice)}
-                                                color={chartColor}
-                                            />
-                                        )}
-                                    </div>
-                                </>
+                            {/* Unified Visx Chart */}
+                            <PrettyChart
+                                series={isMultiOutcome ? chartSeries : [{
+                                    name: 'Prediction',
+                                    color: selectedSide === 'YES' ? '#10B981' : '#EF4444',
+                                    data: chartData
+                                }]}
+                                trigger={lastTradeEvent}
+                            />
+
+                            {/* Multi-outcome Selector (if applicable) */}
+                            {isMultiOutcome && (
+                                <div className="mt-6 pt-6 border-t border-white/10">
+                                    <h3 className="text-sm font-black uppercase text-gray-500 mb-4 tracking-wider">Select an outcome to trade</h3>
+                                    <OutcomeList
+                                        outcomes={marketOutcomes}
+                                        selectedId={selectedOutcomeId}
+                                        onSelect={setSelectedOutcomeId}
+                                        onBuyClick={handleOutcomeBuyClick}
+                                    />
+                                </div>
                             )}
                         </div>
 
@@ -1223,7 +1109,7 @@ export default function MarketPage() {
                                             </span>
                                         </div>
                                         <div className="text-right">
-                                            <span className="block text-3xl font-black text-[#10B981]">{livePrice.toFixed(0)}%</span>
+                                            <span className="block text-3xl font-black text-[#10B981]">{(livePrice ?? 50).toFixed(0)}%</span>
                                             <span className="text-[10px] font-bold text-[#10B981] uppercase tracking-wider">Implied Prob</span>
                                         </div>
                                     </div>
@@ -1232,7 +1118,7 @@ export default function MarketPage() {
                                 <div className="grid grid-cols-2 gap-3 mb-6">
                                     <button onClick={() => setSelectedSide('YES')} className={`p-4 rounded-2xl border transition-all ${selectedSide === 'YES' ? 'bg-emerald-500/10 border-emerald-500' : 'bg-white/5 border-white/5'}`}>
                                         <span className={`block text-xs font-black uppercase mb-1 ${selectedSide === 'YES' ? 'text-emerald-500' : 'text-gray-500'}`}>YES</span>
-                                        <span className="block text-2xl font-black text-white">{livePrice.toFixed(0)}¢</span>
+                                        <span className="block text-2xl font-black text-white">{(livePrice ?? 50).toFixed(0)}¢</span>
                                     </button>
                                     <button onClick={() => setSelectedSide('NO')} className={`p-4 rounded-2xl border transition-all ${selectedSide === 'NO' ? 'bg-red-500/10 border-red-500' : 'bg-white/5 border-white/5'}`}>
                                         <span className={`block text-xs font-black uppercase mb-1 ${selectedSide === 'NO' ? 'text-red-500' : 'text-gray-500'}`}>NO</span>
@@ -1244,126 +1130,82 @@ export default function MarketPage() {
                             {/* INPUT FIELD */}
                             <div className="mb-4 relative group">
                                 <div className={`absolute inset-0 bg-gradient-to-r ${tradeMode === 'BUY' ? 'from-[#10B981]/20 to-emerald-600/20' : 'from-red-500/20 to-orange-500/20'} blur-xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-500`}></div>
-                                <div className="relative flex items-center bg-[#0B0E14] border border-white/10 rounded-2xl p-4 transition-all focus-within:border-white/30">
-                                    <span className="text-gray-500 text-2xl font-black mr-2 select-none">{tradeMode === 'BUY' ? '$' : '#'}</span>
-                                    <input
-                                        type="number"
-                                        value={betAmount}
-                                        onChange={(e) => setBetAmount(e.target.value)}
-                                        placeholder={tradeMode === 'BUY' ? "0.00" : "0"}
-                                        className="w-full bg-transparent text-white text-4xl font-black outline-none placeholder:text-gray-800 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                    />
-                                    <div className="flex flex-col items-end pointer-events-none">
-                                        <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">{inputLabel}</span>
-                                        <span className="text-[9px] text-gray-600 font-mono">{inputSubtext}</span>
-                                    </div>
-                                </div>
-                                {/* POTENTIAL PAYOUT DISPLAY */}
-                                {tradeMode === 'BUY' && amountNum > 0 && (
-                                    <div className="mt-3 flex justify-between items-end px-2 animate-in fade-in slide-in-from-top-1 bg-white/5 p-3 rounded-xl border border-white/5">
-                                        <div className="flex flex-col gap-1">
-                                            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Est. Shares</span>
-                                            <span className="text-lg font-black text-[#10B981] leading-none">{estimatedShares.toFixed(2)}</span>
-                                        </div>
-                                        <div className="text-right flex flex-col gap-1">
-                                            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Potential Payout</span>
-                                            <div className="flex flex-col items-end">
-                                                <span className="block text-2xl font-black text-[#10B981] leading-none mb-1">{potentialSolPayout.toFixed(4)} <span className="text-sm">SOL</span></span>
-                                                <span className="text-sm font-bold text-[#10B981] bg-[#10B981]/10 px-2 py-0.5 rounded-lg">+{potentialRoi.toFixed(0)}% ROI</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
+                                <div className="relative group">
+                                    {/* Background Glow */}
+                                    <div className={`absolute inset-0 bg-gradient-to-r ${tradeMode === 'BUY' ? 'from-[#10B981]/20 to-emerald-600/20' : 'from-red-500/20 to-orange-500/20'} blur-xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-500 rounded-2xl`}></div>
 
-                                {tradeMode === 'SELL' && solBalance < 0.003 && (
-                                    <div className="mx-2 mt-2 p-2 bg-orange-500/10 border border-orange-500/20 rounded-lg flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
-                                        <AlertCircle className="w-4 h-4 text-orange-500" />
-                                        <span className="text-[10px] text-orange-400 font-bold">
-                                            Warning: Low SOL ({solBalance.toFixed(4)}). You need ~0.003 SOL for gas.
-                                        </span>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Percentage Selector for Sell Mode */}
-                            {tradeMode === 'SELL' && (
-                                (selectedSide === 'YES' && myYesShares > 0) || (selectedSide === 'NO' && myNoShares > 0)
-                            ) && (
-                                    <div className="mb-4">
-                                        <div className="flex justify-end gap-2 mb-4">
-                                            {[25, 50, 75, 100].map((pct) => (
-                                                <button
-                                                    key={pct}
-                                                    onClick={() => {
-                                                        let available = 0;
-                                                        if (tradeMode === 'BUY') available = solBalance;
-                                                        else available = selectedSide === 'YES' ? myYesShares : myNoShares;
-
-                                                        let val;
-                                                        // For SELL: available is Shares.
-                                                        // For BUY: available is SOL.
-
-                                                        if (tradeMode === 'BUY') {
-                                                            // Reserve for gas if 100%
-                                                            if (pct === 100) {
-                                                                val = Math.max(0, available - 0.025); // Reserve 0.025 SOL
-                                                            } else {
-                                                                val = available * (pct / 100);
-                                                            }
-                                                            // Round to 4 decimals
-                                                            val = Math.floor(val * 10000) / 10000;
-                                                            setBetAmount(val.toString());
-                                                        } else {
-                                                            // SELL logic
-                                                            if (pct === 100) {
-                                                                // Ensure smooth string without scientific notation for huge numbers
-                                                                // Logic: use available directly, but handle precision
-                                                                setBetAmount(available.toString());
-                                                            } else {
-                                                                const shareAmount = available * (pct / 100);
-                                                                val = parseFloat(shareAmount.toFixed(4));
-                                                                setBetAmount(val.toString());
-                                                            }
-                                                        }
-                                                    }}
-                                                    className="px-3 py-1.5 text-[10px] font-bold text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors bg-white/5 border border-white/5"
-                                                >
-                                                    {pct}%
-                                                </button>
-                                            ))}
+                                    <div className="relative flex items-center bg-[#0B0E14] border border-white/10 rounded-2xl p-4 transition-all focus-within:border-white/30">
+                                        {/* Icon */}
+                                        <div className="mr-3 text-gray-500">
+                                            {tradeMode === 'BUY' ? <DollarSign size={20} /> : <Activity size={20} />}
                                         </div>
-                                        <div className="text-right -mt-2 mb-4">
-                                            <span className="text-[9px] text-gray-600 font-mono">Available: {selectedSide === 'YES' ? myYesShares.toFixed(2) : myNoShares.toFixed(2)} shares</span>
-                                        </div>
-                                    </div>
-                                )}
 
-                            {/* Trade Inputs */}
-                            <div className="space-y-4 mb-6">
-                                <div>
-                                    <div className="flex justify-between text-xs text-gray-400 mb-1">
-                                        <span>Amount ({inputSubtext})</span>
-                                        <span className="flex items-center gap-1">
-                                            <Wallet size={10} />
-                                            {tradeMode === 'BUY' ? `${solBalance.toFixed(3)} SOL` : `${selectedSide === 'YES' ? myYesShares.toFixed(2) : myNoShares.toFixed(2)} Shares`}
-                                        </span>
-                                    </div>
-                                    <div className="relative">
-                                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-djinn-neon-blue">
-                                            {tradeMode === 'BUY' ? <DollarSign size={16} /> : <Activity size={16} />}
-                                        </div>
+                                        {/* Input */}
                                         <input
                                             type="number"
                                             value={betAmount}
                                             onChange={(e) => setBetAmount(e.target.value)}
-                                            className="w-full bg-[#0F1115] border border-gray-800 rounded-lg py-3 pl-10 pr-16 text-white placeholder-gray-600 focus:outline-none focus:border-djinn-neon-blue transition-colors font-mono"
+                                            className="w-full bg-transparent text-white text-3xl font-black outline-none placeholder:text-gray-800 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none font-mono"
                                             placeholder="0.00"
                                         />
-                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500 font-bold">
-                                            {inputLabel}
+
+                                        {/* Prominent Suffix */}
+                                        <div className="flex flex-col items-end pl-4 border-l border-white/10">
+                                            <span className="text-xl font-black text-white tracking-wider">SOL</span>
+                                            <span className="text-[10px] text-gray-500 font-mono whitespace-nowrap">
+                                                {amountNum > 0 ? `≈ $${(amountNum * solPrice).toFixed(2)}` : 'Amount'}
+                                            </span>
                                         </div>
                                     </div>
                                 </div>
+                                {/* Percentage Selector for Sell Mode */}
+                                {tradeMode === 'SELL' && (
+                                    (selectedSide === 'YES' && myYesShares > 0) || (selectedSide === 'NO' && myNoShares > 0)
+                                ) && (
+                                        <div className="mb-4">
+                                            <div className="flex justify-end gap-2 mb-2">
+                                                {[25, 50, 75, 100].map((pct) => (
+                                                    <button
+                                                        key={pct}
+                                                        onClick={() => {
+                                                            let available = 0;
+                                                            if (tradeMode === 'BUY') available = solBalance;
+                                                            else available = selectedSide === 'YES' ? myYesShares : myNoShares;
+
+                                                            let val;
+
+                                                            if (tradeMode === 'BUY') {
+                                                                // ... (BUY Logic unchanged)
+                                                                if (pct === 100) val = Math.max(0, available - 0.025);
+                                                                else val = available * (pct / 100);
+                                                                val = Math.floor(val * 10000) / 10000;
+                                                                setBetAmount(val.toString());
+                                                            } else {
+                                                                // SELL logic (SOL Value)
+                                                                const currentPrice = selectedSide === 'YES' ? livePrice : (100 - livePrice);
+                                                                const priceRatio = currentPrice / 100;
+                                                                // available is in Shares. Convert to SOL value.
+                                                                const totalSolValue = available * priceRatio;
+
+                                                                if (pct === 100) {
+                                                                    setIsMaxSell(true);
+                                                                    val = totalSolValue;
+                                                                } else {
+                                                                    setIsMaxSell(false);
+                                                                    val = totalSolValue * (pct / 100);
+                                                                }
+                                                                // Round 
+                                                                setBetAmount(val.toFixed(4));
+                                                            }
+                                                        }}
+                                                        className="px-3 py-1.5 text-[10px] font-bold text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors bg-white/5 border border-white/5"
+                                                    >
+                                                        {pct}%
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
 
                                 {/* Transaction Summary */}
                                 <div className="bg-[#0F1115]/50 rounded-lg p-3 space-y-2 text-xs">
@@ -1371,45 +1213,33 @@ export default function MarketPage() {
                                     {tradeMode === 'BUY' && (
                                         <>
                                             <div className="flex justify-between items-center text-gray-400">
-                                                <span>Est. Shares</span>
-                                                <span className="text-white font-mono">{estimatedShares.toFixed(2)}</span>
+                                                <span>Value</span>
+                                                <span className="text-gray-300 font-mono">
+                                                    ${(parseFloat(betAmount || '0') * solPrice).toFixed(2)}
+                                                </span>
                                             </div>
                                             <div className="flex justify-between items-center text-gray-400">
-                                                <span>Avg. Price</span>
-                                                <span className="text-white font-mono">{effectivePrice.toFixed(4)} SOL</span>
+                                                <span>Est. Shares</span>
+                                                <span className="text-white font-black font-mono text-sm">{estimatedShares.toFixed(2)}</span>
                                             </div>
                                             <div className="flex justify-between items-center text-gray-400">
                                                 <span>Potential Payout</span>
-                                                <span className="text-[#10b981] font-black italic tracking-wide">{potentialSolPayout.toFixed(2)} SOL</span>
-                                            </div>
-                                            <div className="flex justify-between items-center text-gray-400">
-                                                <span>ROI</span>
-                                                <span className="text-[#10b981] font-black italic tracking-wide">+{potentialRoi.toFixed(0)}%</span>
+                                                <div className="text-right">
+                                                    <span className="block text-[#10B981] font-black font-mono text-sm">{estimatedShares.toFixed(2)} SOL</span>
+                                                    {potentialRoi > 0 && <span className="text-[9px] text-[#10B981] opacity-80">+{potentialRoi.toFixed(0)}% gain</span>}
+                                                </div>
                                             </div>
                                         </>
                                     )}
 
                                     {/* SELL MODE SUMMARY */}
                                     {tradeMode === 'SELL' && (
-                                        <>
-                                            <div className="flex justify-between items-center text-gray-400">
-                                                <span>Value</span>
-                                                <span className="text-white font-mono">{(parseFloat(betAmount || '0') * (currentPriceForSide / 100)).toFixed(4)} SOL</span>
-                                            </div>
-                                            {/* Hidden Fees as requested */}
-                                            {/* 
-                                            <div className="flex justify-between items-center text-gray-400">
-                                                <span>Market Fee</span>
-                                                <span className="text-red-400 font-mono">-{((parseFloat(betAmount || '0') * (currentPriceForSide / 100)) * 0.025).toFixed(4)} SOL</span>
-                                            </div>
-                                            */}
-                                            <div className="pt-2 mt-2 border-t border-gray-800/50 flex justify-between items-center">
-                                                <span className="text-gray-300 font-bold">SOL Receive</span>
-                                                <span className="text-[#10b981] font-black italic text-sm tracking-wide">
-                                                    {((parseFloat(betAmount || '0') * (currentPriceForSide / 100)) * 0.975).toFixed(4)} SOL
-                                                </span>
-                                            </div>
-                                        </>
+                                        <div className="flex justify-between items-center text-gray-400">
+                                            <span>Shares to Sell</span>
+                                            <span className="text-white font-black font-mono text-sm">
+                                                {(parseFloat(betAmount || '0') / (currentPriceForSide / 100)).toFixed(2)}
+                                            </span>
+                                        </div>
                                     )}
                                 </div>
                             </div>
@@ -1435,9 +1265,6 @@ export default function MarketPage() {
                                     </span>
                                 )}
                             </button>
-                            <p className="text-[9px] text-gray-600 text-center mt-2">
-                                {tradeMode === 'SELL' ? "Market fee (2.5%) applies. Funds returned to Solana wallet." : "Secure transaction via Djinn Protocol"}
-                            </p>
                         </div>
                     </div>
                 </div>

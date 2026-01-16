@@ -1,304 +1,74 @@
-# 🔮 Djinn - Solana Prediction Market
+# 🧞‍♂️ DJINN PROTOCOL
+### The Infinite Pool Prediction Engine on Solana
 
-**Djinn** is the next-generation decentralized prediction market built on Solana. High-frequency trading, real-time resolution, and a premium user experience.
+**DJINN** is a decentralized, non-custodial prediction protocol that reimagines events as tradable assets using **Asymptotic S-Curve Bonding Curves**. Unlike traditional binary markets, DJINN allows for infinite speculative upside by merging the "Jackpot" mechanics of lottery pools with the precision of DeFi.
 
-> *Belief market. Truth has a price. The future is yours.*
+## 💎 Key Innovations
 
----
+### 1. The Golden S-Curve (Sigmoid Pricing)
+DJINN uses a proprietary S-Curve for price discovery.
+*   **Early Phase:** Near-flat pricing for "Snipers" to achieve up to 800x-5000x multipliers.
+*   **FOMO Phase:** Exponential volatility to drive high-frequency trading volume.
+*   **Stability Phase:** Asymptotic curve logic ensures protocol solvency by pinning price movement to real Vault liquidity.
 
-## 🎯 ¿Qué es Djinn?
+### 2. Multi-Outcome Jackpot Architecture
+Markets are not limited to Binary results. DJINN supports N-Outcome markets (e.g., Sports Leagues, Multi-candidate Elections).
+*   All outcomes feed into a **Global Vault**.
+*   Winners take the entire pool (minus fees), allowing for payouts that far exceed the initial $1.00 "ceiling" seen in legacy platforms.
 
-Djinn es un mercado de predicciones on-chain donde puedes:
-- ✅ **Crear mercados** sobre cualquier evento futuro
-- 💰 **Apostar con SOL** en el resultado (YES o NO)
-- 📊 **Ver precios en tiempo real** basados en la demanda
-- 🏆 **Ganar dinero** si predices correctamente
-- 💬 **Comentar y discutir** con otros traders
+### 3. Asymptotic Solvency (The Alfred Adjustment)
+Price is calculated via Integral Calculus ($\int P(s) ds$). The contract dynamically flattens the curve as it approaches the Vault's total collateral, making DJINN mathematically impossible to default.
 
----
+## 📊 Fee Economy
+*   **1% Trading Fee:** Captured on every buy/sell on the curve. 50/50 split with market creators.
+*   **2% Resolution Fee:** Automated treasury capture upon market settlement.
+*   **$3.00 Creation Fee:** Anti-spam measure and initial seed liquidity for the pool.
 
-## 💎 Características Principales
-
-### Frontend (100% Completo)
-- ✅ Diseño moderno premium con gradientes y animaciones
-- ✅ Wallet integration (Phantom, Solflare, etc.)
-- ✅ Gráficos de precio dinámicos con efectos visuales
-- ✅ Sistema de comentarios con likes en tiempo real
-- ✅ Perfiles de usuario con active bets
-- ✅ Feed global de actividad
-- ✅ Categorías de mercados (Crypto, Sports, Politics, etc.)
-- ✅ Creación de mercados custom
-
-### Smart Contract (Anchor/Solana)
-- ✅ Create market con fee de 0.03 SOL
-- ✅ Trading YES/NO con fee de 0.1%
-- ✅ Sistema de resolución con fee de 2%
-- ✅ Shares como SPL tokens
-- ✅ CPMM pricing algorithm
-- ✅ Redención de ganancias
-
-### Backend (Supabase)
-- ✅ Base de datos PostgreSQL
-- ✅ Real-time subscriptions
-- ✅ Almacenamiento de:
-  - Perfiles de usuario
-  - Comentarios y likes
-  - Actividad de trading
-  - Market data
-
----
-
-## 💰 Modelo de Revenue (Fees)
-
-### 1. Market Creation Fee
-**0.03 SOL** (~$3 USD) por crear un mercado
-- Va 100% al treasury del protocolo
-
-### 2. Trading Fee
-**0.1%** de cada trade
-- **Si TÚ creaste el market:** 100% para ti
-- **Si otro usuario creó:** 50% para creador, 50% para protocolo
-
-### 3. Resolution Fee
-**2%** del pool total
-- Va 100% al protocolo cuando se resuelve el mercado
-
-**Ejemplo de revenue:**
-Un mercado con $50,000 de volumen genera:
-- Creation: $3
-- Trading: $50
-- Resolution: $1,000
-- **Total: ~$1,053**
-
----
-
-## 🏗️ Arquitectura Técnica
-
-### Stack
+## 📊 Final Architecture Diagram
 ```
-Frontend:  Next.js 16 + TypeScript + TailwindCSS
-Wallet:    Solana Web3.js + Wallet Adapter
-Charts:    Recharts
-Database:  Supabase (PostgreSQL + Realtime)
-Smart Contract: Anchor (Rust)
-Blockchain: Solana
+┌─────────────────────────────────────────────────────┐
+│                  DJINN MARKET v2.0                  │
+│           Multi-Outcome Bonding Curve AMM           │
+└─────────────────────────────────────────────────────┘
+                         │
+        ┌────────────────┼────────────────┐
+        │                │                │
+   ┌────▼────┐      ┌────▼────┐     ┌────▼────┐
+   │ BUY     │      │ SELL    │     │ RESOLVE │
+   │ 1% Fee  │      │ 1% Fee  │     │ 3-Layer │
+   └────┬────┘      └────┬────┘     └────┬────┘
+        │                │                │
+        ▼                ▼                ▼
+   ┌─────────────────────────────────────────┐
+   │        S-Curve Integral (u128)          │
+   │  Cost = C * (S_new^n - S_old^n) / n     │
+   │  Asymptotic Safety: P ≤ Vault*0.98/S    │
+   └─────────────────────────────────────────┘
+                         │
+                         ▼
+              ┌──────────────────┐
+              │  GLOBAL VAULT    │
+              │  (PDA Balance)   │
+              └──────────────────┘
+                         │
+        ┌────────────────┼────────────────┐
+        │                │                │
+   ┌────▼────┐      ┌────▼────┐     ┌────▼────┐
+   │Winner   │      │Loser    │     │No Winner│
+   │Payout   │      │Burn = 0 │     │Treasury │
+   │V*0.98*S │      │         │     │Jackpot  │
+   └─────────┘      └─────────┘     └─────────┘
 ```
 
-### Estructura del Proyecto
-```
-Djinn-pmarket/
-├── app/                      # Next.js pages
-│   ├── page.tsx             # Homepage con markets
-│   ├── market/[slug]/       # Página individual de market
-│   ├── profile/[username]/  # Perfiles de usuario
-│   └── leaderboard/         # Ranking de traders
-├── components/
-│   ├── market/              # Componentes de trading
-│   │   ├── MarketChart.tsx  # Gráfico animado
-│   │   ├── CommentsSection.tsx
-│   │   └── OrderBook.tsx
-│   ├── GlobalActivityFeed.tsx
-│   └── Navbar.tsx
-├── lib/
-│   ├── supabase.ts          # Cliente Supabase
-│   └── supabase-db.ts       # Funciones de DB
-├── programs/
-│   └── djinn-market/        # Smart contract Anchor
-│       └── src/lib.rs       # Programa Solana
-└── supabase-schema.sql      # Schema de base de datos
-```
+## 🛠 Tech Stack
+*   **Blockchain:** Solana (Mainnet-Beta)
+*   **Framework:** Anchor (Rust)
+*   **Oracles:** Pyth / Custom Multi-Sig Resolution
+*   **Frontend:** Next.js + Tailwind + Solana Wallet Adapter
+
+## 🔗 Links
+*   **X (Twitter):** [@Djinnmarket](https://x.com/Djinnmarket)
+*   **GitHub:** [https://github.com/Lord14sol/Djinn-pmarket](https://github.com/Lord14sol/Djinn-pmarket)
 
 ---
-
-## 🚀 Cómo Funciona
-
-### 1. Usuario crea un mercado
-```typescript
-Pregunta: "Will Bitcoin hit $150k in 2026?"
-Fee: 0.03 SOL
-Resultado: Mercado creado, YES/NO tokens minted
-```
-
-### 2. Usuarios apuestan
-```typescript
-Alice apuesta 10 SOL en YES
-- Fee: 0.01 SOL (0.1%)
-- Recibe: ~10 YES tokens
-- Precio YES sube a 65%
-```
-
-### 3. Mercado se resuelve
-```typescript
-Fecha límite alcanzada
-Oracle decide: YES ganó
-Fee: 2% del pool total
-Ganadores pueden hacer redeem
-```
-
-### 4. Alice reclama ganancias
-```typescript
-Alice tenía 10 YES tokens
-Pool total: 100 SOL
-YES tokens totales: 50
-Payout de Alice: (10/50) * 100 = 20 SOL
-Profit: 20 - 10 = 10 SOL (100% ROI)
-```
-
----
-
-## 🎨 Features Visuales Destacadas
-
-### Charts Animados
-- Gradientes dinámicos que cambian con YES/NO
-- Glow effects y animaciones suaves
-- Flash cuando hay nueva compra
-- Tooltips personalizados
-
-### Perfiles
-- Avatar y banner personalizables
-- Active Bets con profit/loss en tiempo real
-- Estadísticas de win rate
-- Markets creados
-
-### Activity Feed
-- Ver todas las compras en tiempo real
-- Click en usuario → ver su perfil
-- Click en market → ir al market
-- Badges de YES/NO con colores
-
----
-
-## 📊 Estado Actual del Proyecto
-
-| Componente | Progreso | Estado |
-|------------|----------|--------|
-| UI/UX | 100% | ✅ Completo |
-| Wallet Integration | 50% | 🟡 Connect Only (No Read/Write) |
-| Database | 30% | 🟡 LocalStorage (Moving to Supabase) |
-| Comments & Social | 80% | 🟡 Local State |
-| **Smart Contract** | **20%** | 🟡 Implemented (Not Connected) |
-| Frontend ↔ SC Integration | 60% | 🟡 In Progress (Trade & Holders Connected) |
-| Escrow System | 0% | ❌ Pendiente |
-| Oracle/Resolution | 10% | ❌ Manual (Mock) |
-
-**Progreso Global: ~40%** (Frontend MVP Complete)
-
-> ℹ️ For the detailed migration plan, see [ARCHITECTURE.md](./ARCHITECTURE.md)
-
----
-
-## 🔧 Setup Local
-
-### Requisitos
-- Node.js 18+
-- Rust + Solana CLI
-- Anchor Framework
-- Phantom Wallet
-
-### Instalación
-
-1. **Clonar repo**
-```bash
-git clone https://github.com/Lord14sol/Djinn-pmarket.git
-cd Djinn-pmarket
-```
-
-2. **Instalar dependencias**
-```bash
-npm install
-```
-
-3. **Configurar Supabase**
-```bash
-cp .env.example .env.local
-# Agregar tus credenciales de Supabase
-```
-
-4. **Compilar smart contract**
-```bash
-cd programs/djinn-market
-anchor build
-```
-
-5. **Deploy a devnet**
-```bash
-anchor deploy
-```
-
-6. **Correr frontend**
-```bash
-npm run dev
-```
-
-Visita `http://localhost:3003`
-
----
-
-## 🎯 Roadmap
-
-### ✅ Fase 1: MVP Frontend (Completo)
-- [x] Diseño UI/UX
-- [x] Wallet integration
-- [x] Database setup
-- [x] Comments system
-- [x] User profiles
-
-### 🟡 Fase 2: Smart Contract (En Progreso)
-- [x] Core logic
-- [x] Fee structure
-- [ ] Testing exhaustivo
-- [ ] Escrow accounts
-- [ ] Deploy a devnet
-
-### 🟡 Fase 3: Integration (En Progreso)
-- [x] Conectar frontend con SC (Partial)
-- [x] Actualizar funciones de trading (Holders, Trade Widget)
-- [ ] Integrar resolución
-- [ ] Testing end-to-end
-
-### ❌ Fase 4: Production (Pendiente)
-- [ ] Auditoría de seguridad
-- [ ] Deploy a mainnet
-- [ ] Liquidez inicial
-- [ ] Marketing y launch
-
----
-
-## 🔐 Seguridad
-
-- ✅ Row Level Security (RLS) en Supabase
-- ✅ PDA (Program Derived Addresses) en smart contract
-- ✅ Authority checks para resolución
-- ⚠️ **Pendiente:** Auditoría profesional antes de mainnet
-
----
-
-## 🌐 Socials
-
-Stay updated on our latest developments:
-- **X (Twitter):** [@Djinnmarket](https://x.com/Djinnmarket)
-
----
-
-## 🔒 Legal
-
-**Djinn** is a proprietary software. All rights reserved.
-Unauthorized copying, modification, distribution, or use of this software is strictly prohibited.
-
----
-
-## 👤 Team
-
-**Djinn Startup**
-- Lead Developer: [@Lord14sol](https://github.com/Lord14sol)
-
-## 🙏 Agradecimientos
-
-- Solana Foundation
-- Anchor Framework
-- Supabase Team
-- Prediction market protocols: Polymarket, Augur, Gnosis
-
----
-
-**Djinn** - *Predice el futuro. Gana en el presente.* 🔮
+*Code is Law. Trade at your own risk.*

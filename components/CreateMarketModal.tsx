@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useDjinnProtocol } from '@/hooks/useDjinnProtocol';
-import { supabase } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { compressImage } from '@/lib/utils';
 import { checkMarketMilestones, createMarket } from '@/lib/supabase-db';
 import Link from 'next/link';
@@ -84,6 +84,13 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
 
     // --- MAIN LOGIC (Ported from Hero.tsx) ---
     const handleCreateMarket = async () => {
+        // ✅ Check if Supabase is configured
+        if (!isSupabaseConfigured) {
+            setError('⚠️ Supabase not configured. Check your .env.local file.');
+            console.error('Supabase credentials missing!');
+            return;
+        }
+
         if (!publicKey) {
             setVisible(true);
             return;
@@ -160,8 +167,9 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                 txSignature = 'local_fallback';
             }
 
-            // SAVE TO SUPABASE (Using centralized helper)
-            const { data: savedMarket, error: dbError } = await createMarket({
+            // SAVE TO SUPABASE (Using centralized helper - throws on error)
+            // @ts-ignore
+            const { data: savedMarket } = await createMarket({
                 slug,
                 title: poolName,
                 creator_wallet: publicKey.toString(),
@@ -173,27 +181,9 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                 total_yes_pool: 0,
                 total_no_pool: 0,
                 resolved: false,
-                resolution_source: 'DERIVED',
+                resolution_source: 'DERIVED', // Changed from derived to 'DERIVED' to match type if needed, or keeping explicit string
                 banner_url: finalBanner
             });
-
-            if (dbError) {
-                const errorString = typeof dbError === 'object' ? JSON.stringify(dbError, null, 2) : String(dbError);
-                console.error('DB error details:', errorString);
-
-                // Detailed helpful alert for Supabase connectivity issues
-                const isFetchError = errorString.includes('Failed to fetch') || errorString.includes('TypeError');
-                const errorMessage = isFetchError
-                    ? "SUPABASE CONNECTION FAILED: The browser couldn't reach the database.\n\n" +
-                    "Please check:\n" +
-                    "1. Your VPN or Firewall (might be blocking supabase.co)\n" +
-                    "2. Your .env.local has valid NEXT_PUBLIC_SUPABASE_URL\n" +
-                    "3. Restart 'npm run dev' to reload environment variables."
-                    : `DATABASE SAVE FAILED:\n${dbError.message || errorString}`;
-
-                alert(errorMessage);
-                return;
-            }
 
             // SUCCESS - Show Animation and Redirect
             setIsSuccess(true);

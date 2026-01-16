@@ -367,13 +367,14 @@ export function subscribeToComments(marketSlug: string, callback: (payload: any)
         .subscribe();
 }
 
-export function subscribeToActivity(callback: (payload: any) => void) {
+export function subscribeToActivity(marketSlug: string, callback: (payload: any) => void) {
     return supabase
-        .channel('activity')
+        .channel(`activity:${marketSlug}`)
         .on('postgres_changes', {
             event: 'INSERT',
             schema: 'public',
-            table: 'activity'
+            table: 'activity',
+            filter: `market_slug=eq.${marketSlug}` // ✅ FIX: Only receive events for this market
         }, callback)
         .subscribe();
 }

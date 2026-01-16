@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useEffect } from 'react';
 import { useAnchorWallet, useConnection } from '@solana/wallet-adapter-react';
 import { Program, AnchorProvider, Idl, BN, web3 } from '@project-serum/anchor';
 import { PublicKey, SystemProgram } from '@solana/web3.js';
@@ -26,15 +26,17 @@ export const useDjinnProtocol = () => {
     }, [provider]);
 
     const isContractReady = useMemo(() => {
-        const ready = !!(program && provider && wallet && wallet.publicKey);
-        console.log('[Djinn Protocol] Contract Ready Check:', {
+        return !!(program && provider && wallet && wallet.publicKey);
+    }, [program, provider, wallet]);
+
+    useEffect(() => {
+        console.log('[Djinn Protocol] Contract Status:', {
             program: !!program,
             provider: !!provider,
             wallet: !!wallet,
-            isReady: ready
+            isReady: isContractReady
         });
-        return ready;
-    }, [program, provider, wallet]);
+    }, [isContractReady, program, provider, wallet]);
 
     const createMarket = useCallback(async (
         title: string,
@@ -324,20 +326,37 @@ export const useDjinnProtocol = () => {
         sharesAmount: number,
         yesMint: PublicKey,
         noMint: PublicKey,
-        minSolOut: number = 0
+        minSolOut: number = 0,
+        sellMax: boolean = false
     ) => {
         if (!program || !wallet) throw new Error("Wallet not connected");
 
         try {
-            // Robust Rounding for BN
-            const sharesRaw = new BN(Math.floor(sharesAmount * 1_000_000_000));
-            const minSolBN = new BN(Math.floor(minSolOut * web3.LAMPORTS_PER_SOL));
-
-            if (sharesRaw.isZero()) throw new Error("Amount too small to sell");
-
             const { getAssociatedTokenAddress, createAssociatedTokenAccountIdempotentInstruction } = await import('@solana/spl-token');
             const userYesATA = await getAssociatedTokenAddress(yesMint, wallet.publicKey);
             const userNoATA = await getAssociatedTokenAddress(noMint, wallet.publicKey);
+
+            // Robust Rounding for BN
+            let sharesRaw = new BN(Math.floor(sharesAmount * 1_000_000_000));
+            const minSolBN = new BN(Math.floor(minSolOut * web3.LAMPORTS_PER_SOL));
+
+            if (sellMax) {
+                console.log("🔥 Selling MAX shares (fetching exact balance)...");
+                const targetMint = side === 'yes' ? yesMint : noMint;
+                const targetATA = side === 'yes' ? userYesATA : userNoATA;
+
+                try {
+                    const balance = await connection.getTokenAccountBalance(targetATA);
+                    // Use the exact atomic amount from chain
+                    sharesRaw = new BN(balance.value.amount);
+                    console.log(`🔥 Exact Balance found: ${balance.value.amount} wait...`);
+                } catch (e) {
+                    console.error("Failed to fetch exact balance for max sell:", e);
+                    // Fallback to the estimated float
+                }
+            }
+
+            if (sharesRaw.isZero()) throw new Error("Amount too small to sell");
 
             const transaction = new web3.Transaction();
             // Ensure BOTH ATAs exist for the contract to validate them
@@ -350,7 +369,7 @@ export const useDjinnProtocol = () => {
 
             const sideArg = side === 'yes' ? { yes: {} } : { no: {} };
 
-            console.log(`Selling ${sharesAmount} shares of ${side}`);
+            console.log(`Selling ${sharesAmount} shares of ${side} (Raw: ${sharesRaw.toString()})`);
 
             const [protocolStatePda] = await PublicKey.findProgramAddress(
                 [Buffer.from("protocol")],
@@ -384,7 +403,7 @@ export const useDjinnProtocol = () => {
             console.error("Error selling shares:", error);
             throw error;
         }
-    }, [program, wallet]);
+    }, [program, wallet, connection]);
 
     return {
         program,

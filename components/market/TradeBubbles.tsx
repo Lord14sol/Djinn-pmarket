@@ -6,8 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 interface Bubble {
     id: string;
     text: string;
-    x: number;
-    y: number;
+    // Styling/Positioning logic handled by flex stack now
 }
 
 export default function TradeBubbles({ trigger }: { trigger: { amount: number; side: 'YES' | 'NO' } | null }) {
@@ -15,42 +14,47 @@ export default function TradeBubbles({ trigger }: { trigger: { amount: number; s
 
     const addBubble = useCallback((amount: number, side: 'YES' | 'NO') => {
         const id = Math.random().toString(36).substr(2, 9);
-        const x = 20 + Math.random() * 60; // 20% to 80% width
-        const y = 40 + Math.random() * 40; // 40% to 80% height
 
         const newBubble: Bubble = {
             id,
-            text: `+ $${amount.toFixed(0)}`,
-            x,
-            y
+            // Format as USD currency
+            text: `+ $${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
         };
 
-        setBubbles(prev => [...prev, newBubble]);
+        setBubbles(prev => [newBubble, ...prev].slice(0, 5)); // Keep max 5, add to TOP
         setTimeout(() => {
             setBubbles(prev => prev.filter(b => b.id !== id));
-        }, 2000);
+        }, 4000); // 4s Fade Out
     }, []);
 
     useEffect(() => {
-        if (trigger) {
+        if (trigger && trigger.amount > 0) {
             addBubble(trigger.amount, trigger.side);
         }
     }, [trigger, addBubble]);
 
     return (
-        <div className="absolute inset-0 pointer-events-none overflow-hidden z-20">
-            <AnimatePresence>
+        <div className="absolute top-4 left-6 z-20 flex flex-col gap-2 pointer-events-none">
+            <AnimatePresence mode='popLayout'>
                 {bubbles.map(bubble => (
                     <motion.div
                         key={bubble.id}
-                        initial={{ opacity: 0, y: bubble.y, scale: 0.5 }}
-                        animate={{ opacity: 1, y: bubble.y - 100, scale: 1.2 }}
-                        exit={{ opacity: 0, scale: 1.5 }}
-                        transition={{ duration: 1.5, ease: "easeOut" }}
-                        className="absolute whitespace-nowrap px-3 py-1 bg-[#F492B7] text-black text-[10px] font-black rounded-full shadow-[0_0_20px_#F492B7]"
-                        style={{ left: `${bubble.x}%`, top: `${bubble.y}%` }}
+                        initial={{ opacity: 0, y: 20, scale: 0.8, filter: 'blur(10px)' }}
+                        animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+                        exit={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }}
+                        transition={{ duration: 0.4, ease: "backOut" }}
+                        className="
+                            px-4 py-2 
+                            bg-[rgba(255,50,150,0.25)] 
+                            border border-[#FF007A]/40
+                            text-white text-sm font-bold
+                            rounded-lg shadow-[0_0_15px_rgba(255,0,122,0.2)]
+                            backdrop-blur-md
+                            flex items-center gap-2
+                        "
                     >
-                        {bubble.text}
+                        <span className="text-[#FF007A] drop-shadow-sm">Buy</span>
+                        <span>{bubble.text}</span>
                     </motion.div>
                 ))}
             </AnimatePresence>

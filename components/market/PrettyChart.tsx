@@ -1,47 +1,50 @@
 'use client';
 
 import React, { useMemo, useCallback } from 'react';
-import { AreaClosed, LinePath, Bar } from '@visx/shape';
-import { curveMonotoneX } from '@visx/curve';
+import { LinePath, Bar, Line, Circle } from '@visx/shape'; // Added Circle for End Dots
+import { curveStepAfter } from '@visx/curve'; // Step Interpolation (Polymarket Style)
 import { scaleTime, scaleLinear } from '@visx/scale';
-import { LinearGradient } from '@visx/gradient';
+import { Group } from '@visx/group';
+import { GridRows } from '@visx/grid'; // Grid Lines
 import { ParentSize } from '@visx/responsive';
 import { useTooltip, TooltipWithBounds, defaultStyles } from '@visx/tooltip';
 import { localPoint } from '@visx/event';
 import TradeBubbles from './TradeBubbles';
-import { bisectDate } from '@/lib/utils'; // Assuming a bisect util or similar logic
+import { bisector } from 'd3-array';
 
-// --- COLORS & STYLES ---
-const PINK_DJINN = '#F492B7';
-const ACCENT_CYAN = '#00F0FF';
-const DARK_BG = '#0E0E0E';
+// --- HYBRID PALETTE ---
+const THEME = {
+    BG: '#1a1d2e', // Polymarket Dark
+    GRID: '#2a2d3e',
+    CROSSHAIR: 'rgba(255, 255, 255, 0.4)',
+    TEXT: '#ffffff',
+    TOOLTIP_BG: '#1e2130',
+    TOOLTIP_BORDER: '#374151',
+};
 
 interface DataPoint {
-    date: number; // timestamp
-    value: number; // percentage
+    date: number;
+    value: number;
 }
 
 interface OutcomeSeries {
     name: string;
-    color: string;
+    color?: string;
     data: DataPoint[];
 }
 
-interface PrettyChartProps {
-    series: OutcomeSeries[];
-    height?: number;
-}
+// Bisector
+const bisectDate = bisector<DataPoint, Date>(d => new Date(d.date)).left;
 
 const tooltipStyles = {
     ...defaultStyles,
-    background: 'rgba(0, 0, 0, 0.8)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
+    background: THEME.TOOLTIP_BG,
+    border: `1px solid ${THEME.TOOLTIP_BORDER}`,
     color: 'white',
-    padding: '8px 12px',
+    padding: '0',
     borderRadius: '8px',
-    fontSize: '10px',
-    fontWeight: 'black',
-    boxShadow: '0 0 20px rgba(244,146,183,0.3)',
+    boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+    zIndex: 100,
 };
 
 const Chart = ({ series, width, height }: { series: OutcomeSeries[]; width: number; height: number }) => {
@@ -55,14 +58,15 @@ const Chart = ({ series, width, height }: { series: OutcomeSeries[]; width: numb
 
     // 1. SCALES
     const allData = useMemo(() => series.flatMap(s => s.data), [series]);
-    const minDate = useMemo(() => Math.min(...allData.map(d => d.date)), [allData]);
-    const maxDate = useMemo(() => Math.max(...allData.map(d => d.date)), [allData]);
+    const minDate = Math.min(...allData.map(d => d.date));
+    const maxDate = Math.max(...allData.map(d => d.date));
 
     const xScale = useMemo(() => scaleTime({
         domain: [minDate, maxDate],
         range: [0, width],
     }), [minDate, maxDate, width]);
 
+    // Fixed 0-100% Y-Scale
     const yScale = useMemo(() => scaleLinear({
         domain: [0, 100],
         range: [height, 0],
@@ -73,75 +77,86 @@ const Chart = ({ series, width, height }: { series: OutcomeSeries[]; width: numb
         const { x } = localPoint(event) || { x: 0 };
         const x0 = xScale.invert(x);
 
-        // Find closest point in each series
+        // Find closest point for EACH series
         const hoverData = series.map(s => {
-            // Simple index-based find for performance, can use bisect for more accuracy
-            const index = Math.floor((x / width) * (s.data.length - 1));
-            const d = s.data[Math.max(0, Math.min(index, s.data.length - 1))];
-            if (!d) return null; // Safe guard
-            return { name: s.name, color: s.color, value: d.value };
-        }).filter(Boolean); // Filter out nulls
+            const index = bisectDate(s.data, x0, 1);
+            const d0 = s.data[index - 1];
+            const d1 = s.data[index];
+            let d = d0;
+            if (d1 && d0) {
+                d = x0.getTime() - d0.date > d1.date - x0.getTime() ? d1 : d0;
+            } else if (d1) {
+                d = d1;
+            }
+            if (!d) return null;
+            return { name: s.name, color: s.color, value: d.value, date: d.date };
+        }).filter(Boolean);
 
-        showTooltip({
-            tooltipData: hoverData,
-            tooltipLeft: x,
-            tooltipTop: 0,
-        });
-    }, [xScale, series, width, showTooltip]);
+        if (hoverData.length > 0) {
+            // Snap to the YES line timestamp (assuming synchronized data)
+            const snapX = xScale(hoverData[0]!.date);
+            showTooltip({
+                tooltipData: hoverData, // Array of ALL outcomes at this timestamp
+                tooltipLeft: snapX,
+                tooltipTop: 0, // Not used for positioning list
+            });
+        }
+    }, [xScale, series, showTooltip]);
 
     return (
         <div className="relative">
             <svg width={width} height={height}>
-                <defs>
-                    {series.map((s, i) => (
-                        <LinearGradient
-                            key={`grad-${i}`}
-                            id={`grad-${s.name.replace(/\s+/g, '-')}`}
-                            from={s.color}
-                            fromOpacity={0.4}
-                            to={s.color}
-                            toOpacity={0}
-                        />
-                    ))}
-                </defs>
+                <rect width={width} height={height} fill={THEME.BG} rx={14} />
 
-                {/* Vertical Grid Line for Tooltip */}
+                {/* Horizontal Grid Lines (0, 25, 50, 75, 100) */}
+                <GridRows
+                    scale={yScale}
+                    width={width}
+                    tickValues={[0, 25, 50, 75, 100]}
+                    stroke={THEME.GRID}
+                    strokeDasharray="4 4"
+                />
+
+                {/* Series Lines & Dots */}
+                {series.map((s, i) => {
+                    const lastPoint = s.data[s.data.length - 1];
+                    return (
+                        <g key={`series-${i}`}>
+                            <LinePath
+                                data={s.data}
+                                x={d => xScale(d.date) || 0}
+                                y={d => yScale(d.value) || 0}
+                                stroke={s.color || '#fff'}
+                                strokeWidth={3} // 3px Sharp
+                                curve={curveStepAfter} // Step Interpolation
+                            />
+                            {/* Live Indicator Dot */}
+                            {lastPoint && (
+                                <Circle
+                                    cx={xScale(lastPoint.date)}
+                                    cy={yScale(lastPoint.value)}
+                                    r={4}
+                                    fill={s.color || '#fff'}
+                                    stroke={THEME.BG}
+                                    strokeWidth={2}
+                                />
+                            )}
+                        </g>
+                    );
+                })}
+
+                {/* Vertical Crosshair */}
                 {tooltipData && (
-                    <line
-                        x1={tooltipLeft}
-                        x2={tooltipLeft}
-                        y1={0}
-                        y2={height}
-                        stroke="rgba(255,255,255,0.2)"
+                    <Line
+                        from={{ x: tooltipLeft, y: 0 }}
+                        to={{ x: tooltipLeft, y: height }}
+                        stroke={THEME.CROSSHAIR}
                         strokeWidth={1}
-                        strokeDasharray="4 4"
                         pointerEvents="none"
                     />
                 )}
 
-                {/* Series Paths */}
-                {series.map((s, i) => (
-                    <g key={`series-${i}`}>
-                        <AreaClosed
-                            data={s.data}
-                            x={d => xScale(d.date) || 0}
-                            y={d => yScale(d.value) || 0}
-                            yScale={yScale}
-                            fill={`url(#grad-${s.name.replace(/\s+/g, '-')})`}
-                            curve={curveMonotoneX}
-                        />
-                        <LinePath
-                            data={s.data}
-                            x={d => xScale(d.date) || 0}
-                            y={d => yScale(d.value) || 0}
-                            stroke={s.color}
-                            strokeWidth={2}
-                            curve={curveMonotoneX}
-                        />
-                    </g>
-                ))}
-
-                {/* Interaction Layer */}
+                {/* Interaction Overlay */}
                 <Bar
                     width={width}
                     height={height}
@@ -152,24 +167,34 @@ const Chart = ({ series, width, height }: { series: OutcomeSeries[]; width: numb
                 />
             </svg>
 
-            {/* Custom Premium Tooltip */}
+            {/* Custom Tooltip (Hybrid Poly/Kalshi) */}
             {tooltipData && (
                 <TooltipWithBounds
-                    key={Math.random()}
-                    top={tooltipTop + 20}
+                    key={Math.random()} // Force re-render for position updates if needed
+                    top={10} // Fixed top position or float? Let's try floating near cursor
                     left={tooltipLeft}
                     style={tooltipStyles}
                 >
-                    <div className="flex flex-col gap-2">
-                        {tooltipData.map((d: any, i: number) => (
-                            <div key={i} className="flex items-center justify-between gap-4">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: d.color }} />
-                                    <span className="opacity-60">{d.name}</span>
+                    <div className="min-w-[180px]">
+                        {/* Header: Timestamp */}
+                        <div className="bg-[#2a2d3e] px-3 py-2 border-b border-gray-700 text-xs text-gray-400 font-mono">
+                            {new Date(tooltipData[0].date).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </div>
+
+                        {/* Body: Outcomes */}
+                        <div className="p-3 flex flex-col gap-3">
+                            {tooltipData.map((d: any, i: number) => (
+                                <div key={i} className="flex flex-col">
+                                    <div className="flex items-center gap-2 mb-0.5">
+                                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: d.color }} />
+                                        <span className="text-xs font-bold text-gray-300">{d.name}</span>
+                                    </div>
+                                    <span className="text-xl font-black tracking-tight" style={{ color: d.color }}>
+                                        {d.value.toFixed(1)}%
+                                    </span>
                                 </div>
-                                <span className="font-bold">{d.value.toFixed(1)}%</span>
-                            </div>
-                        ))}
+                            ))}
+                        </div>
                     </div>
                 </TooltipWithBounds>
             )}
@@ -178,18 +203,28 @@ const Chart = ({ series, width, height }: { series: OutcomeSeries[]; width: numb
 };
 
 export default function PrettyChartWrapper({ series, trigger }: { series: OutcomeSeries[]; trigger?: { amount: number; side: 'YES' | 'NO' } | null }) {
-    if (!series || series.length === 0) return <div className="h-[400px] flex items-center justify-center text-white/20">Awaiting Data Orbit...</div>;
+    if (!series || series.length === 0) return (
+        <div className="h-[400px] flex items-center justify-center text-white/20 bg-[#1a1d2e] rounded-3xl">
+            Initializing Market Data...
+        </div>
+    );
 
     return (
-        <div className="w-full h-[400px] bg-black/40 backdrop-blur-xl border border-white/5 rounded-3xl p-6 relative overflow-hidden group">
+        <div
+            className="w-full h-[400px] rounded-3xl relative overflow-hidden shadow-2xl border border-gray-800"
+            style={{ backgroundColor: THEME.BG }}
+        >
             <TradeBubbles trigger={trigger || null} />
+
             <ParentSize>
                 {({ width, height }) => <Chart series={series} width={width} height={height} />}
             </ParentSize>
 
-            {/* Watermark */}
-            <div className="absolute top-4 right-6 pointer-events-none">
-                <span className="text-[10px] font-black uppercase text-white/20 tracking-[0.2em]">Djinn Visual Terminal</span>
+            {/* Platform Watermark */}
+            <div className="absolute top-4 right-4 pointer-events-none opacity-30">
+                <span className="text-[10px] uppercase font-black tracking-widest text-gray-500">
+                    DJINN :: DEVNET
+                </span>
             </div>
         </div>
     );

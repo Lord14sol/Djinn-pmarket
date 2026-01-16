@@ -46,3 +46,4 @@ deploy-wallet.json
 *keypair.json
 *wallet.json
 *.so
+devnet-deploy.json
