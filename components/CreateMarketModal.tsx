@@ -43,6 +43,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
     ]);
     const [initialBuyAmount, setInitialBuyAmount] = useState('0');
     const [initialBuySide, setInitialBuySide] = useState<'yes' | 'no'>('yes');
+    const [error, setError] = useState('');
 
     // Reset State logic
     React.useEffect(() => {
@@ -119,11 +120,11 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
             // Try to create on blockchain (with timeout to prevent hanging)
             if (isContractReady && wallet && publicKey) {
                 try {
-                    console.log("⛓️ Calling smart contract (15s timeout)...");
+                    console.log("⛓️ Calling smart contract (60s timeout)...");
 
                     // Add timeout wrapper to prevent indefinite hanging
                     const timeoutPromise = new Promise((_, reject) =>
-                        setTimeout(() => reject(new Error('Blockchain timeout')), 120000)
+                        setTimeout(() => reject(new Error('Transaction timeout - Devnet may be congested')), 60000)
                     );
 
                     const buyAmount = parseFloat(initialBuyAmount) || 0;
@@ -136,6 +137,11 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                     );
 
                     const result = await Promise.race([contractPromise, timeoutPromise]) as any;
+
+                    // Ensure we have a signature
+                    if (!result || !result.tx) {
+                        throw new Error("No transaction signature returned");
+                    }
 
                     marketPDA = result.marketPda.toBase58();
                     yesTokenMint = result.yesMintPda.toBase58();
@@ -244,7 +250,15 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
 
         } catch (error: any) {
             console.error("❌ Error:", error);
-            alert(`Failed: ${error.message || 'Unknown error'}`);
+
+            // Better error parsing
+            let diffMsg = error.message || 'Unknown error';
+            if (diffMsg.includes('timeout')) {
+                diffMsg = 'Devnet is slow. Please try again or check your wallet.';
+            } else if (diffMsg.includes('User rejected')) {
+                diffMsg = 'Transaction cancelled by user.';
+            }
+            setError(diffMsg);
         } finally {
             setIsLoading(false);
         }
@@ -357,11 +371,40 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                                 >
                                     {isLoading ? '⏳ CREATING ON SOLANA...' : 'CREATE MARKET'}
                                 </button>
+
+                                {error && <ErrorMessage error={error} />}
                             </div>
                         </div>
                     </>
                 )}
             </div>
+        </div>
+    );
+}
+
+function ErrorMessage({ error }: { error: string }) {
+    const isTimeout = error.toLowerCase().includes('timeout') || error.toLowerCase().includes('slow');
+    const isRejection = error.includes('cancelled');
+
+    return (
+        <div className="bg-red-900/20 border border-red-500 rounded-xl p-4 mt-4 animate-in fade-in slide-in-from-bottom-2">
+            <p className="text-red-400 font-bold flex items-center gap-2">
+                {isTimeout && '⏱️ Transaction Timeout'}
+                {isRejection && '🚫 Transaction Cancelled'}
+                {!isTimeout && !isRejection && '❌ Error'}
+            </p>
+            <p className="text-red-300 text-xs mt-1 font-mono">{error}</p>
+
+            {isTimeout && (
+                <div className="mt-3 text-[10px] text-gray-400 bg-black/20 p-2 rounded">
+                    <p className="font-bold mb-1">Devnet Tips:</p>
+                    <ul className="list-disc ml-4 space-y-1">
+                        <li>Wait 30s and try again</li>
+                        <li>Check your wallet has SOL (~0.01)</li>
+                        <li>Ensure you are connected to Devnet</li>
+                    </ul>
+                </div>
+            )}
         </div>
     );
 }

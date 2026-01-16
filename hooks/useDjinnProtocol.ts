@@ -25,6 +25,17 @@ export const useDjinnProtocol = () => {
         return new Program(idl as Idl, PROGRAM_ID, provider);
     }, [provider]);
 
+    const isContractReady = useMemo(() => {
+        const ready = !!(program && provider && wallet && wallet.publicKey);
+        console.log('[Djinn Protocol] Contract Ready Check:', {
+            program: !!program,
+            provider: !!provider,
+            wallet: !!wallet,
+            isReady: ready
+        });
+        return ready;
+    }, [program, provider, wallet]);
+
     const createMarket = useCallback(async (
         title: string,
         description: string,
@@ -32,9 +43,21 @@ export const useDjinnProtocol = () => {
         initialBuyAmount: number = 0,
         initialBuySide: 'yes' | 'no' = 'yes'
     ) => {
-        if (!program || !wallet) throw new Error("Wallet not connected");
+        if (!isContractReady || !program || !wallet || !provider) {
+            console.warn('⚠️ Contract not ready - falling back to local mode');
+            throw new Error("Wallet not connected or contract not ready");
+        }
 
         try {
+            console.log('[Djinn] Starting on-chain creation...', { title, initialBuyAmount });
+
+            // Pre-flight checks
+            const balance = await provider.connection.getBalance(wallet.publicKey);
+            console.log('[Djinn] Wallet balance:', balance / 1e9, 'SOL');
+
+            if (balance < 0.01 * 1e9) {
+                throw new Error('Insufficient SOL balance (need ~0.01 SOL for transaction)');
+            }
             const [marketPda] = await PublicKey.findProgramAddress(
                 [
                     Buffer.from("market"),
@@ -121,9 +144,15 @@ export const useDjinnProtocol = () => {
 
             // Send Transaction
             if (!provider) throw new Error("Provider not available");
-            const signature = await provider.sendAndConfirm(tx);
 
-            return { tx, marketPda, yesMintPda, noMintPda };
+            console.log("[Djinn] Sending transaction...");
+            const signature = await provider.sendAndConfirm(tx, [], {
+                commitment: 'confirmed',
+                skipPreflight: false
+            });
+            console.log("[Djinn] ✅ Transaction confirmed:", signature);
+
+            return { tx: signature, marketPda, yesMintPda, noMintPda };
         } catch (error) {
             console.error("Error creating market:", error);
             throw error;
@@ -365,6 +394,6 @@ export const useDjinnProtocol = () => {
         resolveMarket,
         claimReward,
         getUserBalance,
-        isReady: !!program
+        isReady: isContractReady
     };
 };

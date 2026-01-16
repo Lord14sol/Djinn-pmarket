@@ -157,40 +157,46 @@ export default function MarketPage() {
     const [showShareModal, setShowShareModal] = useState(false);
     const [viewMode, setViewMode] = useState<'pretty' | 'pro'>('pretty');
 
-    const generateOhlcData = (currentPrice: number) => {
-        const now = new Date();
-        const baseTime = Math.floor(now.getTime() / 1000);
-        const points = 50;
+    const generateOhlcData = (currentPrice: number, days: number = 30) => {
         const data = [];
-        let prevClose = currentPrice * 0.9;
+        const now = Date.now();
+        const dayInMs = 86400000;
 
-        for (let i = 0; i < points; i++) {
-            const timeStr = new Date((baseTime - (points - i) * 86400) * 1000).toISOString().split('T')[0];
-            const open = prevClose;
-            const close = open + (Math.random() - 0.5) * 5;
-            const high = Math.max(open, close) + Math.random() * 2;
-            const low = Math.min(open, close) - Math.random() * 2;
+        // Probability drift
+        let probability = 0.5;
+
+        for (let i = days; i >= 0; i--) {
+            // Unix timestamp in seconds
+            const timestamp = Math.floor((now - i * dayInMs) / 1000) as unknown as string;
+
+            // Simulate realistic price movement
+            const volatility = 0.05;
+            const drift = (currentPrice - probability) / (i + 1);
+            const randomWalk = (Math.random() - 0.5) * volatility;
+
+            probability = Math.max(0.01, Math.min(0.99, probability + drift + randomWalk));
+
+            const open = probability;
+            const close = Math.max(0.01, Math.min(0.99, probability + (Math.random() - 0.5) * 0.02));
+            const high = Math.max(open, close) + Math.random() * 0.03;
+            const low = Math.min(open, close) - Math.random() * 0.03;
 
             data.push({
-                time: timeStr,
+                time: timestamp,
                 open: parseFloat(open.toFixed(2)),
-                high: parseFloat(high.toFixed(2)),
-                low: parseFloat(low.toFixed(2)),
+                high: parseFloat((Math.min(0.99, high)).toFixed(2)),
+                low: parseFloat((Math.max(0.01, low)).toFixed(2)),
                 close: parseFloat(close.toFixed(2))
             });
-            prevClose = close;
+            probability = close;
         }
 
-        const finalTimeStr = now.toISOString().split('T')[0];
-        data.push({
-            time: finalTimeStr,
-            open: parseFloat(prevClose.toFixed(2)),
-            high: parseFloat((Math.max(prevClose, currentPrice) + 1).toFixed(2)),
-            low: parseFloat((Math.min(prevClose, currentPrice) - 1).toFixed(2)),
-            close: parseFloat(currentPrice.toFixed(2))
-        });
+        // Ensure strictly unique timestamps
+        const uniqueData = data.filter((item, index, self) =>
+            index === self.findIndex((t) => t.time === item.time)
+        );
 
-        return data;
+        return uniqueData;
     };
     const [lastTradeEvent, setLastTradeEvent] = useState<{ amount: number; side: 'YES' | 'NO' } | null>(null);
 

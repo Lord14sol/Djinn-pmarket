@@ -4,7 +4,7 @@ import React, { useEffect, useRef } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries } from 'lightweight-charts';
 
 interface TradingViewProChartProps {
-    data: { time: string; open: number; high: number; low: number; close: number }[];
+    data: { time: string | number; open: number; high: number; low: number; close: number }[];
     color: string;
 }
 
@@ -54,7 +54,13 @@ export default function TradingViewProChart({ data, color }: TradingViewProChart
             wickDownColor: '#4A5568',
         });
 
-        candlestickSeries.setData(data);
+        const validData = data.filter(d =>
+            d.time &&
+            typeof d.open === 'number' &&
+            typeof d.close === 'number'
+        );
+
+        candlestickSeries.setData(validData as any);
         chart.timeScale().fitContent();
 
         chartRef.current = chart;
@@ -76,7 +82,8 @@ export default function TradingViewProChart({ data, color }: TradingViewProChart
 
     useEffect(() => {
         if (seriesRef.current && data.length > 0) {
-            seriesRef.current.setData(data);
+            const validData = data.filter(d => d.time && typeof d.open === 'number');
+            seriesRef.current.setData(validData as any);
         }
     }, [data]);
 

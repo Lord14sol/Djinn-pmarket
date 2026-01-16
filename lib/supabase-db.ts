@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { withRetry } from './supabase-retry';
 
 // ============================================
 // PROFILES
@@ -15,16 +16,18 @@ export interface Profile {
 }
 
 export async function getProfile(walletAddress: string): Promise<Profile | null> {
-    const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('wallet_address', walletAddress)
-        .single();
+    return withRetry(async () => {
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('wallet_address', walletAddress)
+            .single();
 
-    if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching profile:', JSON.stringify(error, null, 2));
-    }
-    return data;
+        if (error && error.code !== 'PGRST116') {
+            throw error;
+        }
+        return data;
+    }, `getProfile(${walletAddress})`);
 }
 
 export async function upsertProfile(profile: Partial<Profile> & { wallet_address: string }): Promise<Profile | null> {
@@ -414,39 +417,43 @@ export interface Market {
 }
 
 export async function createMarket(market: Partial<Market> & { slug: string; title: string; creator_wallet: string }) {
-    const { data, error } = await supabase
-        .from('markets')
-        .upsert(market, { onConflict: 'slug' })
-        .select()
-        .single();
+    return withRetry(async () => {
+        const { data, error } = await supabase
+            .from('markets')
+            .upsert(market, { onConflict: 'slug' })
+            .select()
+            .single();
 
-    if (error) console.error('Error creating market:', error);
-    return { data, error };
+        if (error) throw error;
+        return { data, error: null };
+    }, 'createMarket');
 }
 
 export async function getMarkets(): Promise<Market[]> {
-    const { data, error } = await supabase
-        .from('markets')
-        .select('*')
-        .order('created_at', { ascending: false });
+    return withRetry(async () => {
+        const { data, error } = await supabase
+            .from('markets')
+            .select('*')
+            .order('created_at', { ascending: false });
 
-    if (error) {
-        console.error('Error fetching markets:', typeof error === 'object' ? JSON.stringify(error, null, 2) : error);
-    }
-    return data || [];
+        if (error) throw error;
+        return data || [];
+    }, 'getMarkets');
 }
 
 export async function getMarket(slug: string): Promise<Market | null> {
-    const { data, error } = await supabase
-        .from('markets')
-        .select('*')
-        .eq('slug', slug)
-        .single();
+    return withRetry(async () => {
+        const { data, error } = await supabase
+            .from('markets')
+            .select('*')
+            .eq('slug', slug)
+            .single();
 
-    if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching market:', typeof error === 'object' ? JSON.stringify(error, null, 2) : error);
-    }
-    return data;
+        if (error && error.code !== 'PGRST116') {
+            throw error;
+        }
+        return data;
+    }, `getMarket(${slug})`);
 }
 
 export async function resolveMarket(slug: string, winningOutcome: 'YES' | 'NO' | 'VOID') {

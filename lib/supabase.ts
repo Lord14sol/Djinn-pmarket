@@ -19,6 +19,15 @@ if (typeof window !== 'undefined') {
 
 // If missing keys (e.g. build time), provide a dummy URL to satisfy createClient
 // This prevents "Error: supabaseUrl is required" during 'npm run build'
+
+if (typeof window !== 'undefined' && (!supabaseUrl || !supabaseAnonKey)) {
+    console.error('❌ Missing Supabase environment variables!');
+    console.log('SUPABASE_URL:', supabaseUrl ? '✓ Set' : '✗ Missing');
+    console.log('SUPABASE_ANON_KEY:', supabaseAnonKey ? '✓ Set' : '✗ Missing');
+    // We throw to stop execution and alert the developer immediately
+    throw new Error('Supabase configuration missing - check .env.local');
+}
+
 export const supabase = createClient(
     supabaseUrl || 'https://placeholder.supabase.co',
     supabaseAnonKey || 'placeholder-key'
