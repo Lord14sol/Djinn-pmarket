@@ -18,8 +18,8 @@ djinn_market = "EkWbgwnLtY76MYzKZPWCz6xBwkrScktK6cpgXQb4GdU6"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "devnet"
-wallet = "./devnet-deploy.json"
+cluster = "Localnet"
+wallet = "~/.config/solana/id.json"
 
 [scripts]
 test = "npx ts-mocha -p ./tsconfig.json -t 1000000 \"tests/**/*.ts\""

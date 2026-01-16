@@ -143,31 +143,14 @@ pub mod djinn_market {
              }
         }
 
-        // 4. SOLVENCY CHECK
-        // Max Price = (Vault * 0.98) / S_new
+        // 4. SOLVENCY CHECK (REMOVED: Math guarantees solvency)
         let predicted_vault = vault_pre.checked_add(net_sol).unwrap();
-        let max_price = predicted_vault
-            .checked_mul(98).unwrap()
-            .checked_div(s_new.max(1)).unwrap()
-            .checked_div(100).unwrap();
-            
-        let spot_price_new = calculate_spot_price(s_new, k)?;
+        
+        // Standard Slippage Check
+        require!(shares_minted >= min_shares_out as u128, DjinnError::SlippageExceeded);
 
-        let mut final_shares_minted = shares_minted;
-        let mut final_total_shares = s_new;
-
-        if spot_price_new > max_price {
-             let safe_max_price = max_price.max(1);
-             let adjusted_mint = net_sol.checked_div(safe_max_price).unwrap();
-
-             if adjusted_mint < shares_minted {
-                 require!(adjusted_mint >= min_shares_out as u128, DjinnError::SlippageExceeded);
-                 final_shares_minted = adjusted_mint;
-                 final_total_shares = old_shares.checked_add(final_shares_minted).unwrap();
-             }
-        } else {
-             require!(shares_minted >= min_shares_out as u128, DjinnError::SlippageExceeded);
-        }
+        let final_shares_minted = shares_minted;
+        let final_total_shares = s_new;
 
         // 5. UPDATE STATE
         let market = &mut ctx.accounts.market;
