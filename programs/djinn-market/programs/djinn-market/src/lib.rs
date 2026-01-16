@@ -181,18 +181,54 @@ pub mod djinn_market {
             )?;
         }
 
-        // User -> Treasury (Fee)
+        // User -> Fees (Split)
         if entry_fee > 0 {
-            anchor_lang::system_program::transfer(
-                CpiContext::new(
-                    ctx.accounts.system_program.to_account_info(),
-                    anchor_lang::system_program::Transfer {
-                        from: ctx.accounts.user.to_account_info(),
-                        to: ctx.accounts.protocol_treasury.to_account_info(),
-                    },
-                ),
-                entry_fee as u64,
-            )?;
+            require!(ctx.accounts.market_creator.key() == market.creator, DjinnError::Unauthorized);
+
+            let treasury = &ctx.accounts.protocol_treasury;
+            let creator_acc = &ctx.accounts.market_creator;
+
+            if creator_acc.key() == treasury.key() {
+                 // 100% to Treasury (Me)
+                 anchor_lang::system_program::transfer(
+                    CpiContext::new(
+                        ctx.accounts.system_program.to_account_info(),
+                        anchor_lang::system_program::Transfer {
+                            from: ctx.accounts.user.to_account_info(),
+                            to: treasury.to_account_info(),
+                        },
+                    ),
+                    entry_fee as u64,
+                )?;
+            } else {
+                 // 50/50 Split
+                 let creator_cut = entry_fee / 2;
+                 let treasury_cut = entry_fee - creator_cut;
+
+                 // To Treasury
+                 anchor_lang::system_program::transfer(
+                    CpiContext::new(
+                        ctx.accounts.system_program.to_account_info(),
+                        anchor_lang::system_program::Transfer {
+                            from: ctx.accounts.user.to_account_info(),
+                            to: treasury.to_account_info(),
+                        },
+                    ),
+                    treasury_cut as u64,
+                )?;
+
+                 // To Creator
+                 anchor_lang::system_program::transfer(
+                    CpiContext::new(
+                        ctx.accounts.system_program.to_account_info(),
+                        anchor_lang::system_program::Transfer {
+                            from: ctx.accounts.user.to_account_info(),
+                            to: creator_acc.to_account_info(),
+                        },
+                    ),
+                    creator_cut as u64,
+                )?;
+            }
         }
 
         emit!(Trade {
@@ -268,19 +304,64 @@ pub mod djinn_market {
             )?;
         }
 
-        // Vault -> Treasury (Fee)
+        // Vault -> Fees (Split)
         if exit_fee > 0 {
-            anchor_lang::system_program::transfer(
-                CpiContext::new_with_signer(
-                    ctx.accounts.system_program.to_account_info(),
-                    anchor_lang::system_program::Transfer {
-                        from: ctx.accounts.market_vault.to_account_info(),
-                        to: ctx.accounts.protocol_treasury.to_account_info(),
-                    },
-                    signer,
-                ),
-                exit_fee as u64,
-            )?;
+            require!(ctx.accounts.market_creator.key() == market.creator, DjinnError::Unauthorized);
+            
+            let treasury = &ctx.accounts.protocol_treasury;
+            let creator_acc = &ctx.accounts.market_creator;
+
+            let seeds = &[
+                b"market_vault",
+                market_key.as_ref(),
+                &[market.vault_bump],
+            ];
+            let signer = &[&seeds[..]];
+
+            if creator_acc.key() == treasury.key() {
+                 // 100% to Treasury
+                 anchor_lang::system_program::transfer(
+                    CpiContext::new_with_signer(
+                        ctx.accounts.system_program.to_account_info(),
+                        anchor_lang::system_program::Transfer {
+                            from: ctx.accounts.market_vault.to_account_info(),
+                            to: treasury.to_account_info(),
+                        },
+                        signer,
+                    ),
+                    exit_fee as u64,
+                )?;
+            } else {
+                 // 50/50 Split
+                 let creator_cut = exit_fee / 2;
+                 let treasury_cut = exit_fee - creator_cut;
+
+                 // To Treasury
+                 anchor_lang::system_program::transfer(
+                    CpiContext::new_with_signer(
+                        ctx.accounts.system_program.to_account_info(),
+                        anchor_lang::system_program::Transfer {
+                            from: ctx.accounts.market_vault.to_account_info(),
+                            to: treasury.to_account_info(),
+                        },
+                        signer,
+                    ),
+                    treasury_cut as u64,
+                )?;
+
+                 // To Creator
+                 anchor_lang::system_program::transfer(
+                    CpiContext::new_with_signer(
+                        ctx.accounts.system_program.to_account_info(),
+                        anchor_lang::system_program::Transfer {
+                            from: ctx.accounts.market_vault.to_account_info(),
+                            to: creator_acc.to_account_info(),
+                        },
+                        signer,
+                    ),
+                    creator_cut as u64,
+                )?;
+            }
         }
 
         emit!(Trade {
@@ -560,6 +641,9 @@ pub struct BuyShares<'info> {
     #[account(mut)]
     /// CHECK: Treasury
     pub protocol_treasury: AccountInfo<'info>,
+    #[account(mut)]
+    /// CHECK: Creator
+    pub market_creator: AccountInfo<'info>,
     pub system_program: Program<'info, System>,
 }
 
@@ -577,6 +661,9 @@ pub struct SellShares<'info> {
     #[account(mut)]
     /// CHECK: Treasury
     pub protocol_treasury: AccountInfo<'info>,
+    #[account(mut)]
+    /// CHECK: Creator
+    pub market_creator: AccountInfo<'info>,
     pub system_program: Program<'info, System>,
 }
 

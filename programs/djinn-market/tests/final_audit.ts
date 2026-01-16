@@ -69,7 +69,7 @@ describe("Djinn Protocol: FINAL AUDIT (500 Iterations)", () => {
 
         // Init trader pos
         await program.methods.buyShares(0, new BN(1e6), new BN(0), 10000)
-            .accounts({ market: marketPda, marketVault: vaultPda, userPosition: pos, user: trader.publicKey, protocolTreasury: G1_TREASURY_PUBKEY, systemProgram: anchor.web3.SystemProgram.programId })
+            .accounts({ market: marketPda, marketVault: vaultPda, userPosition: pos, user: trader.publicKey, protocolTreasury: G1_TREASURY_PUBKEY, marketCreator: creator.publicKey, systemProgram: anchor.web3.SystemProgram.programId })
             .signers([trader]).rpc();
 
         let previousPrice = 0;
@@ -81,7 +81,7 @@ describe("Djinn Protocol: FINAL AUDIT (500 Iterations)", () => {
 
         for (let i = 0; i < 50; i++) {
             await program.methods.buyShares(0, buyAmount, new BN(0), 10000)
-                .accounts({ market: marketPda, marketVault: vaultPda, userPosition: pos, user: trader.publicKey, protocolTreasury: G1_TREASURY_PUBKEY, systemProgram: anchor.web3.SystemProgram.programId })
+                .accounts({ market: marketPda, marketVault: vaultPda, userPosition: pos, user: trader.publicKey, protocolTreasury: G1_TREASURY_PUBKEY, marketCreator: creator.publicKey, systemProgram: anchor.web3.SystemProgram.programId })
                 .signers([trader]).rpc();
 
             const market = await program.account.market.fetch(marketPda);
@@ -115,7 +115,7 @@ describe("Djinn Protocol: FINAL AUDIT (500 Iterations)", () => {
         const [pos] = anchor.web3.PublicKey.findProgramAddressSync([Buffer.from("user_pos"), marketPda.toBuffer(), whale.publicKey.toBuffer()], program.programId);
 
         await program.methods.buyShares(0, pumpAmount, new BN(0), 10000)
-            .accounts({ market: marketPda, marketVault: vaultPda, userPosition: pos, user: whale.publicKey, protocolTreasury: G1_TREASURY_PUBKEY, systemProgram: anchor.web3.SystemProgram.programId })
+            .accounts({ market: marketPda, marketVault: vaultPda, userPosition: pos, user: whale.publicKey, protocolTreasury: G1_TREASURY_PUBKEY, marketCreator: creator.publicKey, systemProgram: anchor.web3.SystemProgram.programId })
             .signers([whale]).rpc();
 
         const market = await program.account.market.fetch(marketPda);
@@ -134,7 +134,7 @@ describe("Djinn Protocol: FINAL AUDIT (500 Iterations)", () => {
         // Loser buys NO
         const [loserPos] = anchor.web3.PublicKey.findProgramAddressSync([Buffer.from("user_pos"), marketPda.toBuffer(), loser.publicKey.toBuffer()], program.programId);
         await program.methods.buyShares(1, new BN(50_000 * 1e9), new BN(0), 10000)
-            .accounts({ market: marketPda, marketVault: vaultPda, userPosition: loserPos, user: loser.publicKey, protocolTreasury: G1_TREASURY_PUBKEY, systemProgram: anchor.web3.SystemProgram.programId })
+            .accounts({ market: marketPda, marketVault: vaultPda, userPosition: loserPos, user: loser.publicKey, protocolTreasury: G1_TREASURY_PUBKEY, marketCreator: creator.publicKey, systemProgram: anchor.web3.SystemProgram.programId })
             .signers([loser]).rpc();
 
         // 3. Calculate Resolution Payout

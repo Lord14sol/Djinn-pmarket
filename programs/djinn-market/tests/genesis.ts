@@ -84,7 +84,7 @@ describe("Djinn Protocol: THE JUDGMENT DAY (Devnet Edition)", () => {
         const [pos] = anchor.web3.PublicKey.findProgramAddressSync([Buffer.from("user_pos"), marketPda.toBuffer(), hedgeFund.publicKey.toBuffer()], program.programId);
 
         await program.methods.buyShares(0, amount, new BN(0), 5000)
-            .accounts({ market: marketPda, marketVault: vaultPda, userPosition: pos, user: hedgeFund.publicKey, protocolTreasury: G1_TREASURY_PUBKEY, systemProgram: anchor.web3.SystemProgram.programId })
+            .accounts({ market: marketPda, marketVault: vaultPda, userPosition: pos, user: hedgeFund.publicKey, protocolTreasury: G1_TREASURY_PUBKEY, marketCreator: creator.publicKey, systemProgram: anchor.web3.SystemProgram.programId })
             .signers([hedgeFund]).rpc();
 
         console.log("    ✔ Hedge Fund Micro-Long Executed.");
@@ -95,7 +95,7 @@ describe("Djinn Protocol: THE JUDGMENT DAY (Devnet Edition)", () => {
         const [pos] = anchor.web3.PublicKey.findProgramAddressSync([Buffer.from("user_pos"), marketPda.toBuffer(), argentinaWhale.publicKey.toBuffer()], program.programId);
 
         await program.methods.buyShares(0, amount, new BN(0), 10000)
-            .accounts({ market: marketPda, marketVault: vaultPda, userPosition: pos, user: argentinaWhale.publicKey, protocolTreasury: G1_TREASURY_PUBKEY, systemProgram: anchor.web3.SystemProgram.programId })
+            .accounts({ market: marketPda, marketVault: vaultPda, userPosition: pos, user: argentinaWhale.publicKey, protocolTreasury: G1_TREASURY_PUBKEY, marketCreator: creator.publicKey, systemProgram: anchor.web3.SystemProgram.programId })
             .signers([argentinaWhale]).rpc();
 
         await logStats("POST-WHALE PUMP");
@@ -107,7 +107,7 @@ describe("Djinn Protocol: THE JUDGMENT DAY (Devnet Edition)", () => {
 
         try {
             await program.methods.buyShares(0, amount, new BN("9999999999999"), 500) // Infinite shares demand
-                .accounts({ market: marketPda, marketVault: vaultPda, userPosition: pos, user: hacker.publicKey, protocolTreasury: G1_TREASURY_PUBKEY, systemProgram: anchor.web3.SystemProgram.programId })
+                .accounts({ market: marketPda, marketVault: vaultPda, userPosition: pos, user: hacker.publicKey, protocolTreasury: G1_TREASURY_PUBKEY, marketCreator: creator.publicKey, systemProgram: anchor.web3.SystemProgram.programId })
                 .signers([hacker]).rpc();
             assert.fail("❌ Security Failure: Slippage ignored.");
         } catch (e) {
@@ -120,7 +120,7 @@ describe("Djinn Protocol: THE JUDGMENT DAY (Devnet Edition)", () => {
 
         // Init Pos with tiny buy
         await program.methods.buyShares(0, new BN(0.001 * 1e9), new BN(0), 5000)
-            .accounts({ market: marketPda, marketVault: vaultPda, userPosition: pos, user: hacker.publicKey, protocolTreasury: G1_TREASURY_PUBKEY, systemProgram: anchor.web3.SystemProgram.programId })
+            .accounts({ market: marketPda, marketVault: vaultPda, userPosition: pos, user: hacker.publicKey, protocolTreasury: G1_TREASURY_PUBKEY, marketCreator: creator.publicKey, systemProgram: anchor.web3.SystemProgram.programId })
             .signers([hacker]).rpc();
 
         const account = await program.account.userPosition.fetch(pos);
@@ -128,7 +128,7 @@ describe("Djinn Protocol: THE JUDGMENT DAY (Devnet Edition)", () => {
 
         try {
             await program.methods.sellShares(toSteal)
-                .accounts({ market: marketPda, marketVault: vaultPda, userPosition: pos, user: hacker.publicKey, protocolTreasury: G1_TREASURY_PUBKEY, systemProgram: anchor.web3.SystemProgram.programId })
+                .accounts({ market: marketPda, marketVault: vaultPda, userPosition: pos, user: hacker.publicKey, protocolTreasury: G1_TREASURY_PUBKEY, marketCreator: creator.publicKey, systemProgram: anchor.web3.SystemProgram.programId })
                 .signers([hacker]).rpc();
             assert.fail("❌ Security Failure: Sold non-existent shares.");
         } catch (e) {
@@ -141,7 +141,7 @@ describe("Djinn Protocol: THE JUDGMENT DAY (Devnet Edition)", () => {
         const [pos] = anchor.web3.PublicKey.findProgramAddressSync([Buffer.from("user_pos"), marketPda.toBuffer(), loser.publicKey.toBuffer()], program.programId);
 
         await program.methods.buyShares(1, amount, new BN(0), 5000)
-            .accounts({ market: marketPda, marketVault: vaultPda, userPosition: pos, user: loser.publicKey, protocolTreasury: G1_TREASURY_PUBKEY, systemProgram: anchor.web3.SystemProgram.programId })
+            .accounts({ market: marketPda, marketVault: vaultPda, userPosition: pos, user: loser.publicKey, protocolTreasury: G1_TREASURY_PUBKEY, marketCreator: creator.publicKey, systemProgram: anchor.web3.SystemProgram.programId })
             .signers([loser]).rpc();
     });
 
