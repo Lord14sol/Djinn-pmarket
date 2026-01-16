@@ -358,6 +358,7 @@ pub mod djinn_market {
                     from: burn_from.to_account_info(),
                     authority: ctx.accounts.user.to_account_info(),
                 },
+                signer,
             ),
             user_shares,
         )?;
@@ -373,6 +374,107 @@ pub mod djinn_market {
             amount: net_payout,
         });
         Ok(())
+    }
+
+    // --- SENTINEL SHIELD SECURITY PROTOCOL ---
+
+    pub fn propose_outcome(
+        ctx: Context<ProposeOutcome>,
+        outcome: MarketOutcome,
+    ) -> Result<()> {
+        let market = &mut ctx.accounts.market;
+        let protocol = &ctx.accounts.protocol_state;
+
+        require!(ctx.accounts.authority.key() == protocol.authority, DjinnError::Unauthorized);
+        require!(market.status == MarketStatus::Open, DjinnError::MarketClosed);
+
+        market.proposed_outcome = outcome;
+        market.status = MarketStatus::Proposed;
+        market.proposal_timestamp = Clock::get()?.unix_timestamp;
+
+        msg!("Sentinel Layer 1: Outcome Proposed. Governance Window Open.");
+        emit!(MarketProposed {
+            market: market.key(),
+            outcome: outcome,
+            timestamp: market.proposal_timestamp,
+        });
+        Ok(())
+    }
+
+    pub fn cast_vote(
+        ctx: Context<CastVote>,
+        vote: MarketOutcome,
+    ) -> Result<()> {
+        let market = &ctx.accounts.market;
+        require!(market.status == MarketStatus::Proposed, DjinnError::VotingClosed);
+        
+        emit!(VoteCast {
+            market: market.key(),
+            user: ctx.accounts.user.key(),
+            vote: vote,
+        });
+        Ok(())
+    }
+
+    pub fn emergency_freeze(
+        ctx: Context<EmergencyFreeze>,
+    ) -> Result<()> {
+        let market = &mut ctx.accounts.market;
+        let protocol = &ctx.accounts.protocol_state;
+
+        require!(ctx.accounts.authority.key() == protocol.authority, DjinnError::Unauthorized);
+
+        market.status = MarketStatus::Frozen;
+        msg!("🛡️ SENTINEL SHIELD: MARKET FROZEN.");
+        
+        emit!(MarketFrozen {
+            market: market.key(),
+        });
+        Ok(())
+    }
+
+    pub fn sovereign_resolve(
+        ctx: Context<ResolveMarket>, 
+        outcome: MarketOutcome,
+    ) -> Result<()> {
+        let market = &mut ctx.accounts.market;
+        
+        // Only G1 Treasury or Protocol Authority
+        require!(ctx.accounts.authority.key() == G1_TREASURY || ctx.accounts.authority.key() == ctx.accounts.protocol_state.authority, DjinnError::Unauthorized);
+        
+        market.outcome = outcome;
+        market.status = MarketStatus::Resolved;
+        market.resolution_timestamp = Clock::get()?.unix_timestamp;
+
+        msg!("👑 SOVEREIGN RESOLUTION EXECUTED.");
+        emit!(MarketResolved {
+            market: market.key(),
+            outcome: outcome,
+        });
+        Ok(())
+    }
+
+    pub fn finalize_service(
+         ctx: Context<ResolveMarket>,
+    ) -> Result<()> {
+         let market = &mut ctx.accounts.market;
+         let protocol = &ctx.accounts.protocol_state;
+         require!(ctx.accounts.authority.key() == protocol.authority, DjinnError::Unauthorized);
+         require!(market.status == MarketStatus::Proposed, DjinnError::NotProposed);
+         
+         let now = Clock::get()?.unix_timestamp;
+         require!(now >= market.proposal_timestamp + 7200, DjinnError::TimelockActive);
+
+         market.outcome = market.proposed_outcome;
+         market.status = MarketStatus::Resolved;
+         market.resolution_timestamp = now;
+
+         msg!("Sentinel Shield: Validation Complete. Market Resolved.");
+         emit!(MarketResolved {
+            market: market.key(),
+            outcome: market.outcome,
+        });
+         Ok(())
     }
 
     pub fn sell_shares(
@@ -394,9 +496,6 @@ pub mod djinn_market {
 
         let mut amount_sol_out_gross = (x - new_x) as u64;
 
-        // 🛡️ SECURITY FIX: LIQUIDITY HOSTAGE PROTECTION
-        // If bonding curve returns dust (< 1000 lamports) but user is selling real shares,
-        // fallback to "Fair Share" of the Virtual Reserves.
         if amount_sol_out_gross < 1000 && shares_amount > 0 {
              let (mint_supply, _decimals) = match side {
                 MarketOutcome::Yes => (ctx.accounts.yes_token_mint.supply, ctx.accounts.yes_token_mint.decimals),
@@ -405,31 +504,9 @@ pub mod djinn_market {
              };
              
              if mint_supply > 0 {
-                  // Payout = (Shares / Supply) * Virtual SOL
                   let fair_share_payout = (shares_amount as u128 * market.virtual_sol_reserves as u128 / mint_supply as u128) as u64;
                   if fair_share_payout > amount_sol_out_gross {
                       amount_sol_out_gross = fair_share_payout;
-                      msg!("🛡️ Anti-Hostage Triggered: Using Fair Share Payout ({} lamports)", fair_share_payout);
-                  }
-             }
-        }
-
-        // 🛡️ SECURITY FIX: LIQUIDITY HOSTAGE PROTECTION
-        // If bonding curve returns dust (< 1000 lamports) but user is selling real shares,
-        // fallback to "Fair Share" of the Virtual Reserves.
-        if amount_sol_out_gross < 1000 && shares_amount > 0 {
-             let (mint_supply, _decimals) = match side {
-                MarketOutcome::Yes => (ctx.accounts.yes_token_mint.supply, ctx.accounts.yes_token_mint.decimals),
-                MarketOutcome::No => (ctx.accounts.no_token_mint.supply, ctx.accounts.no_token_mint.decimals),
-                _ => (0, 0),
-             };
-             
-             if mint_supply > 0 {
-                  // Payout = (Shares / Supply) * Virtual SOL
-                  let fair_share_payout = (shares_amount as u128 * market.virtual_sol_reserves as u128 / mint_supply as u128) as u64;
-                  if fair_share_payout > amount_sol_out_gross {
-                      amount_sol_out_gross = fair_share_payout;
-                      msg!("🛡️ Anti-Hostage Triggered: Using Fair Share Payout ({} lamports)", fair_share_payout);
                   }
              }
         }
@@ -443,13 +520,11 @@ pub mod djinn_market {
         if market.last_trade_slot == current_slot && market.last_trader == ctx.accounts.user.key() {
             fee_rate = FEE_ANTIBOT;
             fee_creator_rate = 0;
-            msg!("Anti-Bot Penalty Applied on Sell!");
         } else {
             let current_price_e9 = (market.virtual_sol_reserves as u128 * 1_000_000_000) / market.virtual_share_reserves as u128;
             if current_price_e9 >= ENDGAME_THRESHOLD_BPS as u128 * 100_000 {
                 fee_rate = FEE_ENDGAME_TOTAL;
                 fee_creator_rate = FEE_ENDGAME_CREATOR;
-                msg!("Endgame Fee Activated on Sell");
             }
         }
 
@@ -461,7 +536,6 @@ pub mod djinn_market {
         }
 
         let fee_protocol = fee_total - fee_creator;
-        
         let amount_sol_net = amount_sol_out_gross - fee_total;
         require!(amount_sol_net >= min_sol_out, DjinnError::SlippageExceeded);
 
@@ -490,7 +564,6 @@ pub mod djinn_market {
             shares_amount,
         )?;
 
-        // MANUALLY TRANSFER SOL (PDA IS OWNER)
         **market.to_account_info().try_borrow_mut_lamports()? -= amount_sol_net;
         **ctx.accounts.user.to_account_info().try_borrow_mut_lamports()? += amount_sol_net;
 
@@ -515,10 +588,10 @@ pub mod djinn_market {
     }
 }
 
-// --- DATA STRUCTURES (UPDATED V2) ---
+// --- DATA STRUCTURES ---
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug)]
-pub enum MarketStatus { Open, Resolved, Voided }
+pub enum MarketStatus { Open, Proposed, Frozen, Resolved, Voided }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MarketOutcome { None, Yes, No, Void }
@@ -527,28 +600,23 @@ pub enum MarketOutcome { None, Yes, No, Void }
 pub struct Market {
     pub creator: Pubkey,
     pub title: String,
-    
-    // V2 AMM State
     pub virtual_sol_reserves: u64,
     pub virtual_share_reserves: u64,
     pub creator_fees_claimable: u64,
     pub total_volume: u64,
-
-    // Anti-Bot
     pub last_trade_slot: u64,
     pub last_trader: Pubkey,
-
     pub resolution_time: i64,
-    pub resolution_timestamp: i64, // Settlement start
+    pub resolution_timestamp: i64,
     pub status: MarketStatus,
     pub outcome: MarketOutcome,
     pub bump: u8,
+    // Sentinel
+    pub proposed_outcome: MarketOutcome,
+    pub proposal_timestamp: i64,
 }
 
-impl Market {
-    // Increased size for new fields approx
-    pub const LEN: usize = 400; 
-}
+impl Market { pub const LEN: usize = 500; }
 
 #[account]
 pub struct ProtocolState {
@@ -558,7 +626,7 @@ pub struct ProtocolState {
 
 impl ProtocolState { pub const LEN: usize = 8 + 32 + 32; }
 
-// --- ACCOUNTS (UPDATED) ---
+// --- ACCOUNTS ---
 
 #[derive(Accounts)]
 pub struct InitializeProtocol<'info> {
@@ -576,19 +644,15 @@ pub struct InitializeProtocol<'info> {
 pub struct CreateMarket<'info> {
     #[account(init, payer = creator, space = Market::LEN, seeds = [b"market", creator.key().as_ref(), title.as_bytes()], bump)]
     pub market: Box<Account<'info, Market>>,
-    
     #[account(init, payer = creator, seeds = [b"yes_mint", market.key().as_ref()], bump, mint::decimals = 9, mint::authority = market)]
     pub yes_token_mint: Box<Account<'info, Mint>>,
-    
     #[account(init, payer = creator, seeds = [b"no_mint", market.key().as_ref()], bump, mint::decimals = 9, mint::authority = market)]
     pub no_token_mint: Box<Account<'info, Mint>>,
-
     #[account(mut)]
     pub creator: Signer<'info>,
-    /// CHECK: Treasury verified by constraint inside function
+    /// CHECK: G1 Treasury
     #[account(mut)]
     pub protocol_treasury: AccountInfo<'info>,
-
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
     pub rent: Sysvar<'info, Rent>,
@@ -598,35 +662,19 @@ pub struct CreateMarket<'info> {
 pub struct PlaceBet<'info> {
     #[account(mut)]
     pub market: Box<Account<'info, Market>>,
-    
     #[account(mut)]
     pub user: Signer<'info>,
-    
     #[account(mut)]
     pub yes_token_mint: Box<Account<'info, Mint>>,
     #[account(mut)]
     pub no_token_mint: Box<Account<'info, Mint>>,
-
-    #[account(
-        init_if_needed,
-        payer = user,
-        associated_token::mint = yes_token_mint,
-        associated_token::authority = user,
-    )]
+    #[account(init_if_needed, payer = user, associated_token::mint = yes_token_mint, associated_token::authority = user)]
     pub user_yes_account: Box<Account<'info, TokenAccount>>,
-    #[account(
-        init_if_needed,
-        payer = user,
-        associated_token::mint = no_token_mint,
-        associated_token::authority = user,
-    )]
+    #[account(init_if_needed, payer = user, associated_token::mint = no_token_mint, associated_token::authority = user)]
     pub user_no_account: Box<Account<'info, TokenAccount>>,
     pub associated_token_program: Program<'info, AssociatedToken>,
-    
-    /// CHECK: Treasury wallet
     #[account(mut)]
-    pub protocol_treasury: AccountInfo<'info>, // Needed for direct protocol fee transfer
-
+    pub protocol_treasury: AccountInfo<'info>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 }
@@ -640,7 +688,7 @@ pub struct ClaimCreatorFees<'info> {
 }
 
 #[derive(Accounts)]
-pub struct ResolveMarket<'info> {
+pub struct ProposeOutcome<'info> {
     #[account(mut)]
     pub market: Box<Account<'info, Market>>,
     pub authority: Signer<'info>,
@@ -649,26 +697,51 @@ pub struct ResolveMarket<'info> {
 }
 
 #[derive(Accounts)]
+pub struct CastVote<'info> {
+    pub market: Box<Account<'info, Market>>,
+    pub user: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct EmergencyFreeze<'info> {
+    #[account(mut)]
+    pub market: Box<Account<'info, Market>>,
+    pub authority: Signer<'info>,
+    #[account(mut)]
+    pub protocol_state: Box<Account<'info, ProtocolState>>,
+}
+
+#[derive(Accounts)]
+pub struct ResolveMarket<'info> {
+    #[account(mut)]
+    pub market: Box<Account<'info, Market>>,
+    pub authority: Signer<'info>,
+    #[account(mut)]
+    pub protocol_state: Box<Account<'info, ProtocolState>>,
+    #[account(mut)]
+    pub protocol_treasury: AccountInfo<'info>,
+    #[account(mut)]
+    pub yes_token_mint: Box<Account<'info, Mint>>,
+    #[account(mut)]
+    pub no_token_mint: Box<Account<'info, Mint>>,
+}
+
+#[derive(Accounts)]
 pub struct ClaimReward<'info> {
     #[account(mut)]
     pub market: Box<Account<'info, Market>>,
     #[account(mut)]
     pub user: Signer<'info>,
-    
     #[account(mut)]
     pub yes_token_mint: Box<Account<'info, Mint>>,
     #[account(mut)]
     pub no_token_mint: Box<Account<'info, Mint>>,
-
     #[account(mut)]
     pub user_yes_account: Box<Account<'info, TokenAccount>>,
     #[account(mut)]
     pub user_no_account: Box<Account<'info, TokenAccount>>,
-    
-    /// CHECK: Treasury for fees
     #[account(mut)]
     pub protocol_treasury: AccountInfo<'info>,
-    
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 }
@@ -677,27 +750,28 @@ pub struct ClaimReward<'info> {
 pub struct SellShares<'info> {
     #[account(mut)]
     pub market: Box<Account<'info, Market>>,
-    
     #[account(mut)]
     pub user: Signer<'info>,
-    
     #[account(mut)]
     pub yes_token_mint: Box<Account<'info, Mint>>,
     #[account(mut)]
     pub no_token_mint: Box<Account<'info, Mint>>,
-
     #[account(mut)]
     pub user_yes_account: Box<Account<'info, TokenAccount>>,
     #[account(mut)]
     pub user_no_account: Box<Account<'info, TokenAccount>>,
-    
-    /// CHECK: Treasury
     #[account(mut)]
     pub protocol_treasury: AccountInfo<'info>,
-
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 }
+
+#[event]
+pub struct MarketProposed { pub market: Pubkey, pub outcome: MarketOutcome, pub timestamp: i64 }
+#[event]
+pub struct VoteCast { pub market: Pubkey, pub user: Pubkey, pub vote: MarketOutcome }
+#[event]
+pub struct MarketFrozen { pub market: Pubkey }
 
 #[error_code]
 pub enum DjinnError {
@@ -713,5 +787,6 @@ pub enum DjinnError {
     #[msg("Math Error")] MathError,
     #[msg("Timelock Active: Wait 2 Hours")] TimelockActive,
     #[msg("Slippage Exceeded")] SlippageExceeded,
-    #[msg("Whale Limit Exceeded (Max 2%)")] WhaleLimitExceeded,
+    #[msg("Voting Closed")] VotingClosed,
+    #[msg("Market Not Proposed")] NotProposed,
 }

@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { createChart, ColorType, IChartApi, ISeriesApi, LineSeries } from 'lightweight-charts';
 import Image from 'next/image';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 // Color palette for different outcomes
 const OUTCOME_COLORS = [
@@ -22,223 +22,153 @@ interface MultiLineChartProps {
     selectedOutcome?: string | null;
 }
 
-// Custom tooltip component
-const CustomTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-        return (
-            <div className="bg-black/95 border border-white/20 rounded-xl p-4 shadow-2xl backdrop-blur-md">
-                <p className="text-gray-400 text-xs font-mono mb-3 uppercase tracking-wider">{label}</p>
-                <div className="space-y-2">
-                    {payload.map((entry: any, index: number) => (
-                        <div
-                            key={index}
-                            className="flex items-center justify-between gap-6 px-3 py-1.5 rounded-lg"
-                            style={{ backgroundColor: `${entry.color}15` }}
-                        >
-                            <div className="flex items-center gap-2">
-                                <div
-                                    className="w-3 h-3 rounded-full"
-                                    style={{ backgroundColor: entry.color, boxShadow: `0 0 8px ${entry.color}` }}
-                                />
-                                <span className="text-white font-bold text-sm">{entry.name}</span>
-                            </div>
-                            <span
-                                className="font-black text-base"
-                                style={{ color: entry.color }}
-                            >
-                                {entry.value.toFixed(1)}%
-                            </span>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        );
-    }
-    return null;
-};
-
-// Legend component
-const CustomLegend = ({ outcomes }: { outcomes: { name: string; color: string; currentValue: number }[] }) => {
-    return (
-        <div className="flex flex-wrap gap-4 mb-4 px-2">
-            {outcomes.map((outcome, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                    <div
-                        className="w-2.5 h-2.5 rounded-full"
-                        style={{ backgroundColor: outcome.color }}
-                    />
-                    <span className="text-gray-400 text-xs font-medium">{outcome.name}</span>
-                    <span
-                        className="text-xs font-black"
-                        style={{ color: outcome.color }}
-                    >
-                        {outcome.currentValue.toFixed(1)}%
-                    </span>
-                </div>
-            ))}
-        </div>
-    );
-};
-
-// Time period selector
-const periods = ['1H', '6H', '1D', '1W', '1M', 'ALL'];
-
 export default function MultiLineChart({ outcomes, hasPosition, selectedOutcome }: MultiLineChartProps) {
-    const [activePeriod, setActivePeriod] = useState('ALL');
-    const [hoveredLine, setHoveredLine] = useState<string | null>(null);
+    const chartContainerRef = useRef<HTMLDivElement>(null);
+    const chartRef = useRef<IChartApi | null>(null);
+    const seriesMapRef = useRef<Map<string, ISeriesApi<"Line">>>(new Map());
 
-    // Merge all data points by time
-    const mergedData = outcomes.length > 0 ? outcomes[0].data.map((point, idx) => {
-        const merged: any = { time: point.time };
-        outcomes.forEach((outcome, i) => {
-            merged[outcome.name] = outcome.data[idx]?.value || 0;
+    useEffect(() => {
+        if (!chartContainerRef.current) return;
+
+        // 1. Initial Chart Setup
+        const chart = createChart(chartContainerRef.current, {
+            layout: {
+                background: { type: ColorType.Solid, color: 'transparent' },
+                textColor: '#666',
+                fontFamily: 'monospace',
+            },
+            grid: {
+                vertLines: { visible: false },
+                horzLines: { color: 'rgba(255, 255, 255, 0.03)' },
+            },
+            width: chartContainerRef.current.clientWidth,
+            height: 320,
+            timeScale: {
+                borderVisible: false,
+                timeVisible: true,
+            },
+            rightPriceScale: {
+                borderVisible: false,
+                scaleMargins: {
+                    top: 0.1,
+                    bottom: 0.1,
+                },
+            },
+            handleScroll: false,
+            handleScale: false,
         });
-        return merged;
-    }) : [];
 
-    // Get current values for legend
-    const legendData = outcomes.map((outcome, idx) => ({
-        name: outcome.name,
-        color: OUTCOME_COLORS[idx % OUTCOME_COLORS.length],
-        currentValue: outcome.data[outcome.data.length - 1]?.value || 0
-    }));
+        chartRef.current = chart;
 
-    // Custom dot for the last data point
-    const renderCustomizedDot = (props: any) => {
-        const { cx, cy, index, stroke } = props;
-        if (index === mergedData.length - 1) {
-            return (
-                <svg x={cx - 6} y={cy - 6} width={12} height={12} fill="white" viewBox="0 0 1024 1024">
-                    <circle cx="512" cy="512" r="512" fill={stroke} />
-                    <circle cx="512" cy="512" r="200" fill="white" />
-                </svg>
-            );
-        }
-        return <></>;
-    };
+        // Cleanup
+        return () => {
+            chart.remove();
+        };
+    }, []);
+
+    // Sync Series and Data
+    useEffect(() => {
+        if (!chartRef.current) return;
+
+        const chart = chartRef.current;
+
+        // Remove old series that are no longer present
+        const currentOutcomeNames = new Set(outcomes.map(o => o.name));
+        seriesMapRef.current.forEach((series, name) => {
+            if (!currentOutcomeNames.has(name)) {
+                chart.removeSeries(series);
+                seriesMapRef.current.delete(name);
+            }
+        });
+
+        // Add or Update series
+        outcomes.forEach((outcome, idx) => {
+            let series = seriesMapRef.current.get(outcome.name);
+            const color = OUTCOME_COLORS[idx % OUTCOME_COLORS.length];
+
+            const isSelected = selectedOutcome === outcome.name;
+            const hasSelection = !!selectedOutcome;
+            const opacity = hasSelection ? (isSelected ? 1 : 0.2) : 1;
+
+            if (!series) {
+                // v5 Unified API
+                series = chart.addSeries(LineSeries, {
+                    color: color,
+                    lineWidth: 2,
+                    priceFormat: {
+                        type: 'custom',
+                        formatter: (price: number) => `${price.toFixed(0)}%`,
+                    },
+                });
+                seriesMapRef.current.set(outcome.name, series);
+            }
+
+            // Apply styling based on selection
+            series.applyOptions({
+                lineWidth: isSelected ? 4 : 2,
+                color: `${color}${Math.floor(opacity * 255).toString(16).padStart(2, '0')}`,
+            });
+
+            // Format data
+            const formattedData = outcome.data.map((d, i) => ({
+                time: (i * 86400) as any,
+                value: d.value
+            }));
+            series.setData(formattedData);
+        });
+
+        chart.timeScale().fitContent();
+    }, [outcomes, selectedOutcome]);
+
+    // Handle Resize
+    useEffect(() => {
+        const handleResize = () => {
+            if (chartContainerRef.current && chartRef.current) {
+                chartRef.current.applyOptions({ width: chartContainerRef.current.clientWidth });
+            }
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     return (
-        <div className="relative w-full">
-            {/* Header: Legend + Real Volume if available (or static moved out) */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-4 gap-4">
-                <CustomLegend outcomes={legendData} />
-
-                {/* Volume Display - Moved Outside & Made Dynamic later if needed */}
-                <div className="text-right px-2">
-                    <p className="text-gray-600 text-[9px] font-mono uppercase tracking-widest mb-0.5">24h Volume</p>
-                    <p className="text-white text-lg font-bold tracking-tight">$0.00</p>
-                </div>
-            </div>
-
-            {/* Chart container */}
-            <div className="relative h-64 md:h-80 w-full bg-[#0A0A0A] rounded-2xl border border-white/5 overflow-hidden">
-                {/* Grid pattern - More subtle */}
-                <div className="absolute inset-0 opacity-[0.02]" style={{
-                    backgroundImage: 'linear-gradient(#fff 1px, transparent 1px)',
-                    backgroundSize: '100% 40px'
-                }} />
-
-                {/* Djinn watermark - Centered */}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 opacity-[0.05] select-none scale-75">
+        <div className="relative w-full mb-8">
+            <div className="relative bg-[#050505] border border-white/5 rounded-3xl p-6 overflow-hidden">
+                {/* Djinn Watermark */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 opacity-[0.03] select-none scale-75">
                     <div className="flex items-center gap-0">
                         <Image src="/star.png" alt="Djinn" width={140} height={140} className="-mr-3" />
                         <span className="text-5xl font-bold text-white" style={{ fontFamily: 'var(--font-adriane), serif' }}>Djinn</span>
                     </div>
                 </div>
 
-                <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={mergedData} margin={{ top: 20, right: 10, bottom: 5, left: -20 }}>
-                        <XAxis
-                            dataKey="time"
-                            axisLine={false}
-                            tickLine={false}
-                            tick={{ fill: '#444', fontSize: 9, fontWeight: 500, fontFamily: 'monospace' }}
-                            interval="preserveStartEnd"
-                            tickMargin={8}
-                        />
-
-                        <YAxis
-                            domain={[0, 100]}
-                            axisLine={false}
-                            tickLine={false}
-                            tick={{ fill: '#444', fontSize: 9, fontWeight: 500 }}
-                            tickFormatter={(value) => `${value}`}
-                            width={35}
-                        />
-
-                        <Tooltip content={<CustomTooltip />} />
-
+                <div className="flex justify-between items-center mb-6 relative z-10">
+                    <div className="flex flex-wrap gap-4">
                         {outcomes.map((outcome, idx) => {
                             const color = OUTCOME_COLORS[idx % OUTCOME_COLORS.length];
-                            const isHovered = hoveredLine === outcome.name;
                             const isSelected = selectedOutcome === outcome.name;
-                            // Dim others if one is hovered OR selected
-                            const isOtherDimmed = (hoveredLine !== null && !isHovered) || (selectedOutcome !== null && !isSelected && hoveredLine === null);
-
                             return (
-                                <Line
+                                <div
                                     key={outcome.name}
-                                    type="monotone"
-                                    dataKey={outcome.name}
-                                    name={outcome.name}
-                                    stroke={color}
-                                    strokeWidth={isHovered || isSelected ? 3 : 1.5}
-                                    dot={false}
-                                    activeDot={{
-                                        r: 5,
-                                        fill: color,
-                                        stroke: '#000',
-                                        strokeWidth: 2,
-                                    }}
-                                    opacity={isOtherDimmed ? 0.15 : 1}
-                                    onMouseEnter={() => setHoveredLine(outcome.name)}
-                                    onMouseLeave={() => setHoveredLine(null)}
-                                    isAnimationActive={true}
-                                />
+                                    className={`flex items-center gap-2 transition-opacity duration-300 ${selectedOutcome && !isSelected ? 'opacity-30' : 'opacity-100'}`}
+                                >
+                                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color, boxShadow: `0 0 8px ${color}` }} />
+                                    <span className="text-[10px] font-bold text-white/60 tracking-wider uppercase">{outcome.name}</span>
+                                    <span className="text-[10px] font-black" style={{ color }}>{outcome.data[outcome.data.length - 1]?.value.toFixed(1)}%</span>
+                                </div>
                             );
                         })}
-                    </LineChart>
-                </ResponsiveContainer>
+                    </div>
+                </div>
 
-                {/* Position indicator */}
+                <div ref={chartContainerRef} className="w-full h-80 relative z-10" />
+
                 {hasPosition && (
-                    <div className="absolute top-3 right-3 px-2 py-1 bg-black/60 backdrop-blur-sm border border-[#F492B7]/30 rounded flex items-center gap-1.5">
-                        <div className="w-1.5 h-1.5 rounded-full animate-pulse bg-[#F492B7]" style={{ boxShadow: '0 0 5px #F492B7' }} />
-                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#F492B7]">Active</span>
+                    <div className="absolute top-6 right-6 px-3 py-1 bg-white/5 border border-white/10 rounded-full flex items-center gap-2 z-20">
+                        <div className="w-1.5 h-1.5 rounded-full animate-pulse bg-purple-500" style={{ boxShadow: '0 0 8px #a855f7' }} />
+                        <span className="text-[9px] font-bold text-white/60 uppercase">Position Active</span>
                     </div>
                 )}
-            </div>
-
-            {/* Time period selector - Minimalist */}
-            <div className="flex items-center justify-between mt-3 px-1">
-                <div className="flex gap-2">
-                    {periods.map((period) => (
-                        <button
-                            key={period}
-                            onClick={() => setActivePeriod(period)}
-                            className={`text-[9px] font-bold uppercase tracking-widest transition-colors ${activePeriod === period
-                                ? 'text-[#F492B7]'
-                                : 'text-gray-600 hover:text-gray-400'
-                                }`}
-                        >
-                            {period}
-                        </button>
-                    ))}
-                </div>
-
-                {/* Chart controls */}
-                <div className="flex items-center gap-2">
-                    <button className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-500 hover:text-white transition-all">
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                        </svg>
-                    </button>
-                    <button className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-500 hover:text-white transition-all">
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                        </svg>
-                    </button>
-                </div>
             </div>
         </div>
     );

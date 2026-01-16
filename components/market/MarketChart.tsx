@@ -1,175 +1,104 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import Image from 'next/image';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import React, { useEffect, useRef, useState } from 'react';
+import { createChart, ColorType, IChartApi, ISeriesApi, AreaSeries } from 'lightweight-charts';
+import TradeBubbles from './TradeBubbles';
 
 interface MarketChartProps {
     data: { time: string; value: number }[];
     color: string;
     hasPosition?: boolean;
-    flashOnUpdate?: boolean;
+    lastTrade?: { amount: number; side: 'YES' | 'NO' } | null;
 }
 
-export default function MarketChart({ data, color, hasPosition, flashOnUpdate }: MarketChartProps) {
-    const [isFlashing, setIsFlashing] = useState(false);
-    const [prevDataLength, setPrevDataLength] = useState(data.length);
+export default function MarketChart({ data, color, hasPosition, lastTrade }: MarketChartProps) {
+    const chartContainerRef = useRef<HTMLDivElement>(null);
+    const chartRef = useRef<IChartApi | null>(null);
+    const seriesRef = useRef<ISeriesApi<"Area"> | null>(null);
 
-    // Trigger flash animation when new data is added
     useEffect(() => {
-        if (data.length > prevDataLength && flashOnUpdate) {
-            setIsFlashing(true);
-            const timer = setTimeout(() => setIsFlashing(false), 600);
-            return () => clearTimeout(timer);
-        }
-        setPrevDataLength(data.length);
-    }, [data.length, prevDataLength, flashOnUpdate]);
+        if (!chartContainerRef.current) return;
 
-    // Create multiple gradient stops for richer effect
-    const gradientId = `gradient-${color.replace('#', '')}`;
+        const chart = createChart(chartContainerRef.current, {
+            layout: {
+                background: { type: ColorType.Solid, color: 'transparent' },
+                textColor: '#A0A0A0',
+                fontFamily: 'Inter, sans-serif',
+            },
+            grid: {
+                vertLines: { visible: false },
+                horzLines: { color: 'rgba(255, 255, 255, 0.03)' },
+            },
+            width: chartContainerRef.current.clientWidth,
+            height: 320,
+            timeScale: {
+                borderVisible: false,
+                timeVisible: true,
+            },
+            rightPriceScale: {
+                borderVisible: false,
+                scaleMargins: { top: 0.1, bottom: 0.1 },
+            },
+            handleScroll: false,
+            handleScale: false,
+        });
+
+        const areaSeries = chart.addSeries(AreaSeries, {
+            lineColor: color,
+            topColor: `${color}33`,
+            bottomColor: `${color}00`,
+            lineWidth: 2,
+            priceFormat: {
+                type: 'custom',
+                formatter: (price: number) => `${Math.round(price)}%`,
+            },
+        });
+
+        const formattedData = data.map((d, i) => ({
+            time: (i * 86400) as any,
+            value: d.value
+        }));
+
+        areaSeries.setData(formattedData);
+        chart.timeScale().fitContent();
+
+        chartRef.current = chart;
+        seriesRef.current = areaSeries;
+
+        const handleResize = () => {
+            if (chartContainerRef.current && chartRef.current) {
+                chartRef.current.applyOptions({ width: chartContainerRef.current.clientWidth });
+            }
+        };
+
+        window.addEventListener('resize', handleResize);
+        return () => {
+            window.removeEventListener('resize', handleResize);
+            chart.remove();
+        };
+    }, [color]);
+
+    useEffect(() => {
+        if (seriesRef.current && data.length > 0) {
+            const formattedData = data.map((d, i) => ({
+                time: (i * 86400) as any,
+                value: d.value
+            }));
+            seriesRef.current.setData(formattedData);
+        }
+    }, [data]);
 
     return (
-        <div className="relative h-64 md:h-80 w-full mb-8">
-            {/* Animated glow background */}
-            <div
-                className="absolute inset-0 rounded-2xl opacity-20 blur-3xl transition-opacity duration-300"
-                style={{
-                    background: `radial-gradient(circle at 50% 0%, ${color}40, transparent 70%)`,
-                    animation: 'pulse 3s ease-in-out infinite'
-                }}
-            />
+        <div className="relative w-full overflow-hidden">
+            {/* Real-time Bubbles Overlay */}
+            <TradeBubbles trigger={lastTrade || null} />
 
-            {/* Flash effect on purchase */}
-            {isFlashing && (
-                <div
-                    className="absolute inset-0 rounded-2xl animate-ping"
-                    style={{
-                        background: `radial-gradient(circle at center, ${color}60, transparent 60%)`,
-                        animationDuration: '0.6s',
-                        animationIterationCount: '1'
-                    }}
-                />
-            )}
+            <div ref={chartContainerRef} className="w-full h-80" />
 
-            {/* Chart container with glassmorphism effect */}
-            <div className="relative h-full bg-gradient-to-br from-white/[0.02] to-transparent rounded-2xl border border-white/5 backdrop-blur-sm overflow-hidden">
-                {/* Grid pattern overlay */}
-                <div className="absolute inset-0 opacity-10" style={{
-                    backgroundImage: 'linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)',
-                    backgroundSize: '20px 20px'
-                }} />
-
-                {/* Djinn watermark */}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 opacity-[0.12]">
-                    <div className="flex items-center gap-0">
-                        <Image src="/star.png" alt="Djinn" width={140} height={140} className="-mr-3" />
-                        <span className="text-5xl font-bold text-white" style={{ fontFamily: 'var(--font-adriane), serif' }}>Djinn</span>
-                    </div>
-                </div>
-
-                <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={data} margin={{ top: 20, right: 20, bottom: 20, left: 0 }}>
-                        <defs>
-                            {/* Enhanced gradient with multiple stops */}
-                            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor={color} stopOpacity={0.4} />
-                                <stop offset="50%" stopColor={color} stopOpacity={0.2} />
-                                <stop offset="100%" stopColor={color} stopOpacity={0} />
-                            </linearGradient>
-
-                            {/* Glow filter for the line */}
-                            <filter id="glow">
-                                <feGaussianBlur stdDeviation="2" result="coloredBlur" />
-                                <feMerge>
-                                    <feMergeNode in="coloredBlur" />
-                                    <feMergeNode in="SourceGraphic" />
-                                </feMerge>
-                            </filter>
-                        </defs>
-
-                        <XAxis
-                            dataKey="time"
-                            axisLine={false}
-                            tickLine={false}
-                            tick={{ fill: '#666', fontSize: 9, fontWeight: 700, fontFamily: 'monospace' }}
-                            interval="preserveStartEnd"
-                            tickMargin={12}
-                        />
-
-                        <YAxis
-                            domain={[0, 100]}
-                            axisLine={false}
-                            tickLine={false}
-                            tick={{ fill: '#666', fontSize: 10, fontWeight: 700 }}
-                            tickFormatter={(value) => `${value}%`}
-                            width={40}
-                        />
-
-                        <Tooltip
-                            contentStyle={{
-                                backgroundColor: 'rgba(0, 0, 0, 0.95)',
-                                border: `1px solid ${color}40`,
-                                borderRadius: '16px',
-                                boxShadow: `0 0 20px ${color}30`,
-                                backdropFilter: 'blur(10px)',
-                                padding: '12px 16px'
-                            }}
-                            itemStyle={{
-                                color: color,
-                                fontWeight: 900,
-                                fontSize: '14px',
-                                textShadow: `0 0 10px ${color}80`
-                            }}
-                            labelStyle={{
-                                color: '#999',
-                                fontSize: '10px',
-                                marginBottom: '6px',
-                                fontFamily: 'monospace',
-                                textTransform: 'uppercase',
-                                letterSpacing: '0.5px'
-                            }}
-                            formatter={(value: any) => [`${value.toFixed(1)}%`, 'Chance']}
-                            cursor={{ stroke: color, strokeWidth: 1, strokeDasharray: '4 4', opacity: 0.3 }}
-                        />
-
-                        <Area
-                            type="monotone"
-                            dataKey="value"
-                            stroke={color}
-                            strokeWidth={3}
-                            fillOpacity={1}
-                            fill={`url(#${gradientId})`}
-                            isAnimationActive={true}
-                            animationDuration={800}
-                            animationEasing="ease-in-out"
-                            filter="url(#glow)"
-                            dot={false}
-                            activeDot={{
-                                r: 6,
-                                fill: color,
-                                stroke: '#000',
-                                strokeWidth: 2,
-                                filter: 'drop-shadow(0 0 6px currentColor)'
-                            }}
-                        />
-                    </AreaChart>
-                </ResponsiveContainer>
-
-                {/* Position indicator overlay */}
-                {hasPosition && (
-                    <div className="absolute top-4 right-4 px-3 py-1.5 bg-black/80 backdrop-blur-md border rounded-lg flex items-center gap-2" style={{ borderColor: `${color}40` }}>
-                        <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: color, boxShadow: `0 0 8px ${color}` }} />
-                        <span className="text-[10px] font-black uppercase tracking-wider" style={{ color }}>Position Active</span>
-                    </div>
-                )}
+            {/* Polymarket-style Watermark or info */}
+            <div className="absolute top-4 right-4 opacity-20 pointer-events-none">
+                <span className="text-[10px] font-black uppercase tracking-widest text-white">Djinn Lite</span>
             </div>
-
-            <style jsx>{`
-                @keyframes pulse {
-                    0%, 100% { opacity: 0.15; }
-                    50% { opacity: 0.25; }
-                }
-            `}</style>
         </div>
     );
 }

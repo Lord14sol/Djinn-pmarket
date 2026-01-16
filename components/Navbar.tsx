@@ -315,7 +315,7 @@ function NavbarContent() {
                             {/* Oracle Bot - Only visible to Protocol Authority */}
                             {connected && publicKey?.toString() === "G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma" && (
                                 <Link
-                                    href="/oracle"
+                                    href="/admin/oracle"
                                     onClick={() => setIsOpen(false)}
                                     className="flex items-center gap-3 p-4 rounded-xl hover:bg-[#00FF41]/10 transition-colors group border border-[#00FF41]/20"
                                 >

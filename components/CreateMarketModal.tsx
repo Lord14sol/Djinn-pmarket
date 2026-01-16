@@ -6,7 +6,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useDjinnProtocol } from '@/hooks/useDjinnProtocol';
 import { supabase } from '@/lib/supabase';
 import { compressImage } from '@/lib/utils';
-import { checkMarketMilestones } from '@/lib/supabase-db'; // Direct import if possible, or dynamic
+import { checkMarketMilestones, createMarket } from '@/lib/supabase-db';
 import Link from 'next/link';
 
 // --- ICONOS ---
@@ -154,8 +154,8 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                 txSignature = 'local_fallback';
             }
 
-            // SAVE TO SUPABASE
-            const { error: dbError } = await supabase.from('markets').insert({
+            // SAVE TO SUPABASE (Using centralized helper)
+            const { data: savedMarket, error: dbError } = await createMarket({
                 slug,
                 title: poolName,
                 creator_wallet: publicKey.toString(),
@@ -164,18 +164,28 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                 yes_token_mint: yesTokenMint,
                 no_token_mint: noTokenMint,
                 tx_signature: txSignature,
-
                 total_yes_pool: 0,
                 total_no_pool: 0,
                 resolved: false,
                 resolution_source: 'DERIVED',
                 banner_url: finalBanner
             });
+
             if (dbError) {
-                console.error('DB error details:', JSON.stringify(dbError, null, 2));
-                alert(`DATABASE SAVE FAILED:\n${dbError.message || JSON.stringify(dbError)}\n\n(The market was created on-chain but not saved to the website. Please report this error.)`);
-                // Do not proceed to Redirect if DB failed, or maybe redirect anyway but warn?
-                // Better to stay and let them see the error.
+                const errorString = typeof dbError === 'object' ? JSON.stringify(dbError, null, 2) : String(dbError);
+                console.error('DB error details:', errorString);
+
+                // Detailed helpful alert for Supabase connectivity issues
+                const isFetchError = errorString.includes('Failed to fetch') || errorString.includes('TypeError');
+                const errorMessage = isFetchError
+                    ? "SUPABASE CONNECTION FAILED: The browser couldn't reach the database.\n\n" +
+                    "Please check:\n" +
+                    "1. Your VPN or Firewall (might be blocking supabase.co)\n" +
+                    "2. Your .env.local has valid NEXT_PUBLIC_SUPABASE_URL\n" +
+                    "3. Restart 'npm run dev' to reload environment variables."
+                    : `DATABASE SAVE FAILED:\n${dbError.message || errorString}`;
+
+                alert(errorMessage);
                 return;
             }
 

@@ -7,8 +7,9 @@ import Image from 'next/image';
 // --- SOLANA IMPORTS PARA SALDO REAL ---
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { LAMPORTS_PER_SOL, PublicKey, Transaction } from '@solana/web3.js';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Loader2 } from 'lucide-react';
+import { createChart, ColorType } from 'lightweight-charts';
+
 
 import * as supabaseDb from '@/lib/supabase-db';
 import { supabase } from '@/lib/supabase';
@@ -916,53 +917,77 @@ function ProfitLossCard({ profit, activeBets }: { profit: number; activeBets: an
                 </div>
 
                 {/* Chart with Djinn Watermark */}
-                <div className="h-48 mt-8 bg-black/40 rounded-2xl p-4 border border-white/5 relative overflow-hidden">
-                    {/* Grid pattern overlay */}
-                    <div className="absolute inset-0 opacity-10" style={{
-                        backgroundImage: 'linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)',
-                        backgroundSize: '20px 20px'
-                    }} />
-                    {/* Djinn watermark - standardized */}
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 opacity-[0.12]">
-                        <div className="flex items-center gap-0">
-                            <img src="/star.png" alt="" className="w-[140px] h-[140px] -mr-3" />
-                            <span className="text-5xl font-bold text-white" style={{ fontFamily: 'var(--font-adriane), serif' }}>Djinn</span>
-                        </div>
-                    </div>
-                    <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={chartData} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-                            <defs>
-                                <linearGradient id="profitGradient" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor="#F492B7" stopOpacity={0.4} />
-                                    <stop offset="100%" stopColor="#F492B7" stopOpacity={0} />
-                                </linearGradient>
-                            </defs>
-                            <XAxis dataKey="label" hide />
-                            <YAxis hide domain={['auto', 'auto']} />
-                            <Tooltip
-                                contentStyle={{
-                                    background: '#0A0A0A',
-                                    border: '1px solid rgba(244, 146, 183, 0.2)',
-                                    borderRadius: '12px',
-                                    padding: '8px 12px'
-                                }}
-                                labelStyle={{ color: '#999', fontSize: 10 }}
-                                formatter={(value: number | undefined) => [value ? `$${value.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '$0', 'Value']}
-                            />
-                            <Area
-                                type="monotone"
-                                dataKey="value"
-                                stroke="#F492B7"
-                                strokeWidth={2}
-                                fill="url(#profitGradient)"
-                            />
-                        </AreaChart>
-                    </ResponsiveContainer>
-                </div>
+                <ProfileMiniChart data={chartData} color="#F492B7" />
             </div>
         </div>
     );
 }
+
+// Single Component for Profile Mini Charts
+function ProfileMiniChart({ data, color }: { data: any[], color: string }) {
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!containerRef.current) return;
+
+        const chart = createChart(containerRef.current, {
+            layout: {
+                background: { type: ColorType.Solid, color: 'transparent' },
+                textColor: '#666',
+                fontFamily: 'monospace',
+            },
+            grid: {
+                vertLines: { visible: false },
+                horzLines: { color: 'rgba(255, 255, 255, 0.03)' },
+            },
+            width: containerRef.current.clientWidth,
+            height: 180,
+            handleScroll: false,
+            handleScale: false,
+            timeScale: { borderVisible: false },
+            rightPriceScale: { borderVisible: false },
+        });
+
+        const series = chart.addSeries(AreaSeries, {
+            lineColor: color,
+            topColor: `${color}33`,
+            bottomColor: `${color}00`,
+            lineWidth: 2,
+        });
+
+        series.setData(data.map((d, i) => ({ time: (i * 86400) as any, value: d.value })));
+        chart.timeScale().fitContent();
+
+        const handleResize = () => {
+            if (containerRef.current) {
+                chart.applyOptions({ width: containerRef.current.clientWidth });
+            }
+        };
+        window.addEventListener('resize', handleResize);
+
+        return () => {
+            window.removeEventListener('resize', handleResize);
+            chart.remove();
+        };
+    }, [data, color]);
+
+    return (
+        <div className="h-48 mt-8 bg-black/40 rounded-2xl p-4 border border-white/5 relative overflow-hidden">
+            <div className="absolute inset-0 opacity-10" style={{
+                backgroundImage: 'linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)',
+                backgroundSize: '20px 20px'
+            }} />
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 opacity-[0.12]">
+                <div className="flex items-center gap-0">
+                    <img src="/star.png" alt="" className="w-[140px] h-[140px] -mr-3" />
+                    <span className="text-5xl font-bold text-white" style={{ fontFamily: 'var(--font-adriane), serif' }}>Djinn</span>
+                </div>
+            </div>
+            <div ref={containerRef} className="w-full h-full relative z-10" />
+        </div>
+    );
+}
+
 
 
 // --- CREATOR REWARDS CARD - DJINN STYLE ---
@@ -1133,27 +1158,12 @@ function CreatorRewardsCard({ createdMarkets, isMyProfile }: { createdMarkets: a
                     </div>
                 </div>
 
-                {/* Chart placeholder ... */}
-                <div className="h-48 mb-6 relative overflow-hidden">
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 opacity-[0.12]">
-                        <span className="text-gray-500 font-black">REWARDS HISTORY</span>
-                    </div>
-                    <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={chartData} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-                            <defs>
-                                <linearGradient id="rewardsGradient" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor="#F492B7" stopOpacity={0.4} />
-                                    <stop offset="100%" stopColor="#F492B7" stopOpacity={0} />
-                                </linearGradient>
-                            </defs>
-                            <Area type="monotone" dataKey="value" stroke="#F492B7" strokeWidth={2} fill="url(#rewardsGradient)" />
-                        </AreaChart>
-                    </ResponsiveContainer>
-                </div>
+                <ProfileMiniChart data={chartData} color="#10B981" />
             </div>
         </div>
     );
 }
+
 
 // Helper to find IDL discriminator would go here if we had the library.
 

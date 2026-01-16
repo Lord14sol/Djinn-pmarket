@@ -430,7 +430,9 @@ export async function getMarkets(): Promise<Market[]> {
         .select('*')
         .order('created_at', { ascending: false });
 
-    if (error) console.error('Error fetching markets:', error);
+    if (error) {
+        console.error('Error fetching markets:', typeof error === 'object' ? JSON.stringify(error, null, 2) : error);
+    }
     return data || [];
 }
 
@@ -441,7 +443,9 @@ export async function getMarket(slug: string): Promise<Market | null> {
         .eq('slug', slug)
         .single();
 
-    if (error && error.code !== 'PGRST116') console.error('Error fetching market:', error);
+    if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching market:', typeof error === 'object' ? JSON.stringify(error, null, 2) : error);
+    }
     return data;
 }
 
@@ -674,7 +678,9 @@ export async function getUserBets(walletAddress: string): Promise<Bet[]> {
         .eq('wallet_address', walletAddress)
         .order('created_at', { ascending: false });
 
-    if (error) console.error('Error fetching user bets:', error);
+    if (error) {
+        console.error('Error fetching user bets:', typeof error === 'object' ? JSON.stringify(error, null, 2) : error);
+    }
     return data || [];
 }
 

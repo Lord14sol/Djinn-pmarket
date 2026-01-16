@@ -11,8 +11,9 @@ import { useDjinnProtocol } from '@/hooks/useDjinnProtocol';
 import { simulateBuy, estimatePayoutInternal, INITIAL_VIRTUAL_SOL } from '@/lib/core-amm';
 
 // Components
-import MarketChart from '@/components/market/MarketChart';
-import MultiLineChart from '@/components/market/MultiLineChart';
+import PrettyChart from '@/components/market/PrettyChart';
+import TradingViewProChart from '@/components/market/TradingViewProChart';
+import ChartSwitcher from '@/components/market/ChartSwitcher';
 import CommentsSection from '@/components/market/CommentsSection';
 import OutcomeList, { Outcome } from '@/components/market/OutcomeList';
 import PurchaseToast from '@/components/market/PurchaseToast';
@@ -48,32 +49,52 @@ const marketDisplayData: Record<string, any> = {
 
 
 
-// Generate chart data for single outcome
-const generateChartData = (basePrice: number) => {
+// Generate chart data for single outcome with Bonding Curve "Origin" logic
+const generateChartData = (currentPrice: number) => {
     const data = [];
-    for (let i = 0; i < 50; i++) {
+    const points = 50;
+    // Bonding curve often starts at a lower baseline (e.g. 5% or 10%) or 50/50
+    // To show "growth", we'll start from a lower point and curve up/down towards the current price
+    const startValue = 10; // 10% baseline for a new market
+
+    for (let i = 0; i < points; i++) {
         const date = new Date();
-        date.setHours(date.getHours() - (50 - i));
+        date.setHours(date.getHours() - (points - i));
+
+        // Exponential growth simulation: value = start + (current - start) * (i/points)^shape
+        const progress = i / (points - 1);
+        const curveFactor = Math.pow(progress, 0.7); // Slight curve
+        const baseValue = startValue + (currentPrice - startValue) * curveFactor;
+
+        // Add micro-variance for visual interest
+        const variance = Math.sin(i * 0.5) * 0.5;
+
         data.push({
             time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            value: basePrice
+            value: Math.max(1, Math.min(99, baseValue + variance))
         });
     }
     return data;
 };
 
-// Generate chart data for multi-outcome (all options with different colors)
+// Generate chart data for multi-outcome (all options starting from origin)
 const generateMultiOutcomeChartData = (options: { name: string; chance: number }[]) => {
+    const points = 50;
     return options.map(opt => ({
         name: opt.name,
-        data: Array.from({ length: 50 }, (_, i) => {
+        data: Array.from({ length: points }, (_, i) => {
             const date = new Date();
-            date.setHours(date.getHours() - (50 - i));
-            // Add slight variance for visual interest
-            const variance = Math.sin(i * 0.2) * 2;
+            date.setHours(date.getHours() - (points - i));
+
+            const startValue = 1; // Multi-outcomes usually start very low (e.g. 1%)
+            const progress = i / (points - 1);
+            const curveFactor = Math.pow(progress, 0.8);
+            const baseValue = startValue + (opt.chance - startValue) * curveFactor;
+
+            const variance = Math.sin(i * 0.3) * 1;
             return {
                 time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                value: Math.max(1, Math.min(99, opt.chance + variance))
+                value: Math.max(0.5, Math.min(99, baseValue + variance))
             };
         })
     }));
@@ -134,6 +155,45 @@ export default function MarketPage() {
     // Toast & Share Modal State
     const [showPurchaseToast, setShowPurchaseToast] = useState(false);
     const [showShareModal, setShowShareModal] = useState(false);
+    const [viewMode, setViewMode] = useState<'pretty' | 'pro'>('pretty');
+
+    const generateOhlcData = (currentPrice: number) => {
+        const now = new Date();
+        const baseTime = Math.floor(now.getTime() / 1000);
+        const points = 50;
+        const data = [];
+        let prevClose = currentPrice * 0.9;
+
+        for (let i = 0; i < points; i++) {
+            const timeStr = new Date((baseTime - (points - i) * 86400) * 1000).toISOString().split('T')[0];
+            const open = prevClose;
+            const close = open + (Math.random() - 0.5) * 5;
+            const high = Math.max(open, close) + Math.random() * 2;
+            const low = Math.min(open, close) - Math.random() * 2;
+
+            data.push({
+                time: timeStr,
+                open: parseFloat(open.toFixed(2)),
+                high: parseFloat(high.toFixed(2)),
+                low: parseFloat(low.toFixed(2)),
+                close: parseFloat(close.toFixed(2))
+            });
+            prevClose = close;
+        }
+
+        const finalTimeStr = now.toISOString().split('T')[0];
+        data.push({
+            time: finalTimeStr,
+            open: parseFloat(prevClose.toFixed(2)),
+            high: parseFloat((Math.max(prevClose, currentPrice) + 1).toFixed(2)),
+            low: parseFloat((Math.min(prevClose, currentPrice) - 1).toFixed(2)),
+            close: parseFloat(currentPrice.toFixed(2))
+        });
+
+        return data;
+    };
+    const [lastTradeEvent, setLastTradeEvent] = useState<{ amount: number; side: 'YES' | 'NO' } | null>(null);
+
     const [lastBetDetails, setLastBetDetails] = useState<{
         outcomeName: string;
         side: 'YES' | 'NO';
@@ -630,14 +690,13 @@ export default function MarketPage() {
             await new Promise(r => setTimeout(r, 500));
             const updatedHolders = await supabaseDb.getTopHolders(effectiveSlug);
             setHolders(updatedHolders);
-
-            // Update specific share count
-            if (selectedSide === 'YES') {
+            if (selectedSide === "YES") {
                 setMyYesShares(prev => prev + sim.sharesReceived);
             } else {
                 setMyNoShares(prev => prev + sim.sharesReceived);
             }
-
+            setLastTradeEvent({ amount: usdValueInTrading, side: selectedSide });
+            setTimeout(() => setLastTradeEvent(null), 3000);
             setLastBetDetails({
                 outcomeName: selectedOutcomeName || staticMarketInfo.title,
                 side: selectedSide,
@@ -912,17 +971,46 @@ export default function MarketPage() {
                                                 <span className="text-[10px] font-black uppercase text-[#10B981] tracking-wide">Your Position Active</span>
                                             </div>
                                         )}
-                                        {/* Refresh Balance Button */}
-                                        <button
-                                            onClick={refreshBalances}
-                                            className="p-1.5 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
-                                            title="Refresh Wallet Balance"
-                                        >
-                                            <Loader2 size={12} className={isLoading ? 'animate-spin' : ''} />
-                                        </button>
+                                    </div>
+                                    <div className="flex justify-between items-center mb-6 px-1">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-2 h-2 rounded-full bg-[#F492B7] shadow-[0_0_10px_#F492B7] animate-pulse" />
+                                            <h3 className="text-white font-black text-[10px] uppercase tracking-widest opacity-40">Market Terminal</h3>
+                                        </div>
+                                        <ChartSwitcher
+                                            viewMode={viewMode}
+                                            onToggle={() => setViewMode(prev => prev === 'pretty' ? 'pro' : 'pretty')}
+                                        />
                                     </div>
 
-                                    <MarketChart data={chartData} color={chartColor} hasPosition={myYesShares > 0 || myNoShares > 0} />
+                                    <div className="min-h-[400px]">
+                                        {viewMode === 'pretty' ? (
+                                            <PrettyChart
+                                                series={isMultiOutcome ? chartSeries.map(s => ({
+                                                    name: s.name,
+                                                    color: s.color,
+                                                    data: s.data.map((d, i) => ({ date: i * 86400 * 1000, value: d.value }))
+                                                })) : [
+                                                    {
+                                                        name: 'YES',
+                                                        color: '#10B981',
+                                                        data: chartData.map((d, i) => ({ date: i * 86400 * 1000, value: d.value }))
+                                                    },
+                                                    {
+                                                        name: 'NO',
+                                                        color: '#EF4444',
+                                                        data: chartData.map((d, i) => ({ date: i * 86400 * 1000, value: 100 - d.value }))
+                                                    }
+                                                ]}
+                                                trigger={lastTradeEvent}
+                                            />
+                                        ) : (
+                                            <TradingViewProChart
+                                                data={generateOhlcData(livePrice)}
+                                                color={chartColor}
+                                            />
+                                        )}
+                                    </div>
                                 </>
                             )}
                         </div>
@@ -1411,7 +1499,7 @@ export default function MarketPage() {
                 />
             </div>
 
-        </div>
+        </div >
 
     );
 }
