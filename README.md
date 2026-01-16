@@ -1,9 +1,9 @@
-# 🧞‍♂️ DJINN PROTOCOL
+#  DJINN PROTOCOL
 ### The Infinite Pool Prediction Engine on Solana
 
 **DJINN** is a decentralized, non-custodial prediction protocol that reimagines events as tradable assets using **Asymptotic S-Curve Bonding Curves**. Unlike traditional binary markets, DJINN allows for infinite speculative upside by merging the "Jackpot" mechanics of lottery pools with the precision of DeFi.
 
-## 💎 Key Innovations
+##  Key Innovations
 
 ### 1. The Golden S-Curve (Sigmoid Pricing)
 DJINN uses a proprietary S-Curve for price discovery.
@@ -19,12 +19,12 @@ Markets are not limited to Binary results. DJINN supports N-Outcome markets (e.g
 ### 3. Asymptotic Solvency (The Alfred Adjustment)
 Price is calculated via Integral Calculus ($\int P(s) ds$). The contract dynamically flattens the curve as it approaches the Vault's total collateral, making DJINN mathematically impossible to default.
 
-## 📊 Fee Economy
+##  Fee Economy
 *   **1% Trading Fee:** Captured on every buy/sell on the curve. 50/50 split with market creators.
 *   **2% Resolution Fee:** Automated treasury capture upon market settlement.
 *   **$3.00 Creation Fee:** Anti-spam measure and initial seed liquidity for the pool.
 
-## 📊 Final Architecture Diagram
+##  Final Architecture Diagram
 ```
 ┌─────────────────────────────────────────────────────┐
 │                  DJINN MARKET v2.0                  │
@@ -60,7 +60,7 @@ Price is calculated via Integral Calculus ($\int P(s) ds$). The contract dynamic
    └─────────┘      └─────────┘     └─────────┘
 ```
 
-## 🛠 Tech Stack
+##  Tech Stack
 *   **Blockchain:** Solana (Mainnet-Beta)
 *   **Framework:** Anchor (Rust)
 *   **Oracles:** Pyth / Custom Multi-Sig Resolution
