@@ -137,25 +137,34 @@ graph TD
 ## 🏛️ The Multiplication Factor: Why the Starting Price is Your Best Ally
 
 Many ask: **Why start at 0.00000267 SOL?** Is this price "too low"?
-DJINN's answer is clear: **Nominal value is irrelevant; what matters is Expansion Capacity.**
+## 🦅 The Proportional Equity Manifesto (Architecture v2.0)
 
-### 1. The Room for 10,000x
-In traditional markets (like Polymarket), the price is bounded between $0 and $1. If you buy at $0.50, your max gain is 2x. It's linear, limited, and for a "Trencher", boring.
+DJINN rejects the "Probability 0-1" model of traditional prediction markets. We do not trade probabilities; we trade **Risk Equity**.
 
-In DJINN, by starting at a fraction of a penny, the **"ceiling" does not exist**. A low initial price allows the market to absorb massive SOL orders before reaching prohibitive levels. This creates the **Mutant Multiplier**:
-> Buying at 0.000002 SOL and selling at 0.02 SOL is not just a price move; it is a **10,000x on your initial investment**.
+### 1. The Golden Mutant Curve ($S^2/2K$)
+Price is not determined by an order book. It is determined by the **Inverse Slope Integral** of the bonding curve.
+- **Formula:** $Price = Shares / K$
+- **Cost:** $\int (S/K) dS = S^2 / 2K$
+- **Solvency:** The Vault ALWAYS holds the integral of the price curve. This guarantees that $Vault \ge \sum (UserShares \times SalePrice)$. Bank runs are mathematically impossible.
 
-### 2. Relationship: Price vs. Probability vs. Shares
-In DJINN, the amount of Shares you own represents your "slice of the pie" of the **Global Vault**.
+### 2. Proportional Equity (The Payout)
+When a market resolves, the Global Vault (Winners + Losers + Dead Money) is distributed purely based on share ownership.
+$$Payout = \frac{\text{UserShares}}{\text{TotalWinningShares (inc. Offset)}} \times \text{GlobalVault}$$
+*Note: The `VIRTUAL_OFFSET` (1B Shares) acts as a permanent, non-claiming shareholder. This effectively "burns" a small portion of the vault to guarantee a price floor, rewarding early risk-takers who bought when the denominator was small.*
 
-*   **Low Liquidity (Start):** With 1 SOL, you acquire an astronomical amount of shares (e.g. 865 Billion). You are an early "majority owner".
-*   **High Liquidity (Maturity):** As SOL flows in (Whales), the price per share rises. The whale depositing 100 SOL receives shares at a much higher price, pushing the value of your initial shares to the sky.
+### 3. The Pioneer Advantage
+- **Genesis Buyer:** Buys at $2.66 \times 10^{-6}$ SOL.
+- **Late Buyer:** Buys at $0.15$ SOL.
+The Pioneer gets **56,000x more equity** per SOL than the Late Buyer.
+The system is designed to disproportionately reward those who provide the initial capital (Risk) over those who enter when the outcome is obvious (Safety).
 
-**The Golden Rule:** You don't buy a "50% probability"; you buy **Equity in Truth**. If you are right, the Vault is split among fewer winning shares, skyrocketing the final payout.
+### 4. Protocol Veritas
+DJINN is the "Robinhood of Truth".
+- Markets are backed by a **Source of Truth (URL)**.
+- If the Source fails, the market is **Invalidated** and the Vault refunds the Equity holders.
+- The House (G1 Treasury) takes a fee on the friction, but never steals the principal.
 
-### 3. The "Steel Anchor" and Confidence
-That 0.00000267 SOL price is not weakness, it is **Inertia**.
-Thanks to the **Virtual Offset of 1B**, the price is not volatile against small bot attacks. Real conviction is needed to move the needle. You are buying "tickets to heaven" at a bargain price, but with the assurance that the market won't collapse from a $10 trade.
+**"We don't sell odds. We sell Shares of the Future."**
 
 ### 📉 Scenario Table
 

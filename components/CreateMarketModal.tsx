@@ -37,6 +37,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
     const [marketType, setMarketType] = useState<'binary' | 'multiple'>('binary');
     const [poolName, setPoolName] = useState('');
     const [mainImage, setMainImage] = useState<string | null>(null);
+    const [sourceUrl, setSourceUrl] = useState('');
     const [options, setOptions] = useState([
         { id: 1, name: '' },
         { id: 2, name: '' }
@@ -135,13 +136,14 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                     );
 
                     const buyAmount = parseFloat(initialBuyAmount) || 0;
-                    const contractPromise = createMarketOnChain(
-                        slug,
-                        poolName,
-                        new Date(resolutionTime * 1000),
-                        buyAmount,
-                        initialBuySide
-                    );
+                        const contractPromise = createMarketOnChain(
+                            slug,
+                            poolName,
+                            new Date(resolutionTime * 1000),
+                            sourceUrl, // NEW: Veritas
+                            buyAmount,
+                            initialBuySide
+                        );
 
                     const result = await Promise.race([contractPromise, timeoutPromise]) as any;
 
@@ -293,6 +295,18 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                                 </div>
 
                                 <input type="text" placeholder="Enter question..." className="w-full bg-black/40 border border-white/10 rounded-xl p-5 text-lg font-bold outline-none focus:border-[#F492B7]" value={poolName} onChange={(e) => setPoolName(e.target.value)} />
+
+                                <div className="space-y-2">
+                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest block">Source of Truth (URL)</label>
+                                    <input
+                                        type="text"
+                                        placeholder="https://official-source.com/news/123"
+                                        className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-sm font-medium outline-none focus:border-[#F492B7] text-gray-300"
+                                        value={sourceUrl}
+                                        onChange={(e) => setSourceUrl(e.target.value)}
+                                    />
+                                    <p className="text-[10px] text-gray-600">Protocol Veritas: If this link fails verification, the market will be invalidated.</p>
+                                </div>
 
 
 
