@@ -132,6 +132,39 @@ graph TD
 
 ---
 
+---
+
+## 🏛️ The Multiplication Factor: Why the Starting Price is Your Best Ally
+
+Many ask: **Why start at 0.00000267 SOL?** Is this price "too low"?
+DJINN's answer is clear: **Nominal value is irrelevant; what matters is Expansion Capacity.**
+
+### 1. The Room for 10,000x
+In traditional markets (like Polymarket), the price is bounded between $0 and $1. If you buy at $0.50, your max gain is 2x. It's linear, limited, and for a "Trencher", boring.
+
+In DJINN, by starting at a fraction of a penny, the **"ceiling" does not exist**. A low initial price allows the market to absorb massive SOL orders before reaching prohibitive levels. This creates the **Mutant Multiplier**:
+> Buying at 0.000002 SOL and selling at 0.02 SOL is not just a price move; it is a **10,000x on your initial investment**.
+
+### 2. Relationship: Price vs. Probability vs. Shares
+In DJINN, the amount of Shares you own represents your "slice of the pie" of the **Global Vault**.
+
+*   **Low Liquidity (Start):** With 1 SOL, you acquire an astronomical amount of shares (e.g. 865 Billion). You are an early "majority owner".
+*   **High Liquidity (Maturity):** As SOL flows in (Whales), the price per share rises. The whale depositing 100 SOL receives shares at a much higher price, pushing the value of your initial shares to the sky.
+
+**The Golden Rule:** You don't buy a "50% probability"; you buy **Equity in Truth**. If you are right, the Vault is split among fewer winning shares, skyrocketing the final payout.
+
+### 3. The "Steel Anchor" and Confidence
+That 0.00000267 SOL price is not weakness, it is **Inertia**.
+Thanks to the **Virtual Offset of 1B**, the price is not volatile against small bot attacks. Real conviction is needed to move the needle. You are buying "tickets to heaven" at a bargain price, but with the assurance that the market won't collapse from a $10 trade.
+
+### 📉 Scenario Table
+
+| Scenario | Share Price | Investment | Shares Obtained | Potential Payout (ROI) |
+| :--- | :--- | :--- | :--- | :--- |
+| **Genesis (You)** | `0.000002 SOL` | 1 SOL | **865,000M** | **Epic (10,000x)** 🟢 |
+| **Growth** | `0.023000 SOL` | 1 SOL | 43,000M | **High (100x)** 🟡 |
+| **Maturity** | `0.160000 SOL` | 1 SOL | 6,000M | **Stable (2x - 5x)** 🔴 |
+
 ## 🚀 Elite Tech Stack
 
 *   **Blockchain:** Solana (Mainnet-Beta) for instant settlement.
