@@ -8,7 +8,11 @@ import Image from 'next/image';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { LAMPORTS_PER_SOL, PublicKey, Transaction } from '@solana/web3.js';
 import { Loader2 } from 'lucide-react';
-import { createChart, ColorType } from 'lightweight-charts';
+import { AreaClosed, LinePath } from '@visx/shape';
+import { scaleLinear } from '@visx/scale';
+import { curveMonotoneX } from '@visx/curve';
+import { LinearGradient } from '@visx/gradient';
+import { ParentSize } from '@visx/responsive';
 
 
 import * as supabaseDb from '@/lib/supabase-db';
@@ -923,53 +927,9 @@ function ProfitLossCard({ profit, activeBets }: { profit: number; activeBets: an
     );
 }
 
-// Single Component for Profile Mini Charts
+// Single Component for Profile Mini Charts (VISX REPLACEMENT)
 function ProfileMiniChart({ data, color }: { data: any[], color: string }) {
-    const containerRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        if (!containerRef.current) return;
-
-        const chart = createChart(containerRef.current, {
-            layout: {
-                background: { type: ColorType.Solid, color: 'transparent' },
-                textColor: '#666',
-                fontFamily: 'monospace',
-            },
-            grid: {
-                vertLines: { visible: false },
-                horzLines: { color: 'rgba(255, 255, 255, 0.03)' },
-            },
-            width: containerRef.current.clientWidth,
-            height: 180,
-            handleScroll: false,
-            handleScale: false,
-            timeScale: { borderVisible: false },
-            rightPriceScale: { borderVisible: false },
-        });
-
-        const series = chart.addSeries(AreaSeries, {
-            lineColor: color,
-            topColor: `${color}33`,
-            bottomColor: `${color}00`,
-            lineWidth: 2,
-        });
-
-        series.setData(data.map((d, i) => ({ time: (i * 86400) as any, value: d.value })));
-        chart.timeScale().fitContent();
-
-        const handleResize = () => {
-            if (containerRef.current) {
-                chart.applyOptions({ width: containerRef.current.clientWidth });
-            }
-        };
-        window.addEventListener('resize', handleResize);
-
-        return () => {
-            window.removeEventListener('resize', handleResize);
-            chart.remove();
-        };
-    }, [data, color]);
+    if (!data || data.length === 0) return null;
 
     return (
         <div className="h-48 mt-8 bg-black/40 rounded-2xl p-4 border border-white/5 relative overflow-hidden">
@@ -983,8 +943,64 @@ function ProfileMiniChart({ data, color }: { data: any[], color: string }) {
                     <span className="text-5xl font-bold text-white" style={{ fontFamily: 'var(--font-adriane), serif' }}>Djinn</span>
                 </div>
             </div>
-            <div ref={containerRef} className="w-full h-full relative z-10" />
+
+            <div className="relative z-10 w-full h-full">
+                <ParentSize>
+                    {({ width, height }) => (
+                        <MiniChartSVG data={data} width={width} height={height} color={color} />
+                    )}
+                </ParentSize>
+            </div>
         </div>
+    );
+}
+
+function MiniChartSVG({ data, width, height, color }: { data: any[], width: number, height: number, color: string }) {
+    // Scales
+    const xMax = width;
+    const yMax = height;
+
+    // Data Accessors
+    const getX = (d: any) => d.time;
+    const getY = (d: any) => d.value;
+
+    const xScale = scaleLinear({
+        range: [0, xMax],
+        domain: [0, data.length > 0 ? data[data.length - 1].time : 0],
+    });
+
+    const values = data.map(getY);
+    const minVal = Math.min(...values);
+    const maxVal = Math.max(...values);
+    // Add 10% padding to visual range
+    const padding = (maxVal - minVal) * 0.1 || 10; // Fallback if flat
+
+    const yScale = scaleLinear({
+        range: [yMax, 0],
+        domain: [Math.max(0, minVal - padding), maxVal + padding],
+    });
+
+    return (
+        <svg width={width} height={height}>
+            <LinearGradient id={`gradient-${color.replace('#', '')}`} from={color} to={color} fromOpacity={0.25} toOpacity={0} />
+            <AreaClosed
+                data={data}
+                x={d => xScale(getX(d)) ?? 0}
+                y={d => yScale(getY(d)) ?? 0}
+                yScale={yScale}
+                strokeWidth={0}
+                fill={`url(#gradient-${color.replace('#', '')})`}
+                curve={curveMonotoneX}
+            />
+            <LinePath
+                data={data}
+                x={d => xScale(getX(d)) ?? 0}
+                y={d => yScale(getY(d)) ?? 0}
+                stroke={color}
+                strokeWidth={3}
+                curve={curveMonotoneX}
+            />
+        </svg>
     );
 }
 

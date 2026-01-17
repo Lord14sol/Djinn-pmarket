@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useEffect } from 'react';
 import { useAnchorWallet, useConnection } from '@solana/wallet-adapter-react';
-import { Program, AnchorProvider, Idl, BN, web3 } from '@project-serum/anchor';
+import { Program, AnchorProvider, Idl, BN, web3 } from '@coral-xyz/anchor';
 import { PublicKey, SystemProgram } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import idl from '../lib/idl/djinn_market.json';
@@ -36,6 +36,11 @@ export const useDjinnProtocol = () => {
             wallet: !!wallet,
             isReady: isContractReady
         });
+
+        if (program) {
+            const idlInstruction = (program.idl as any).instructions.find((i: any) => i.name === 'initializeMarket');
+            console.log("🔍 ARGS EN IDL VIVO (AUTOMÁTICO):", idlInstruction?.args);
+        }
     }, [isContractReady, program, provider, wallet]);
 
     const createMarket = useCallback(async (
@@ -83,6 +88,11 @@ export const useDjinnProtocol = () => {
             const userYesATA = await getAssociatedTokenAddress(yesMintPda, wallet.publicKey);
             const userNoATA = await getAssociatedTokenAddress(noMintPda, wallet.publicKey);
 
+            const [marketVaultPda] = await PublicKey.findProgramAddress(
+                [Buffer.from("market_vault"), marketPda.toBuffer()],
+                program.programId
+            );
+
             // 1. Create Market Instruction 
             // (Standard 200k compute is enough for just creation, but we keep 600k for safety if bundled)
             const modifyComputeUnits = web3.ComputeBudgetProgram.setComputeUnitLimit({
@@ -96,53 +106,37 @@ export const useDjinnProtocol = () => {
             tx.add(modifyComputeUnits);
             tx.add(addPriorityFee);
 
+            // SANITY CHECK: Verify loaded IDL arguments
+            const idlInstruction = (program.idl as any).instructions.find((i: any) => i.name === 'initializeMarket');
+            console.log("🔍 ARGS EN IDL VIVO:", idlInstruction?.args);
+
+            console.log("DEBUG: Sending InitializeMarket Params:", {
+                title,
+                resolutionTime: Math.floor(endDate.getTime() / 1000),
+                numOutcomes: 2,
+                curveConstant: 150_000_000_000
+            });
+
             const createIx = await program.methods
-                .createMarket(
+                .initializeMarket(
                     title,
-                    new BN(Math.floor(endDate.getTime() / 1000))
+                    new BN(Math.floor(endDate.getTime() / 1000)),
+                    new BN(2), // Force BN for u8 serialization safety
+                    new BN(1_000_000_000) // Heavyweight 1B Anchor
                 )
                 .accounts({
                     market: marketPda,
-                    yesTokenMint: yesMintPda,
-                    noTokenMint: noMintPda,
+                    marketVault: marketVaultPda,
                     creator: wallet.publicKey,
                     protocolTreasury: MASTER_TREASURY,
-                    tokenProgram: TOKEN_PROGRAM_ID,
                     systemProgram: SystemProgram.programId,
-                    rent: web3.SYSVAR_RENT_PUBKEY,
                 })
                 .instruction();
 
             tx.add(createIx);
 
-            // 2. Initial Buy Instruction (Bundled)
-            if (initialBuyAmount > 0) {
-                const sideArg = initialBuySide === 'yes' ? { yes: {} } : { no: {} };
-                const initialBuyBN = new BN(Math.floor(initialBuyAmount * web3.LAMPORTS_PER_SOL));
-                const minSharesOut = new BN(0); // Slippage 100% allowed for initial buy (self)
 
-                const buyIx = await program.methods
-                    .placeBet(
-                        sideArg,
-                        initialBuyBN,
-                        minSharesOut
-                    )
-                    .accounts({
-                        market: marketPda,
-                        user: wallet.publicKey,
-                        yesTokenMint: yesMintPda,
-                        noTokenMint: noMintPda,
-                        userYesAccount: userYesATA,
-                        userNoAccount: userNoATA,
-                        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-                        protocolTreasury: MASTER_TREASURY,
-                        tokenProgram: TOKEN_PROGRAM_ID,
-                        systemProgram: SystemProgram.programId,
-                    })
-                    .instruction();
 
-                tx.add(buyIx);
-            }
 
             // Send Transaction
             if (!provider) throw new Error("Provider not available");
@@ -161,12 +155,13 @@ export const useDjinnProtocol = () => {
         }
     }, [program, wallet]);
 
-    const placeBet = useCallback(async (
+    const buyShares = useCallback(async (
         marketPda: PublicKey,
         side: 'yes' | 'no',
         amountSol: number,
         yesMint: PublicKey,
         noMint: PublicKey,
+        marketCreator: PublicKey,
         minSharesOut: number = 0
     ) => {
         if (!program || !wallet) throw new Error("Wallet not connected");
@@ -188,39 +183,45 @@ export const useDjinnProtocol = () => {
                 createAssociatedTokenAccountIdempotentInstruction(wallet.publicKey, userNoATA, wallet.publicKey, noMint)
             );
 
-            const sideArg = side === 'yes' ? { yes: {} } : { no: {} };
+            // Side -> Outcome Index (0=Yes, 1=No for V1 Binary)
+            // But V3 uses u8 index. 
+            // NOTE: This assumes Protocol V1 Binary (0=Yes, 1=No).
+            // Logic must match contract expectation if contract simply mapped outcomes.
+            // V3 has `outcomeIndex` u8. 'yes' is usually index 0, 'no' index 1?
+            // Actually, `initializeMarket` creates N outcomes.
+            // If binary, traditionally 0 = Yes, 1 = No.
+            // Let's verify standard: Usually outcome[0] is YES, outcome[1] is NO.
+            const outcomeIndex = side.toLowerCase() === 'yes' ? 0 : 1;
 
-            const [protocolStatePda] = await PublicKey.findProgramAddress(
-                [Buffer.from("protocol")],
-                program.programId
-            );
-            const stateAccount = await program.account.protocolState.fetchNullable(protocolStatePda);
-            const treasuryKey = stateAccount ? (stateAccount as any).treasury : MASTER_TREASURY;
-
-            const placeBetIx = await program.methods
-                .placeBet(sideArg, amountLamports, minSharesBN)
+            const buyIx = await program.methods
+                .buyShares(
+                    outcomeIndex,
+                    amountLamports,
+                    minSharesBN,
+                    new BN(Date.now() / 1000 + 60) // Deadline
+                )
                 .accounts({
                     market: marketPda,
+                    mapketVault: marketPda, // Anchor might resolve PDA, but usually need vault PDA
+                    // Wait, IDL says "marketVault".
+                    // We need to derive vault PDA.
+                    marketVault: PublicKey.findProgramAddressSync([Buffer.from("market_vault"), marketPda.toBuffer()], program.programId)[0],
+                    userPosition: PublicKey.findProgramAddressSync([Buffer.from("user_pos"), marketPda.toBuffer(), wallet.publicKey.toBuffer()], program.programId)[0],
                     user: wallet.publicKey,
-                    yesTokenMint: yesMint,
-                    noTokenMint: noMint,
-                    userYesAccount: userYesATA,
-                    userNoAccount: userNoATA,
-                    protocolTreasury: treasuryKey,
-                    tokenProgram: TOKEN_PROGRAM_ID,
-                    associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+                    protocolTreasury: MASTER_TREASURY,
+                    marketCreator: marketCreator, // PASSED ARG
                     systemProgram: SystemProgram.programId,
                 })
                 .instruction();
 
-            transaction.add(placeBetIx);
+            transaction.add(buyIx);
 
             // @ts-ignore
             const txHash = await program.provider.sendAndConfirm(transaction);
             return txHash;
 
         } catch (error) {
-            console.error("Error placing bet:", error);
+            console.error("Error buying shares:", error);
             throw error;
         }
     }, [program, wallet]);
@@ -326,6 +327,7 @@ export const useDjinnProtocol = () => {
         sharesAmount: number,
         yesMint: PublicKey,
         noMint: PublicKey,
+        marketCreator: PublicKey,
         minSolOut: number = 0,
         sellMax: boolean = false
     ) => {
@@ -340,20 +342,13 @@ export const useDjinnProtocol = () => {
             let sharesRaw = new BN(Math.floor(sharesAmount * 1_000_000_000));
             const minSolBN = new BN(Math.floor(minSolOut * web3.LAMPORTS_PER_SOL));
 
+            // Just simplistic logic for now
             if (sellMax) {
-                console.log("🔥 Selling MAX shares (fetching exact balance)...");
-                const targetMint = side === 'yes' ? yesMint : noMint;
                 const targetATA = side === 'yes' ? userYesATA : userNoATA;
-
                 try {
                     const balance = await connection.getTokenAccountBalance(targetATA);
-                    // Use the exact atomic amount from chain
                     sharesRaw = new BN(balance.value.amount);
-                    console.log(`🔥 Exact Balance found: ${balance.value.amount} wait...`);
-                } catch (e) {
-                    console.error("Failed to fetch exact balance for max sell:", e);
-                    // Fallback to the estimated float
-                }
+                } catch (e) { }
             }
 
             if (sharesRaw.isZero()) throw new Error("Amount too small to sell");
@@ -367,28 +362,15 @@ export const useDjinnProtocol = () => {
                 createAssociatedTokenAccountIdempotentInstruction(wallet.publicKey, userNoATA, wallet.publicKey, noMint)
             );
 
-            const sideArg = side === 'yes' ? { yes: {} } : { no: {} };
-
-            console.log(`Selling ${sharesAmount} shares of ${side} (Raw: ${sharesRaw.toString()})`);
-
-            const [protocolStatePda] = await PublicKey.findProgramAddress(
-                [Buffer.from("protocol")],
-                program.programId
-            );
-            const stateAccount = await program.account.protocolState.fetchNullable(protocolStatePda);
-            const treasuryKey = stateAccount ? (stateAccount as any).treasury : MASTER_TREASURY;
-
             const sellIx = await program.methods
-                .sellShares(sideArg, sharesRaw, minSolBN)
+                .sellShares(sharesRaw)
                 .accounts({
                     market: marketPda,
+                    marketVault: PublicKey.findProgramAddressSync([Buffer.from("market_vault"), marketPda.toBuffer()], program.programId)[0],
+                    userPosition: PublicKey.findProgramAddressSync([Buffer.from("user_pos"), marketPda.toBuffer(), wallet.publicKey.toBuffer()], program.programId)[0],
                     user: wallet.publicKey,
-                    yesTokenMint: yesMint,
-                    noTokenMint: noMint,
-                    userYesAccount: userYesATA,
-                    userNoAccount: userNoATA,
-                    protocolTreasury: treasuryKey,
-                    tokenProgram: TOKEN_PROGRAM_ID,
+                    protocolTreasury: MASTER_TREASURY,
+                    marketCreator: marketCreator,
                     systemProgram: SystemProgram.programId,
                 })
                 .instruction();
@@ -408,7 +390,7 @@ export const useDjinnProtocol = () => {
     return {
         program,
         createMarket,
-        placeBet,
+        buyShares,
         sellShares,
         resolveMarket,
         claimReward,

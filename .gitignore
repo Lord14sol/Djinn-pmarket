@@ -47,3 +47,4 @@ deploy-wallet.json
 *wallet.json
 *.so
 devnet-deploy.json
+test-ledger/

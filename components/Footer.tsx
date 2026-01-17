@@ -1,6 +1,9 @@
+'use client';
+
 import React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { usePrice } from '@/lib/PriceContext';
 
 const SocialIcon = ({ children }: { children: React.ReactNode }) => (
     <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-gray-400 hover:bg-[#F492B7] hover:text-black transition-all duration-300 cursor-pointer hover:scale-110 hover:shadow-[0_0_15px_rgba(244,146,183,0.4)]">
@@ -61,7 +64,18 @@ export default function Footer() {
 
             {/* Barra inferior */}
             <div className="max-w-[1600px] mx-auto flex flex-col md:flex-row justify-between items-center border-t border-white/10 pt-8 gap-4 relative z-10">
-                <span className="text-gray-500 text-xs font-medium">© 2026 Djinn. All rights reserved.</span>
+                <div className="flex items-center gap-6">
+                    <span className="text-gray-500 text-xs font-medium">© 2026 Djinn. All rights reserved.</span>
+                    <div className="flex items-center gap-2 bg-white/5 px-3 py-1 rounded-full border border-white/5">
+                        <img
+                            src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
+                            alt="SOL"
+                            className="w-3 h-3 rounded-full"
+                        />
+                        <span className="text-[10px] font-black text-white font-mono uppercase tracking-tighter">SOL</span>
+                        <span className="text-[10px] font-bold text-[#10B981] font-mono">${usePrice().solPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                </div>
                 <div className="flex items-center gap-4 text-gray-500 text-xs font-mono">
                     <span>v1.0.3-beta</span>
                 </div>

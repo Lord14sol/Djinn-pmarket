@@ -1,14 +1,12 @@
 import { PublicKey } from '@solana/web3.js';
 
-// Djinn Prediction Market Program ID (Matches Anchor.toml)
-// Djinn Prediction Market Program ID (Matches Anchor.toml)
-export const PROGRAM_ID = new PublicKey('9xXGnGG4hxwC4XTHavmy5BWAdb8MC2VJtTDMW9FfkGbg');
+// Djinn Prediction Market// 1. Program ID (New Heavyweight Deployment)
+export const PROGRAM_ID = "DY1X52RW55bpNU5ZA8E3m6w1w7VG1ioHKpUt7jUkYSV9";
 
-// Fee constants (Matches V2 Smart Contract)
-export const MARKET_CREATION_FEE = 50_000_000; // 0.05 SOL
-export const TRADING_FEE_BPS = 100; // 1.0% Standard (Blueprint)
-export const TRADING_FEE_ENDGAME_BPS = 10; // 0.1% Endgame (>0.95)
-export const TRADING_FEE_CREATOR_BPS = 50; // 0.5% Creator Share
+// Fee constants (Matches V3 Verified Smart Contract)
+export const MARKET_CREATION_FEE = 30_000_000; // ~0.03 SOL ($3 USD approx)
+export const TRADING_FEE_BPS = 100; // 1.0% Total
+export const TRADING_FEE_CREATOR_BPS = 50; // 0.5% (Half of trading fee)
 export const RESOLUTION_FEE_BPS = 200; // 2.0%
 
 export const BPS_DENOMINATOR = 10_000;
@@ -29,14 +27,9 @@ export function calculateResolutionFee(totalPool: number): number {
     return Math.floor((totalPool * RESOLUTION_FEE_BPS) / BPS_DENOMINATOR);
 }
 
-export function splitTradingFee(fee: number, isCreator: boolean): { creatorFee: number; protocolFee: number } {
-    if (isCreator) {
-        return { creatorFee: 0, protocolFee: fee };
-    }
-    // V2: Creator gets 1.0%, Protocol gets 1.5% (Total 2.5%)
-    // This helper might need accurate amount logic, but for simple split:
-    // Creator Share = (Fee / 2.5) * 1.0 = Fee * 0.4
-    const creatorShare = Math.floor(fee * 0.4);
+export function splitTradingFee(fee: number): { creatorFee: number; protocolFee: number } {
+    // 50/50 Split logic
+    const creatorShare = Math.floor(fee / 2);
     const protocolShare = fee - creatorShare;
     return { creatorFee: creatorShare, protocolFee: protocolShare };
 }

@@ -12,26 +12,10 @@ import { PublicKey } from "@solana/web3.js";
 // Buy 1 SOL: new_x = 41. new_y = 3200 / 41 = 78.04.
 // Shares out = 80 - 78.04 = 1.96.
 // Avg cost = 1 / 1.96 = 0.51. Price moved from 0.50 to ~0.51 (2%). Perfect.
-export const INITIAL_VIRTUAL_SOL = 40;
-export const INITIAL_PROBABILITY = 0.5;
-
-// Fee Schedule
-export const FEE_CREATION_SOL = 0.05;
+// --- LINEAR BONDING CURVE CONSTANTS (Matching lib.rs) ---
+export const CURVE_CONSTANT = 375_000_000_000_000;
+export const VIRTUAL_OFFSET = 50_000_000_000; // 50B Shares
 export const FEE_RESOLUTION_PCT = 0.02; // 2% removed from WINNING pot
-
-// Trading Fees
-// Trading Fees
-export const FEE_STANDARD_TOTAL = 0.010; // 1.0% (Blueprint)
-export const FEE_STANDARD_PROTOCOL = 0.005; // 0.5%
-export const FEE_STANDARD_CREATOR = 0.005; // 0.5%
-
-export const FEE_ENDGAME_TOTAL = 0.001; // 0.1%
-export const FEE_ENDGAME_PROTOCOL = 0.001;
-export const FEE_ENDGAME_CREATOR = 0.000;
-
-export const ENDGAME_PRICE_THRESHOLD = 0.95; // > 95 cents
-
-// --- TYPES ---
 
 export interface MarketState {
     virtualSolReserves: number;
@@ -55,51 +39,34 @@ export interface TradeSimulation {
     warningSlippage: boolean;
 }
 
-// --- FUNCTIONS ---
-
 /**
- * Calculates the output of a BUY trade (SOL -> Shares).
+ * Calculates the output of a BUY trade (SOL -> Shares) using Linear Curve Math.
+ * Cost(X) = (1/2K) * ((S+X)^2 - S^2)
+ * X(Cost) = sqrt(2K * Cost + S^2) - S
  */
 export function simulateBuy(
     amountSol: number,
     marketState: MarketState
 ): TradeSimulation {
-    const { virtualSolReserves, virtualShareReserves } = marketState;
-    const k = virtualSolReserves * virtualShareReserves;
-    const startPrice = virtualSolReserves / virtualShareReserves; // Approximate unit price
+    const lamports = amountSol * 1e9;
+    const S = marketState.totalSharesMinted + VIRTUAL_OFFSET;
+    const K = CURVE_CONSTANT;
 
-    // 1. Determine Fees based on current price
-    // Note: Technically fees should be dynamic *during* the trade if it crosses threshold,
-    // but for MVP we use the START price or AVERAGE price. 
-    // Spec says: "IF Share Price < 0.95". Let's use Start Price for simplicity.
-    const isEndgame = startPrice >= ENDGAME_PRICE_THRESHOLD;
-
-    const feeRateTotal = isEndgame ? FEE_ENDGAME_TOTAL : FEE_STANDARD_TOTAL;
-    const feeRateProtocol = isEndgame ? FEE_ENDGAME_PROTOCOL : FEE_STANDARD_PROTOCOL;
-    const feeRateCreator = isEndgame ? FEE_ENDGAME_CREATOR : FEE_STANDARD_CREATOR;
-
+    // Fees (Simplified for UI display)
+    const feeRateTotal = 0.01; // 1%
     const feeTotal = amountSol * feeRateTotal;
-    const feeProtocol = amountSol * feeRateProtocol;
-    const feeCreator = amountSol * feeRateCreator;
+    const netInvestedSol = amountSol - feeTotal;
+    const netInvestedLamports = netInvestedSol * 1e9;
 
-    const netInvested = amountSol - feeTotal;
+    // Shares = sqrt(2K * Cost + S^2) - S
+    const newS = Math.sqrt(2 * K * netInvestedLamports + Math.pow(S, 2));
+    const sharesReceived = newS - S;
 
-    // 2. Bonding Curve Math (x * y = k)
-    // new_x = x + net_invested
-    // new_y = k / new_x
-    // shares_out = y - new_y
+    const startPrice = S / K; // SOL per Share (approx)
+    const endPrice = newS / K;
+    const averageEntryPrice = amountSol / sharesReceived;
 
-    const newVirtualSol = virtualSolReserves + netInvested;
-    const newVirtualShares = k / newVirtualSol;
-    const sharesReceived = virtualShareReserves - newVirtualShares;
-
-    // 3. Derived Stats
-    const endPrice = newVirtualSol / newVirtualShares; // Instantaneous price after trade
-    const averageEntryPrice = amountSol / sharesReceived; // Actual cost per share including fees
-
-    // Price Impact = (EndPrice - StartPrice) / StartPrice
-    // Or closer to Uniswap: (MarketPrice - ExecutionPrice) / MarketPrice ? 
-    // Let's use simple % movement.
+    // Price Impact for UI
     const priceImpact = ((endPrice - startPrice) / startPrice) * 100;
 
     return {
@@ -107,13 +74,13 @@ export function simulateBuy(
         sharesReceived,
         priceImpact,
         feeTotal,
-        feeProtocol,
-        feeCreator,
-        netInvested,
+        feeProtocol: feeTotal * 0.5,
+        feeCreator: feeTotal * 0.5,
+        netInvested: netInvestedSol,
         averageEntryPrice,
         startPrice,
         endPrice,
-        isEndgame,
+        isEndgame: false, // End-game threshold logic not yet ported for linear curve
         warningSlippage: priceImpact > 5.0
     };
 }

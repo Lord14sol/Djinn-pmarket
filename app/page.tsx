@@ -320,38 +320,52 @@ export default function Home() {
   const oneDayAgo = now - 86400000; // 24 horas
 
   const filteredMarkets = markets.filter(market => {
-    if (activeCategory === 'Trending') return true;
+    const age = now - (market.createdAt || 0);
+    const oneHour = 3600000;
+    const twelveHours = 43200000;
+    const oneDay = 86400000;
+
+    if (activeCategory === 'Trending') return true; // Show mix
+
+    // NEW: Real-time feed (Everything sorted by newest)
     if (activeCategory === 'New') {
-      return market.createdAt && market.createdAt > oneDayAgo;
+      return true;
     }
+
+    // HOT: 1h - 12h range (High velocity zone)
+    if (activeCategory === 'Hot') {
+      return age > oneHour && age < twelveHours;
+    }
+
+    // STABLE: 24h+ (Consolidated markets)
+    if (activeCategory === 'Stable') {
+      return age > oneDay;
+    }
+
     if (activeCategory === 'Earth') {
-      // Si hay subcategoría seleccionada, filtrar por región
-      if (activeSubcategory) {
-        return market.region === activeSubcategory;
-      }
-      // Si no hay subcategoría, mostrar todos los de Earth
+      if (activeSubcategory) return market.region === activeSubcategory;
       return market.category === 'Earth' || market.region;
     }
     return market.category === activeCategory;
   });
 
-  // Ordenar: New por fecha, otros por volumen
+  // Sorting Logic
   const sortedMarkets = [...filteredMarkets].sort((a, b) => {
+    // NEW: Strictly by Time (Newest First)
     if (activeCategory === 'New') {
-      const timeA = (a.createdAt || 0);
-      const timeB = (b.createdAt || 0);
-      return timeB - timeA; // Descending: Newest First
+      return (b.createdAt || 0) - (a.createdAt || 0);
     }
-    // Trending: Order by "Freshness" (< 1 hour) then Volume
-    const isNewA = (Date.now() - (a.createdAt || 0)) < 3600000; // 1 hour
-    const isNewB = (Date.now() - (b.createdAt || 0)) < 3600000;
 
-    if (isNewA && !isNewB) return -1;
-    if (!isNewA && isNewB) return 1;
+    // HOT: Volume * Velocity Metric (Mocked by Volume mainly)
+    if (activeCategory === 'Hot') {
+      const volA = parseFloat(a.volume?.replace(/[$,M,K]/g, '') || '0');
+      const volB = parseFloat(b.volume?.replace(/[$,M,K]/g, '') || '0');
+      return volB - volA;
+    }
 
-    // Standard Volume Sort
-    const volA = parseFloat(a.volume?.replace(/[$,M]/g, '') || '0');
-    const volB = parseFloat(b.volume?.replace(/[$,M]/g, '') || '0');
+    // Standard: Volume
+    const volA = parseFloat(a.volume?.replace(/[$,M,K]/g, '') || '0');
+    const volB = parseFloat(b.volume?.replace(/[$,M,K]/g, '') || '0');
     return volB - volA;
   });
 

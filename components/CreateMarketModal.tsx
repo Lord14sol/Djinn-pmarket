@@ -297,6 +297,8 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
 
 
                                 <div className="space-y-3">
+
+
                                     <div className="flex justify-between items-center">
                                         <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest">Outcomes</label>
                                         {marketType === 'multiple' && (
@@ -316,43 +318,6 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                                     </div>
                                 </div>
 
-                                {/* INITIAL BUY SECTION */}
-                                <div className="bg-white/5 p-6 rounded-2xl border border-white/10 space-y-4">
-                                    <div className="flex justify-between items-center">
-                                        <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest">Initial Buy (Optional)</label>
-                                        <span className="text-[10px] text-gray-500 font-bold">Launch with a position</span>
-                                    </div>
-                                    <div className="flex gap-4">
-                                        <div className="flex-1 relative">
-                                            <input
-                                                type="number"
-                                                placeholder="0.0"
-                                                className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-[#F492B7] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                                value={initialBuyAmount}
-                                                onChange={(e) => setInitialBuyAmount(e.target.value)}
-                                            />
-                                            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-gray-500">SOL</span>
-                                        </div>
-                                        <div className="flex bg-black/40 rounded-xl border border-white/10 p-1">
-                                            <button
-                                                onClick={() => setInitialBuySide('yes')}
-                                                className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${initialBuySide === 'yes' ? 'bg-[#F492B7] text-black' : 'text-gray-500'}`}
-                                            >
-                                                Yes
-                                            </button>
-                                            <button
-                                                onClick={() => setInitialBuySide('no')}
-                                                className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${initialBuySide === 'no' ? 'bg-[#F492B7] text-black' : 'text-gray-500'}`}
-                                            >
-                                                No
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div className="text-[9px] text-gray-500 flex justify-between px-1 italic">
-                                        <span>Creation Fee: 0.05 SOL</span>
-                                        {parseFloat(initialBuyAmount) > 0 && <span>+ {initialBuyAmount} SOL investment</span>}
-                                    </div>
-                                </div>
 
                                 <button
                                     onClick={handleCreateMarket}

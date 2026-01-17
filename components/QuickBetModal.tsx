@@ -5,7 +5,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { PublicKey } from '@solana/web3.js';
 import { useDjinnProtocol } from '../hooks/useDjinnProtocol';
-import { simulateBuy, estimatePayoutInternal, INITIAL_VIRTUAL_SOL } from '../lib/core-amm';
+import { simulateBuy, estimatePayoutInternal, CURVE_CONSTANT, VIRTUAL_OFFSET } from '../lib/core-amm';
 import * as supabaseDb from '../lib/supabase-db';
 
 interface QuickBetModalProps {
@@ -27,7 +27,7 @@ interface QuickBetModalProps {
 export default function QuickBetModal({ isOpen, onClose, market, outcome }: QuickBetModalProps) {
     const wallet = useWallet();
     const { setVisible } = useWalletModal();
-    const { placeBet } = useDjinnProtocol();
+    const { buyShares, program } = useDjinnProtocol();
     const [amount, setAmount] = useState(1);
     const [isLoading, setIsLoading] = useState(false);
     const [solPrice, setSolPrice] = useState(0);
@@ -58,20 +58,17 @@ export default function QuickBetModal({ isOpen, onClose, market, outcome }: Quic
     }, [isOpen]);
 
     // --- REAL AMM MATH ---
-    // We derive the "Virtual Reserves" from the current price (chance) and the constant liquidity depth.
-    // Price = x / y. x = INITIAL_VIRTUAL_SOL (40).
+    // Price = S / K. S = Price * K.
+    // S_market = TotalShares + VIRTUAL_OFFSET
     const currentPrice = (market.chance || 50) / 100;
     const safePrice = Math.max(0.01, Math.min(0.99, currentPrice));
 
-    // Reverse engineer Virtual Share Reserves (y)
-    // y = x / price
-    const virtualShareReserves = INITIAL_VIRTUAL_SOL / safePrice;
-
+    // Reverse engineer State from Price
     const marketState = {
-        virtualSolReserves: INITIAL_VIRTUAL_SOL,
-        virtualShareReserves: virtualShareReserves,
+        virtualSolReserves: 0,
+        virtualShareReserves: 0,
         realSolReserves: 0, // Not needed for buy sim
-        totalSharesMinted: 0 // Not needed for buy sim
+        totalSharesMinted: (safePrice * CURVE_CONSTANT) - VIRTUAL_OFFSET
     };
 
     const sim = simulateBuy(amount, marketState);
@@ -103,12 +100,18 @@ export default function QuickBetModal({ isOpen, onClose, market, outcome }: Quic
                 return;
             }
 
-            const tx = await placeBet(
+            // WE NEED MARKET CREATOR. FETCH IT.
+            if (!program) throw new Error("Protocol not ready");
+            const marketAccount = await program.account.market.fetch(new PublicKey(market.marketPDA));
+            const marketCreator = marketAccount.creator as PublicKey;
+
+            const tx = await buyShares(
                 new PublicKey(market.marketPDA),
                 outcome,
                 amount,
                 new PublicKey(market.yesTokenMint || "So11111111111111111111111111111111111111112"),
                 new PublicKey(market.noTokenMint || "So11111111111111111111111111111111111111112"),
+                marketCreator,
                 0 // minSharesOut
             );
 
@@ -154,17 +157,11 @@ export default function QuickBetModal({ isOpen, onClose, market, outcome }: Quic
 
             // D. Update Market Stats (Price/Volume) locally
             // Calculate impact
-            const priceImpact = (usdValue / 1000000) * 50; // Mock volume impact for visual, or derive from sim.endPrice
-            // Better: use sim.endPrice as new price
+            const priceImpact = (usdValue / 1000000) * 50;
             const newUnknownPrice = sim.endPrice * 100;
-            // Depending on outcome, price moves differently
-            // If BUY YES -> Price Up. If BUY NO -> Price Down (Yes price down) ?? 
-            // WAIT. If I buy YES, YES price goes UP.
-            // If I buy NO, NO price goes UP -> YES price goes DOWN.
 
             let newYesPrice = market.chance;
             if (outcome === 'yes') {
-                // Simple linear nudge for the DB update since we don't have full AMM state in DB
                 newYesPrice = Math.min(99, market.chance + sim.priceImpact);
             } else {
                 newYesPrice = Math.max(1, market.chance - sim.priceImpact);

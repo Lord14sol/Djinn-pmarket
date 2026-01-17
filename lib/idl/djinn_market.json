@@ -1,536 +1,733 @@
 {
-    "version": "0.1.0",
-    "name": "djinn_market",
-    "metadata": {
-        "address": "9xXGnGG4hxwC4XTHavmy5BWAdb8MC2VJtTDMW9FfkGbg",
-        "origin": "anchor",
-        "binary": "localnet"
+  "version": "0.1.0",
+  "name": "djinn_market",
+  "instructions": [
+    {
+      "name": "initializeProtocol",
+      "accounts": [
+        {
+          "name": "protocolState",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "authority",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "treasury",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": []
     },
-    "instructions": [
+    {
+      "name": "initializeMultisig",
+      "accounts": [
         {
-            "name": "initializeProtocol",
-            "discriminator": [
-                188,
-                233,
-                252,
-                106,
-                134,
-                146,
-                202,
-                91
-            ],
-            "accounts": [
-                {
-                    "name": "protocolState",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "authority",
-                    "isMut": true,
-                    "isSigner": true
-                },
-                {
-                    "name": "treasury",
-                    "isMut": false,
-                    "isSigner": false
-                },
-                {
-                    "name": "systemProgram",
-                    "isMut": false,
-                    "isSigner": false
-                }
-            ],
-            "args": []
+          "name": "multisig",
+          "isMut": true,
+          "isSigner": false
         },
         {
-            "name": "createMarket",
-            "discriminator": [
-                103,
-                226,
-                97,
-                235,
-                200,
-                188,
-                251,
-                254
-            ],
-            "accounts": [
-                {
-                    "name": "market",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "yesTokenMint",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "noTokenMint",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "creator",
-                    "isMut": true,
-                    "isSigner": true
-                },
-                {
-                    "name": "protocolTreasury",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "tokenProgram",
-                    "isMut": false,
-                    "isSigner": false
-                },
-                {
-                    "name": "systemProgram",
-                    "isMut": false,
-                    "isSigner": false
-                },
-                {
-                    "name": "rent",
-                    "isMut": false,
-                    "isSigner": false
-                }
-            ],
-            "args": [
-                {
-                    "name": "title",
-                    "type": "string"
-                },
-                {
-                    "name": "resolutionTime",
-                    "type": "i64"
-                }
-            ]
+          "name": "payer",
+          "isMut": true,
+          "isSigner": true
         },
         {
-            "name": "placeBet",
-            "discriminator": [
-                222,
-                62,
-                67,
-                220,
-                63,
-                166,
-                126,
-                33
-            ],
-            "accounts": [
-                {
-                    "name": "market",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "user",
-                    "isMut": true,
-                    "isSigner": true
-                },
-                {
-                    "name": "yesTokenMint",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "noTokenMint",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "userYesAccount",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "userNoAccount",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "associatedTokenProgram",
-                    "isMut": false,
-                    "isSigner": false
-                },
-                {
-                    "name": "protocolTreasury",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "tokenProgram",
-                    "isMut": false,
-                    "isSigner": false
-                },
-                {
-                    "name": "systemProgram",
-                    "isMut": false,
-                    "isSigner": false
-                }
-            ],
-            "args": [
-                {
-                    "name": "side",
-                    "type": {
-                        "defined": "MarketOutcome"
-                    }
-                },
-                {
-                    "name": "amount",
-                    "type": "u64"
-                },
-                {
-                    "name": "minSharesOut",
-                    "type": "u64"
-                }
-            ]
-        },
-        {
-            "name": "resolveMarket",
-            "discriminator": [
-                155,
-                23,
-                80,
-                173,
-                46,
-                74,
-                23,
-                239
-            ],
-            "accounts": [
-                {
-                    "name": "market",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "authority",
-                    "isMut": false,
-                    "isSigner": true
-                },
-                {
-                    "name": "protocolState",
-                    "isMut": true,
-                    "isSigner": false
-                }
-            ],
-            "args": [
-                {
-                    "name": "outcome",
-                    "type": {
-                        "defined": "MarketOutcome"
-                    }
-                }
-            ]
-        },
-        {
-            "name": "claimReward",
-            "discriminator": [
-                149,
-                95,
-                181,
-                242,
-                94,
-                90,
-                158,
-                162
-            ],
-            "accounts": [
-                {
-                    "name": "market",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "user",
-                    "isMut": true,
-                    "isSigner": true
-                },
-                {
-                    "name": "yesTokenMint",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "noTokenMint",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "userYesAccount",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "userNoAccount",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "protocolTreasury",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "tokenProgram",
-                    "isMut": false,
-                    "isSigner": false
-                },
-                {
-                    "name": "systemProgram",
-                    "isMut": false,
-                    "isSigner": false
-                }
-            ],
-            "args": []
-        },
-        {
-            "name": "sellShares",
-            "discriminator": [
-                184,
-                164,
-                169,
-                16,
-                231,
-                158,
-                199,
-                196
-            ],
-            "accounts": [
-                {
-                    "name": "market",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "user",
-                    "isMut": true,
-                    "isSigner": true
-                },
-                {
-                    "name": "yesTokenMint",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "noTokenMint",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "userYesAccount",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "userNoAccount",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "protocolTreasury",
-                    "isMut": true,
-                    "isSigner": false
-                },
-                {
-                    "name": "tokenProgram",
-                    "isMut": false,
-                    "isSigner": false
-                },
-                {
-                    "name": "systemProgram",
-                    "isMut": false,
-                    "isSigner": false
-                }
-            ],
-            "args": [
-                {
-                    "name": "side",
-                    "type": {
-                        "defined": "MarketOutcome"
-                    }
-                },
-                {
-                    "name": "sharesAmount",
-                    "type": "u64"
-                },
-                {
-                    "name": "minSolOut",
-                    "type": "u64"
-                }
-            ]
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
         }
-    ],
-    "accounts": [
+      ],
+      "args": []
+    },
+    {
+      "name": "initializeMarket",
+      "accounts": [
         {
-            "name": "ProtocolState",
-            "type": {
-                "kind": "struct",
-                "fields": [
-                    {
-                        "name": "authority",
-                        "type": "publicKey"
-                    },
-                    {
-                        "name": "treasury",
-                        "type": "publicKey"
-                    }
-                ]
-            }
+          "name": "market",
+          "isMut": true,
+          "isSigner": false
         },
         {
-            "name": "Market",
-            "type": {
-                "kind": "struct",
-                "fields": [
-                    {
-                        "name": "creator",
-                        "type": "publicKey"
-                    },
-                    {
-                        "name": "title",
-                        "type": "string"
-                    },
-                    {
-                        "name": "virtualSolReserves",
-                        "type": "u64"
-                    },
-                    {
-                        "name": "virtualShareReserves",
-                        "type": "u64"
-                    },
-                    {
-                        "name": "creatorFeesClaimable",
-                        "type": "u64"
-                    },
-                    {
-                        "name": "totalVolume",
-                        "type": "u64"
-                    },
-                    {
-                        "name": "lastTradeSlot",
-                        "type": "u64"
-                    },
-                    {
-                        "name": "lastTrader",
-                        "type": "publicKey"
-                    },
-                    {
-                        "name": "resolutionTime",
-                        "type": "i64"
-                    },
-                    {
-                        "name": "resolutionTimestamp",
-                        "type": "i64"
-                    },
-                    {
-                        "name": "status",
-                        "type": {
-                            "defined": "MarketStatus"
-                        }
-                    },
-                    {
-                        "name": "outcome",
-                        "type": {
-                            "defined": "MarketOutcome"
-                        }
-                    },
-                    {
-                        "name": "bump",
-                        "type": "u8"
-                    }
-                ]
-            }
+          "name": "marketVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "creator",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "protocolTreasury",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
         }
-    ],
-    "types": [
+      ],
+      "args": [
         {
-            "name": "MarketStatus",
-            "type": {
-                "kind": "enum",
-                "variants": [
-                    {
-                        "name": "Open"
-                    },
-                    {
-                        "name": "Resolved"
-                    },
-                    {
-                        "name": "Voided"
-                    }
-                ]
-            }
+          "name": "title",
+          "type": "string"
         },
         {
-            "name": "MarketOutcome",
-            "type": {
-                "kind": "enum",
-                "variants": [
-                    {
-                        "name": "None"
-                    },
-                    {
-                        "name": "Yes"
-                    },
-                    {
-                        "name": "No"
-                    },
-                    {
-                        "name": "Void"
-                    }
-                ]
-            }
+          "name": "resolutionTime",
+          "type": "i64"
+        },
+        {
+          "name": "numOutcomes",
+          "type": "u8"
+        },
+        {
+          "name": "curveConstant",
+          "type": "u128"
         }
-    ],
-    "errors": [
+      ]
+    },
+    {
+      "name": "buyShares",
+      "accounts": [
         {
-            "code": 6000,
-            "name": "FeeTooHigh",
-            "msg": "Fee too high"
+          "name": "market",
+          "isMut": true,
+          "isSigner": false
         },
         {
-            "code": 6001,
-            "name": "MarketClosed",
-            "msg": "Market closed"
+          "name": "marketVault",
+          "isMut": true,
+          "isSigner": false
         },
         {
-            "code": 6002,
-            "name": "MarketExpired",
-            "msg": "Market expired"
+          "name": "userPosition",
+          "isMut": true,
+          "isSigner": false
         },
         {
-            "code": 6003,
-            "name": "InvalidAmount",
-            "msg": "Invalid amount"
+          "name": "user",
+          "isMut": true,
+          "isSigner": true
         },
         {
-            "code": 6004,
-            "name": "InvalidOutcome",
-            "msg": "Invalid outcome"
+          "name": "protocolTreasury",
+          "isMut": true,
+          "isSigner": false
         },
         {
-            "code": 6005,
-            "name": "Unauthorized",
-            "msg": "Unauthorized"
+          "name": "marketCreator",
+          "isMut": true,
+          "isSigner": false
         },
         {
-            "code": 6006,
-            "name": "AlreadyResolved",
-            "msg": "Already resolved"
-        },
-        {
-            "code": 6007,
-            "name": "NotResolved",
-            "msg": "Not resolved"
-        },
-        {
-            "code": 6008,
-            "name": "NothingToClaim",
-            "msg": "Nothing to claim"
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
         }
-    ]
+      ],
+      "args": [
+        {
+          "name": "outcomeIndex",
+          "type": "u8"
+        },
+        {
+          "name": "solIn",
+          "type": "u64"
+        },
+        {
+          "name": "minSharesOut",
+          "type": "u64"
+        },
+        {
+          "name": "maxPriceImpactBps",
+          "type": "u16"
+        }
+      ]
+    },
+    {
+      "name": "sellShares",
+      "accounts": [
+        {
+          "name": "market",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "marketVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "userPosition",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "user",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "protocolTreasury",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "marketCreator",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "sharesToBurn",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "resolveMarket",
+      "accounts": [
+        {
+          "name": "market",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "aiOracle",
+          "isMut": false,
+          "isSigner": true
+        },
+        {
+          "name": "apiOracle",
+          "isMut": false,
+          "isSigner": true
+        },
+        {
+          "name": "daoMultisig",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "authority",
+          "isMut": false,
+          "isSigner": true
+        },
+        {
+          "name": "marketVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "protocolTreasury",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "winningOutcome",
+          "type": "u8"
+        },
+        {
+          "name": "aiVote",
+          "type": "u8"
+        },
+        {
+          "name": "apiVote",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "forceResolveMarket",
+      "accounts": [
+        {
+          "name": "market",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "authority",
+          "isMut": false,
+          "isSigner": true
+        },
+        {
+          "name": "marketVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "protocolTreasury",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "winningOutcome",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "claimWinnings",
+      "accounts": [
+        {
+          "name": "market",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "marketVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "userPosition",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "user",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "protocolTreasury",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "authority",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": []
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Market",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "creator",
+            "type": "publicKey"
+          },
+          {
+            "name": "outcomes",
+            "type": {
+              "vec": {
+                "defined": "OutcomeState"
+              }
+            }
+          },
+          {
+            "name": "title",
+            "type": "string"
+          },
+          {
+            "name": "globalVault",
+            "type": "u128"
+          },
+          {
+            "name": "curveConstant",
+            "type": "u128"
+          },
+          {
+            "name": "lockedSeedShares",
+            "type": "u128"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": "MarketStatus"
+            }
+          },
+          {
+            "name": "resolutionTime",
+            "type": "i64"
+          },
+          {
+            "name": "resolutionTimestamp",
+            "type": "i64"
+          },
+          {
+            "name": "winningOutcome",
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "vaultBump",
+            "type": "u8"
+          },
+          {
+            "name": "creationFeeSeed",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UserPosition",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "publicKey"
+          },
+          {
+            "name": "outcomeIndex",
+            "type": "u8"
+          },
+          {
+            "name": "shares",
+            "type": "u128"
+          },
+          {
+            "name": "claimed",
+            "type": "bool"
+          },
+          {
+            "name": "claimTimestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ProtocolState",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "publicKey"
+          },
+          {
+            "name": "treasury",
+            "type": "publicKey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Multisig",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "approvals",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Vault",
+      "type": {
+        "kind": "struct",
+        "fields": []
+      }
+    }
+  ],
+  "types": [
+    {
+      "name": "OutcomeState",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "totalShares",
+            "type": "u128"
+          },
+          {
+            "name": "totalLiquidity",
+            "type": "u128"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Pending"
+          },
+          {
+            "name": "Active"
+          },
+          {
+            "name": "Paused"
+          },
+          {
+            "name": "Resolving"
+          },
+          {
+            "name": "Disputed"
+          },
+          {
+            "name": "Resolved"
+          },
+          {
+            "name": "Finalized"
+          }
+        ]
+      }
+    }
+  ],
+  "events": [
+    {
+      "name": "MarketCreated",
+      "fields": [
+        {
+          "name": "market",
+          "type": "publicKey",
+          "index": false
+        },
+        {
+          "name": "creator",
+          "type": "publicKey",
+          "index": false
+        },
+        {
+          "name": "numOutcomes",
+          "type": "u8",
+          "index": false
+        },
+        {
+          "name": "genesisShares",
+          "type": "u128",
+          "index": false
+        },
+        {
+          "name": "curveConstant",
+          "type": "u128",
+          "index": false
+        }
+      ]
+    },
+    {
+      "name": "Trade",
+      "fields": [
+        {
+          "name": "market",
+          "type": "publicKey",
+          "index": false
+        },
+        {
+          "name": "user",
+          "type": "publicKey",
+          "index": false
+        },
+        {
+          "name": "isBuy",
+          "type": "bool",
+          "index": false
+        },
+        {
+          "name": "outcomeIndex",
+          "type": "u8",
+          "index": false
+        },
+        {
+          "name": "solAmount",
+          "type": "u64",
+          "index": false
+        },
+        {
+          "name": "sharesAmount",
+          "type": "u64",
+          "index": false
+        }
+      ]
+    },
+    {
+      "name": "MarketResolved",
+      "fields": [
+        {
+          "name": "market",
+          "type": "publicKey",
+          "index": false
+        },
+        {
+          "name": "winningOutcome",
+          "type": "u8",
+          "index": false
+        }
+      ]
+    },
+    {
+      "name": "WinningsClaimed",
+      "fields": [
+        {
+          "name": "user",
+          "type": "publicKey",
+          "index": false
+        },
+        {
+          "name": "payout",
+          "type": "u64",
+          "index": false
+        },
+        {
+          "name": "sharesBurned",
+          "type": "u64",
+          "index": false
+        }
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "InvalidOutcomeCount",
+      "msg": "Invalid Outcome Count"
+    },
+    {
+      "code": 6001,
+      "name": "MathError",
+      "msg": "Math Error"
+    },
+    {
+      "code": 6002,
+      "name": "MarketNotActive",
+      "msg": "Market Not Active"
+    },
+    {
+      "code": 6003,
+      "name": "InvalidOutcomeIndex",
+      "msg": "Invalid Outcome Index"
+    },
+    {
+      "code": 6004,
+      "name": "PriceImpactTooHigh",
+      "msg": "Price Impact Too High"
+    },
+    {
+      "code": 6005,
+      "name": "SlippageExceeded",
+      "msg": "Slippage Exceeded"
+    },
+    {
+      "code": 6006,
+      "name": "WrongOutcomePosition",
+      "msg": "Wrong Outcome Position"
+    },
+    {
+      "code": 6007,
+      "name": "InsufficientShares",
+      "msg": "Insufficient Shares"
+    },
+    {
+      "code": 6008,
+      "name": "AmountTooSmall",
+      "msg": "Amount Too Small"
+    },
+    {
+      "code": 6009,
+      "name": "AIVoteMismatch",
+      "msg": "Vote Mismatch"
+    },
+    {
+      "code": 6010,
+      "name": "APIVoteMismatch",
+      "msg": "Vote Mismatch"
+    },
+    {
+      "code": 6011,
+      "name": "InsufficientDAOApprovals",
+      "msg": "DAO Approval Fail"
+    },
+    {
+      "code": 6012,
+      "name": "NotResolved",
+      "msg": "Not Resolved"
+    },
+    {
+      "code": 6013,
+      "name": "AlreadyClaimed",
+      "msg": "Already Claimed"
+    },
+    {
+      "code": 6014,
+      "name": "NoShares",
+      "msg": "No Shares"
+    },
+    {
+      "code": 6015,
+      "name": "NotWinner",
+      "msg": "Not Winner"
+    },
+    {
+      "code": 6016,
+      "name": "Unauthorized",
+      "msg": "Unauthorized"
+    },
+    {
+      "code": 6017,
+      "name": "MarketExpired",
+      "msg": "Market Expired (Trading Closed)"
+    },
+    {
+      "code": 6018,
+      "name": "MarketNotExpired",
+      "msg": "Market Not Expired Yet"
+    },
+    {
+      "code": 6019,
+      "name": "MarketNotLocked",
+      "msg": "Market Not Locked (Wait 2h)"
+    },
+    {
+      "code": 6020,
+      "name": "UnauthorizedOracle",
+      "msg": "Unauthorized Oracle Key"
+    }
+  ],
+  "metadata": {
+    "address": "DY1X52RW55bpNU5ZA8E3m6w1w7VG1ioHKpUt7jUkYSV9"
+  }
 }

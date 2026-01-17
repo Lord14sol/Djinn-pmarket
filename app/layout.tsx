@@ -7,6 +7,7 @@ import Footer from "@/components/Footer";
 import { SolanaProvider } from "@/components/SolanaProvider";
 import { CategoryProvider } from "@/lib/CategoryContext";
 import { ModalProvider } from "@/lib/ModalContext";
+import { PriceProvider } from "@/lib/PriceContext";
 import AchievementNotification from "@/components/achievements/AchievementNotification";
 
 const geistSans = Geist({
@@ -83,12 +84,14 @@ export default function RootLayout({
           <React.Suspense fallback={null}>
             <CategoryProvider>
               <ModalProvider>
-                <Navbar />
-                <AchievementNotification />
-                <main className="pt-20 flex-grow">
-                  {children}
-                </main>
-                <Footer />
+                <PriceProvider>
+                  <Navbar />
+                  <AchievementNotification />
+                  <main className="pt-20 flex-grow">
+                    {children}
+                  </main>
+                  <Footer />
+                </PriceProvider>
               </ModalProvider>
             </CategoryProvider>
           </React.Suspense>

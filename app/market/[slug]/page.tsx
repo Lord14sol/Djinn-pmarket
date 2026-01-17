@@ -8,7 +8,7 @@ import { LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from '@solana
 import { Clock, DollarSign, Wallet, Activity, Users, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useDjinnProtocol } from '@/hooks/useDjinnProtocol';
-import { simulateBuy, estimatePayoutInternal, INITIAL_VIRTUAL_SOL } from '@/lib/core-amm';
+import { simulateBuy, estimatePayoutInternal, CURVE_CONSTANT, VIRTUAL_OFFSET } from '@/lib/core-amm';
 
 // Components
 import PrettyChart from '@/components/market/PrettyChart';
@@ -19,7 +19,9 @@ import PurchaseToast from '@/components/market/PurchaseToast';
 import ShareModal from '@/components/market/ShareModal';
 import ActivePositionsWidget from '@/components/market/ActivePositionsWidget';
 import DjinnToast, { DjinnToastType } from '@/components/ui/DjinnToast';
+import { usePrice } from '@/lib/PriceContext';
 import * as supabaseDb from '@/lib/supabase-db';
+import { PrizePoolCounter } from '@/components/PrizePoolCounter';
 
 // Utils
 const TREASURY_WALLET = new PublicKey("G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma");
@@ -85,7 +87,7 @@ export default function Page() {
     const slug = params?.slug as string || '';
     const { publicKey, signTransaction } = useWallet();
     const { connection } = useConnection();
-    const { placeBet, sellShares, marketAccount, isLoading: isContractLoading } = useDjinnProtocol(slug);
+    const { buyShares, sellShares, marketAccount, isLoading: isContractLoading } = useDjinnProtocol(slug);
 
     // --- STATE ---
     // Market Data
@@ -96,7 +98,7 @@ export default function Page() {
     const [chartSeries, setChartSeries] = useState<any[]>([]);
     const [chartData, setChartData] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [solPrice, setSolPrice] = useState<number>(145);
+    const { solPrice } = usePrice();
 
     // User Data
     const [solBalance, setSolBalance] = useState<number>(0);
@@ -113,6 +115,7 @@ export default function Page() {
     const [isSuccess, setIsSuccess] = useState(false);
     const [djinnToast, setDjinnToast] = useState<{ isVisible: boolean; type: DjinnToastType; title?: string; message: string; actionLink?: string; actionLabel?: string }>({ isVisible: false, type: 'INFO', message: '' });
     const [lastTradeEvent, setLastTradeEvent] = useState<{ amount: number; side: 'YES' | 'NO' } | null>(null);
+    const [tradeMode, setTradeMode] = useState<'BUY' | 'SELL'>('BUY');
 
     const [isMaxSell, setIsMaxSell] = useState(false);
     const [showPurchaseToast, setShowPurchaseToast] = useState(false);
@@ -257,22 +260,8 @@ export default function Page() {
         }
     };
 
-    // ... (Keep Initial Load Effect for basic data)
-    // ... (Keep Update Balance Effect)
-    // ... (Keep Load Market Data Effect - NOTE: This might conflict if it sets livePrice back. 
-    //      We need to make sure the loop updates respect the state.)
 
-    // ... (Keep Calculations)
-    // ... (Keep Auto-refresh SOL)
-
-    // REFERENCED IN CODE REPLACEMENT:
-    // We are replacing the top part of the component up to handlePlaceBet 
-    // AND swapping logic inside handlePlaceBet and Sell Button.
-
-    // Let's do a targeted replacements.
-
-    // ...
-
+    // Manual Refresh for User (in case of indexer lag)
     // Manual Refresh for User (in case of indexer lag)
     const refreshBalances = async () => {
         setIsLoading(true);
@@ -310,21 +299,17 @@ export default function Page() {
 
     // Initial Load
     useEffect(() => {
-        const fetchSolPrice = async () => {
-            try {
-                const res = await fetch("https://api.binance.com/api/v3/ticker/price?symbol=SOLUSDT");
-                const data = await res.json();
-                setSolPrice(parseFloat(data.price));
-            } catch (e) { console.error("Error price"); }
-        };
-        fetchSolPrice();
-
-        // Load Profile
+        // SOL price is now managed by PriceProvider global context
         const savedProfile = localStorage.getItem('djinn_user_profile');
         if (savedProfile) setUserProfile(JSON.parse(savedProfile));
         if (publicKey) {
             supabaseDb.getProfile(publicKey.toBase58()).then(p => {
-                if (p) setUserProfile({ username: p.username, avatarUrl: p.avatar_url });
+                if (p) {
+                    setUserProfile({
+                        username: p.username || '',
+                        avatarUrl: p.avatar_url || ''
+                    });
+                }
             });
         }
     }, [publicKey]);
@@ -350,7 +335,7 @@ export default function Page() {
             const dbData = await supabaseDb.getMarketData(effectiveSlug);
             const marketInfo = await supabaseDb.getMarket(effectiveSlug);
             console.log("MARKET INFO DEBUG:", marketInfo); // Debug Real Market detection
-            if (marketInfo) setMarketAccount(marketInfo);
+            // if (marketInfo) setMarketAccount(marketInfo); // marketAccount is from hook
 
             if (dbData) {
                 setLivePrice(dbData.live_price);
@@ -454,19 +439,23 @@ export default function Page() {
     const myHeldAmountStr = (myHeldAmount || 0).toFixed(2);
 
     // Trading Preview Calculations
-    const safePrice = Math.max(0.01, Math.min(0.99, currentPriceForSide / 100)); // 0.01 to 0.99
-    const virtualShareReserves = INITIAL_VIRTUAL_SOL / safePrice;
+    // With Linear Curve: S_market = TotalSharesMinted + VIRTUAL_OFFSET
+    // Price = S / K. So S = Price * K.
 
-    // Simulate purely for display
+    // safePrice is 0.01 to 0.99 (SOL per Share approx).
+    const safePrice = Math.max(0.01, Math.min(0.99, currentPriceForSide / 100)); // 0.01 to 0.99
+
+    const estimatedS = safePrice * (CURVE_CONSTANT / 1e9);
+
     const previewSim = simulateBuy(amountNum, {
-        virtualSolReserves: INITIAL_VIRTUAL_SOL,
-        virtualShareReserves: virtualShareReserves,
+        virtualSolReserves: 0,
+        virtualShareReserves: 0,
         realSolReserves: 0,
-        totalSharesMinted: 0
+        totalSharesMinted: (safePrice * CURVE_CONSTANT) - VIRTUAL_OFFSET
     });
 
     const estimatedShares = previewSim.sharesReceived;
-    const effectivePrice = previewSim.averagePrice;
+    const effectivePrice = previewSim.averageEntryPrice;
 
     const potentialSolPayout = estimatePayoutInternal(estimatedShares);
     const potentialRoi = amountNum > 0 ? ((potentialSolPayout - amountNum) / amountNum) * 100 : 0;
@@ -477,17 +466,7 @@ export default function Page() {
 
     const chartColor = selectedSide === 'YES' ? '#10b981' : '#EF4444';
 
-    // Auto-refresh SOL Price every 30s
-    useEffect(() => {
-        const interval = setInterval(async () => {
-            try {
-                const res = await fetch("https://api.binance.com/api/v3/ticker/price?symbol=SOLUSDT");
-                const data = await res.json();
-                setSolPrice(parseFloat(data.price));
-            } catch (e) { console.error("Error refreshing SOL price"); }
-        }, 30000);
-        return () => clearInterval(interval);
-    }, []);
+    // SOL price refreshing is now handled by PriceProvider
 
     // PLACE BET
     const handlePlaceBet = async () => {
@@ -516,12 +495,15 @@ export default function Page() {
             if (isRealMarket) {
                 // --- ON-CHAIN BUY ---
                 console.log("🔗 Executing On-Chain Buy...");
-                const tx = await placeBet(
+                if (!marketAccount.creator_wallet) throw new Error("Market Creator unknown");
+
+                const tx = await buyShares(
                     new PublicKey(marketAccount.market_pda),
                     selectedSide.toLowerCase() as 'yes' | 'no',
                     amountNum,
                     new PublicKey(marketAccount.yes_token_mint),
                     new PublicKey(marketAccount.no_token_mint),
+                    new PublicKey(marketAccount.creator_wallet), // Market Creator
                     0 // minSharesOut
                 );
                 console.log("✅ Buy TX:", tx);
@@ -548,13 +530,13 @@ export default function Page() {
             // 1. Calculate stats (Simulated for DB sync)
             const currentProb = selectedSide === 'YES' ? livePrice : (100 - livePrice);
             const safePrice = Math.max(0.01, Math.min(0.99, currentProb / 100));
-            const virtualShareReserves = INITIAL_VIRTUAL_SOL / safePrice;
+            // const virtualShareReserves = INITIAL_VIRTUAL_SOL / safePrice; // Deprecated
 
             const sim = simulateBuy(amountNum, {
-                virtualSolReserves: INITIAL_VIRTUAL_SOL,
-                virtualShareReserves: virtualShareReserves,
+                virtualSolReserves: 0,
+                virtualShareReserves: 0,
                 realSolReserves: 0,
-                totalSharesMinted: 0
+                totalSharesMinted: (safePrice * CURVE_CONSTANT) - VIRTUAL_OFFSET
             });
 
             // 2. Update Price Locally (Pari-Mutuel Inverse) and in DB
@@ -658,8 +640,6 @@ export default function Page() {
     };
 
 
-    // --- NEW STATE FOR TRADING ---
-    const [tradeMode, setTradeMode] = useState<'BUY' | 'SELL'>('BUY');
 
     // Reset when side or mode changes
     useEffect(() => {
@@ -716,12 +696,15 @@ export default function Page() {
 
                 if (isRealMarket) {
                     console.log("🔗 Executing On-Chain Sell...");
+                    if (!marketAccount.creator_wallet) throw new Error("Market Creator unknown");
+
                     const tx = await sellShares(
                         new PublicKey(marketAccount.market_pda),
                         selectedSide.toLowerCase() as 'yes' | 'no',
                         finalSharesToSell,
                         new PublicKey(marketAccount.yes_token_mint),
                         new PublicKey(marketAccount.no_token_mint),
+                        new PublicKey(marketAccount.creator_wallet), // Market Creator
                         0, // minSolOut (Slippage)
                         isMaxSell // ✅ PASS MAX FLAG
                     );
@@ -736,12 +719,15 @@ export default function Page() {
                 // 1. Calculate Sell Impact (Negative)
                 // Impact Logic: Buying X amount moves price Y. Selling X should move price -Y.
                 const usdValue = finalSharesToSell * (currentPrice / 100) * solPrice;
-                const virtualShareReserves = INITIAL_VIRTUAL_SOL / (currentPrice / 100);
+                // S = Price * K
+                const currentS = (currentPrice / 100) * CURVE_CONSTANT;
+                // const virtualShareReserves = INITIAL_VIRTUAL_SOL / (currentPrice / 100); // legacy
+
                 const sim = simulateBuy(estimatedSolReturn, {
-                    virtualSolReserves: INITIAL_VIRTUAL_SOL,
-                    virtualShareReserves: virtualShareReserves,
+                    virtualSolReserves: 0,
+                    virtualShareReserves: 0,
                     realSolReserves: 0,
-                    totalSharesMinted: 0
+                    totalSharesMinted: currentS - VIRTUAL_OFFSET
                 });
 
                 // For Sell, we INVERT the impact.
@@ -833,8 +819,6 @@ export default function Page() {
         }
     };
 
-    // Replaces handlePlaceBet used in render
-    // ...
 
     return (
         <div className="min-h-screen bg-black text-white font-sans pb-32">
@@ -1072,14 +1056,15 @@ export default function Page() {
                             <div className="flex justify-between mb-4 items-center">
                                 <h3 className="text-[10px] font-black uppercase tracking-widest text-white opacity-40">Trade</h3>
                                 <div className="flex items-center gap-3">
-                                    <div className="flex items-center gap-1 text-[10px] text-gray-400 font-bold bg-white/5 px-2 py-1 rounded">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                                        SOL: ${solPrice.toFixed(2)}
-                                    </div>
                                     <div className="flex items-center gap-2 text-[10px] font-bold text-[#F492B7] bg-[#F492B7]/10 px-3 py-1 rounded-full">
                                         <Wallet size={10} /> <span>{solBalance.toFixed(2)} SOL</span>
                                     </div>
                                 </div>
+                            </div>
+
+                            {/* SQUID GAME UI: Prize Pool Counter */}
+                            <div className="mb-6">
+                                <PrizePoolCounter totalSol={marketAccount?.global_vault ? (Number(marketAccount.global_vault) / LAMPORTS_PER_SOL) : 0.05} />
                             </div>
 
                             {/* NEW: BUY / SELL TOGGLE */}
@@ -1118,11 +1103,11 @@ export default function Page() {
                                 <div className="grid grid-cols-2 gap-3 mb-6">
                                     <button onClick={() => setSelectedSide('YES')} className={`p-4 rounded-2xl border transition-all ${selectedSide === 'YES' ? 'bg-emerald-500/10 border-emerald-500' : 'bg-white/5 border-white/5'}`}>
                                         <span className={`block text-xs font-black uppercase mb-1 ${selectedSide === 'YES' ? 'text-emerald-500' : 'text-gray-500'}`}>YES</span>
-                                        <span className="block text-2xl font-black text-white">{(livePrice ?? 50).toFixed(0)}¢</span>
+                                        <span className="block text-2xl font-black text-white">{(livePrice ?? 50).toFixed(0)}%</span>
                                     </button>
                                     <button onClick={() => setSelectedSide('NO')} className={`p-4 rounded-2xl border transition-all ${selectedSide === 'NO' ? 'bg-red-500/10 border-red-500' : 'bg-white/5 border-white/5'}`}>
                                         <span className={`block text-xs font-black uppercase mb-1 ${selectedSide === 'NO' ? 'text-red-500' : 'text-gray-500'}`}>NO</span>
-                                        <span className="block text-2xl font-black text-white">{(100 - livePrice).toFixed(0)}¢</span>
+                                        <span className="block text-2xl font-black text-white">{(100 - livePrice).toFixed(0)}%</span>
                                     </button>
                                 </div>
                             )}
@@ -1134,26 +1119,33 @@ export default function Page() {
                                     {/* Background Glow */}
                                     <div className={`absolute inset-0 bg-gradient-to-r ${tradeMode === 'BUY' ? 'from-[#10B981]/20 to-emerald-600/20' : 'from-red-500/20 to-orange-500/20'} blur-xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-500 rounded-2xl`}></div>
 
-                                    <div className="relative flex items-center bg-[#0B0E14] border border-white/10 rounded-2xl p-4 transition-all focus-within:border-white/30">
-                                        {/* Icon */}
-                                        <div className="mr-3 text-gray-500">
-                                            {tradeMode === 'BUY' ? <DollarSign size={20} /> : <Activity size={20} />}
+                                    <div className="relative flex items-center bg-[#0F111A] border border-white/5 rounded-2xl p-6 transition-all focus-within:border-white/10 focus-within:bg-[#141822]">
+                                        {/* Input Area */}
+                                        <div className="flex-1">
+                                            <input
+                                                type="number"
+                                                value={betAmount}
+                                                onChange={(e) => setBetAmount(e.target.value)}
+                                                className="w-full bg-transparent text-white text-4xl font-black outline-none placeholder:text-gray-700 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none font-mono tracking-tighter"
+                                                placeholder="0.00"
+                                            />
+                                            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">
+                                                {tradeMode === 'BUY' ? 'You Pay' : 'You Extract'}
+                                            </div>
                                         </div>
 
-                                        {/* Input */}
-                                        <input
-                                            type="number"
-                                            value={betAmount}
-                                            onChange={(e) => setBetAmount(e.target.value)}
-                                            className="w-full bg-transparent text-white text-3xl font-black outline-none placeholder:text-gray-800 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none font-mono"
-                                            placeholder="0.00"
-                                        />
-
-                                        {/* Prominent Suffix */}
-                                        <div className="flex flex-col items-end pl-4 border-l border-white/10">
-                                            <span className="text-xl font-black text-white tracking-wider">SOL</span>
-                                            <span className="text-[10px] text-gray-500 font-mono whitespace-nowrap">
-                                                {amountNum > 0 ? `≈ $${(amountNum * solPrice).toFixed(2)}` : 'Amount'}
+                                        {/* Suffix (SOL Label) */}
+                                        <div className="flex flex-col items-end pl-6">
+                                            <div className="flex items-center gap-2">
+                                                <img
+                                                    src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
+                                                    alt="SOL"
+                                                    className="w-6 h-6 rounded-full"
+                                                />
+                                                <span className="text-xl font-black text-white tracking-wider">SOL</span>
+                                            </div>
+                                            <span className="text-[10px] text-gray-400 font-mono font-bold mt-1">
+                                                {amountNum > 0 ? `$${(amountNum * solPrice).toFixed(2)}` : '$0.00'}
                                             </span>
                                         </div>
                                     </div>
@@ -1168,35 +1160,22 @@ export default function Page() {
                                                     <button
                                                         key={pct}
                                                         onClick={() => {
-                                                            let available = 0;
-                                                            if (tradeMode === 'BUY') available = solBalance;
-                                                            else available = selectedSide === 'YES' ? myYesShares : myNoShares;
-
                                                             let val;
+                                                            // Inside tradeMode === 'SELL' block, so we set available to shares
+                                                            const availableShares = selectedSide === 'YES' ? myYesShares : myNoShares;
+                                                            const currentPrice = selectedSide === 'YES' ? livePrice : (100 - livePrice);
+                                                            const priceRatio = currentPrice / 100;
+                                                            // availableShares is in Shares. Convert to SOL value for the input.
+                                                            const totalSolValue = availableShares * priceRatio;
 
-                                                            if (tradeMode === 'BUY') {
-                                                                // ... (BUY Logic unchanged)
-                                                                if (pct === 100) val = Math.max(0, available - 0.025);
-                                                                else val = available * (pct / 100);
-                                                                val = Math.floor(val * 10000) / 10000;
-                                                                setBetAmount(val.toString());
+                                                            if (pct === 100) {
+                                                                setIsMaxSell(true);
+                                                                val = totalSolValue;
                                                             } else {
-                                                                // SELL logic (SOL Value)
-                                                                const currentPrice = selectedSide === 'YES' ? livePrice : (100 - livePrice);
-                                                                const priceRatio = currentPrice / 100;
-                                                                // available is in Shares. Convert to SOL value.
-                                                                const totalSolValue = available * priceRatio;
-
-                                                                if (pct === 100) {
-                                                                    setIsMaxSell(true);
-                                                                    val = totalSolValue;
-                                                                } else {
-                                                                    setIsMaxSell(false);
-                                                                    val = totalSolValue * (pct / 100);
-                                                                }
-                                                                // Round 
-                                                                setBetAmount(val.toFixed(4));
+                                                                setIsMaxSell(false);
+                                                                val = totalSolValue * (pct / 100);
                                                             }
+                                                            setBetAmount(val.toFixed(4));
                                                         }}
                                                         className="px-3 py-1.5 text-[10px] font-bold text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors bg-white/5 border border-white/5"
                                                     >
@@ -1208,25 +1187,34 @@ export default function Page() {
                                     )}
 
                                 {/* Transaction Summary */}
-                                <div className="bg-[#0F1115]/50 rounded-lg p-3 space-y-2 text-xs">
+                                <div className="bg-white/5 rounded-2xl border border-white/5 p-4 space-y-3">
                                     {/* BUY MODE SUMMARY */}
                                     {tradeMode === 'BUY' && (
                                         <>
-                                            <div className="flex justify-between items-center text-gray-400">
-                                                <span>Value</span>
-                                                <span className="text-gray-300 font-mono">
-                                                    ${(parseFloat(betAmount || '0') * solPrice).toFixed(2)}
+                                            <div className="flex justify-between items-center text-gray-500 font-bold uppercase text-[9px] tracking-widest">
+                                                <span>Exchange Rate</span>
+                                                <span className="font-mono text-[10px] lowercase text-gray-400">
+                                                    1 SOL ≈ {amountNum > 0 ? (estimatedShares / amountNum).toLocaleString(undefined, { maximumFractionDigits: 0 }) : '7,500'} shares
                                                 </span>
                                             </div>
-                                            <div className="flex justify-between items-center text-gray-400">
-                                                <span>Est. Shares</span>
-                                                <span className="text-white font-black font-mono text-sm">{estimatedShares.toFixed(2)}</span>
+                                            <div className="flex justify-between items-center text-gray-500 font-bold uppercase text-[9px] tracking-widest pt-1">
+                                                <span>Pool Impact</span>
+                                                <span className={`font-mono text-[10px] ${previewSim.priceImpact > 5 ? 'text-amber-400' : 'text-gray-400'}`}>
+                                                    {previewSim.priceImpact.toFixed(2)}%
+                                                </span>
                                             </div>
-                                            <div className="flex justify-between items-center text-gray-400">
-                                                <span>Potential Payout</span>
+                                            <div className="flex justify-between items-end border-t border-white/5 pt-3">
+                                                <div>
+                                                    <span className="block text-gray-500 font-bold uppercase text-[9px] tracking-widest mb-1">Shares to Receive</span>
+                                                    <span className="text-3xl font-black text-white leading-none tracking-tighter">
+                                                        {estimatedShares.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                    </span>
+                                                </div>
                                                 <div className="text-right">
-                                                    <span className="block text-[#10B981] font-black font-mono text-sm">{estimatedShares.toFixed(2)} SOL</span>
-                                                    {potentialRoi > 0 && <span className="text-[9px] text-[#10B981] opacity-80">+{potentialRoi.toFixed(0)}% gain</span>}
+                                                    <span className="block text-gray-500 font-bold uppercase text-[9px] tracking-widest mb-1">Cost</span>
+                                                    <span className="text-xs font-black text-emerald-400 font-mono tracking-tight">
+                                                        ${(parseFloat(betAmount || '0') * solPrice).toFixed(2)}
+                                                    </span>
                                                 </div>
                                             </div>
                                         </>
@@ -1234,11 +1222,19 @@ export default function Page() {
 
                                     {/* SELL MODE SUMMARY */}
                                     {tradeMode === 'SELL' && (
-                                        <div className="flex justify-between items-center text-gray-400">
-                                            <span>Shares to Sell</span>
-                                            <span className="text-white font-black font-mono text-sm">
-                                                {(parseFloat(betAmount || '0') / (currentPriceForSide / 100)).toFixed(2)}
-                                            </span>
+                                        <div className="flex justify-between items-end">
+                                            <div>
+                                                <span className="block text-gray-500 font-bold uppercase text-[9px] tracking-widest mb-1">Shares to Burn</span>
+                                                <span className="text-3xl font-black text-white leading-none tracking-tighter">
+                                                    {(parseFloat(betAmount || '0') / (currentPriceForSide / 100)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                </span>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="block text-gray-500 font-bold uppercase text-[9px] tracking-widest mb-1">Extracting</span>
+                                                <span className="text-sm font-black text-red-400 font-mono tracking-tight">
+                                                    ◎{parseFloat(betAmount || '0').toFixed(4)}
+                                                </span>
+                                            </div>
                                         </div>
                                     )}
                                 </div>
