@@ -247,18 +247,52 @@ pub mod djinn_market {
             net_sol as u64,
         )?;
         
-        // 7. Transfer fee to treasury
+        // 7. Transfer fee (SPLIT LOGIC)
         if fee > 0 {
-            anchor_lang::system_program::transfer(
-                CpiContext::new(
-                    ctx.accounts.system_program.to_account_info(),
-                    anchor_lang::system_program::Transfer {
-                        from: ctx.accounts.user.to_account_info(),
-                        to: ctx.accounts.protocol_treasury.to_account_info(),
-                    },
-                ),
-                fee as u64,
-            )?;
+            let creator = market.creator;
+            let treasury = ctx.accounts.protocol_treasury.key();
+            
+            if creator == treasury {
+                // G1 created market: 100% to treasury
+                anchor_lang::system_program::transfer(
+                    CpiContext::new(
+                        ctx.accounts.system_program.to_account_info(),
+                        anchor_lang::system_program::Transfer {
+                            from: ctx.accounts.user.to_account_info(),
+                            to: ctx.accounts.protocol_treasury.to_account_info(),
+                        },
+                    ),
+                    fee as u64,
+                )?;
+            } else {
+                // User created market: 50/50 split
+                let creator_cut = fee / 2;
+                let treasury_cut = fee - creator_cut;
+                
+                // To Treasury
+                anchor_lang::system_program::transfer(
+                    CpiContext::new(
+                        ctx.accounts.system_program.to_account_info(),
+                        anchor_lang::system_program::Transfer {
+                            from: ctx.accounts.user.to_account_info(),
+                            to: ctx.accounts.protocol_treasury.to_account_info(),
+                        },
+                    ),
+                    treasury_cut as u64,
+                )?;
+                
+                // To Creator
+                anchor_lang::system_program::transfer(
+                    CpiContext::new(
+                        ctx.accounts.system_program.to_account_info(),
+                        anchor_lang::system_program::Transfer {
+                            from: ctx.accounts.user.to_account_info(),
+                            to: ctx.accounts.market_creator.to_account_info(),
+                        },
+                    ),
+                    creator_cut as u64,
+                )?;
+            }
         }
         
         Ok(())
@@ -456,6 +490,10 @@ pub struct BuyShares<'info> {
     /// CHECK: Treasury
     #[account(mut)]
     pub protocol_treasury: AccountInfo<'info>,
+    
+    /// CHECK: Market Creator (for fee split)
+    #[account(mut)]
+    pub market_creator: AccountInfo<'info>,
     
     pub system_program: Program<'info, System>,
 }
