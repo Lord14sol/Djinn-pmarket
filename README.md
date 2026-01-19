@@ -1,4 +1,4 @@
-# DJINN: Redefining Price Discovery on Solana 🧞‍♂️
+ DJINN: Redefining Price Discovery on Solana 
 
 <div align="center">
 
