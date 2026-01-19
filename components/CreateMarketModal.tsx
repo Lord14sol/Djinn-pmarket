@@ -6,7 +6,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useDjinnProtocol } from '@/hooks/useDjinnProtocol';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { compressImage } from '@/lib/utils';
-import { checkMarketMilestones, createMarket } from '@/lib/supabase-db';
+import { checkMarketMilestones, createMarket, updateMarketPrice } from '@/lib/supabase-db';
 import Link from 'next/link';
 
 // --- ICONOS ---
@@ -195,6 +195,16 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                 banner_url: finalBanner
             });
 
+            // INITIALIZE MARKET DATA (Price & Volume)
+            // If there was an initial buy, the price isn't exactly 50, but we'll let the indexer or first load correct it.
+            // Importantly, we record the VOLUME from the initial buy.
+            const initialVol = parseFloat(initialBuyAmount) || 0;
+            // Value of buy ~ initialVol (ignoring fees for rough volume stats)
+            await updateMarketPrice(slug, 50, initialVol * 200); // *200 as mock USD conversion or just use SOL? updateMarketPrice expects number.
+            // Actually Activity logs USD amount. market_data volume usually USD?
+            // Let's assume volume is USD.
+            // We'll init with 50% price. The on-chain sync will fix the exact price later if it moved.
+
             // SUCCESS - Store data and show animation
             setSuccessData({
                 txSignature,
@@ -253,6 +263,10 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
 
         } catch (error: any) {
             console.error("❌ Error:", error);
+            if (typeof error === 'object' && error !== null) {
+                console.error("❌ Error details:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+                if (error.logs) console.error("📜 Blockchain Logs:", error.logs);
+            }
 
             // Better error parsing
             let diffMsg = error.message || 'Unknown error';

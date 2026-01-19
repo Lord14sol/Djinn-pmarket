@@ -131,7 +131,7 @@ function NavbarContent() {
     const [userPfp, setUserPfp] = useState<string | null>(null);
     const [username, setUsername] = useState<string>("User");
     const [balance, setBalance] = useState<number>(0);
-    const { openCreateMarket } = useModal();
+    const { openCreateMarket, openActivityFeed } = useModal();
 
     // HYDRATION FIX: Prevent SSR/client mismatch for wallet-dependent content
     const [mounted, setMounted] = useState(false);
@@ -311,16 +311,15 @@ function NavbarContent() {
                                 </div>
                                 <span className="text-sm font-bold text-gray-200 uppercase tracking-widest">Leaderboard</span>
                             </Link>
-                            <Link
-                                href="/live"
-                                onClick={() => setIsOpen(false)}
-                                className="flex items-center gap-3 p-4 rounded-xl hover:bg-white/5 transition-colors group"
+                            <button
+                                onClick={() => { setIsOpen(false); openActivityFeed(); }}
+                                className="flex w-full items-center gap-3 p-4 rounded-xl hover:bg-white/5 transition-colors group text-left"
                             >
                                 <div className="text-[#F492B7]/80 group-hover:text-[#F492B7] transition-colors">
                                     <ActivityIcon />
                                 </div>
                                 <span className="text-sm font-bold text-gray-200 uppercase tracking-widest">Activity</span>
-                            </Link>
+                            </button>
 
                             {/* Oracle Bot - Only visible to Protocol Authority */}
                             {connected && publicKey?.toString() === "G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma" && (

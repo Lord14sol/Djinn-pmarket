@@ -14,7 +14,7 @@ Traditional prediction markets (Polymarket, Kalshi) are boring. Traditional meme
 
 | Problem | Djinn Solution |
 |---------|----------------|
-| First bot wins 1000x | First **1,500 people** win 10x-150x together |
+| First bot wins 1000x | First **1,500 people** win 10x-19x together (gradual growth) |
 | No resolution, pure PVP | Markets **resolve to reality** |
 | Institutional UX | **Gamified UI** with Ignition Bar |
 
@@ -35,8 +35,8 @@ P(x) = {
 ```
 
 Where:
-- `σ_norm(z) = 2·(sigmoid(k·z) - 0.5)` — Normalized sigmoid starting at 0
-- `k = 4.7×10⁻¹⁰` — Steepness calibrated for 150x at 120M shares
+- `σ_norm(z) = k·z` — Linear approximation for gas efficiency
+- `k = 4.7×10⁻⁴` — Steepness calibrated for ~19x at 120M shares (gradual growth)
 
 ### Phase Breakdown
 
@@ -46,27 +46,28 @@ Where:
 | **2. Bridge** | 90M → 110M | $0.0000027 → $0.000015 | Smooth C⁰ transition. No cliff. |
 | **3. Ignition** | 110M → 1B | $0.000015 → $0.95 | Viral pump. God candle. |
 
-### The 150x Strategy (Deep Liquidity Tank)
+### The 19x Gradual Growth Strategy (Democratization of the Pump)
 
-The curve is calibrated so that:
-
-```
-Price at 120M shares = $0.00225 SOL = 150× entry price
-```
-
-This creates **deep liquidity** that can absorb whale sells without collapsing, producing a sustainable upward trend rather than a pump-and-dump.
-
-### C¹ Continuity (No Cliff)
-
-The quadratic bridge phase is constructed by solving the system:
+The curve is calibrated for **sustainable community growth**:
 
 ```
-P(90M) = P_90 (end of linear)
-P(110M) = P_110 (start of sigmoid)  
-P'(90M) = m (derivative matches linear slope)
+Price at 120M shares ≈ $0.000019 SOL ≈ 19× entry price
 ```
 
-This ensures **zero price discontinuity** at phase transitions.
+This creates a **long accumulation phase** (0-110M shares) allowing more participants to enter fairly, followed by gradual appreciation. Unlike predatory pump-and-dump curves, this design prioritizes **community building over extraction**.
+
+### C⁰ Continuity (No Cliff)
+
+The quadratic bridge phase ensures smooth transitions:
+
+```
+P(90M) = P_90 = 0.0000027 SOL (2.7× entry)
+P(110M) = P_110 = 0.000015 SOL (15× entry)
+```
+
+Simplified gas-optimized formula: `P = P_90 + (P_110 - P_90) · (progress/range)²`
+
+This ensures **price continuity** at phase transitions (jumps < 1%).
 
 ---
 
@@ -129,11 +130,17 @@ cd programs/djinn-market && anchor build && anchor deploy
 ## 🔬 Curve Verification
 
 ```bash
-# Run curve debug (verify 150x calibration)
-npx ts-node -e "const c = require('./lib/core-amm'); console.log(JSON.stringify(c.debugCurvePoints(), null, 2));"
+# Run comprehensive curve verification (verify 19x calibration)
+npx tsx verify-curve.ts
+
+# Run full test suite (34 tests)
+npx tsx test-complete.ts
+
+# Run smart contract tests
+cd programs/djinn-market && anchor test
 ```
 
-Expected output at 120M shares: `price: 0.00225` (150× from entry)
+Expected output at 120M shares: `price: 0.000019` (~19× from entry)
 
 ---
 

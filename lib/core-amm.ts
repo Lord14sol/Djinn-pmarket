@@ -12,10 +12,10 @@ export const TOTAL_SUPPLY = 1_000_000_000; // 1B Shares
 export const ANCHOR_THRESHOLD = 100_000_000; // 100M (10%)
 
 // PHASE BOUNDARIES (Scaled to match Rust: shares * 1e9 on-chain)
-const PHASE1_END = 90_000_000;    // 90M
-const PHASE2_START = 90_000_000;  // 90M
-const PHASE2_END = 110_000_000;   // 110M
-const PHASE3_START = 110_000_000; // 110M
+export const PHASE1_END = 90_000_000;    // 90M
+const PHASE2_START = 90_000_000;  // 90M (internal only)
+export const PHASE2_END = 110_000_000;   // 110M
+export const PHASE3_START = 110_000_000; // 110M
 
 // PRICE CONSTANTS (in SOL, matches Lamports conversion in lib.rs)
 const P_START = 0.000001;   // 1 nanoSOL (1 Lamport / 1e9)
@@ -23,11 +23,13 @@ const P_90 = 0.0000027;     // 2700 nanoSOL
 const P_110 = 0.000015;     // 15000 nanoSOL
 const P_MAX = 0.95;         // 950M nanoSOL (0.95 SOL cap)
 
-// SIGMOID CALIBRATION: 150x at 120M shares
-// Derivation: At x=120M, P(x) = 0.00015 SOL (150x from P_START)
-// Solving: 0.00015 = P_110 + (P_MAX - P_110) * sigmoid_norm(k * 10M)
-// Result: k = 2.84229e-8 (was 4.7e-10, now 60x STRONGER for true 150x)
-const K_SIGMOID = 0.0000000284229; // ← RECALIBRATED FOR 150X
+// SIGMOID CALIBRATION - ORIGINAL "GRADUAL GROWTH" DESIGN
+// ⚠️ LINEAR APPROXIMATION: norm_sig = k * x (not full sigmoid!)
+// Philosophy: Long accumulation phase, sustainable growth (~19x at 120M)
+// Smart contract: k_scaled = 470 (with shares × 1e9)
+// Frontend: k = 4.7e-4 (shares not scaled)
+// Derivation: At 120M, kz should be 4700 → k = 4700 / 10M = 0.00047
+const K_SIGMOID = 0.00047; // 4.7e-4 - Original gradual curve
 
 // LEGACY/COMPATIBILITY
 export const TOTAL_SUPPLY_CHAINHEAD = TOTAL_SUPPLY;
@@ -109,59 +111,59 @@ export function getSpotPrice(sharesSupply: number): number {
         return P_90 + price_delta;
 
     } else {
-        // PHASE 3: LINEAR SIGMOID APPROXIMATION (lib.rs line 95-113)
-        // Avoids exp() for gas efficiency: normalized_sigmoid(z) ≈ k * z
+        // PHASE 3: LINEAR SIGMOID APPROXIMATION (lib.rs line 98-117)
+        // EXACT MATCH with smart contract scaling
         const x_rel = sharesSupply - PHASE3_START;
 
-        // k * x_rel, clamped to [0, 1]
+        // k * x_rel (scaled)
+        // In contract: kz = (K_SIGMOID_SCALED * x_rel_scaled) / K_SCALE_FACTOR
+        // Here: x_rel is in shares (not scaled), so we compute kz directly
         const kz = K_SIGMOID * x_rel;
-        const norm_sig = Math.min(1, Math.max(0, kz));
 
-        // P = P_110 + (P_MAX - P_110) * norm_sig
-        const price_delta = (P_MAX - P_110) * norm_sig;
+        // Clamp to [0, 1e9] (contract line 112)
+        const norm_sig = Math.min(1_000_000_000, Math.max(0, kz));
+
+        // P = P_110 + (P_MAX - P_110) * norm_sig / 1e9 (contract line 115)
+        const price_delta = (P_MAX - P_110) * norm_sig / 1_000_000_000;
         return P_110 + price_delta;
     }
 }
 
 /**
- * Integrated Cost Function - For calculating total SOL spent from 0 to x
+ * Integrated Cost Function - Total SOL to buy from 0 to x shares
+ * ⚠️ MATCHES smart contract calculate_cost() logic
  */
 function getIntegratedCost(x: number): number {
     if (x <= 0) return 0;
 
     if (x <= PHASE1_END) {
-        // PHASE 1: Linear Integral = P_START*x + (slope/2)*x^2
-        return (P_START * x) + (LINEAR_SLOPE * x * x / 2);
-    } else if (x <= PHASE2_END) {
-        // PHASE 1 full cost + PHASE 2 partial
-        const phase1Cost = (P_START * PHASE1_END) + (LINEAR_SLOPE * PHASE1_END * PHASE1_END / 2);
+        // PHASE 1: ∫(P_START + m*s)ds = P_START*x + (m/2)*x²
+        return P_START * x + (LINEAR_SLOPE / 2) * x * x;
 
-        // Quadratic Integral: ∫(ax^2 + bx + c)dx = (a/3)x^3 + (b/2)x^2 + cx
-        const { a, b, c } = BRIDGE_COEFFS;
-        const F = (t: number) => (a / 3) * t * t * t + (b / 2) * t * t + c * t;
-        const phase2Cost = F(x) - F(PHASE2_START);
+    } else if (x <= PHASE2_END) {
+        // PHASE 1 full cost
+        const phase1Cost = P_START * PHASE1_END + (LINEAR_SLOPE / 2) * PHASE1_END * PHASE1_END;
+
+        // PHASE 2: ∫[P_90 + (P_110 - P_90) * ((s - 90M) / 20M)²]ds
+        // Let u = s - 90M, range = 20M
+        // = P_90 * u + (P_110 - P_90) * u³ / (3 * range²)
+        const progress = x - PHASE1_END;
+        const range = PHASE2_END - PHASE1_END;
+        const phase2Cost = P_90 * progress + (P_110 - P_90) * (progress ** 3) / (3 * range * range);
 
         return phase1Cost + phase2Cost;
+
     } else {
-        // PHASE 1 + PHASE 2 full + PHASE 3 partial
-        const phase1Cost = (P_START * PHASE1_END) + (LINEAR_SLOPE * PHASE1_END * PHASE1_END / 2);
+        // PHASE 1 + PHASE 2 full
+        const phase1Cost = P_START * PHASE1_END + (LINEAR_SLOPE / 2) * PHASE1_END * PHASE1_END;
 
-        const { a, b, c } = BRIDGE_COEFFS;
-        const F = (t: number) => (a / 3) * t * t * t + (b / 2) * t * t + c * t;
-        const phase2Cost = F(PHASE2_END) - F(PHASE2_START);
+        const fullRange = PHASE2_END - PHASE1_END;
+        const phase2Cost = P_90 * fullRange + (P_110 - P_90) * (fullRange ** 3) / (3 * fullRange * fullRange);
 
-        // Phase 3: Numerical approximation (trapezoidal) for sigmoid integral
+        // PHASE 3: ∫[P_110 + (P_MAX - P_110) * k * (s - 110M) / 1e9]ds
+        // = P_110 * u + (P_MAX - P_110) * k * u² / (2 * 1e9)
         const x_rel = x - PHASE3_START;
-        const steps = 100;
-        const dx = x_rel / steps;
-        let phase3Cost = 0;
-        for (let i = 0; i < steps; i++) {
-            const xLocal = PHASE3_START + i * dx;
-            const xNext = PHASE3_START + (i + 1) * dx;
-            const pLocal = getSpotPrice(xLocal);
-            const pNext = getSpotPrice(xNext);
-            phase3Cost += ((pLocal + pNext) / 2) * dx;
-        }
+        const phase3Cost = P_110 * x_rel + (P_MAX - P_110) * K_SIGMOID * (x_rel ** 2) / (2 * 1_000_000_000);
 
         return phase1Cost + phase2Cost + phase3Cost;
     }
@@ -244,47 +246,45 @@ export function simulateBuy(
 
 export function calculateImpliedProbability(yesMcap: number, noMcap: number): number {
     const total = yesMcap + noMcap;
-    if (total <= 0) return 50;
+    if (total <= 0) return 50; // No bets yet, 50/50
+    if (noMcap === 0) return 100; // All YES, 100% probability
+    if (yesMcap === 0) return 0;  // All NO, 0% probability
     return (yesMcap / total) * 100;
 }
 
+/**
+ * Inverse function: Given a price, return the supply
+ * Used for UI price synchronization
+ */
 export function getSupplyFromPrice(priceSol: number): number {
-    // Inverse of getSpotPrice for UI synchronization
     if (priceSol <= P_START) return 0;
 
     if (priceSol <= P_90) {
-        // PHASE 1: Inverse Linear
+        // PHASE 1 INVERSE: P = P_START + m*x → x = (P - P_START) / m
         return (priceSol - P_START) / LINEAR_SLOPE;
+
     } else if (priceSol <= P_110) {
-        // PHASE 2: Inverse Quadratic (use Newton-Raphson)
-        const { a, b, c } = BRIDGE_COEFFS;
-        // Solve ax^2 + bx + (c - price) = 0
-        const c_adj = c - priceSol;
-        const discriminant = b * b - 4 * a * c_adj;
-        if (discriminant < 0) return PHASE2_START;
-        const x = (-b + Math.sqrt(discriminant)) / (2 * a);
-        return Math.max(PHASE2_START, Math.min(PHASE2_END, x));
+        // PHASE 2 INVERSE: P = P_90 + (P_110 - P_90) * t²
+        // t² = (P - P_90) / (P_110 - P_90)
+        // t = sqrt(...)
+        // x = 90M + t * 20M
+        const ratio_sq = (priceSol - P_90) / (P_110 - P_90);
+        const ratio = Math.sqrt(Math.max(0, ratio_sq));
+        const range = PHASE2_END - PHASE1_END;
+        return PHASE1_END + ratio * range;
+
     } else {
-        // PHASE 3: Inverse Sigmoid
-        // P = P_110 + (P_MAX - P_110) * normalized_sigmoid
-        // normalized_sigmoid = (P - P_110) / (P_MAX - P_110)
-        const norm = (priceSol - P_110) / (P_MAX - P_110);
-        if (norm >= 1) return TOTAL_SUPPLY;
-        if (norm <= 0) return PHASE3_START;
+        // PHASE 3 INVERSE: P = P_110 + (P_MAX - P_110) * k * x_rel / 1e9
+        // x_rel = (P - P_110) * 1e9 / ((P_MAX - P_110) * k)
+        const price_delta = priceSol - P_110;
+        if (price_delta >= (P_MAX - P_110)) return TOTAL_SUPPLY;
+        if (price_delta <= 0) return PHASE3_START;
 
-        // normalized_sigmoid = (rawSig - 0.5) * 2
-        // rawSig = norm/2 + 0.5
-        const rawSig = norm / 2 + 0.5;
-        // rawSig = 1 / (1 + e^(-k*x_rel))
-        // 1 + e^(-k*x_rel) = 1/rawSig
-        // e^(-k*x_rel) = 1/rawSig - 1
-        // -k*x_rel = ln(1/rawSig - 1)
-        // x_rel = -ln(1/rawSig - 1) / k
-
-        const term = (1 / rawSig) - 1;
-        if (term <= 0) return TOTAL_SUPPLY;
-        const x_rel = -Math.log(term) / K_SIGMOID;
-        return PHASE3_START + Math.max(0, x_rel);
+        // norm_sig = price_delta / (P_MAX - P_110)
+        // x_rel = norm_sig * 1e9 / k
+        const norm_sig = price_delta / (P_MAX - P_110);
+        const x_rel = norm_sig * 1_000_000_000 / K_SIGMOID;
+        return PHASE3_START + Math.min(x_rel, TOTAL_SUPPLY - PHASE3_START);
     }
 }
 

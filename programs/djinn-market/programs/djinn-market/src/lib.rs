@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-declare_id!("DY1X52RW55bpNU5ZA8E3m6w1w7VG1ioHKpUt7jUkYSV9");
+declare_id!("HkjMQFag41pUutseBpXSXUuEwSKuc2CByRJjyiwAvGjL");
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // DJINN CURVE V3 HYBRID: "ROBIN HOOD" PROTOCOL
@@ -24,7 +24,10 @@ pub const P_110: u128 = 15_000;        // 0.000015 SOL = 15000 nanoSOL
 pub const P_MAX: u128 = 950_000_000;   // 0.95 SOL = 950M nanoSOL
 
 // SIGMOID K (Scaled: k * 1e18 for fixed-point)
-// Target: 150x at 120M → k = 4.7e-10 → k_scaled = 470
+// ⚠️ LINEAR APPROXIMATION: norm_sig = k * x (not exp-based sigmoid!)
+// Philosophy: GRADUAL GROWTH for democratization
+// k = 4.7e-10 → k_scaled = 470 (original design)
+// This gives ~19x at 120M shares, allowing longer accumulation phase
 pub const K_SIGMOID_SCALED: u128 = 470;
 pub const K_SCALE_FACTOR: u128 = 1_000_000_000_000_000_000; // 1e18
 
@@ -167,6 +170,7 @@ pub fn calculate_shares_from_sol(sol_in: u128, supply_old: u128) -> Result<u128>
 pub struct Market {
     pub creator: Pubkey,
     pub title: String,
+    pub nonce: i64,              // Unique nonce for duplicate titles
     pub yes_supply: u128,      // Current YES shares minted
     pub no_supply: u128,       // Current NO shares minted
     pub vault_balance: u128,   // Total SOL in vault (Lamports)
@@ -204,18 +208,20 @@ pub mod djinn_market {
         ctx: Context<InitializeMarket>,
         title: String,
         resolution_time: i64,
+        nonce: i64,
     ) -> Result<()> {
         let market = &mut ctx.accounts.market;
         
         market.creator = ctx.accounts.creator.key();
         market.title = title;
+        market.nonce = nonce;
         market.yes_supply = 0;
         market.no_supply = 0;
         market.vault_balance = 0;
         market.status = MarketStatus::Active;
         market.resolution_time = resolution_time;
         market.winning_outcome = None;
-        market.bump = ctx.bumps.market;
+        market.bump = *ctx.bumps.get("market").unwrap();
         
         // Calculate vault bump
         let (_, vault_bump) = Pubkey::find_program_address(
@@ -223,6 +229,21 @@ pub mod djinn_market {
             ctx.program_id
         );
         market.vault_bump = vault_bump;
+        
+        // CREATION FEE: ~$2 USD → ~0.01 SOL → 10_000_000 Lamports
+        // Transfer from creator to G1 treasury
+        let creation_fee: u64 = 10_000_000; // 0.01 SOL
+        
+        anchor_lang::system_program::transfer(
+            CpiContext::new(
+                ctx.accounts.system_program.to_account_info(),
+                anchor_lang::system_program::Transfer {
+                    from: ctx.accounts.creator.to_account_info(),
+                    to: ctx.accounts.protocol_treasury.to_account_info(),
+                },
+            ),
+            creation_fee,
+        )?;
         
         Ok(())
     }
@@ -492,6 +513,37 @@ pub mod djinn_market {
 // ═══════════════════════════════════════════════════════════════════════════════
 // ACCOUNT CONTEXTS
 // ═══════════════════════════════════════════════════════════════════════════════
+
+// InitializeMarket context with nonce in PDA seeds
+#[derive(Accounts)]
+#[instruction(title: String, resolution_time: i64, nonce: i64)]
+pub struct InitializeMarket<'info> {
+    #[account(
+        init,
+        payer = creator,
+        space = 8 + 32 + 4 + 64 + 8 + 16 + 16 + 16 + 1 + 8 + 2 + 1 + 1, // discriminator + pubkey + title_len + title_max + nonce + supplies + vault + status + resolution + outcome + bumps
+        seeds = [b"market", creator.key().as_ref(), title.as_bytes(), &nonce.to_le_bytes()],
+        bump
+    )]
+    pub market: Box<Account<'info, Market>>,
+    
+    /// CHECK: Vault PDA (will be created on first buy)
+    #[account(
+        mut,
+        seeds = [b"market_vault", market.key().as_ref()],
+        bump
+    )]
+    pub market_vault: AccountInfo<'info>,
+    
+    #[account(mut)]
+    pub creator: Signer<'info>,
+    
+    /// CHECK: Protocol treasury
+    #[account(mut)]
+    pub protocol_treasury: AccountInfo<'info>,
+    
+    pub system_program: Program<'info, System>,
+}
 
 #[derive(Accounts)]
 #[instruction(outcome: u8)]

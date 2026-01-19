@@ -67,10 +67,11 @@ export const useDjinnProtocol = () => {
                 throw new Error('Insufficient SOL balance (need ~0.01 SOL for transaction)');
             }
 
-            // Generate ABSOLUTELY UNIQUE nonce: timestamp + random
+            // Generate unique nonce for duplicate title support
             const nonce = Date.now() * 1000 + Math.floor(Math.random() * 1000);
             console.log("[Djinn] 🎲 Unique nonce generated:", nonce);
-            // Manual little-endian i64 conversion (browser compatible)
+
+            // Convert nonce to little-endian i64 bytes
             const nonceBuffer = new Uint8Array(8);
             let n = BigInt(nonce);
             for (let i = 0; i < 8; i++) {
@@ -78,12 +79,13 @@ export const useDjinnProtocol = () => {
                 n >>= BigInt(8);
             }
 
+            // Market PDA with nonce in seeds (allows duplicate titles)
             const [marketPda] = await PublicKey.findProgramAddress(
                 [
                     Buffer.from("market"),
                     wallet.publicKey.toBuffer(),
-                    Buffer.from(title),
-                    nonceBuffer
+                    Buffer.from(title.slice(0, 32)), // Truncate title for seed safety
+                    Buffer.from(nonceBuffer)
                 ],
                 program.programId
             );
@@ -139,24 +141,18 @@ export const useDjinnProtocol = () => {
             tx.add(modifyComputeUnits);
             tx.add(addPriorityFee);
 
-            // SANITY CHECK: Verify loaded IDL arguments
-            const idlInstruction = (program.idl as any).instructions.find((i: any) => i.name === 'initializeMarket');
-            console.log("🔍 ARGS EN IDL VIVO:", idlInstruction?.args);
-
-            console.log("DEBUG: Sending InitializeMarket Params:", {
+            console.log("DEBUG: Sending InitializeMarket Params (V3 with Nonce):", {
                 title,
                 resolutionTime: Math.floor(endDate.getTime() / 1000),
-                numOutcomes: 2,
-                curveConstant: 150_000_000_000
+                nonce
             });
 
+            // NEW: Contract now accepts 3 args: title, resolution_time, nonce
             const createIx = await program.methods
                 .initializeMarket(
-                    title,
+                    title.slice(0, 32), // Match seed truncation
                     new BN(Math.floor(endDate.getTime() / 1000)),
-                    new BN(2), // Force BN for u8 serialization safety
-                    new BN(1_000_000_000), // Heavyweight 1B Anchor
-                    new BN(nonce) // Unique nonce for duplicate titles
+                    new BN(nonce)
                 )
                 .accounts({
                     market: marketPda,
@@ -180,7 +176,7 @@ export const useDjinnProtocol = () => {
             tx.recentBlockhash = blockhash;
             tx.feePayer = wallet.publicKey;
 
-            console.log("[Djinn] Sending transaction with nonce:", nonce, "blockhash:", blockhash.slice(0, 10) + "...");
+            console.log("[Djinn] Sending transaction, blockhash:", blockhash.slice(0, 10) + "...");
             const signature = await provider.sendAndConfirm(tx, [], {
                 commitment: 'confirmed',
                 skipPreflight: true // BYPASS simulation caching issues
@@ -190,6 +186,13 @@ export const useDjinnProtocol = () => {
             return { tx: signature, marketPda, yesMintPda, noMintPda };
         } catch (error) {
             console.error("Error creating market:", error);
+            if (typeof error === 'object' && error !== null) {
+                console.error("Error details:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+                if ((error as any).logs) {
+                    console.error("📜 Program Logs:");
+                    (error as any).logs.forEach((log: string) => console.log(log));
+                }
+            }
             throw error;
         }
     }, [program, wallet]);
@@ -259,6 +262,13 @@ export const useDjinnProtocol = () => {
 
         } catch (error) {
             console.error("Error buying shares:", error);
+            if (typeof error === 'object' && error !== null) {
+                console.error("Error details:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+                if ((error as any).logs) {
+                    console.error("📜 Program Logs:");
+                    (error as any).logs.forEach((log: string) => console.log(log));
+                }
+            }
             throw error;
         }
     }, [program, wallet]);

@@ -91,14 +91,6 @@
           "type": "i64"
         },
         {
-          "name": "numOutcomes",
-          "type": "u8"
-        },
-        {
-          "name": "curveConstant",
-          "type": "u128"
-        },
-        {
           "name": "nonce",
           "type": "i64"
         }
@@ -744,6 +736,6 @@
     }
   ],
   "metadata": {
-    "address": "DY1X52RW55bpNU5ZA8E3m6w1w7VG1ioHKpUt7jUkYSV9"
+    "address": "HkjMQFag41pUutseBpXSXUuEwSKuc2CByRJjyiwAvGjL"
   }
 }

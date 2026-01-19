@@ -1,7 +1,7 @@
 import { PublicKey } from '@solana/web3.js';
 
-// Djinn Prediction Market// 1. Program ID (New Heavyweight Deployment)
-export const PROGRAM_ID = "DY1X52RW55bpNU5ZA8E3m6w1w7VG1ioHKpUt7jUkYSV9";
+// Djinn Prediction Market - Program ID (New Heavyweight Deployment with Nonce Support)
+export const PROGRAM_ID = "HkjMQFag41pUutseBpXSXUuEwSKuc2CByRJjyiwAvGjL";
 
 // Fee constants (Matches V3 Verified Smart Contract)
 export const MARKET_CREATION_FEE = 30_000_000; // ~0.03 SOL ($3 USD approx)
