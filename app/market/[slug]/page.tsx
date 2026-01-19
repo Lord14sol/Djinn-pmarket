@@ -1345,13 +1345,13 @@ export default function Page() {
                                         placeholder="0"
                                     />
                                     {/* SOL ICON (Refined) */}
-                                    <div className="flex items-center gap-1.5 bg-black/30 px-2.5 py-1 rounded-full border border-white/5">
+                                    <div className="flex items-center gap-2 bg-black/50 px-3 py-1.5 rounded-full border border-white/10">
                                         <img
                                             src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
-                                            className="w-4 h-4 rounded-full"
+                                            className="w-6 h-6 rounded-full ring-1 ring-white/20"
                                             alt="SOL"
                                         />
-                                        <span className="text-[10px] font-semibold text-gray-400">SOL</span>
+                                        <span className="text-xs font-bold text-white">SOL</span>
                                     </div>
                                 </div>
                             </div>
