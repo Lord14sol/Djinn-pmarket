@@ -1348,7 +1348,7 @@ export default function Page() {
                                     <div className="flex items-center gap-2 bg-black/50 px-3 py-1.5 rounded-full border border-white/10">
                                         <img
                                             src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
-                                            className="w-6 h-6 rounded-full ring-1 ring-white/20"
+                                            className="w-6 h-6 rounded-full"
                                             alt="SOL"
                                         />
                                         <span className="text-xs font-bold text-white">SOL</span>
