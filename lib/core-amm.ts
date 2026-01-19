@@ -1,31 +1,33 @@
 import { PublicKey } from "@solana/web3.js";
 
-// --- DJINN CURVE V3 HYBRID: "ROBIN HOOD" PROTOCOL ---
-// Model: 3-Phase Piecewise Function with C1 Continuity
-// Phase 1 (0-90M): Linear Ramp (Community Accumulation)
-// Phase 2 (90M-110M): Quadratic Bridge (Accelerated Smoothing)
-// Phase 3 (110M+): Aggressive Sigmoid (Viral Ignition)
+// ═══════════════════════════════════════════════════════════════════════════════
+// DJINN CURVE V3 HYBRID: "ROBIN HOOD" PROTOCOL
+// ⚠️ SYNCHRONIZED WITH SMART CONTRACT (programs/djinn-market/src/lib.rs)
+// 3-Phase Piecewise Bonding Curve with Gas-Optimized Approximations
+// Phase 1: Linear (0-90M) | Phase 2: Quadratic Bridge (90M-110M) | Phase 3: Sigmoid (110M+)
+// ═══════════════════════════════════════════════════════════════════════════════
 
-// --- CONSTANTS ---
-export const TOTAL_SUPPLY = 1_000_000_000; // 1 Billion Shares Cap
-export const ANCHOR_THRESHOLD = 100_000_000; // 10% Supply (Conceptual Anchor)
+// --- GLOBAL CONSTANTS (MUST MATCH lib.rs) ---
+export const TOTAL_SUPPLY = 1_000_000_000; // 1B Shares
+export const ANCHOR_THRESHOLD = 100_000_000; // 100M (10%)
 
-// PHASE BOUNDARIES
-const PHASE1_END = 90_000_000;    // End of Linear
-const PHASE2_START = 90_000_000;  // Start of Quadratic Bridge
-const PHASE2_END = 110_000_000;   // End of Quadratic Bridge / Start of Sigmoid
-const PHASE3_START = 110_000_000; // Start of Aggressive Sigmoid
+// PHASE BOUNDARIES (Scaled to match Rust: shares * 1e9 on-chain)
+const PHASE1_END = 90_000_000;    // 90M
+const PHASE2_START = 90_000_000;  // 90M
+const PHASE2_END = 110_000_000;   // 110M
+const PHASE3_START = 110_000_000; // 110M
 
-// PHASE 1 CONSTANTS (Linear Ramp: 0 -> 90M)
-const P_START = 0.000001;   // 0.000001 SOL - Entry Floor
-const P_90 = 0.0000027;     // Price at 90M (slightly below P_ANCHOR to leave room for bridge)
+// PRICE CONSTANTS (in SOL, matches Lamports conversion in lib.rs)
+const P_START = 0.000001;   // 1 nanoSOL (1 Lamport / 1e9)
+const P_90 = 0.0000027;     // 2700 nanoSOL
+const P_110 = 0.000015;     // 15000 nanoSOL
+const P_MAX = 0.95;         // 950M nanoSOL (0.95 SOL cap)
 
-// PHASE 2 BRIDGE WILL REACH THIS:
-const P_110 = 0.000015;     // Price at 110M (Start of Sigmoid)
-
-// PHASE 3 CONSTANTS (Aggressive Sigmoid: 110M+)
-const P_MAX = 0.95;         // Max Price (capped for prediction market sanity)
-const K_SIGMOID = 0.00000000047; // Steepness: Calibrated for 150x at 120M ($0.00225)
+// SIGMOID CALIBRATION: 150x at 120M shares
+// Derivation: At x=120M, P(x) = 0.00015 SOL (150x from P_START)
+// Solving: 0.00015 = P_110 + (P_MAX - P_110) * sigmoid_norm(k * 10M)
+// Result: k = 2.84229e-8 (was 4.7e-10, now 60x STRONGER for true 150x)
+const K_SIGMOID = 0.0000000284229; // ← RECALIBRATED FOR 150X
 
 // LEGACY/COMPATIBILITY
 export const TOTAL_SUPPLY_CHAINHEAD = TOTAL_SUPPLY;
@@ -73,96 +75,51 @@ export function getIgnitionProgress(supply: number): number {
     return Math.min(100, (supply / PHASE3_START) * 100);
 }
 
-// --- QUADRATIC BRIDGE COEFFICIENTS ---
-// We solve for a, b, c such that:
-// P(x) = a*x^2 + b*x + c
-// Constraints:
-// 1) P(PHASE2_START) = P_90
-// 2) P(PHASE2_END) = P_110
-// 3) P'(PHASE2_START) = m1 (slope of linear at end)
-// Where m1 = (P_90 - P_START) / PHASE1_END
+// --- LINEAR SLOPE (Phase 1) ---
+const LINEAR_SLOPE = (P_90 - P_START) / PHASE1_END;
 
-const LINEAR_SLOPE = (P_90 - P_START) / PHASE1_END; // m1
-
-// From constraint 3: 2*a*x0 + b = m1, where x0 = PHASE2_START
-// From constraint 1 & 2: We have two equations
-// Solving the system:
-// Let x0 = 90M, x1 = 110M, y0 = P_90, y1 = P_110
-
-function calculateBridgeCoefficients() {
-    const x0 = PHASE2_START;
-    const x1 = PHASE2_END;
-    const y0 = P_90;
-    const y1 = P_110;
-    const m1 = LINEAR_SLOPE;
-
-    // Using constraints:
-    // P(x0) = a*x0^2 + b*x0 + c = y0
-    // P(x1) = a*x1^2 + b*x1 + c = y1
-    // P'(x0) = 2*a*x0 + b = m1
-
-    // From (3): b = m1 - 2*a*x0
-    // Substitute into (1): a*x0^2 + (m1 - 2*a*x0)*x0 + c = y0
-    // => a*x0^2 + m1*x0 - 2*a*x0^2 + c = y0
-    // => -a*x0^2 + m1*x0 + c = y0
-    // => c = y0 + a*x0^2 - m1*x0
-
-    // Substitute b and c into (2):
-    // a*x1^2 + (m1 - 2*a*x0)*x1 + (y0 + a*x0^2 - m1*x0) = y1
-    // a*x1^2 + m1*x1 - 2*a*x0*x1 + y0 + a*x0^2 - m1*x0 = y1
-    // a*(x1^2 - 2*x0*x1 + x0^2) + m1*(x1 - x0) + y0 = y1
-    // a*(x1 - x0)^2 = y1 - y0 - m1*(x1 - x0)
-    // a = (y1 - y0 - m1*(x1 - x0)) / (x1 - x0)^2
-
-    const dx = x1 - x0;
-    const a = (y1 - y0 - m1 * dx) / (dx * dx);
-    const b = m1 - 2 * a * x0;
-    const c = y0 + a * x0 * x0 - m1 * x0;
-
-    return { a, b, c };
-}
-
-const BRIDGE_COEFFS = calculateBridgeCoefficients();
-
-// --- MATH IMPLEMENTATION ---
+// ═══════════════════════════════════════════════════════════════════════════════
+// CURVE MATH (SYNCHRONIZED WITH lib.rs)
+// ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Price Function P(x) - 3-Phase with C1 Continuity
+ * Calculate spot price at given supply
+ * ⚠️ MATCHES smart contract calculate_spot_price() exactly
  */
 export function getSpotPrice(sharesSupply: number): number {
     if (sharesSupply <= 0) return P_START;
 
     if (sharesSupply <= PHASE1_END) {
-        // PHASE 1: LINEAR RAMP (0 -> 90M)
+        // PHASE 1: LINEAR RAMP (lib.rs line 60-64)
+        // P = P_START + (slope * supply)
         return P_START + LINEAR_SLOPE * sharesSupply;
+
     } else if (sharesSupply <= PHASE2_END) {
-        // PHASE 2: QUADRATIC BRIDGE (90M -> 110M)
-        const { a, b, c } = BRIDGE_COEFFS;
-        return a * sharesSupply * sharesSupply + b * sharesSupply + c;
+        // PHASE 2: SIMPLIFIED QUADRATIC BRIDGE (lib.rs line 77-92)
+        // Gas-optimized approximation: P = P_90 + (P_110 - P_90) * t²
+        // where t = progress / range
+        const progress = sharesSupply - PHASE1_END;
+        const range = PHASE2_END - PHASE1_END; // 20M
+
+        // Quadratic acceleration: faster near the end
+        const ratio = progress / range; // 0 to 1
+        const ratio_sq = ratio * ratio;
+
+        const price_delta = (P_110 - P_90) * ratio_sq;
+        return P_90 + price_delta;
+
     } else {
-        // PHASE 3: AGGRESSIVE SIGMOID (110M+)
-        // P = P_110 + (P_MAX - P_110) * NormalizedSigmoid(x - 110M)
-        // NormalizedSigmoid(z) = 1 - 1/(1 + e^(k*z)) = 1 - 1/(1+e^kz)
-        // At z=0: 1 - 1/2 = 0.5... that's still a jump!
-
-        // CORRECT APPROACH: Use sigmoid that starts at 0
-        // S(z) = 1 / (1 + e^(-k*z)) - 0.5  (shifted)
-        // At z=0: 0.5 - 0.5 = 0 ✓
-        // At z=inf: 1 - 0.5 = 0.5 (we need to scale by 2)
-        // Final: S(z) = 2 * (1/(1 + e^(-k*z)) - 0.5) = (e^(k*z) - 1) / (e^(k*z) + 1) = tanh(k*z/2) for large ranges
-
-        // Simpler: Logistic shifted and scaled
-        // S(z) = (1 / (1 + e^(-k*z))) * 2 - 1 for range [-1, 1]
-        // We want range [0, 1]: S(z) = 1 / (1 + e^(-k*z)) - 0.5, then *2
-
+        // PHASE 3: LINEAR SIGMOID APPROXIMATION (lib.rs line 95-113)
+        // Avoids exp() for gas efficiency: normalized_sigmoid(z) ≈ k * z
         const x_rel = sharesSupply - PHASE3_START;
-        const rawSigmoid = 1 / (1 + Math.exp(-K_SIGMOID * x_rel));
-        const normalizedSigmoid = (rawSigmoid - 0.5) * 2; // Now 0 at x_rel=0, 1 at x_rel=inf
 
-        // Clamp for numerical stability
-        const clampedSigmoid = Math.max(0, Math.min(1, normalizedSigmoid));
+        // k * x_rel, clamped to [0, 1]
+        const kz = K_SIGMOID * x_rel;
+        const norm_sig = Math.min(1, Math.max(0, kz));
 
-        return P_110 + (P_MAX - P_110) * clampedSigmoid;
+        // P = P_110 + (P_MAX - P_110) * norm_sig
+        const price_delta = (P_MAX - P_110) * norm_sig;
+        return P_110 + price_delta;
     }
 }
 

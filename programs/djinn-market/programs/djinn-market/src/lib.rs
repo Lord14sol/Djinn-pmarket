@@ -199,6 +199,34 @@ pub struct UserPosition {
 pub mod djinn_market {
     use super::*;
 
+    /// Create a new prediction market
+    pub fn initialize_market(
+        ctx: Context<InitializeMarket>,
+        title: String,
+        resolution_time: i64,
+    ) -> Result<()> {
+        let market = &mut ctx.accounts.market;
+        
+        market.creator = ctx.accounts.creator.key();
+        market.title = title;
+        market.yes_supply = 0;
+        market.no_supply = 0;
+        market.vault_balance = 0;
+        market.status = MarketStatus::Active;
+        market.resolution_time = resolution_time;
+        market.winning_outcome = None;
+        market.bump = ctx.bumps.market;
+        
+        // Calculate vault bump
+        let (_, vault_bump) = Pubkey::find_program_address(
+            &[b"market_vault", market.key().as_ref()],
+            ctx.program_id
+        );
+        market.vault_bump = vault_bump;
+        
+        Ok(())
+    }
+
     pub fn buy_shares(
         ctx: Context<BuyShares>,
         outcome: u8, // 0 = YES, 1 = NO
