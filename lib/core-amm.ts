@@ -1,10 +1,11 @@
 import { PublicKey } from "@solana/web3.js";
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// DJINN CURVE V3 HYBRID: "ROBIN HOOD" PROTOCOL
+// DJINN CURVE V4 AGGRESSIVE: "EARLY BIRD REWARDS"
 // ⚠️ SYNCHRONIZED WITH SMART CONTRACT (programs/djinn-market/src/lib.rs)
-// 3-Phase Piecewise Bonding Curve with Gas-Optimized Approximations
-// Phase 1: Linear (0-90M) | Phase 2: Quadratic Bridge (90M-110M) | Phase 3: Sigmoid (110M+)
+// 3-Phase Piecewise Bonding Curve with Progressive Gains
+// Phase 1: Linear (0-50M → 6x) | Phase 2: Quadratic (50M-90M → 15x) | Phase 3: Sigmoid (90M+)
+// Progressive: 10M=2x, 20M=3x, 30M=4x, 40M=5x, 50M=6x
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // --- GLOBAL CONSTANTS (MUST MATCH lib.rs) ---
@@ -12,15 +13,16 @@ export const TOTAL_SUPPLY = 1_000_000_000; // 1B Shares
 export const ANCHOR_THRESHOLD = 100_000_000; // 100M (10%)
 
 // PHASE BOUNDARIES (Scaled to match Rust: shares * 1e9 on-chain)
-export const PHASE1_END = 90_000_000;    // 90M
-const PHASE2_START = 90_000_000;  // 90M (internal only)
-export const PHASE2_END = 110_000_000;   // 110M
-export const PHASE3_START = 110_000_000; // 110M
+// ⚠️ AGGRESSIVE CURVE: Early birds get progressive gains (2x, 3x, 4x, 5x, 6x)
+export const PHASE1_END = 50_000_000;    // 50M → 6x price
+const PHASE2_START = 50_000_000;  // 50M (internal only)
+export const PHASE2_END = 90_000_000;    // 90M → 15x price
+export const PHASE3_START = 90_000_000;  // 90M → MONSTRUOSO
 
 // PRICE CONSTANTS (in SOL, matches Lamports conversion in lib.rs)
 const P_START = 0.000001;   // 1 nanoSOL (1 Lamport / 1e9)
-const P_90 = 0.0000027;     // 2700 nanoSOL
-const P_110 = 0.000015;     // 15000 nanoSOL
+const P_50 = 0.000006;      // 6000 nanoSOL (6x from start) - Phase 1 end
+const P_90 = 0.000015;      // 15000 nanoSOL (15x from start) - Phase 2 end
 const P_MAX = 0.95;         // 950M nanoSOL (0.95 SOL cap)
 
 // SIGMOID CALIBRATION - ORIGINAL "GRADUAL GROWTH" DESIGN
@@ -77,8 +79,8 @@ export function getIgnitionProgress(supply: number): number {
     return Math.min(100, (supply / PHASE3_START) * 100);
 }
 
-// --- LINEAR SLOPE (Phase 1) ---
-const LINEAR_SLOPE = (P_90 - P_START) / PHASE1_END;
+// --- LINEAR SLOPE (Phase 1: 0 → 50M, achieves 6x) ---
+const LINEAR_SLOPE = (P_50 - P_START) / PHASE1_END;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CURVE MATH (SYNCHRONIZED WITH lib.rs)
@@ -97,35 +99,27 @@ export function getSpotPrice(sharesSupply: number): number {
         return P_START + LINEAR_SLOPE * sharesSupply;
 
     } else if (sharesSupply <= PHASE2_END) {
-        // PHASE 2: SIMPLIFIED QUADRATIC BRIDGE (lib.rs line 77-92)
-        // Gas-optimized approximation: P = P_90 + (P_110 - P_90) * t²
-        // where t = progress / range
+        // PHASE 2: QUADRATIC ACCELERATION (50M-90M)
+        // P = P_50 + (P_90 - P_50) * t²
         const progress = sharesSupply - PHASE1_END;
-        const range = PHASE2_END - PHASE1_END; // 20M
+        const range = PHASE2_END - PHASE1_END; // 40M
 
-        // Quadratic acceleration: faster near the end
         const ratio = progress / range; // 0 to 1
         const ratio_sq = ratio * ratio;
 
-        const price_delta = (P_110 - P_90) * ratio_sq;
-        return P_90 + price_delta;
+        const price_delta = (P_90 - P_50) * ratio_sq;
+        return P_50 + price_delta;
 
     } else {
-        // PHASE 3: LINEAR SIGMOID APPROXIMATION (lib.rs line 98-117)
-        // EXACT MATCH with smart contract scaling
+        // PHASE 3: SIGMOID MONSTRUOSO (90M+)
         const x_rel = sharesSupply - PHASE3_START;
 
-        // k * x_rel (scaled)
-        // In contract: kz = (K_SIGMOID_SCALED * x_rel_scaled) / K_SCALE_FACTOR
-        // Here: x_rel is in shares (not scaled), so we compute kz directly
         const kz = K_SIGMOID * x_rel;
-
-        // Clamp to [0, 1e9] (contract line 112)
         const norm_sig = Math.min(1_000_000_000, Math.max(0, kz));
 
-        // P = P_110 + (P_MAX - P_110) * norm_sig / 1e9 (contract line 115)
-        const price_delta = (P_MAX - P_110) * norm_sig / 1_000_000_000;
-        return P_110 + price_delta;
+        // P = P_90 + (P_MAX - P_90) * norm_sig / 1e9
+        const price_delta = (P_MAX - P_90) * norm_sig / 1_000_000_000;
+        return P_90 + price_delta;
     }
 }
 
@@ -144,12 +138,10 @@ function getIntegratedCost(x: number): number {
         // PHASE 1 full cost
         const phase1Cost = P_START * PHASE1_END + (LINEAR_SLOPE / 2) * PHASE1_END * PHASE1_END;
 
-        // PHASE 2: ∫[P_90 + (P_110 - P_90) * ((s - 90M) / 20M)²]ds
-        // Let u = s - 90M, range = 20M
-        // = P_90 * u + (P_110 - P_90) * u³ / (3 * range²)
+        // PHASE 2: ∫[P_50 + (P_90 - P_50) * ((s - 50M) / 40M)²]ds
         const progress = x - PHASE1_END;
         const range = PHASE2_END - PHASE1_END;
-        const phase2Cost = P_90 * progress + (P_110 - P_90) * (progress ** 3) / (3 * range * range);
+        const phase2Cost = P_50 * progress + (P_90 - P_50) * (progress ** 3) / (3 * range * range);
 
         return phase1Cost + phase2Cost;
 
@@ -158,12 +150,11 @@ function getIntegratedCost(x: number): number {
         const phase1Cost = P_START * PHASE1_END + (LINEAR_SLOPE / 2) * PHASE1_END * PHASE1_END;
 
         const fullRange = PHASE2_END - PHASE1_END;
-        const phase2Cost = P_90 * fullRange + (P_110 - P_90) * (fullRange ** 3) / (3 * fullRange * fullRange);
+        const phase2Cost = P_50 * fullRange + (P_90 - P_50) * (fullRange ** 3) / (3 * fullRange * fullRange);
 
-        // PHASE 3: ∫[P_110 + (P_MAX - P_110) * k * (s - 110M) / 1e9]ds
-        // = P_110 * u + (P_MAX - P_110) * k * u² / (2 * 1e9)
+        // PHASE 3: ∫[P_90 + (P_MAX - P_90) * k * (s - 90M) / 1e9]ds
         const x_rel = x - PHASE3_START;
-        const phase3Cost = P_110 * x_rel + (P_MAX - P_110) * K_SIGMOID * (x_rel ** 2) / (2 * 1_000_000_000);
+        const phase3Cost = P_90 * x_rel + (P_MAX - P_90) * K_SIGMOID * (x_rel ** 2) / (2 * 1_000_000_000);
 
         return phase1Cost + phase2Cost + phase3Cost;
     }

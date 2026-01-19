@@ -3,24 +3,25 @@ use anchor_lang::prelude::*;
 declare_id!("HkjMQFag41pUutseBpXSXUuEwSKuc2CByRJjyiwAvGjL");
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// DJINN CURVE V3 HYBRID: "ROBIN HOOD" PROTOCOL
-// 3-Phase Piecewise Bonding Curve with C1 Continuity
-// Phase 1: Linear (0-90M) | Phase 2: Quadratic Bridge (90M-110M) | Phase 3: Sigmoid (110M+)
+// DJINN CURVE V4 AGGRESSIVE: "EARLY BIRD REWARDS"
+// 3-Phase Piecewise Bonding Curve with Progressive Gains
+// Phase 1: Linear (0-50M → 6x) | Phase 2: Quadratic (50M-90M → 15x) | Phase 3: Sigmoid (90M+)
+// Progressive: 10M=2x, 20M=3x, 30M=4x, 40M=5x, 50M=6x
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // --- GLOBAL CONSTANTS ---
 pub const TOTAL_SUPPLY: u128 = 1_000_000_000_000_000_000; // 1B Shares * 1e9 (9 decimals)
 pub const ANCHOR_THRESHOLD: u128 = 100_000_000_000_000_000; // 100M * 1e9
 
-// PHASE BOUNDARIES (Scaled by 1e9)
-pub const PHASE1_END: u128 = 90_000_000_000_000_000;   // 90M
-pub const PHASE2_END: u128 = 110_000_000_000_000_000;  // 110M
-pub const PHASE3_START: u128 = 110_000_000_000_000_000;
+// PHASE BOUNDARIES (Scaled by 1e9) - AGGRESSIVE CURVE
+pub const PHASE1_END: u128 = 50_000_000_000_000_000;   // 50M → 6x price
+pub const PHASE2_END: u128 = 90_000_000_000_000_000;   // 90M → 15x price
+pub const PHASE3_START: u128 = 90_000_000_000_000_000; // 90M → MONSTRUOSO
 
 // PRICE CONSTANTS (in Lamports, 1 SOL = 1e9 Lamports)
 pub const P_START: u128 = 1;           // 0.000000001 SOL (for precision)
-pub const P_90: u128 = 2_700;          // 0.0000027 SOL = 2700 nanoSOL
-pub const P_110: u128 = 15_000;        // 0.000015 SOL = 15000 nanoSOL
+pub const P_50: u128 = 6_000;          // 0.000006 SOL = 6x from start (Phase 1 end)
+pub const P_90: u128 = 15_000;         // 0.000015 SOL = 15x from start (Phase 2 end)
 pub const P_MAX: u128 = 950_000_000;   // 0.95 SOL = 950M nanoSOL
 
 // SIGMOID K (Scaled: k * 1e18 for fixed-point)
@@ -41,16 +42,13 @@ pub const BPS_DENOMINATOR: u128 = 10_000;
 pub const G1_TREASURY: Pubkey = anchor_lang::solana_program::pubkey!("G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma");
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// CURVE MATH (V3 HYBRID: 3-PHASE PIECEWISE)
+// CURVE MATH (V4 AGGRESSIVE: 3-PHASE PIECEWISE)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Linear slope for Phase 1: m = (P_90 - P_START) / PHASE1_END
+/// Linear slope for Phase 1: m = (P_50 - P_START) / PHASE1_END
 fn get_linear_slope() -> u128 {
-    // (2700 - 1) / 90e15 ≈ 3e-14 → scaled: (2699 * 1e18) / 90e15
-    // Simplified: we compute inline to avoid overflow
-    // slope_scaled = (P_90 - P_START) * SCALE / PHASE1_END
-    // For precision: return per-unit slope * 1e18
-    ((P_90 - P_START) * K_SCALE_FACTOR) / PHASE1_END
+    // (6000 - 1) / 50e15 → steeper slope for faster gains
+    ((P_50 - P_START) * K_SCALE_FACTOR) / PHASE1_END
 }
 
 /// Calculate spot price at given supply (in nanoSOL/Lamports)
@@ -77,43 +75,32 @@ pub fn calculate_spot_price(supply: u128) -> Result<u128> {
     }
 }
 
-/// Quadratic Bridge: P = a*x^2 + b*x + c
-/// Constraints: P(90M) = P_90, P(110M) = P_110, P'(90M) = linear_slope
+/// Quadratic Bridge: P = P_50 + (P_90 - P_50) * t²
 fn calculate_bridge_price(supply: u128) -> Result<u128> {
-    // For computational simplicity in Rust/Solana, we use linear interpolation
-    // approximation within the bridge zone (production would use pre-computed LUT)
-    
     let progress = supply.checked_sub(PHASE1_END).unwrap();
-    let range = PHASE2_END - PHASE1_END; // 20M
+    let range = PHASE2_END - PHASE1_END; // 40M
     
-    // Quadratic acceleration: faster near the end
-    // P = P_90 + (P_110 - P_90) * (progress/range)^2
+    // Quadratic acceleration: P = P_50 + (P_90 - P_50) * (progress/range)²
     let ratio = (progress * 1_000_000) / range; // Scaled by 1e6
-    let ratio_sq = (ratio * ratio) / 1_000_000; // (progress/range)^2 * 1e6
+    let ratio_sq = (ratio * ratio) / 1_000_000; // (progress/range)² * 1e6
     
-    let price_delta = ((P_110 - P_90) * ratio_sq) / 1_000_000;
-    Ok(P_90 + price_delta)
+    let price_delta = ((P_90 - P_50) * ratio_sq) / 1_000_000;
+    Ok(P_50 + price_delta)
 }
 
-/// Sigmoid Phase: P = P_110 + (P_MAX - P_110) * normalized_sigmoid(x - 110M)
-/// normalized_sigmoid(z) = (1/(1+e^(-k*z)) - 0.5) * 2
+/// Sigmoid Phase: P = P_90 + (P_MAX - P_90) * normalized_sigmoid(x - 90M)
 fn calculate_sigmoid_price(supply: u128) -> Result<u128> {
     let x_rel = supply.checked_sub(PHASE3_START).unwrap();
     
-    // Approximate sigmoid using piecewise linear (for gas efficiency)
-    // tanh approximation: sigmoid(z) ≈ 0.5 + 0.5 * tanh(k*z/2)
-    // For deep liquidity (small k), use linear approximation near origin:
-    // normalized_sigmoid(z) ≈ k * z (for small k*z)
-    
-    // k * x_rel (scaled)
+    // Linear approximation: norm_sig = k * x
     let kz = (K_SIGMOID_SCALED * x_rel) / K_SCALE_FACTOR;
     
-    // Clamp to [0, 1e9] for normalized sigmoid
+    // Clamp to [0, 1e9]
     let norm_sig = if kz > 1_000_000_000 { 1_000_000_000 } else { kz };
     
-    // P = P_110 + (P_MAX - P_110) * norm_sig / 1e9
-    let price_delta = ((P_MAX - P_110) * norm_sig) / 1_000_000_000;
-    Ok(P_110 + price_delta)
+    // P = P_90 + (P_MAX - P_90) * norm_sig / 1e9
+    let price_delta = ((P_MAX - P_90) * norm_sig) / 1_000_000_000;
+    Ok(P_90 + price_delta)
 }
 
 /// Calculate cost to buy from supply_old to supply_new
