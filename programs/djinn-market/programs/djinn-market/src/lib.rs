@@ -320,6 +320,111 @@ pub mod djinn_market {
         
         Ok(())
     }
+
+    /// Resolve market - declares the winning outcome
+    pub fn resolve_market(
+        ctx: Context<ResolveMarket>,
+        winning_outcome: u8, // 0 = YES, 1 = NO
+    ) -> Result<()> {
+        let market = &mut ctx.accounts.market;
+        
+        require!(market.status == MarketStatus::Active, DjinnError::MarketNotActive);
+        require!(winning_outcome <= 1, DjinnError::InvalidOutcome);
+        
+        // Check resolution time
+        let now = Clock::get()?.unix_timestamp;
+        require!(now >= market.resolution_time, DjinnError::MarketNotExpired);
+        
+        // Extract resolution fee (2%)
+        let resolution_fee = (market.vault_balance * RESOLUTION_FEE_BPS) / BPS_DENOMINATOR;
+        
+        if resolution_fee > 0 {
+            let market_key = market.key();
+            let seeds = &[
+                b"market_vault",
+                market_key.as_ref(),
+                &[market.vault_bump],
+            ];
+            let signer = &[&seeds[..]];
+            
+            anchor_lang::system_program::transfer(
+                CpiContext::new_with_signer(
+                    ctx.accounts.system_program.to_account_info(),
+                    anchor_lang::system_program::Transfer {
+                        from: ctx.accounts.market_vault.to_account_info(),
+                        to: ctx.accounts.protocol_treasury.to_account_info(),
+                    },
+                    signer,
+                ),
+                resolution_fee as u64,
+            )?;
+            
+            market.vault_balance = market.vault_balance.checked_sub(resolution_fee).unwrap();
+        }
+        
+        market.status = MarketStatus::Resolved;
+        market.winning_outcome = Some(winning_outcome);
+        
+        Ok(())
+    }
+
+    /// Claim winnings after market resolution
+    pub fn claim_winnings(
+        ctx: Context<ClaimWinnings>,
+        outcome: u8,
+    ) -> Result<()> {
+        let market = &mut ctx.accounts.market;
+        let position = &mut ctx.accounts.user_position;
+        
+        require!(market.status == MarketStatus::Resolved, DjinnError::MarketNotResolved);
+        require!(!position.claimed, DjinnError::AlreadyClaimed);
+        require!(position.shares > 0, DjinnError::NoShares);
+        
+        let winning_outcome = market.winning_outcome.unwrap();
+        require!(outcome == winning_outcome, DjinnError::NotWinner);
+        
+        // Calculate payout: user_shares / total_winning_shares * vault_balance
+        let total_winning_shares = if winning_outcome == 0 { 
+            market.yes_supply 
+        } else { 
+            market.no_supply 
+        };
+        
+        if total_winning_shares == 0 {
+            return Ok(());
+        }
+        
+        let payout = (market.vault_balance * position.shares) / total_winning_shares;
+        
+        // Transfer payout
+        let market_key = market.key();
+        let seeds = &[
+            b"market_vault",
+            market_key.as_ref(),
+            &[market.vault_bump],
+        ];
+        let signer = &[&seeds[..]];
+        
+        if payout > 0 {
+            anchor_lang::system_program::transfer(
+                CpiContext::new_with_signer(
+                    ctx.accounts.system_program.to_account_info(),
+                    anchor_lang::system_program::Transfer {
+                        from: ctx.accounts.market_vault.to_account_info(),
+                        to: ctx.accounts.user.to_account_info(),
+                    },
+                    signer,
+                ),
+                payout as u64,
+            )?;
+            
+            market.vault_balance = market.vault_balance.checked_sub(payout).unwrap();
+        }
+        
+        position.claimed = true;
+        
+        Ok(())
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -382,6 +487,49 @@ pub struct SellShares<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+pub struct ResolveMarket<'info> {
+    #[account(mut)]
+    pub market: Box<Account<'info, Market>>,
+    
+    /// CHECK: Vault PDA
+    #[account(mut)]
+    pub market_vault: AccountInfo<'info>,
+    
+    /// CHECK: Only treasury/oracle can resolve
+    #[account(address = G1_TREASURY)]
+    pub authority: Signer<'info>,
+    
+    /// CHECK: Treasury
+    #[account(mut)]
+    pub protocol_treasury: AccountInfo<'info>,
+    
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(outcome: u8)]
+pub struct ClaimWinnings<'info> {
+    #[account(mut)]
+    pub market: Box<Account<'info, Market>>,
+    
+    /// CHECK: Vault PDA
+    #[account(mut)]
+    pub market_vault: AccountInfo<'info>,
+    
+    #[account(
+        mut,
+        seeds = [b"user_pos", market.key().as_ref(), user.key().as_ref(), &[outcome]],
+        bump
+    )]
+    pub user_position: Box<Account<'info, UserPosition>>,
+    
+    #[account(mut)]
+    pub user: Signer<'info>,
+    
+    pub system_program: Program<'info, System>,
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // ERRORS
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -390,10 +538,23 @@ pub struct SellShares<'info> {
 pub enum DjinnError {
     #[msg("Market is not active")]
     MarketNotActive,
+    #[msg("Market is not resolved")]
+    MarketNotResolved,
+    #[msg("Market has not expired yet")]
+    MarketNotExpired,
     #[msg("Slippage exceeded")]
     SlippageExceeded,
     #[msg("Insufficient shares")]
     InsufficientShares,
+    #[msg("Already claimed")]
+    AlreadyClaimed,
+    #[msg("No shares to claim")]
+    NoShares,
+    #[msg("Not a winner")]
+    NotWinner,
+    #[msg("Invalid outcome")]
+    InvalidOutcome,
     #[msg("Math error")]
     MathError,
 }
+
