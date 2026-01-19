@@ -1,4 +1,4 @@
- DJINN: Redefining Price Discovery on Solana 
+ Djinn: Redefining Price Discovery on Solana 
 
 <div align="center">
 
@@ -384,15 +384,9 @@ npx tsx verify-curve.ts
 
 ---
 
-## 📜 License
-
-MIT — Build freely, attribute kindly.
-
----
-
 <div align="center">
 
-**Built for the 2026 Bull Market**
+**Lord**
 
 *Prediction is the new speculation* 🧞‍♂️
 
