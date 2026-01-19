@@ -1344,14 +1344,14 @@ export default function Page() {
                                         className="bg-transparent text-5xl font-extralight text-white w-full outline-none placeholder-white/30 tracking-tighter [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                         placeholder="0"
                                     />
-                                    {/* SOL ICON (Refined) */}
-                                    <div className="flex items-center gap-2 bg-black/50 px-3 py-1.5 rounded-full border border-white/10">
+                                    {/* SOL ICON */}
+                                    <div className="flex items-center gap-2 bg-[#1A1A1A] px-3 py-2 rounded-xl border border-white/10 shrink-0">
                                         <img
                                             src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
-                                            className="w-6 h-6 rounded-full"
+                                            className="w-5 h-5"
                                             alt="SOL"
                                         />
-                                        <span className="text-xs font-bold text-white">SOL</span>
+                                        <span className="text-sm font-bold text-white">SOL</span>
                                     </div>
                                 </div>
                             </div>
