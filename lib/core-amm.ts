@@ -250,30 +250,29 @@ export function calculateImpliedProbability(yesMcap: number, noMcap: number): nu
 export function getSupplyFromPrice(priceSol: number): number {
     if (priceSol <= P_START) return 0;
 
-    if (priceSol <= P_90) {
+    if (priceSol <= P_50) {
         // PHASE 1 INVERSE: P = P_START + m*x → x = (P - P_START) / m
         return (priceSol - P_START) / LINEAR_SLOPE;
 
-    } else if (priceSol <= P_110) {
-        // PHASE 2 INVERSE: P = P_90 + (P_110 - P_90) * t²
-        // t² = (P - P_90) / (P_110 - P_90)
+    } else if (priceSol <= P_90) {
+        // PHASE 2 INVERSE: P = P_50 + (P_90 - P_50) * t²
+        // t² = (P - P_50) / (P_90 - P_50)
         // t = sqrt(...)
-        // x = 90M + t * 20M
-        const ratio_sq = (priceSol - P_90) / (P_110 - P_90);
+        // x = 50M + t * 40M
+        const ratio_sq = (priceSol - P_50) / (P_90 - P_50);
         const ratio = Math.sqrt(Math.max(0, ratio_sq));
         const range = PHASE2_END - PHASE1_END;
         return PHASE1_END + ratio * range;
 
     } else {
-        // PHASE 3 INVERSE: P = P_110 + (P_MAX - P_110) * k * x_rel / 1e9
-        // x_rel = (P - P_110) * 1e9 / ((P_MAX - P_110) * k)
-        const price_delta = priceSol - P_110;
-        if (price_delta >= (P_MAX - P_110)) return TOTAL_SUPPLY;
+        // PHASE 3 INVERSE: P = P_90 + (P_MAX - P_90) * k * x_rel / 1e9
+        const price_delta = priceSol - P_90;
+        if (price_delta >= (P_MAX - P_90)) return TOTAL_SUPPLY;
         if (price_delta <= 0) return PHASE3_START;
 
-        // norm_sig = price_delta / (P_MAX - P_110)
+        // norm_sig = price_delta / (P_MAX - P_90)
         // x_rel = norm_sig * 1e9 / k
-        const norm_sig = price_delta / (P_MAX - P_110);
+        const norm_sig = price_delta / (P_MAX - P_90);
         const x_rel = norm_sig * 1_000_000_000 / K_SIGMOID;
         return PHASE3_START + Math.min(x_rel, TOTAL_SUPPLY - PHASE3_START);
     }

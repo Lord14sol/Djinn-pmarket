@@ -290,14 +290,15 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
 
                 {isSuccess && successData ? (
                     <div className="p-8 md:p-12 text-center flex flex-col items-center justify-center space-y-6">
-                        {/* Animated Pink Checkmark */}
-                        <div className="relative">
-                            <div className="w-24 h-24 bg-gradient-to-br from-[#F492B7] to-[#FF0096] rounded-full flex items-center justify-center shadow-[0_0_60px_rgba(244,146,183,0.5)] animate-pulse">
-                                <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        {/* Animated Pink Checkmark with Scale-In */}
+                        <div className="relative animate-[scale-in_0.5s_ease-out]">
+                            <div className="w-28 h-28 bg-gradient-to-br from-[#F492B7] via-[#FF0096] to-[#F492B7] rounded-full flex items-center justify-center shadow-[0_0_80px_rgba(244,146,183,0.6)]">
+                                <svg className="w-14 h-14 text-white animate-[check-draw_0.6s_ease-out_0.3s_forwards]" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ strokeDasharray: 100, strokeDashoffset: 100 }}>
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path>
                                 </svg>
                             </div>
-                            <div className="absolute -inset-2 bg-[#F492B7]/20 rounded-full blur-xl -z-10 animate-ping"></div>
+                            <div className="absolute -inset-4 bg-gradient-to-br from-[#F492B7]/30 to-[#FF0096]/20 rounded-full blur-2xl -z-10 animate-pulse"></div>
+                            <div className="absolute -inset-1 bg-[#F492B7]/40 rounded-full blur-md -z-10 animate-ping"></div>
                         </div>
 
                         {/* Title with Djinn styling */}
@@ -337,21 +338,16 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                             View on Solscan
                         </a>
 
-                        {/* Action Buttons */}
-                        <div className="flex gap-3 w-full">
-                            <button
-                                onClick={() => router.push(`/market/${successData.slug}`)}
-                                className="flex-1 py-3 bg-gradient-to-r from-[#F492B7] to-[#FF0096] text-black font-bold rounded-xl hover:brightness-110 transition-all"
-                            >
-                                Go to Market
-                            </button>
-                            <button
-                                onClick={onClose}
-                                className="flex-1 py-3 bg-white/10 text-white font-bold rounded-xl hover:bg-white/20 transition-all"
-                            >
-                                Create Another
-                            </button>
-                        </div>
+                        {/* Action Button - Go to Market Only */}
+                        <button
+                            onClick={() => {
+                                onClose();
+                                router.push(`/market/${successData.slug}`);
+                            }}
+                            className="w-full py-4 bg-gradient-to-r from-[#F492B7] via-[#FF0096] to-[#F492B7] text-white font-black text-lg rounded-2xl hover:brightness-110 transition-all shadow-[0_0_30px_rgba(244,146,183,0.4)] animate-pulse"
+                        >
+                            🚀 Go to Market
+                        </button>
                     </div>
                 ) : (
                     <>
