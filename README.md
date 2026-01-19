@@ -154,7 +154,118 @@ K_SIGMOID = 0.00047          // Calibrated for gradual growth
 
 ---
 
-## 🚀 Quick Start
+## � Technical Whitepaper: Financial Architecture
+
+### I. The Probability Filter Engine
+
+The Golden S Mutant Curve is not merely a pricing mechanism—it is a **mathematical filter for outcome probability**.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              PROBABILITY FILTER: UNCERTAINTY → CERTAINTY                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  UNCERTAINTY                                              CERTAINTY         │
+│  (Maximum)                                                (Filtered)        │
+│      │                                                         │            │
+│      ▼                                                         ▼            │
+│   ┌─────┐        ┌─────────────┐        ┌──────────────┐   ┌───────┐       │
+│   │ 1ns │   →    │  Ignition   │   →    │ Acceleration │ → │ 0.95  │       │
+│   │ SOL │        │   Phase     │        │    Bridge    │   │  SOL  │       │
+│   └─────┘        └─────────────┘        └──────────────┘   └───────┘       │
+│                                                                             │
+│   "Reward risk-takers       "Scale with            "Converge to            │
+│    with asymmetric           market                 efficient               │
+│    upside"                   momentum"              pricing"                │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Initial Supply (0-50M):** Represents maximum uncertainty. Price is near-zero (1 nanoSOL) to reward risk-takers who identify opportunities before consensus forms.
+
+**Terminal Supply (Phase 3+):** As supply increases, the curve asymptotically filters out noise, converging toward the 0.95 SOL logic-cap. High prices signal high-probability outcomes.
+
+---
+
+### II. Late-Game Solvency Model
+
+Unlike memecoin AMMs (e.g., Pump.fun) which require "Liquidity Migration" to centralized exchanges, DJINN implements **perpetual on-chain solvency**.
+
+#### The Certainty Premium
+
+Late-stage buyers pay a **Certainty Premium**—approaching 0.95 SOL for high-probability outcomes. This capital structure ensures permanent over-collateralization:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    VAULT SOLVENCY MODEL                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│   VAULT_TOTAL = YES_POOL + NO_POOL                              │
+│                                                                 │
+│   On Resolution (e.g., YES wins):                               │
+│   ├── YES holders claim: VAULT_TOTAL / YES_SUPPLY × shares      │
+│   └── NO holders claim: 0 (capital absorbed)                    │
+│                                                                 │
+│   The "Loser's Pool" (NO_POOL) subsidizes winner payouts,       │
+│   guaranteeing the vault is ALWAYS over-collateralized.         │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Mathematical Guarantee:**
+
+```
+Vault_SOL ≥ (Winning_Shares × Payout_Per_Share) - Fees
+
+Where:
+  Payout_Per_Share = Vault_Total / Winning_Supply
+```
+
+This model eliminates:
+- ❌ Liquidity migration risk
+- ❌ Rug pull vectors
+- ❌ External dependency on market makers
+
+---
+
+### III. Zero-Slippage Settlement
+
+DJINN separates **trading mechanics** from **settlement mechanics**:
+
+| Phase | Mechanism | Slippage |
+|-------|-----------|----------|
+| **Live Trading** | Bonding Curve (C³-smoothed) | Variable (curve-dependent) |
+| **Final Settlement** | Proportional Vault Distribution | **Zero** |
+
+#### How Settlement Works:
+
+1. **Market Resolves** — Oracle confirms outcome (YES or NO)
+2. **Vault Locks** — No more trading, total SOL frozen
+3. **Proportional Claim** — Each winning share receives: `Vault_Total / Winning_Supply`
+
+**This eliminates:**
+- ❌ "Exit scams" where early sellers drain liquidity
+- ❌ "Liquidity crunches" at high redemption
+- ❌ MEV extraction during settlement
+
+---
+
+### IV. Strategic Summary
+
+> **DJINN rewards vision by allowing early participants to buy uncertainty and sell certainty to the mass market.**
+
+| Participant | Strategy | Reward Profile |
+|-------------|----------|----------------|
+| **Visionary** (0-10M) | Identify opportunity before consensus | 100x-200x potential |
+| **Early Believer** (10-50M) | Validate thesis early | 6x-20x potential |
+| **Momentum Trader** (50-90M) | Ride confirmed trends | 2x-6x potential |
+| **Certainty Buyer** (90M+) | Pay premium for high-probability | 1.1x-1.5x (low risk) |
+
+The curve transforms speculation into **structured risk-reward**, where position timing directly correlates with conviction level.
+
+---
+
+## �🚀 Quick Start
 
 ```bash
 # Clone and install
