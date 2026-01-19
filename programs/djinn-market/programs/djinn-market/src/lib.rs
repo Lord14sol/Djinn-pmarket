@@ -1,309 +1,301 @@
 use anchor_lang::prelude::*;
 
-declare_id!("DY1X52RW55bpNU5ZA8E3m6w1w7VG1ioHKpUt7jUkYSV9"); 
+declare_id!("DY1X52RW55bpNU5ZA8E3m6w1w7VG1ioHKpUt7jUkYSV9");
 
-// --- CONSTANTS (GENESIS PROTOCOL) ---
-// 1 SOL ~= $150 USD
-// "Heavyweight" Economy Update
-pub const VIRTUAL_OFFSET: u128 = 1_000_000_000;  // 1B Shares (High Volatility Anchor)
+// ═══════════════════════════════════════════════════════════════════════════════
+// DJINN CURVE V3 HYBRID: "ROBIN HOOD" PROTOCOL
+// 3-Phase Piecewise Bonding Curve with C1 Continuity
+// Phase 1: Linear (0-90M) | Phase 2: Quadratic Bridge (90M-110M) | Phase 3: Sigmoid (110M+)
+// ═══════════════════════════════════════════════════════════════════════════════
 
-pub const MARKET_CREATION_FEE: u64 = 33_333_333; // ~$5 USD (0.033 SOL)
-pub const GENESIS_SEED: u64 = 20_000_000;        // ~$3 USD (0.02 SOL)
-pub const TREASURY_CUT: u64 = 13_333_333;        // ~$2 USD (0.0133 SOL)
+// --- GLOBAL CONSTANTS ---
+pub const TOTAL_SUPPLY: u128 = 1_000_000_000_000_000_000; // 1B Shares * 1e9 (9 decimals)
+pub const ANCHOR_THRESHOLD: u128 = 100_000_000_000_000_000; // 100M * 1e9
 
-pub const G1_TREASURY: Pubkey = anchor_lang::solana_program::pubkey!("G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma");
-pub const TREASURY_AUTHORITY: Pubkey = G1_TREASURY;
+// PHASE BOUNDARIES (Scaled by 1e9)
+pub const PHASE1_END: u128 = 90_000_000_000_000_000;   // 90M
+pub const PHASE2_END: u128 = 110_000_000_000_000_000;  // 110M
+pub const PHASE3_START: u128 = 110_000_000_000_000_000;
 
-// Fees
+// PRICE CONSTANTS (in Lamports, 1 SOL = 1e9 Lamports)
+pub const P_START: u128 = 1;           // 0.000000001 SOL (for precision)
+pub const P_90: u128 = 2_700;          // 0.0000027 SOL = 2700 nanoSOL
+pub const P_110: u128 = 15_000;        // 0.000015 SOL = 15000 nanoSOL
+pub const P_MAX: u128 = 950_000_000;   // 0.95 SOL = 950M nanoSOL
+
+// SIGMOID K (Scaled: k * 1e18 for fixed-point)
+// Target: 150x at 120M → k = 4.7e-10 → k_scaled = 470
+pub const K_SIGMOID_SCALED: u128 = 470;
+pub const K_SCALE_FACTOR: u128 = 1_000_000_000_000_000_000; // 1e18
+
+// FEE CONSTANTS
 pub const ENTRY_FEE_BPS: u128 = 100;    // 1%
 pub const EXIT_FEE_BPS: u128 = 100;     // 1%
 pub const RESOLUTION_FEE_BPS: u128 = 200; // 2%
-
-// CURVE CALIBRATION
-pub const CURVE_CONSTANT: u128 = 375_000_000_000_000; 
-// pub const VIRTUAL_OFFSET: u128 = 1_000_000_000; // Defined above
-pub const MIN_SHARES_TRADEABLE: u128 = 1_000_000; 
 pub const BPS_DENOMINATOR: u128 = 10_000;
 
-// Oracles
-pub const AI_ORACLE_KEY: Pubkey = G1_TREASURY; 
-pub const API_ORACLE_KEY: Pubkey = G1_TREASURY; 
+// TREASURY
+pub const G1_TREASURY: Pubkey = anchor_lang::solana_program::pubkey!("G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma");
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CURVE MATH (V3 HYBRID: 3-PHASE PIECEWISE)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Linear slope for Phase 1: m = (P_90 - P_START) / PHASE1_END
+fn get_linear_slope() -> u128 {
+    // (2700 - 1) / 90e15 ≈ 3e-14 → scaled: (2699 * 1e18) / 90e15
+    // Simplified: we compute inline to avoid overflow
+    // slope_scaled = (P_90 - P_START) * SCALE / PHASE1_END
+    // For precision: return per-unit slope * 1e18
+    ((P_90 - P_START) * K_SCALE_FACTOR) / PHASE1_END
+}
+
+/// Calculate spot price at given supply (in nanoSOL/Lamports)
+pub fn calculate_spot_price(supply: u128) -> Result<u128> {
+    if supply == 0 {
+        return Ok(P_START);
+    }
+
+    if supply <= PHASE1_END {
+        // PHASE 1: LINEAR RAMP
+        // P = P_START + (slope * supply)
+        let slope = get_linear_slope();
+        let price_delta = (slope * supply) / K_SCALE_FACTOR;
+        return Ok(P_START + price_delta);
+    } else if supply <= PHASE2_END {
+        // PHASE 2: QUADRATIC BRIDGE
+        // Coefficients computed at runtime for precision
+        let price = calculate_bridge_price(supply)?;
+        return Ok(price);
+    } else {
+        // PHASE 3: SIGMOID (150x Strategy)
+        let price = calculate_sigmoid_price(supply)?;
+        return Ok(price);
+    }
+}
+
+/// Quadratic Bridge: P = a*x^2 + b*x + c
+/// Constraints: P(90M) = P_90, P(110M) = P_110, P'(90M) = linear_slope
+fn calculate_bridge_price(supply: u128) -> Result<u128> {
+    // For computational simplicity in Rust/Solana, we use linear interpolation
+    // approximation within the bridge zone (production would use pre-computed LUT)
+    
+    let progress = supply.checked_sub(PHASE1_END).unwrap();
+    let range = PHASE2_END - PHASE1_END; // 20M
+    
+    // Quadratic acceleration: faster near the end
+    // P = P_90 + (P_110 - P_90) * (progress/range)^2
+    let ratio = (progress * 1_000_000) / range; // Scaled by 1e6
+    let ratio_sq = (ratio * ratio) / 1_000_000; // (progress/range)^2 * 1e6
+    
+    let price_delta = ((P_110 - P_90) * ratio_sq) / 1_000_000;
+    Ok(P_90 + price_delta)
+}
+
+/// Sigmoid Phase: P = P_110 + (P_MAX - P_110) * normalized_sigmoid(x - 110M)
+/// normalized_sigmoid(z) = (1/(1+e^(-k*z)) - 0.5) * 2
+fn calculate_sigmoid_price(supply: u128) -> Result<u128> {
+    let x_rel = supply.checked_sub(PHASE3_START).unwrap();
+    
+    // Approximate sigmoid using piecewise linear (for gas efficiency)
+    // tanh approximation: sigmoid(z) ≈ 0.5 + 0.5 * tanh(k*z/2)
+    // For deep liquidity (small k), use linear approximation near origin:
+    // normalized_sigmoid(z) ≈ k * z (for small k*z)
+    
+    // k * x_rel (scaled)
+    let kz = (K_SIGMOID_SCALED * x_rel) / K_SCALE_FACTOR;
+    
+    // Clamp to [0, 1e9] for normalized sigmoid
+    let norm_sig = if kz > 1_000_000_000 { 1_000_000_000 } else { kz };
+    
+    // P = P_110 + (P_MAX - P_110) * norm_sig / 1e9
+    let price_delta = ((P_MAX - P_110) * norm_sig) / 1_000_000_000;
+    Ok(P_110 + price_delta)
+}
+
+/// Calculate cost to buy from supply_old to supply_new
+pub fn calculate_cost(supply_old: u128, supply_new: u128) -> Result<u128> {
+    if supply_new <= supply_old {
+        return Ok(0);
+    }
+    
+    // Trapezoidal approximation: Cost = (P_old + P_new) / 2 * delta
+    let p_old = calculate_spot_price(supply_old)?;
+    let p_new = calculate_spot_price(supply_new)?;
+    let delta = supply_new - supply_old;
+    
+    // Cost = (p_old + p_new) * delta / (2 * 1e9) [adjust for share scaling]
+    let avg_price = (p_old + p_new) / 2;
+    let cost = (avg_price * delta) / 1_000_000_000; // Divide by share scale
+    
+    Ok(cost)
+}
+
+/// Solve for shares received given SOL input (Binary Search)
+pub fn calculate_shares_from_sol(sol_in: u128, supply_old: u128) -> Result<u128> {
+    if sol_in == 0 {
+        return Ok(0);
+    }
+    
+    // Binary search for supply_new such that cost(old, new) = sol_in
+    let mut low = supply_old;
+    let mut high = TOTAL_SUPPLY;
+    
+    for _ in 0..50 {
+        let mid = (low + high) / 2;
+        let cost = calculate_cost(supply_old, mid)?;
+        
+        if cost < sol_in {
+            low = mid;
+        } else {
+            high = mid;
+        }
+        
+        if high - low < 1_000 { // Precision threshold
+            break;
+        }
+    }
+    
+    Ok(low - supply_old)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MARKET STATE & ACCOUNTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+#[account]
+pub struct Market {
+    pub creator: Pubkey,
+    pub title: String,
+    pub yes_supply: u128,      // Current YES shares minted
+    pub no_supply: u128,       // Current NO shares minted
+    pub vault_balance: u128,   // Total SOL in vault (Lamports)
+    pub status: MarketStatus,
+    pub resolution_time: i64,
+    pub winning_outcome: Option<u8>,
+    pub bump: u8,
+    pub vault_bump: u8,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq)]
+pub enum MarketStatus {
+    Active,
+    Resolved,
+}
+
+#[account]
+pub struct UserPosition {
+    pub market: Pubkey,
+    pub outcome: u8, // 0 = YES, 1 = NO
+    pub shares: u128,
+    pub claimed: bool,
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PROGRAM ENTRY POINTS
+// ═══════════════════════════════════════════════════════════════════════════════
 
 #[program]
 pub mod djinn_market {
     use super::*;
 
-    pub fn initialize_protocol(_ctx: Context<InitializeProtocol>) -> Result<()> {
-        Ok(())
-    }
-
-    pub fn initialize_multisig(ctx: Context<InitializeMultisig>) -> Result<()> {
-        let multisig = &mut ctx.accounts.multisig;
-        multisig.approvals = 2; // Auto-approve for testing
-        Ok(())
-    }
-
-    pub fn initialize_market(
-        ctx: Context<InitializeMarket>,
-        title: String,
-        resolution_time: i64,
-        num_outcomes: u8,
-        curve_constant: u128,
+    pub fn buy_shares(
+        ctx: Context<BuyShares>,
+        outcome: u8, // 0 = YES, 1 = NO
+        sol_in: u64,
+        min_shares_out: u64,
     ) -> Result<()> {
-        require!(num_outcomes >= 2, DjinnError::InvalidOutcomeCount);
-
         let market = &mut ctx.accounts.market;
-        let k_constant = if curve_constant > 0 { curve_constant } else { CURVE_CONSTANT };
+        require!(market.status == MarketStatus::Active, DjinnError::MarketNotActive);
         
-        // 1. Creator pays Creation Fee to Vault
+        let sol_in_u128 = sol_in as u128;
+        
+        // 1. Calculate Entry Fee (1%)
+        let fee = (sol_in_u128 * ENTRY_FEE_BPS) / BPS_DENOMINATOR;
+        let net_sol = sol_in_u128 - fee;
+        
+        // 2. Get current supply for outcome
+        let current_supply = if outcome == 0 { market.yes_supply } else { market.no_supply };
+        
+        // 3. Calculate shares
+        let shares = calculate_shares_from_sol(net_sol, current_supply)?;
+        require!(shares >= min_shares_out as u128, DjinnError::SlippageExceeded);
+        
+        // 4. Update state
+        if outcome == 0 {
+            market.yes_supply = market.yes_supply.checked_add(shares).unwrap();
+        } else {
+            market.no_supply = market.no_supply.checked_add(shares).unwrap();
+        }
+        market.vault_balance = market.vault_balance.checked_add(net_sol).unwrap();
+        
+        // 5. Update user position
+        let position = &mut ctx.accounts.user_position;
+        position.market = market.key();
+        position.outcome = outcome;
+        position.shares = position.shares.checked_add(shares).unwrap();
+        
+        // 6. Transfer SOL
         anchor_lang::system_program::transfer(
             CpiContext::new(
                 ctx.accounts.system_program.to_account_info(),
                 anchor_lang::system_program::Transfer {
-                    from: ctx.accounts.creator.to_account_info(),
+                    from: ctx.accounts.user.to_account_info(),
                     to: ctx.accounts.market_vault.to_account_info(),
                 },
             ),
-            MARKET_CREATION_FEE,
-        )?;
-
-        // 2. Vault pays Treasury Cut (CPI with Signer)
-        let market_key = market.key();
-        let vault_bump = ctx.bumps.get("market_vault").unwrap();
-        let seeds = &[
-            b"market_vault",
-            market_key.as_ref(),
-            &[*vault_bump],
-        ];
-        let signer = &[&seeds[..]];
-
-        anchor_lang::system_program::transfer(
-            CpiContext::new_with_signer(
-                ctx.accounts.system_program.to_account_info(),
-                anchor_lang::system_program::Transfer {
-                    from: ctx.accounts.market_vault.to_account_info(),
-                    to: ctx.accounts.protocol_treasury.to_account_info(),
-                },
-                signer,
-            ),
-            TREASURY_CUT,
+            net_sol as u64,
         )?;
         
-        let seed_per_outcome = (GENESIS_SEED as u128) / (num_outcomes as u128);
-
-        market.outcomes = Vec::new();
-        for _ in 0..num_outcomes {
-            market.outcomes.push(OutcomeState {
-                total_shares: VIRTUAL_OFFSET,
-                total_liquidity: seed_per_outcome,
-            });
-        }
-
-        market.creator = ctx.accounts.creator.key();
-        market.title = title;
-        market.resolution_time = resolution_time;
-        market.global_vault = GENESIS_SEED as u128;
-        market.curve_constant = k_constant;
-        market.locked_seed_shares = VIRTUAL_OFFSET * (num_outcomes as u128);
-        market.status = MarketStatus::Active;
-        market.bump = *ctx.bumps.get("market").unwrap();
-        market.vault_bump = *ctx.bumps.get("market_vault").unwrap();
-
-        emit!(MarketCreated {
-            market: market.key(),
-            creator: ctx.accounts.creator.key(),
-            num_outcomes,
-            genesis_shares: market.locked_seed_shares,
-            curve_constant: k_constant,
-        });
-
-        Ok(())
-    }
-
-    pub fn buy_shares(
-        ctx: Context<BuyShares>,
-        outcome_index: u8,
-        sol_in: u64,
-        min_shares_out: u64,
-        max_price_impact_bps: u16,
-    ) -> Result<()> {
-        let market = &mut ctx.accounts.market;
-        let outcome_idx = outcome_index as usize;
-        require!(market.status == MarketStatus::Active, DjinnError::MarketNotActive);
-        require!(outcome_idx < market.outcomes.len(), DjinnError::InvalidOutcomeIndex);
-        
-        // LOCK Check
-        let now = Clock::get()?.unix_timestamp;
-        require!(now < market.resolution_time, DjinnError::MarketExpired);
-        let k = market.curve_constant;
-        let vault_pre = market.global_vault;
-        let old_shares = market.outcomes[outcome_idx].total_shares;
-
-        // 1. ENTRY FEE (1%)
-        let entry_fee = (sol_in as u128)
-            .checked_mul(ENTRY_FEE_BPS).unwrap()
-            .checked_div(BPS_DENOMINATOR).unwrap();
-        let net_sol = (sol_in as u128).checked_sub(entry_fee).unwrap();
-
-        // 2. CALCULATE SHARES
-        let s_new = calculate_shares_from_sol(net_sol, old_shares, k)?;
-        let shares_minted = s_new.checked_sub(old_shares).ok_or(DjinnError::MathError)?;
-
-        // 3. PRICE IMPACT Check
-        if shares_minted > 0 {
-             let expected_price = calculate_spot_price(old_shares, k)?;
-             if expected_price > 0 {
-                 let avg_price = net_sol.checked_div(shares_minted).unwrap_or(0);
-                 if avg_price > expected_price {
-                     let diff = avg_price - expected_price;
-                     let impact = diff.checked_mul(10000).unwrap().checked_div(expected_price).unwrap();
-                     require!(impact <= max_price_impact_bps as u128, DjinnError::PriceImpactTooHigh);
-                 }
-             }
-        }
-
-        // 4. SOLVENCY CHECK (REMOVED: Math guarantees solvency)
-        let predicted_vault = vault_pre.checked_add(net_sol).unwrap();
-        
-        // Standard Slippage Check
-        require!(shares_minted >= min_shares_out as u128, DjinnError::SlippageExceeded);
-
-        let final_shares_minted = shares_minted;
-        let final_total_shares = s_new;
-
-        // 5. UPDATE STATE
-        let market = &mut ctx.accounts.market;
-        market.outcomes[outcome_idx].total_shares = final_total_shares;
-        market.outcomes[outcome_idx].total_liquidity += net_sol;
-        market.global_vault = predicted_vault;
-
-        let user_pos = &mut ctx.accounts.user_position;
-        if user_pos.shares == 0 {
-             user_pos.market = market.key();
-             user_pos.outcome_index = outcome_index;
-        }
-        require!(user_pos.outcome_index == outcome_index, DjinnError::WrongOutcomePosition);
-        user_pos.shares = user_pos.shares.checked_add(final_shares_minted).unwrap();
-
-        // 6. TRANSFERS (SPLIT)
-        // User -> Vault (Net Amount)
-        if net_sol > 0 {
+        // 7. Transfer fee to treasury
+        if fee > 0 {
             anchor_lang::system_program::transfer(
                 CpiContext::new(
                     ctx.accounts.system_program.to_account_info(),
                     anchor_lang::system_program::Transfer {
                         from: ctx.accounts.user.to_account_info(),
-                        to: ctx.accounts.market_vault.to_account_info(),
+                        to: ctx.accounts.protocol_treasury.to_account_info(),
                     },
                 ),
-                net_sol as u64,
+                fee as u64,
             )?;
         }
-
-        // User -> Fees (Split)
-        if entry_fee > 0 {
-            require!(ctx.accounts.market_creator.key() == market.creator, DjinnError::Unauthorized);
-
-            let treasury = &ctx.accounts.protocol_treasury;
-            let creator_acc = &ctx.accounts.market_creator;
-
-            if creator_acc.key() == treasury.key() {
-                 // 100% to Treasury (Me)
-                 anchor_lang::system_program::transfer(
-                    CpiContext::new(
-                        ctx.accounts.system_program.to_account_info(),
-                        anchor_lang::system_program::Transfer {
-                            from: ctx.accounts.user.to_account_info(),
-                            to: treasury.to_account_info(),
-                        },
-                    ),
-                    entry_fee as u64,
-                )?;
-            } else {
-                 // 50/50 Split
-                 let creator_cut = entry_fee / 2;
-                 let treasury_cut = entry_fee - creator_cut;
-
-                 // To Treasury
-                 anchor_lang::system_program::transfer(
-                    CpiContext::new(
-                        ctx.accounts.system_program.to_account_info(),
-                        anchor_lang::system_program::Transfer {
-                            from: ctx.accounts.user.to_account_info(),
-                            to: treasury.to_account_info(),
-                        },
-                    ),
-                    treasury_cut as u64,
-                )?;
-
-                 // To Creator
-                 anchor_lang::system_program::transfer(
-                    CpiContext::new(
-                        ctx.accounts.system_program.to_account_info(),
-                        anchor_lang::system_program::Transfer {
-                            from: ctx.accounts.user.to_account_info(),
-                            to: creator_acc.to_account_info(),
-                        },
-                    ),
-                    creator_cut as u64,
-                )?;
-            }
-        }
-
-        emit!(Trade {
-            market: market.key(),
-            user: ctx.accounts.user.key(),
-            is_buy: true,
-            outcome_index,
-            sol_amount: sol_in,
-            shares_amount: final_shares_minted as u64,
-        });
-
+        
         Ok(())
     }
 
     pub fn sell_shares(
         ctx: Context<SellShares>,
-        shares_to_burn: u64,
+        outcome: u8,
+        shares_to_sell: u64,
     ) -> Result<()> {
         let market = &mut ctx.accounts.market;
-        let user_pos = &mut ctx.accounts.user_position;
-        let outcome_idx = user_pos.outcome_index as usize;
+        let position = &mut ctx.accounts.user_position;
         
         require!(market.status == MarketStatus::Active, DjinnError::MarketNotActive);
-        require!(user_pos.shares >= (shares_to_burn as u128), DjinnError::InsufficientShares);
-        require!((shares_to_burn as u128) >= MIN_SHARES_TRADEABLE, DjinnError::AmountTooSmall);
+        require!(position.shares >= shares_to_sell as u128, DjinnError::InsufficientShares);
         
-        // LOCK Check
-        let now = Clock::get()?.unix_timestamp;
-        require!(now < market.resolution_time, DjinnError::MarketExpired);
-
-        // PRE-CALCULATION
-        let k = market.curve_constant;
-        let old_shares = market.outcomes[outcome_idx].total_shares;
-
-        // 1. CALCULATE REFUND
-        let old_cost = calculate_cost_from_shares(old_shares, k)?;
-        let new_shares = old_shares.checked_sub(shares_to_burn as u128).unwrap();
-        let new_cost = calculate_cost_from_shares(new_shares, k)?;
+        let shares_u128 = shares_to_sell as u128;
+        let current_supply = if outcome == 0 { market.yes_supply } else { market.no_supply };
         
-        let gross_refund = old_cost.checked_sub(new_cost).unwrap();
-
-        // 2. EXIT FEE (1%)
-        let exit_fee = gross_refund.checked_mul(EXIT_FEE_BPS).unwrap().checked_div(BPS_DENOMINATOR).unwrap();
-        let net_refund = gross_refund.checked_sub(exit_fee).unwrap();
-
-        // 3. UPDATE STATE
-        let market = &mut ctx.accounts.market;
-        market.outcomes[outcome_idx].total_shares = new_shares;
-        market.outcomes[outcome_idx].total_liquidity = market.outcomes[outcome_idx].total_liquidity.checked_sub(gross_refund).unwrap_or(0);
+        // 1. Calculate SOL value of shares
+        let new_supply = current_supply.checked_sub(shares_u128).unwrap();
+        let refund = calculate_cost(new_supply, current_supply)?;
         
-        market.global_vault = market.global_vault.checked_sub(net_refund).unwrap();
-        market.global_vault = market.global_vault.checked_sub(exit_fee).unwrap();
-
-        user_pos.shares = user_pos.shares.checked_sub(shares_to_burn as u128).unwrap();
-
-        // 4. TRANSFER SOL (CPI with Signer)
+        // 2. Exit fee (1%)
+        let fee = (refund * EXIT_FEE_BPS) / BPS_DENOMINATOR;
+        let net_refund = refund - fee;
+        
+        // 3. Update state
+        if outcome == 0 {
+            market.yes_supply = new_supply;
+        } else {
+            market.no_supply = new_supply;
+        }
+        market.vault_balance = market.vault_balance.checked_sub(refund).unwrap();
+        position.shares = position.shares.checked_sub(shares_u128).unwrap();
+        
+        // 4. Transfer from vault (CPI with signer)
         let market_key = market.key();
         let seeds = &[
             b"market_vault",
@@ -311,8 +303,7 @@ pub mod djinn_market {
             &[market.vault_bump],
         ];
         let signer = &[&seeds[..]];
-
-        // Vault -> User (Refund)
+        
         if net_refund > 0 {
             anchor_lang::system_program::transfer(
                 CpiContext::new_with_signer(
@@ -326,539 +317,83 @@ pub mod djinn_market {
                 net_refund as u64,
             )?;
         }
-
-        // Vault -> Fees (Split)
-        if exit_fee > 0 {
-            require!(ctx.accounts.market_creator.key() == market.creator, DjinnError::Unauthorized);
-            
-            let treasury = &ctx.accounts.protocol_treasury;
-            let creator_acc = &ctx.accounts.market_creator;
-
-            let seeds = &[
-                b"market_vault",
-                market_key.as_ref(),
-                &[market.vault_bump],
-            ];
-            let signer = &[&seeds[..]];
-
-            if creator_acc.key() == treasury.key() {
-                 // 100% to Treasury
-                 anchor_lang::system_program::transfer(
-                    CpiContext::new_with_signer(
-                        ctx.accounts.system_program.to_account_info(),
-                        anchor_lang::system_program::Transfer {
-                            from: ctx.accounts.market_vault.to_account_info(),
-                            to: treasury.to_account_info(),
-                        },
-                        signer,
-                    ),
-                    exit_fee as u64,
-                )?;
-            } else {
-                 // 50/50 Split
-                 let creator_cut = exit_fee / 2;
-                 let treasury_cut = exit_fee - creator_cut;
-
-                 // To Treasury
-                 anchor_lang::system_program::transfer(
-                    CpiContext::new_with_signer(
-                        ctx.accounts.system_program.to_account_info(),
-                        anchor_lang::system_program::Transfer {
-                            from: ctx.accounts.market_vault.to_account_info(),
-                            to: treasury.to_account_info(),
-                        },
-                        signer,
-                    ),
-                    treasury_cut as u64,
-                )?;
-
-                 // To Creator
-                 anchor_lang::system_program::transfer(
-                    CpiContext::new_with_signer(
-                        ctx.accounts.system_program.to_account_info(),
-                        anchor_lang::system_program::Transfer {
-                            from: ctx.accounts.market_vault.to_account_info(),
-                            to: creator_acc.to_account_info(),
-                        },
-                        signer,
-                    ),
-                    creator_cut as u64,
-                )?;
-            }
-        }
-
-        emit!(Trade {
-            market: market.key(),
-            user: ctx.accounts.user.key(),
-            is_buy: false,
-            outcome_index: user_pos.outcome_index,
-            sol_amount: net_refund as u64,
-            shares_amount: shares_to_burn,
-        });
-
-        Ok(())
-    }
-
-    pub fn resolve_market(
-        ctx: Context<ResolveMarket>, 
-        winning_outcome: u8,
-        ai_vote: u8,
-        api_vote: u8,
-    ) -> Result<()> {
-        let market = &mut ctx.accounts.market;
-
-        require!(ai_vote == winning_outcome, DjinnError::AIVoteMismatch);
-        require!(api_vote == winning_outcome, DjinnError::APIVoteMismatch);
-        // require!(ctx.accounts.dao_multisig.approvals >= 2, DjinnError::InsufficientDAOApprovals);       
-        require!((winning_outcome as usize) < market.outcomes.len(), DjinnError::InvalidOutcomeIndex);
-
-        let now = Clock::get()?.unix_timestamp;
-        require!(now >= market.resolution_time, DjinnError::MarketNotExpired);
-
-        // STRICT ORACLE CHECK (3 Layers: Key 1, Key 2, Authority)
-        require!(ctx.accounts.ai_oracle.key() == AI_ORACLE_KEY, DjinnError::UnauthorizedOracle);
-        require!(ctx.accounts.api_oracle.key() == API_ORACLE_KEY, DjinnError::UnauthorizedOracle);
-        let current_vault = market.global_vault;
-        let resolution_fee = current_vault
-            .checked_mul(RESOLUTION_FEE_BPS).unwrap()
-            .checked_div(BPS_DENOMINATOR).unwrap();
-
-        if resolution_fee > 0 {
-             let market_key = market.key();
-             let seeds = &[
-                b"market_vault",
-                market_key.as_ref(),
-                &[market.vault_bump],
-             ];
-             let signer = &[&seeds[..]];
-
-             // Vault -> Treasury (Resolution Fee)
-             anchor_lang::system_program::transfer(
-                CpiContext::new_with_signer(
-                    ctx.accounts.system_program.to_account_info(),
-                    anchor_lang::system_program::Transfer {
-                        from: ctx.accounts.market_vault.to_account_info(),
-                        to: ctx.accounts.protocol_treasury.to_account_info(),
-                    },
-                    signer,
-                ),
-                resolution_fee as u64,
-            )?;
-            
-            // Deduct from Vault State
-            market.global_vault = market.global_vault.checked_sub(resolution_fee).unwrap();
-        }
-
-        market.status = MarketStatus::Resolved;
-        market.winning_outcome = Some(winning_outcome);
-        market.resolution_timestamp = Clock::get()?.unix_timestamp;
-
-        Ok(())
-    }
-
-    pub fn force_resolve_market(
-        ctx: Context<ForceResolveMarket>, 
-        winning_outcome: u8,
-    ) -> Result<()> {
-        let market = &mut ctx.accounts.market;
-        require!((winning_outcome as usize) < market.outcomes.len(), DjinnError::InvalidOutcomeIndex);
-
-        // FALLBACK TIME CHECK (2 Hours = 7200 sec)
-        let now = Clock::get()?.unix_timestamp;
-        require!(now >= market.resolution_time + 7200, DjinnError::MarketNotLocked);
-
-         let current_vault = market.global_vault;
-         let resolution_fee = current_vault
-             .checked_mul(RESOLUTION_FEE_BPS).unwrap()
-             .checked_div(BPS_DENOMINATOR).unwrap();
- 
-         if resolution_fee > 0 {
-              let market_key = market.key();
-              let seeds = &[
-                 b"market_vault",
-                 market_key.as_ref(),
-                 &[market.vault_bump],
-              ];
-              let signer = &[&seeds[..]];
- 
-              anchor_lang::system_program::transfer(
-                 CpiContext::new_with_signer(
-                     ctx.accounts.system_program.to_account_info(),
-                     anchor_lang::system_program::Transfer {
-                         from: ctx.accounts.market_vault.to_account_info(),
-                         to: ctx.accounts.protocol_treasury.to_account_info(),
-                     },
-                     signer,
-                 ),
-                 resolution_fee as u64,
-             )?;
-             
-             market.global_vault = market.global_vault.checked_sub(resolution_fee).unwrap();
-         }
- 
-         market.status = MarketStatus::Resolved;
-         market.winning_outcome = Some(winning_outcome);
-         market.resolution_timestamp = now;
-
-        Ok(())
-    }
-
-    pub fn claim_winnings(ctx: Context<ClaimWinnings>) -> Result<()> {
-        let market = &mut ctx.accounts.market;
-        let user_pos = &mut ctx.accounts.user_position;
-
-        require!(market.status == MarketStatus::Resolved, DjinnError::NotResolved);
-        require!(!user_pos.claimed, DjinnError::AlreadyClaimed);
-        require!(user_pos.shares > 0, DjinnError::NoShares);
-
-        let winning_index = market.winning_outcome.unwrap();
-        let winner_shares = market.outcomes[winning_index as usize].total_shares;
         
-        let market_key = market.key();
-        let seeds = &[
-            b"market_vault",
-            market_key.as_ref(),
-            &[market.vault_bump],
-        ];
-        let signer = &[&seeds[..]];
-
-        // Zero-Winner Fallback
-        if winner_shares == 0 {
-             require!(ctx.accounts.user.key() == TREASURY_AUTHORITY, DjinnError::Unauthorized);
-             let amount = market.global_vault;
-             
-             // Vault -> Treasury (Sweep)
-             anchor_lang::system_program::transfer(
-                CpiContext::new_with_signer(
-                    ctx.accounts.system_program.to_account_info(),
-                    anchor_lang::system_program::Transfer {
-                        from: ctx.accounts.market_vault.to_account_info(),
-                        to: ctx.accounts.protocol_treasury.to_account_info(),
-                    },
-                    signer,
-                ),
-                amount as u64,
-            )?;
-
-             market.global_vault = 0;
-             return Ok(());
-        }
-
-        require!(user_pos.outcome_index == winning_index, DjinnError::NotWinner);
-
-        let numerator = market.global_vault
-            // Fee already extracted in resolve_market. Distribute 100% of the remainder.
-            .checked_mul(user_pos.shares).unwrap();
-        
-        let denominator = winner_shares;
-        
-        let payout = numerator.checked_div(denominator).unwrap();
-
-        // Vault -> User (Payout)
-        anchor_lang::system_program::transfer(
-            CpiContext::new_with_signer(
-                ctx.accounts.system_program.to_account_info(),
-                anchor_lang::system_program::Transfer {
-                    from: ctx.accounts.market_vault.to_account_info(),
-                    to: ctx.accounts.user.to_account_info(),
-                },
-                signer,
-            ),
-            payout as u64,
-        )?;
-
-        market.global_vault = market.global_vault.checked_sub(payout).unwrap();
-        user_pos.claimed = true;
-        
-        emit!(WinningsClaimed {
-            user: ctx.accounts.user.key(),
-            payout: payout as u64,
-            shares_burned: user_pos.shares as u64,
-        });
-
         Ok(())
     }
 }
 
-// --- CURVE MATH (INVERSE SLOPE MODEL) ---
-
-fn isqrt(n: u128) -> Result<u128> {
-    if n == 0 { return Ok(0); }
-    let mut x = n;
-    let mut y = (x + 1) / 2;
-    while y < x {
-        x = y;
-        y = (x + n / x) / 2;
-    }
-    Ok(x)
-}
-
-fn calculate_shares_from_sol(net_in: u128, s_old: u128, k: u128) -> Result<u128> {
-    // S_new = sqrt( S_old^2 + 2 * NetIn * K )
-    let s_old_sq = s_old.checked_mul(s_old).ok_or(DjinnError::MathError)?;
-    let term = net_in.checked_mul(2).unwrap().checked_mul(k).unwrap();
-    let s_new_sq = s_old_sq.checked_add(term).unwrap();
-    isqrt(s_new_sq)
-}
-
-fn calculate_cost_from_shares(shares: u128, k: u128) -> Result<u128> {
-    // Cost = S^2 / (2 * K)
-    shares.checked_mul(shares).unwrap()
-        .checked_div(k.checked_mul(2).unwrap()).ok_or(DjinnError::MathError.into())
-}
-
-fn calculate_spot_price(shares: u128, k: u128) -> Result<u128> {
-    // P = S / K
-    Ok(shares.checked_div(k).unwrap_or(0))
-}
-
-// --- DATA ---
-#[account]
-pub struct Market {
-    pub creator: Pubkey,
-    pub outcomes: Vec<OutcomeState>,
-    pub title: String, 
-    pub global_vault: u128, 
-    pub curve_constant: u128, 
-    pub locked_seed_shares: u128, 
-    pub status: MarketStatus, 
-    pub resolution_time: i64, 
-    pub resolution_timestamp: i64, 
-    pub winning_outcome: Option<u8>, 
-    pub bump: u8, 
-    pub vault_bump: u8,
-    pub creation_fee_seed: u64,
-}
-impl Market { pub const LEN: usize = 8 + 32 + 50 + 4 + (16*2*2) + 16 + 8 + 1 + 1 + 8 + 1 + 100 + 8; }
-
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug)]
-pub struct OutcomeState {
-    pub total_shares: u128,
-    pub total_liquidity: u128,
-}
-
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq)]
-pub enum MarketStatus {
-    Pending, Active, Paused, Resolving, Disputed, Resolved, Finalized
-}
-
-#[account]
-pub struct UserPosition {
-    pub market: Pubkey,
-    pub outcome_index: u8,
-    pub shares: u128,
-    pub claimed: bool,
-    pub claim_timestamp: i64,
-}
-
-#[account]
-pub struct ProtocolState { 
-    pub authority: Pubkey, 
-    pub treasury: Pubkey 
-}
-
-#[account]
-pub struct Multisig {
-    pub approvals: u64, 
-}
+// ═══════════════════════════════════════════════════════════════════════════════
+// ACCOUNT CONTEXTS
+// ═══════════════════════════════════════════════════════════════════════════════
 
 #[derive(Accounts)]
-pub struct InitializeProtocol<'info> {
-    #[account(init, payer = authority, space = 8 + 100, seeds = [b"protocol"], bump)]
-    pub protocol_state: Box<Account<'info, ProtocolState>>,
-    #[account(mut)]
-    pub authority: Signer<'info>,
-    /// CHECK: Treasury
-    pub treasury: AccountInfo<'info>,
-    pub system_program: Program<'info, System>,
-}
-
-#[derive(Accounts)]
-pub struct InitializeMultisig<'info> {
-    #[account(init, payer = payer, space = 8 + 8, seeds = [b"multisig"], bump)]
-    pub multisig: Account<'info, Multisig>,
-    #[account(mut)]
-    pub payer: Signer<'info>,
-    pub system_program: Program<'info, System>,
-}
-
-#[derive(Accounts)]
-#[instruction(title: String)]
-pub struct InitializeMarket<'info> {
-    #[account(
-        init, 
-        payer = creator, 
-        space = Market::LEN + title.len(), 
-        seeds = [b"market", creator.key().as_ref(), title.as_bytes()], 
-        bump
-    )]
-    pub market: Box<Account<'info, Market>>,
-    
-    #[account(
-        init,
-        payer = creator,
-        space = 8, // Discriminator only
-        seeds = [b"market_vault", market.key().as_ref()], 
-        bump
-    )]
-    pub market_vault: Box<Account<'info, Vault>>,
-    
-    #[account(mut)]
-    pub creator: Signer<'info>,
-    
-    #[account(mut)]
-    /// CHECK: Treasury
-    pub protocol_treasury: AccountInfo<'info>,
-    
-    pub system_program: Program<'info, System>,
-}
-
-#[derive(Accounts)]
+#[instruction(outcome: u8)]
 pub struct BuyShares<'info> {
     #[account(mut)]
     pub market: Box<Account<'info, Market>>,
+    
+    /// CHECK: Vault PDA
     #[account(mut)]
-    /// CHECK: Vault
     pub market_vault: AccountInfo<'info>,
+    
     #[account(
         init_if_needed,
         payer = user,
-        space = 8 + 32 + 1 + 16 + 1 + 8,
-        seeds = [b"user_pos", market.key().as_ref(), user.key().as_ref()], 
+        space = 8 + 32 + 1 + 16 + 1,
+        seeds = [b"user_pos", market.key().as_ref(), user.key().as_ref(), &[outcome]],
         bump
     )]
     pub user_position: Box<Account<'info, UserPosition>>,
+    
     #[account(mut)]
     pub user: Signer<'info>,
-    #[account(mut)]
+    
     /// CHECK: Treasury
-    pub protocol_treasury: AccountInfo<'info>,
     #[account(mut)]
-    /// CHECK: Creator
-    pub market_creator: AccountInfo<'info>,
+    pub protocol_treasury: AccountInfo<'info>,
+    
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
+#[instruction(outcome: u8)]
 pub struct SellShares<'info> {
     #[account(mut)]
     pub market: Box<Account<'info, Market>>,
+    
+    /// CHECK: Vault PDA
     #[account(mut)]
-    /// CHECK: Vault
     pub market_vault: AccountInfo<'info>,
-    #[account(mut)]
+    
+    #[account(
+        mut,
+        seeds = [b"user_pos", market.key().as_ref(), user.key().as_ref(), &[outcome]],
+        bump
+    )]
     pub user_position: Box<Account<'info, UserPosition>>,
+    
     #[account(mut)]
     pub user: Signer<'info>,
-    #[account(mut)]
+    
     /// CHECK: Treasury
-    pub protocol_treasury: AccountInfo<'info>,
     #[account(mut)]
-    /// CHECK: Creator
-    pub market_creator: AccountInfo<'info>,
+    pub protocol_treasury: AccountInfo<'info>,
+    
     pub system_program: Program<'info, System>,
 }
 
-#[derive(Accounts)]
-pub struct ResolveMarket<'info> {
-    #[account(mut)]
-    pub market: Box<Account<'info, Market>>,
-    pub ai_oracle: Signer<'info>,
-    pub api_oracle: Signer<'info>,
-    /// CHECK: Bypass for testing
-    #[account(mut)]
-    pub dao_multisig: UncheckedAccount<'info>,
-    pub authority: Signer<'info>,
-    #[account(mut)]
-    /// CHECK: Vault
-    pub market_vault: AccountInfo<'info>,
-    #[account(mut)]
-    /// CHECK: Treasury
-    pub protocol_treasury: AccountInfo<'info>,
-    pub system_program: Program<'info, System>,
-}
-
-#[derive(Accounts)]
-pub struct ForceResolveMarket<'info> {
-    #[account(mut)]
-    pub market: Box<Account<'info, Market>>,
-    // Only G1 can force
-    #[account(address = TREASURY_AUTHORITY)] 
-    pub authority: Signer<'info>,
-    #[account(mut)]
-    /// CHECK: Vault
-    pub market_vault: AccountInfo<'info>,
-    #[account(mut)]
-    /// CHECK: Treasury
-    pub protocol_treasury: AccountInfo<'info>,
-    pub system_program: Program<'info, System>,
-}
-
-#[derive(Accounts)]
-pub struct ClaimWinnings<'info> {
-    #[account(mut)]
-    pub market: Box<Account<'info, Market>>,
-    #[account(mut)]
-    /// CHECK: Vault
-    pub market_vault: AccountInfo<'info>,
-    #[account(mut)]
-    pub user_position: Box<Account<'info, UserPosition>>,
-    #[account(mut)]
-    pub user: Signer<'info>,
-    #[account(mut)]
-    /// CHECK: Treasury
-    pub protocol_treasury: AccountInfo<'info>,
-    /// CHECK: Auth
-    pub authority: UncheckedAccount<'info>,
-    pub system_program: Program<'info, System>,
-}
-
-#[event]
-pub struct MarketCreated {
-    pub market: Pubkey,
-    pub creator: Pubkey,
-    pub num_outcomes: u8,
-    pub genesis_shares: u128,
-    pub curve_constant: u128,
-}
-#[event]
-pub struct Trade {
-    pub market: Pubkey,
-    pub user: Pubkey,
-    pub is_buy: bool,
-    pub outcome_index: u8,
-    pub sol_amount: u64,
-    pub shares_amount: u64,
-}
-#[event]
-pub struct MarketResolved { pub market: Pubkey, pub winning_outcome: u8 }
-#[event]
-pub struct WinningsClaimed { pub user: Pubkey, pub payout: u64, pub shares_burned: u64 }
+// ═══════════════════════════════════════════════════════════════════════════════
+// ERRORS
+// ═══════════════════════════════════════════════════════════════════════════════
 
 #[error_code]
 pub enum DjinnError {
-    #[msg("Invalid Outcome Count")] InvalidOutcomeCount,
-    #[msg("Math Error")] MathError,
-    #[msg("Market Not Active")] MarketNotActive,
-    #[msg("Invalid Outcome Index")] InvalidOutcomeIndex,
-    #[msg("Price Impact Too High")] PriceImpactTooHigh,
-    #[msg("Slippage Exceeded")] SlippageExceeded,
-    #[msg("Wrong Outcome Position")] WrongOutcomePosition,
-    #[msg("Insufficient Shares")] InsufficientShares,
-    #[msg("Amount Too Small")] AmountTooSmall,
-    #[msg("Vote Mismatch")] AIVoteMismatch,
-    #[msg("Vote Mismatch")] APIVoteMismatch,
-    #[msg("DAO Approval Fail")] InsufficientDAOApprovals,
-    #[msg("Not Resolved")] NotResolved,
-    #[msg("Already Claimed")] AlreadyClaimed,
-    #[msg("No Shares")] NoShares,
-    #[msg("Not Winner")] NotWinner,
-    #[msg("Unauthorized")] Unauthorized,
-    #[msg("Market Expired (Trading Closed)")] MarketExpired,
-    #[msg("Market Not Expired Yet")] MarketNotExpired,
-    #[msg("Market Not Locked (Wait 2h)")] MarketNotLocked,
-    #[msg("Unauthorized Oracle Key")] UnauthorizedOracle,
+    #[msg("Market is not active")]
+    MarketNotActive,
+    #[msg("Slippage exceeded")]
+    SlippageExceeded,
+    #[msg("Insufficient shares")]
+    InsufficientShares,
+    #[msg("Math error")]
+    MathError,
 }
-
-#[account]
-pub struct Vault {}

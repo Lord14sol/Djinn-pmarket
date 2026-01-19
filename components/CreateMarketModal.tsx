@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useWalletModal } from '@solana/wallet-adapter-react-ui';
+// import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useDjinnProtocol } from '@/hooks/useDjinnProtocol';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
@@ -29,7 +29,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
     const router = useRouter();
     const wallet = useWallet();
     const { publicKey } = wallet;
-    const { setVisible } = useWalletModal();
+    // const { setVisible } = useWalletModal(); // Removed because context is gone
     const { createMarket: createMarketOnChain, isReady: isContractReady } = useDjinnProtocol();
 
     const [isLoading, setIsLoading] = useState(false);
@@ -45,6 +45,13 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
     const [initialBuyAmount, setInitialBuyAmount] = useState('0');
     const [initialBuySide, setInitialBuySide] = useState<'yes' | 'no'>('yes');
     const [error, setError] = useState('');
+    const [successData, setSuccessData] = useState<{
+        txSignature: string;
+        marketPda: string;
+        yesMint: string;
+        noMint: string;
+        slug: string;
+    } | null>(null);
 
     // Reset State logic
     React.useEffect(() => {
@@ -59,6 +66,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                 setOptions([{ id: 1, name: '' }, { id: 2, name: '' }]);
                 setInitialBuyAmount('0');
                 setInitialBuySide('yes');
+                setSuccessData(null);
             }, 300); // Small delay for fade out
             return () => clearTimeout(t);
         }
@@ -93,7 +101,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
         }
 
         if (!publicKey) {
-            setVisible(true);
+            alert("Please connect your wallet first!");
             return;
         }
         if (!poolName) return alert("Please enter a question");
@@ -136,14 +144,14 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                     );
 
                     const buyAmount = parseFloat(initialBuyAmount) || 0;
-                        const contractPromise = createMarketOnChain(
-                            slug,
-                            poolName,
-                            new Date(resolutionTime * 1000),
-                            sourceUrl, // NEW: Veritas
-                            buyAmount,
-                            initialBuySide
-                        );
+                    const contractPromise = createMarketOnChain(
+                        slug,
+                        poolName,
+                        new Date(resolutionTime * 1000),
+                        sourceUrl, // NEW: Veritas
+                        buyAmount,
+                        initialBuySide
+                    );
 
                     const result = await Promise.race([contractPromise, timeoutPromise]) as any;
 
@@ -183,16 +191,21 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                 total_yes_pool: 0,
                 total_no_pool: 0,
                 resolved: false,
-                resolution_source: 'DERIVED', // Changed from derived to 'DERIVED' to match type if needed, or keeping explicit string
+                resolution_source: sourceUrl || 'DERIVED', // Save actual source URL if provided
                 banner_url: finalBanner
             });
 
-            // SUCCESS - Show Animation and Redirect
+            // SUCCESS - Store data and show animation
+            setSuccessData({
+                txSignature,
+                marketPda: marketPDA,
+                yesMint: yesTokenMint,
+                noMint: noTokenMint,
+                slug
+            });
             setIsSuccess(true);
-            setTimeout(() => {
-                onClose();
-                router.push(`/market/${slug}`);
-            }, 2000);
+            // Longer timeout so user can see the success screen and click links
+            // User can also close manually or wait for redirect
 
             // RESET
             setPoolName('');
@@ -230,15 +243,13 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
             window.dispatchEvent(new Event('storage'));
             window.dispatchEvent(new CustomEvent('market-created', { detail: optimisticMarket }));
 
-            onClose();
+            // DON'T CLOSE - Let user see success modal and click buttons
+            // User will click "Go to Market" or "Create Another" in the success modal
 
-            // Trigger Milestones
+            // Trigger Milestones (background)
             import('@/lib/supabase-db').then(mod => {
                 mod.checkMarketMilestones(publicKey.toString());
             });
-
-            // Redirect or Refresh (Optional)
-            // window.location.reload(); 
 
         } catch (error: any) {
             console.error("❌ Error:", error);
@@ -263,13 +274,70 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
             <div className="absolute inset-0 bg-black/95 backdrop-blur-xl" onClick={() => !isLoading && onClose()} />
             <div className={`relative bg-[#0B0E14] border border-white/10 rounded-[2rem] w-full overflow-hidden shadow-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200 transition-all ${isSuccess ? 'max-w-sm text-center' : 'max-w-2xl'}`}>
 
-                {isSuccess ? (
-                    <div className="p-20 text-center flex flex-col items-center justify-center space-y-6">
-                        <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center animate-[bounce_1s_infinite]">
-                            <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
+                {isSuccess && successData ? (
+                    <div className="p-8 md:p-12 text-center flex flex-col items-center justify-center space-y-6">
+                        {/* Animated Pink Checkmark */}
+                        <div className="relative">
+                            <div className="w-24 h-24 bg-gradient-to-br from-[#F492B7] to-[#FF0096] rounded-full flex items-center justify-center shadow-[0_0_60px_rgba(244,146,183,0.5)] animate-pulse">
+                                <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                            </div>
+                            <div className="absolute -inset-2 bg-[#F492B7]/20 rounded-full blur-xl -z-10 animate-ping"></div>
                         </div>
-                        <h2 className="text-3xl font-black text-white">Market Created!</h2>
-                        <p className="text-gray-400">Taking you there...</p>
+
+                        {/* Title with Djinn styling */}
+                        <div>
+                            <h2 className="text-3xl md:text-4xl font-black">
+                                <span className="text-[#F492B7]">M</span>arket <span className="text-[#F492B7]">C</span>reated!
+                            </h2>
+                            <p className="text-gray-400 mt-2">Your prediction market is live on Solana</p>
+                        </div>
+
+                        {/* Token Addresses */}
+                        <div className="w-full bg-white/5 rounded-2xl p-4 space-y-3 text-left text-xs font-mono">
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-500">Market PDA</span>
+                                <span className="text-[#F492B7] truncate max-w-[180px]">{successData.marketPda.slice(0, 8)}...{successData.marketPda.slice(-6)}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-500">YES Token</span>
+                                <span className="text-green-400 truncate max-w-[180px]">{successData.yesMint.slice(0, 8)}...{successData.yesMint.slice(-6)}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-500">NO Token</span>
+                                <span className="text-red-400 truncate max-w-[180px]">{successData.noMint.slice(0, 8)}...{successData.noMint.slice(-6)}</span>
+                            </div>
+                        </div>
+
+                        {/* Solscan Link */}
+                        <a
+                            href={`https://solscan.io/tx/${successData.txSignature}?cluster=devnet`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 text-[#F492B7] hover:text-white transition-colors underline underline-offset-4"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                            </svg>
+                            View on Solscan
+                        </a>
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-3 w-full">
+                            <button
+                                onClick={() => router.push(`/market/${successData.slug}`)}
+                                className="flex-1 py-3 bg-gradient-to-r from-[#F492B7] to-[#FF0096] text-black font-bold rounded-xl hover:brightness-110 transition-all"
+                            >
+                                Go to Market
+                            </button>
+                            <button
+                                onClick={onClose}
+                                className="flex-1 py-3 bg-white/10 text-white font-bold rounded-xl hover:bg-white/20 transition-all"
+                            >
+                                Create Another
+                            </button>
+                        </div>
                     </div>
                 ) : (
                     <>

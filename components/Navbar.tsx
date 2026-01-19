@@ -4,11 +4,11 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
-import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { useCategory } from '@/lib/CategoryContext';
 import { useModal } from '@/lib/ModalContext';
 import OnboardingModal from './OnboardingModal';
+import CustomWalletModal from './CustomWalletModal';
 
 // --- ICONOS ---
 // Premium multi-layer animated fire for Trending
@@ -133,13 +133,17 @@ function NavbarContent() {
     const [balance, setBalance] = useState<number>(0);
     const { openCreateMarket } = useModal();
 
+    // HYDRATION FIX: Prevent SSR/client mismatch for wallet-dependent content
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => { setMounted(true); }, []);
+
     // Hooks de Solana Wallet Adapter
-    const { setVisible } = useWalletModal();
     const { connected, publicKey, disconnect } = useWallet();
     const { connection } = useConnection();
 
-    // State for Onboarding
+    // State for Onboarding & Custom Wallet Modal
     const [showOnboarding, setShowOnboarding] = useState(false);
+    const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
 
     // Cargar perfil (Local + Supabase + Balance)
     const loadProfile = async () => {
@@ -220,10 +224,16 @@ function NavbarContent() {
                             Create a Market
                         </button>
 
-                        {!connected ? (
+                        {/* HYDRATION FIX: Only render wallet state after mount */}
+                        {!mounted ? (
+                            /* Placeholder during SSR */
+                            <div className="px-5 py-2.5 rounded-xl bg-[#1A1A1A] text-gray-400 text-[11px] font-black uppercase tracking-wider">
+                                Loading...
+                            </div>
+                        ) : !connected ? (
                             /* Desconectado */
                             <button
-                                onClick={() => setVisible(true)}
+                                onClick={() => setIsWalletModalOpen(true)}
                                 className="px-5 py-2.5 rounded-xl bg-[#F492B7] text-black text-[11px] font-black uppercase tracking-wider hover:bg-[#ff6fb7] hover:scale-105 active:scale-95 transition-all duration-300 shadow-[0_0_20px_rgba(244,146,183,0.2)]"
                             >
                                 Connect Wallet
@@ -379,6 +389,11 @@ function NavbarContent() {
                     setShowOnboarding(false);
                     loadProfile();
                 }}
+            />
+
+            <CustomWalletModal
+                isOpen={isWalletModalOpen}
+                onClose={() => setIsWalletModalOpen(false)}
             />
         </nav>
     );

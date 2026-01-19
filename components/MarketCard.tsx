@@ -167,12 +167,23 @@ const MarketCard: React.FC<MarketCardProps> = ({
                     </div>
                 </div>
 
-                {/* Footer: Volume */}
+                {/* Footer: Volume + Source Link */}
                 <div className="mt-auto flex items-center justify-between">
                     <div className="flex items-center gap-2 text-gray-500">
                         <span className="text-[10px] font-bold uppercase tracking-widest">Vol:</span>
                         <span className="text-xs font-bold text-gray-300">{volume}</span>
                     </div>
+                    {resolutionSource && resolutionSource !== 'DERIVED' && resolutionSource.startsWith('http') && (
+                        <a
+                            href={resolutionSource}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] font-bold text-[#F492B7] hover:text-white transition-colors flex items-center gap-1"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            📎 Source
+                        </a>
+                    )}
                 </div>
             </div>
 
@@ -185,7 +196,6 @@ const MarketCard: React.FC<MarketCardProps> = ({
                     chance: selectedOptionChance,
                     volume,
                     marketPDA,
-                    yesTokenMint,
                     yesTokenMint,
                     noTokenMint,
                     slug

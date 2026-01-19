@@ -55,3 +55,12 @@ export function formatTimeAgo(timestamp: string): string {
     if (hours < 24) return `${hours}h ago`;
     return `${days}d ago`;
 }
+
+// Format large numbers as M/K/B/T (Hype Notation)
+export const formatCompact = (num: number): string => {
+    if (!num && num !== 0) return '0';
+    return new Intl.NumberFormat('en-US', {
+        notation: "compact",
+        maximumFractionDigits: 2
+    }).format(num);
+};

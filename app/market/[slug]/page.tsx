@@ -3,12 +3,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
+import { useRouter } from 'next/navigation';
+import { formatCompact } from '@/lib/utils';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
 import { Clock, DollarSign, Wallet, Activity, Users, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useDjinnProtocol } from '@/hooks/useDjinnProtocol';
-import { simulateBuy, estimatePayoutInternal, CURVE_CONSTANT, VIRTUAL_OFFSET } from '@/lib/core-amm';
+import { simulateBuy, estimatePayoutInternal, CURVE_CONSTANT, VIRTUAL_OFFSET, getSpotPrice, getSupplyFromPrice, calculateImpliedProbability, getIgnitionStatus, getIgnitionProgress, ANCHOR_THRESHOLD } from '@/lib/core-amm';
 
 // Components
 import PrettyChart from '@/components/market/PrettyChart';
@@ -17,11 +19,11 @@ import CommentsSection from '@/components/market/CommentsSection';
 import OutcomeList, { Outcome } from '@/components/market/OutcomeList';
 import PurchaseToast from '@/components/market/PurchaseToast';
 import ShareModal from '@/components/market/ShareModal';
-import ActivePositionsWidget from '@/components/market/ActivePositionsWidget';
 import DjinnToast, { DjinnToastType } from '@/components/ui/DjinnToast';
 import { usePrice } from '@/lib/PriceContext';
 import * as supabaseDb from '@/lib/supabase-db';
 import { PrizePoolCounter } from '@/components/PrizePoolCounter';
+import IgnitionBar from '@/components/market/IgnitionBar';
 
 // Utils
 const TREASURY_WALLET = new PublicKey("G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma");
@@ -87,10 +89,11 @@ export default function Page() {
     const slug = params?.slug as string || '';
     const { publicKey, signTransaction } = useWallet();
     const { connection } = useConnection();
-    const { buyShares, sellShares, marketAccount, isLoading: isContractLoading } = useDjinnProtocol(slug);
+    const { buyShares, sellShares, isReady: isContractReady } = useDjinnProtocol();
 
     // --- STATE ---
     // Market Data
+    const [marketAccount, setMarketAccount] = useState<any>(null);
     const [marketOutcomes, setMarketOutcomes] = useState<Outcome[]>([]);
     const [selectedOutcomeId, setSelectedOutcomeId] = useState<string>('');
     const [selectedOutcomeName, setSelectedOutcomeName] = useState<string>('');
@@ -99,6 +102,39 @@ export default function Page() {
     const [chartData, setChartData] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const { solPrice } = usePrice();
+
+    // --- DJINN V3 METRICS ---
+    const { yesMcap, noMcap, impliedProb, ignitionProgress, ignitionStatus } = useMemo(() => {
+        const p = livePrice ?? 50;
+        const priceSolOfYes = p / 100;
+        const priceSolOfNo = (100 - p) / 100;
+
+        // Reverse calculate supply
+        const sYes = getSupplyFromPrice(priceSolOfYes);
+        const sNo = getSupplyFromPrice(priceSolOfNo);
+
+        // Calculate Mcap (Price * Supply)
+        const spotYes = getSpotPrice(sYes);
+        const spotNo = getSpotPrice(sNo);
+
+        const mYes = sYes * spotYes;
+        const mNo = sNo * spotNo;
+
+        // Implied Probability from Money Weight
+        const prob = calculateImpliedProbability(mYes, mNo);
+
+        // IGNITION STATUS (Based on YES pool, as primary indicator)
+        const ignProg = getIgnitionProgress(sYes);
+        const ignStat = getIgnitionStatus(sYes);
+
+        return {
+            yesMcap: mYes,
+            noMcap: mNo,
+            impliedProb: prob,
+            ignitionProgress: ignProg,
+            ignitionStatus: ignStat
+        };
+    }, [livePrice]);
 
     // User Data
     const [solBalance, setSolBalance] = useState<number>(0);
@@ -113,6 +149,7 @@ export default function Page() {
     const [selectedSide, setSelectedSide] = useState<'YES' | 'NO'>('YES');
     const [isPending, setIsPending] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
+    const [tradeSuccessInfo, setTradeSuccessInfo] = useState<{ shares: number; side: string; txSignature: string } | null>(null);
     const [djinnToast, setDjinnToast] = useState<{ isVisible: boolean; type: DjinnToastType; title?: string; message: string; actionLink?: string; actionLabel?: string }>({ isVisible: false, type: 'INFO', message: '' });
     const [lastTradeEvent, setLastTradeEvent] = useState<{ amount: number; side: 'YES' | 'NO' } | null>(null);
     const [tradeMode, setTradeMode] = useState<'BUY' | 'SELL'>('BUY');
@@ -335,7 +372,7 @@ export default function Page() {
             const dbData = await supabaseDb.getMarketData(effectiveSlug);
             const marketInfo = await supabaseDb.getMarket(effectiveSlug);
             console.log("MARKET INFO DEBUG:", marketInfo); // Debug Real Market detection
-            // if (marketInfo) setMarketAccount(marketInfo); // marketAccount is from hook
+            if (marketInfo) setMarketAccount(marketInfo);
 
             if (dbData) {
                 setLivePrice(dbData.live_price);
@@ -374,25 +411,90 @@ export default function Page() {
                 setMyNoShares(dbNo);
             }
 
-            // 2. On-Chain Fallback (Always run this if market is live to be accurate)
-            if (marketInfo && marketInfo.yes_token_mint && marketInfo.no_token_mint && publicKey) {
+            // 2. On-Chain Fallback - Fetch from UserPosition PDA (V2 structure with outcome_index)
+            if (marketInfo?.market_pda && publicKey) {
                 try {
-                    const { getAssociatedTokenAddress } = await import('@solana/spl-token');
-                    const yesMint = new PublicKey(marketInfo.yes_token_mint);
-                    const noMint = new PublicKey(marketInfo.no_token_mint);
+                    const marketPda = new PublicKey(marketInfo.market_pda);
+                    const PROGRAM_ID = new PublicKey('DY1X52RW55bpNU5ZA8E3m6w1w7VG1ioHKpUt7jUkYSV9');
 
-                    const yesAta = await getAssociatedTokenAddress(yesMint, publicKey);
-                    const noAta = await getAssociatedTokenAddress(noMint, publicKey);
+                    console.log("🔍 PAGE.TSX - PDA Derivation Debug:");
+                    console.log("- marketPda:", marketPda.toBase58());
+                    console.log("- publicKey:", publicKey.toBase58());
+                    console.log("- PROGRAM_ID:", PROGRAM_ID.toBase58());
 
-                    const [yesBal, noBal] = await Promise.all([
-                        connection.getTokenAccountBalance(yesAta).then(r => r.value.uiAmount || 0).catch(() => 0),
-                        connection.getTokenAccountBalance(noAta).then(r => r.value.uiAmount || 0).catch(() => 0)
+                    // YES Position PDA (outcome_index = 0)
+                    const [yesPda] = PublicKey.findProgramAddressSync(
+                        [Buffer.from("user_pos"), marketPda.toBuffer(), publicKey.toBuffer(), Buffer.from([0])],
+                        PROGRAM_ID
+                    );
+                    // NO Position PDA (outcome_index = 1)
+                    const [noPda] = PublicKey.findProgramAddressSync(
+                        [Buffer.from("user_pos"), marketPda.toBuffer(), publicKey.toBuffer(), Buffer.from([1])],
+                        PROGRAM_ID
+                    );
+
+                    console.log("- yesPda:", yesPda.toBase58());
+                    console.log("- noPda:", noPda.toBase58());
+
+                    // Fetch both accounts
+                    const [yesAcct, noAcct] = await Promise.all([
+                        connection.getAccountInfo(yesPda),
+                        connection.getAccountInfo(noPda)
                     ]);
 
-                    if (yesBal > 0) setMyYesShares(yesBal);
-                    if (noBal > 0) setMyNoShares(noBal);
+                    console.log("📦 yesAcct exists?:", yesAcct !== null, "length:", yesAcct?.data?.length);
+                    console.log("📦 noAcct exists?:", noAcct !== null, "length:", noAcct?.data?.length);
 
-                } catch (e) { console.warn("On-chain check failed:", e); }
+                    // Parse shares from UserPosition account data
+                    // Layout according to lib.rs UserPosition struct:
+                    // - 8 bytes: Anchor discriminator
+                    // - 32 bytes: market (Pubkey)
+                    // - 1 byte: outcome_index (u8)
+                    // - 16 bytes: shares (u128)
+                    // - 1 byte: claimed (bool)
+                    // - 8 bytes: claim_timestamp (i64)
+                    // Total: 66 bytes, shares starts at offset 41
+                    const parseShares = (data: Buffer): number => {
+                        console.log("📦 UserPosition buffer length:", data.length);
+                        console.log("📦 First 66 bytes (hex):", data.subarray(0, 66).toString('hex'));
+
+                        if (data.length < 57) {
+                            console.warn("⚠️ UserPosition buffer too small:", data.length);
+                            return 0;
+                        }
+
+                        // Debug: show the specific bytes we're reading for shares
+                        console.log("📦 Bytes 41-57 (shares u128 bytes):", data.subarray(41, 57).toString('hex'));
+
+                        // Read u128 as two u64s (little endian)
+                        const lo = data.readBigUInt64LE(41);
+                        const hi = data.readBigUInt64LE(49);
+                        const shares128 = lo + (hi * BigInt(2 ** 64));
+
+                        console.log("🔍 lo (u64):", lo.toString());
+                        console.log("🔍 hi (u64):", hi.toString());
+                        console.log("🔍 Raw shares u128:", shares128.toString());
+
+                        // On-chain stores raw bonding curve shares
+                        // Normalize by dividing by 1e9 for human-readable display
+                        const normalized = Number(shares128) / 1e9;
+                        console.log("🔍 Normalized shares:", normalized);
+
+                        return normalized;
+                    };
+
+                    if (yesAcct?.data) {
+                        const yesBal = parseShares(yesAcct.data);
+                        console.log("📊 YES Shares On-Chain:", yesBal);
+                        if (yesBal > 0) setMyYesShares(yesBal);
+                    }
+                    if (noAcct?.data) {
+                        const noBal = parseShares(noAcct.data);
+                        console.log("📊 NO Shares On-Chain:", noBal);
+                        if (noBal > 0) setMyNoShares(noBal);
+                    }
+
+                } catch (e) { console.warn("On-chain UserPosition check failed:", e); }
             }
         };
 
@@ -623,6 +725,13 @@ export default function Page() {
                 actionLabel: 'View on Solscan'
             });
 
+            // Store success info for inline bubble display
+            setTradeSuccessInfo({
+                shares: sim.sharesReceived,
+                side: selectedSide,
+                txSignature: txSignature || ''
+            });
+
             setIsSuccess(true);
             setBetAmount('');
 
@@ -635,7 +744,10 @@ export default function Page() {
             setDjinnToast({ isVisible: true, type: 'ERROR', title: 'Bet Failed', message: error.message || 'Unknown error' });
         } finally {
             setIsPending(false);
-            setTimeout(() => setIsSuccess(false), 3000);
+            setTimeout(() => {
+                setIsSuccess(false);
+                setTradeSuccessInfo(null);
+            }, 5000); // Extended to 5s for user to see and click link
         }
     };
 
@@ -688,28 +800,51 @@ export default function Page() {
                 let txSignature = '';
                 const isRealMarket = marketAccount?.market_pda && !marketAccount.market_pda.startsWith('local_');
 
-                // Estimate Value & Fee
+                // Estimate Value & Fee (EXIT_FEE_BPS = 100 = 1% on-chain)
                 const estimatedSolReturn = finalSharesToSell * priceRatio; // Should match input roughly
-                const feeParam = 0.025; // 2.5%
+                const feeParam = 0.01; // 1% (matches EXIT_FEE_BPS in contract)
                 const feeAmount = estimatedSolReturn * feeParam;
                 const netSolReturn = estimatedSolReturn - feeAmount;
 
                 if (isRealMarket) {
-                    console.log("🔗 Executing On-Chain Sell...");
-                    if (!marketAccount.creator_wallet) throw new Error("Market Creator unknown");
+                    try {
+                        console.log("🔗 Executing On-Chain Sell...");
+                        console.log("🔗 SELL CALL - marketAccount.market_pda:", marketAccount.market_pda);
+                        console.log("🔗 SELL CALL - Compare with PAGE.TSX marketInfo.market_pda above");
+                        if (!marketAccount.creator_wallet) throw new Error("Market Creator unknown");
 
-                    const tx = await sellShares(
-                        new PublicKey(marketAccount.market_pda),
-                        selectedSide.toLowerCase() as 'yes' | 'no',
-                        finalSharesToSell,
-                        new PublicKey(marketAccount.yes_token_mint),
-                        new PublicKey(marketAccount.no_token_mint),
-                        new PublicKey(marketAccount.creator_wallet), // Market Creator
-                        0, // minSolOut (Slippage)
-                        isMaxSell // ✅ PASS MAX FLAG
-                    );
-                    console.log("✅ Sell TX:", tx);
-                    txSignature = tx;
+                        const tx = await sellShares(
+                            new PublicKey(marketAccount.market_pda),
+                            selectedSide.toLowerCase() as 'yes' | 'no',
+                            finalSharesToSell,
+                            new PublicKey(marketAccount.yes_token_mint),
+                            new PublicKey(marketAccount.no_token_mint),
+                            new PublicKey(marketAccount.creator_wallet), // Market Creator
+                            0, // minSolOut (Slippage)
+                            isMaxSell // ✅ PASS MAX FLAG
+                        );
+                        console.log("✅ Sell TX:", tx);
+                        txSignature = tx;
+                    } catch (sellError: any) {
+                        console.error("❌ SELL ERROR DETAILS:", {
+                            message: sellError.message,
+                            code: sellError.code,
+                            logs: sellError.logs,
+                            error: sellError,
+                            stack: sellError.stack
+                        });
+
+                        // Show detailed error to user
+                        setDjinnToast({
+                            isVisible: true,
+                            type: 'ERROR',
+                            title: 'Sell Failed',
+                            message: `Error: ${sellError.message}. Check console for details.`
+                        });
+
+                        setIsPending(false);
+                        return; // Stop execution on error
+                    }
                 } else {
                     console.log("🔮 Simulated Sell");
                     await new Promise(r => setTimeout(r, 1000));
@@ -847,16 +982,36 @@ export default function Page() {
                             {/* Header Info */}
                             <div className="flex justify-between items-start mb-6">
                                 <div className="flex items-baseline gap-3">
-                                    {isMultiOutcome ? (
+                                    {(isMultiOutcome) ? (
                                         <div className="flex items-center gap-3">
                                             <span className="text-xl font-black tracking-tight text-white">Market Overview</span>
                                             <span className="text-xs font-bold text-gray-500 bg-white/5 px-2 py-1 rounded">{marketOutcomes.length} options</span>
                                         </div>
                                     ) : (
-                                        <>
-                                            <span className="text-5xl font-black tracking-tighter transition-colors" style={{ color: chartColor }}>{(livePrice ?? 50).toFixed(1)}%</span>
-                                            <span className="text-xl font-bold text-gray-500">chance</span>
-                                        </>
+                                        <div className="flex flex-col">
+                                            <div className="flex items-baseline gap-2">
+                                                <span className="text-5xl font-black tracking-tighter transition-colors" style={{ color: chartColor }}>{impliedProb.toFixed(1)}%</span>
+                                                <span className="text-sm font-bold text-gray-500 uppercase tracking-widest">Implied Prob.</span>
+                                            </div>
+
+                                            {/* MCAP STATS (HYPE UI) */}
+                                            <div className="flex items-center gap-6 mt-4 bg-white/5 p-3 rounded-xl border border-white/5 backdrop-blur-sm">
+                                                <div className="flex flex-col">
+                                                    <span className="text-[10px] font-black uppercase text-[#10B981] tracking-widest mb-0.5">YES Mcap</span>
+                                                    <span className="text-lg font-mono font-bold text-white tracking-tight text-shadow-green">${formatCompact(yesMcap * (solPrice || 200))}</span>
+                                                </div>
+                                                <div className="w-px h-8 bg-white/10" />
+                                                <div className="flex flex-col">
+                                                    <span className="text-[10px] font-black uppercase text-red-500 tracking-widest mb-0.5">NO Mcap</span>
+                                                    <span className="text-lg font-mono font-bold text-white tracking-tight text-shadow-red">${formatCompact(noMcap * (solPrice || 200))}</span>
+                                                </div>
+                                            </div>
+
+                                            {/* IGNITION BAR (THE GAME) */}
+                                            <div className="mt-4">
+                                                <IgnitionBar progress={ignitionProgress} status={ignitionStatus} />
+                                            </div>
+                                        </div>
                                     )}
                                 </div>
                                 {(myYesShares > 0 || myNoShares > 0) && (
@@ -867,13 +1022,20 @@ export default function Page() {
                                 )}
                             </div>
 
-                            {/* Unified Visx Chart */}
+                            {/* Unified Visx Chart - Polymarket Style with YES and NO lines */}
                             <PrettyChart
-                                series={isMultiOutcome ? chartSeries : [{
-                                    name: 'Prediction',
-                                    color: selectedSide === 'YES' ? '#10B981' : '#EF4444',
-                                    data: chartData
-                                }]}
+                                series={isMultiOutcome ? chartSeries : [
+                                    {
+                                        name: 'Yes',
+                                        color: '#10B981', // Green
+                                        data: chartData
+                                    },
+                                    {
+                                        name: 'No',
+                                        color: '#EF4444', // Red
+                                        data: chartData.map(d => ({ ...d, value: 100 - d.value }))
+                                    }
+                                ]}
                                 trigger={lastTradeEvent}
                             />
 
@@ -1052,12 +1214,12 @@ export default function Page() {
 
                     {/* RIGHT COLUMN: TRADING (Sticky) */}
                     <div className="md:col-span-4 space-y-6 sticky top-24 h-fit z-20">
-                        <div className="bg-[#0E0E0E] border border-white/10 rounded-[2.5rem] p-4 shadow-2xl">
-                            <div className="flex justify-between mb-4 items-center">
-                                <h3 className="text-[10px] font-black uppercase tracking-widest text-white opacity-40">Trade</h3>
+                        <div className="bg-gradient-to-b from-[#0E0E0E] to-[#050505] border border-white/10 rounded-[3rem] p-8 shadow-2xl backdrop-blur-xl">
+                            <div className="flex justify-between mb-6 items-center">
+                                <h3 className="text-[11px] font-medium uppercase tracking-[0.25em] text-white/40">Trade</h3>
                                 <div className="flex items-center gap-3">
-                                    <div className="flex items-center gap-2 text-[10px] font-bold text-[#F492B7] bg-[#F492B7]/10 px-3 py-1 rounded-full">
-                                        <Wallet size={10} /> <span>{solBalance.toFixed(2)} SOL</span>
+                                    <div className="flex items-center gap-2 text-[11px] font-semibold text-[#10B981] bg-[#10B981]/10 px-4 py-1.5 rounded-full border border-[#10B981]/20">
+                                        <Wallet size={12} /> <span>{solBalance.toFixed(2)} SOL</span>
                                     </div>
                                 </div>
                             </div>
@@ -1068,16 +1230,16 @@ export default function Page() {
                             </div>
 
                             {/* NEW: BUY / SELL TOGGLE */}
-                            <div className="mb-6 p-1 bg-white/5 rounded-xl flex">
+                            <div className="mb-8 p-2 bg-gradient-to-r from-white/[0.05] to-white/[0.03] rounded-[2rem] flex shadow-inner">
                                 <button
                                     onClick={() => setTradeMode('BUY')}
-                                    className={`flex-1 py-3 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${tradeMode === 'BUY' ? 'bg-[#10B981] text-black shadow-lg shadow-[#10B981]/20' : 'text-gray-500 hover:text-white'}`}
+                                    className={`flex-1 py-4 rounded-[1.75rem] text-sm font-bold uppercase tracking-[0.25em] transition-all duration-300 ${tradeMode === 'BUY' ? 'bg-gradient-to-r from-[#10B981] to-[#059669] text-black shadow-xl shadow-[#10B981]/40 scale-[1.02]' : 'text-gray-500 hover:text-white hover:bg-white/5'}`}
                                 >
                                     Buy
                                 </button>
                                 <button
                                     onClick={() => setTradeMode('SELL')}
-                                    className={`flex-1 py-3 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${tradeMode === 'SELL' ? 'bg-[#EF4444] text-white shadow-lg shadow-[#EF4444]/20' : 'text-gray-500 hover:text-white'}`}
+                                    className={`flex-1 py-4 rounded-[1.75rem] text-sm font-bold uppercase tracking-[0.25em] transition-all duration-300 ${tradeMode === 'SELL' ? 'bg-gradient-to-r from-[#EF4444] to-[#DC2626] text-white shadow-xl shadow-[#EF4444]/40 scale-[1.02]' : 'text-gray-500 hover:text-white hover:bg-white/5'}`}
                                 >
                                     Sell
                                 </button>
@@ -1100,51 +1262,97 @@ export default function Page() {
                                     </div>
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-2 gap-3 mb-6">
-                                    <button onClick={() => setSelectedSide('YES')} className={`p-4 rounded-2xl border transition-all ${selectedSide === 'YES' ? 'bg-emerald-500/10 border-emerald-500' : 'bg-white/5 border-white/5'}`}>
-                                        <span className={`block text-xs font-black uppercase mb-1 ${selectedSide === 'YES' ? 'text-emerald-500' : 'text-gray-500'}`}>YES</span>
-                                        <span className="block text-2xl font-black text-white">{(livePrice ?? 50).toFixed(0)}%</span>
+                                <div className="grid grid-cols-2 gap-4 mb-8">
+                                    <button onClick={() => setSelectedSide('YES')} className={`p-6 rounded-[2rem] border-2 transition-all duration-300 shadow-lg ${selectedSide === 'YES' ? 'bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border-emerald-500/60 shadow-emerald-500/20 scale-[1.05]' : 'bg-gradient-to-br from-white/[0.03] to-white/[0.01] border-white/10 hover:border-white/20 hover:scale-[1.02]'}`}>
+                                        <span className={`block text-xs font-bold uppercase tracking-[0.25em] mb-2 ${selectedSide === 'YES' ? 'text-emerald-400' : 'text-gray-500'}`}>YES</span>
+                                        <span className="block text-4xl font-extralight text-white tracking-tight">{(livePrice ?? 50).toFixed(0)}%</span>
                                     </button>
-                                    <button onClick={() => setSelectedSide('NO')} className={`p-4 rounded-2xl border transition-all ${selectedSide === 'NO' ? 'bg-red-500/10 border-red-500' : 'bg-white/5 border-white/5'}`}>
-                                        <span className={`block text-xs font-black uppercase mb-1 ${selectedSide === 'NO' ? 'text-red-500' : 'text-gray-500'}`}>NO</span>
-                                        <span className="block text-2xl font-black text-white">{(100 - livePrice).toFixed(0)}%</span>
+                                    <button onClick={() => setSelectedSide('NO')} className={`p-6 rounded-[2rem] border-2 transition-all duration-300 shadow-lg ${selectedSide === 'NO' ? 'bg-gradient-to-br from-red-500/20 to-red-600/10 border-red-500/60 shadow-red-500/20 scale-[1.05]' : 'bg-gradient-to-br from-white/[0.03] to-white/[0.01] border-white/10 hover:border-white/20 hover:scale-[1.02]'}`}>
+                                        <span className={`block text-xs font-bold uppercase tracking-[0.25em] mb-2 ${selectedSide === 'NO' ? 'text-red-400' : 'text-gray-500'}`}>NO</span>
+                                        <span className="block text-4xl font-extralight text-white tracking-tight">{(100 - livePrice).toFixed(0)}%</span>
                                     </button>
                                 </div>
                             )}
 
+                            {/* YOUR SHARES (Only in SELL Mode) - Shows market image */}
+                            {tradeMode === 'SELL' && (
+                                <div className="mb-6 p-6 bg-gradient-to-br from-red-500/10 to-orange-500/5 border-2 border-red-500/20 rounded-[2rem] shadow-lg">
+                                    <div className="flex items-center gap-4">
+                                        {/* Market Image */}
+                                        {(marketAccount?.banner_url || marketAccount?.icon) && (
+                                            <div className="w-16 h-16 rounded-xl overflow-hidden border border-white/10 flex-shrink-0">
+                                                {(marketAccount.banner_url?.startsWith('http') || marketAccount.banner_url?.startsWith('data:image') ||
+                                                    marketAccount.icon?.startsWith('http') || marketAccount.icon?.startsWith('data:image')) ? (
+                                                    <img
+                                                        src={marketAccount.banner_url || marketAccount.icon}
+                                                        alt=""
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                ) : (
+                                                    <div className="w-full h-full flex items-center justify-center text-2xl bg-white/5">
+                                                        {marketAccount.banner_url || marketAccount.icon || '🔮'}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                        {/* Share Info */}
+                                        <div className="flex-1 flex justify-between items-center">
+                                            <div>
+                                                <span className="text-[10px] font-bold uppercase text-gray-400 tracking-[0.25em]">Your {selectedSide} Shares</span>
+                                                <div className="text-4xl font-extralight text-white tracking-tight mt-1">
+                                                    {formatCompact(selectedSide === 'YES' ? myYesShares : myNoShares)}
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="text-[10px] font-bold uppercase text-gray-400 tracking-[0.25em]">Est. Value</span>
+                                                <div className="text-2xl font-semibold text-[#10B981] mt-1">
+                                                    {(() => {
+                                                        const shares = selectedSide === 'YES' ? myYesShares : myNoShares;
+                                                        const price = selectedSide === 'YES' ? livePrice : (100 - livePrice);
+                                                        const solValue = shares * (price / 100);
+                                                        return `${formatCompact(solValue)} SOL`;
+                                                    })()}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* INPUT FIELD */}
-                            <div className="mb-4 relative group">
-                                <div className={`absolute inset-0 bg-gradient-to-r ${tradeMode === 'BUY' ? 'from-[#10B981]/20 to-emerald-600/20' : 'from-red-500/20 to-orange-500/20'} blur-xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-500`}></div>
+                            <div className="mb-5 relative group">
+                                <div className={`absolute inset-0 bg-gradient-to-r ${tradeMode === 'BUY' ? 'from-[#10B981]/20 to-emerald-600/20' : 'from-red-500/20 to-orange-500/20'} blur-2xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-500 pointer-events-none`}></div>
                                 <div className="relative group">
                                     {/* Background Glow */}
-                                    <div className={`absolute inset-0 bg-gradient-to-r ${tradeMode === 'BUY' ? 'from-[#10B981]/20 to-emerald-600/20' : 'from-red-500/20 to-orange-500/20'} blur-xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-500 rounded-2xl`}></div>
+                                    <div className={`absolute inset-0 bg-gradient-to-r ${tradeMode === 'BUY' ? 'from-[#10B981]/20 to-emerald-600/20' : 'from-red-500/20 to-orange-500/20'} blur-2xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-500 rounded-[2rem] pointer-events-none`}></div>
 
-                                    <div className="relative flex items-center bg-[#0F111A] border border-white/5 rounded-2xl p-6 transition-all focus-within:border-white/10 focus-within:bg-[#141822]">
+                                    <div className="relative flex items-center bg-gradient-to-br from-[#0A0C12] to-[#050608] border border-white/10 rounded-[2rem] p-8 transition-all duration-300 focus-within:border-white/20 focus-within:shadow-2xl focus-within:shadow-white/5">
                                         {/* Input Area */}
                                         <div className="flex-1">
                                             <input
                                                 type="number"
                                                 value={betAmount}
                                                 onChange={(e) => setBetAmount(e.target.value)}
-                                                className="w-full bg-transparent text-white text-4xl font-black outline-none placeholder:text-gray-700 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none font-mono tracking-tighter"
+                                                onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                                                className="w-full bg-transparent text-white text-5xl font-extralight outline-none placeholder:text-gray-700/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none tracking-tight"
                                                 placeholder="0.00"
                                             />
-                                            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">
-                                                {tradeMode === 'BUY' ? 'You Pay' : 'You Extract'}
+                                            <div className="text-[10px] text-gray-500 font-medium uppercase tracking-[0.25em] mt-3">
+                                                {tradeMode === 'BUY' ? 'You Pay' : 'Amount in SOL'}
                                             </div>
                                         </div>
 
                                         {/* Suffix (SOL Label) */}
                                         <div className="flex flex-col items-end pl-6">
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-2.5">
                                                 <img
                                                     src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
                                                     alt="SOL"
-                                                    className="w-6 h-6 rounded-full"
+                                                    className="w-8 h-8 rounded-full ring-2 ring-white/5"
                                                 />
-                                                <span className="text-xl font-black text-white tracking-wider">SOL</span>
+                                                <span className="text-2xl font-semibold text-white tracking-wide">SOL</span>
                                             </div>
-                                            <span className="text-[10px] text-gray-400 font-mono font-bold mt-1">
+                                            <span className="text-[11px] text-gray-500 font-mono mt-2">
                                                 {amountNum > 0 ? `$${(amountNum * solPrice).toFixed(2)}` : '$0.00'}
                                             </span>
                                         </div>
@@ -1154,30 +1362,30 @@ export default function Page() {
                                 {tradeMode === 'SELL' && (
                                     (selectedSide === 'YES' && myYesShares > 0) || (selectedSide === 'NO' && myNoShares > 0)
                                 ) && (
-                                        <div className="mb-4">
-                                            <div className="flex justify-end gap-2 mb-2">
+                                        <div className="mt-5 mb-2">
+                                            <div className="flex justify-center gap-2.5">
                                                 {[25, 50, 75, 100].map((pct) => (
                                                     <button
                                                         key={pct}
                                                         onClick={() => {
-                                                            let val;
-                                                            // Inside tradeMode === 'SELL' block, so we set available to shares
                                                             const availableShares = selectedSide === 'YES' ? myYesShares : myNoShares;
                                                             const currentPrice = selectedSide === 'YES' ? livePrice : (100 - livePrice);
                                                             const priceRatio = currentPrice / 100;
-                                                            // availableShares is in Shares. Convert to SOL value for the input.
                                                             const totalSolValue = availableShares * priceRatio;
 
                                                             if (pct === 100) {
                                                                 setIsMaxSell(true);
-                                                                val = totalSolValue;
+                                                                setBetAmount(totalSolValue.toFixed(9));
                                                             } else {
                                                                 setIsMaxSell(false);
-                                                                val = totalSolValue * (pct / 100);
+                                                                const val = totalSolValue * (pct / 100);
+                                                                setBetAmount(val.toFixed(4));
                                                             }
-                                                            setBetAmount(val.toFixed(4));
                                                         }}
-                                                        className="px-3 py-1.5 text-[10px] font-bold text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors bg-white/5 border border-white/5"
+                                                        className={`px-6 py-3 text-xs font-bold rounded-full transition-all duration-200 ${pct === 100
+                                                            ? 'bg-gradient-to-r from-red-500/20 to-orange-500/20 text-red-400 border border-red-500/30 hover:from-red-500/30 hover:to-orange-500/30 shadow-lg hover:shadow-red-500/20'
+                                                            : 'text-gray-400 hover:text-white hover:bg-gradient-to-r hover:from-white/10 hover:to-white/5 bg-white/[0.03] border border-white/10 hover:border-white/20'
+                                                            }`}
                                                     >
                                                         {pct}%
                                                     </button>
@@ -1187,32 +1395,32 @@ export default function Page() {
                                     )}
 
                                 {/* Transaction Summary */}
-                                <div className="bg-white/5 rounded-2xl border border-white/5 p-4 space-y-3">
+                                <div className="bg-gradient-to-br from-white/[0.03] to-white/[0.01] rounded-[2rem] border border-white/10 p-6 space-y-5 mt-5 shadow-xl">
                                     {/* BUY MODE SUMMARY */}
                                     {tradeMode === 'BUY' && (
                                         <>
-                                            <div className="flex justify-between items-center text-gray-500 font-bold uppercase text-[9px] tracking-widest">
+                                            <div className="flex justify-between items-center text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em]">
                                                 <span>Exchange Rate</span>
-                                                <span className="font-mono text-[10px] lowercase text-gray-400">
-                                                    1 SOL ≈ {amountNum > 0 ? (estimatedShares / amountNum).toLocaleString(undefined, { maximumFractionDigits: 0 }) : '7,500'} shares
+                                                <span className="font-mono text-xs lowercase text-gray-300">
+                                                    1 SOL ≈ {amountNum > 0 ? formatCompact(estimatedShares / amountNum) : '7.5K'} shares
                                                 </span>
                                             </div>
-                                            <div className="flex justify-between items-center text-gray-500 font-bold uppercase text-[9px] tracking-widest pt-1">
+                                            <div className="flex justify-between items-center text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em]">
                                                 <span>Pool Impact</span>
-                                                <span className={`font-mono text-[10px] ${previewSim.priceImpact > 5 ? 'text-amber-400' : 'text-gray-400'}`}>
+                                                <span className={`font-mono text-xs ${previewSim.priceImpact > 5 ? 'text-amber-400' : 'text-gray-300'}`}>
                                                     {previewSim.priceImpact.toFixed(2)}%
                                                 </span>
                                             </div>
-                                            <div className="flex justify-between items-end border-t border-white/5 pt-3">
+                                            <div className="flex justify-between items-end border-t border-white/10 pt-5">
                                                 <div>
-                                                    <span className="block text-gray-500 font-bold uppercase text-[9px] tracking-widest mb-1">Shares to Receive</span>
-                                                    <span className="text-3xl font-black text-white leading-none tracking-tighter">
-                                                        {estimatedShares.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                    <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">Shares to Receive</span>
+                                                    <span className="text-4xl font-extralight text-white leading-none tracking-tight">
+                                                        {formatCompact(estimatedShares)}
                                                     </span>
                                                 </div>
                                                 <div className="text-right">
-                                                    <span className="block text-gray-500 font-bold uppercase text-[9px] tracking-widest mb-1">Cost</span>
-                                                    <span className="text-xs font-black text-emerald-400 font-mono tracking-tight">
+                                                    <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">Cost</span>
+                                                    <span className="text-base font-bold text-[#10B981] font-mono">
                                                         ${(parseFloat(betAmount || '0') * solPrice).toFixed(2)}
                                                     </span>
                                                 </div>
@@ -1222,20 +1430,28 @@ export default function Page() {
 
                                     {/* SELL MODE SUMMARY */}
                                     {tradeMode === 'SELL' && (
-                                        <div className="flex justify-between items-end">
-                                            <div>
-                                                <span className="block text-gray-500 font-bold uppercase text-[9px] tracking-widest mb-1">Shares to Burn</span>
-                                                <span className="text-3xl font-black text-white leading-none tracking-tighter">
-                                                    {(parseFloat(betAmount || '0') / (currentPriceForSide / 100)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                        <>
+                                            <div className="flex justify-between items-center text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em]">
+                                                <span>Exit Price</span>
+                                                <span className="font-mono text-xs text-gray-300">
+                                                    {currentPriceForSide.toFixed(1)}%
                                                 </span>
                                             </div>
-                                            <div className="text-right">
-                                                <span className="block text-gray-500 font-bold uppercase text-[9px] tracking-widest mb-1">Extracting</span>
-                                                <span className="text-sm font-black text-red-400 font-mono tracking-tight">
-                                                    ◎{parseFloat(betAmount || '0').toFixed(4)}
-                                                </span>
+                                            <div className="flex justify-between items-end border-t border-white/10 pt-5 mt-4">
+                                                <div>
+                                                    <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">Shares Sold</span>
+                                                    <span className="text-4xl font-extralight text-white leading-none tracking-tight">
+                                                        {formatCompact(parseFloat(betAmount || '0') / (currentPriceForSide / 100))}
+                                                    </span>
+                                                </div>
+                                                <div className="text-right">
+                                                    <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">You Get</span>
+                                                    <span className="text-xl font-bold text-[#10B981] font-mono">
+                                                        ◎{formatCompact(parseFloat(betAmount || '0') * 0.99)}
+                                                    </span>
+                                                </div>
                                             </div>
-                                        </div>
+                                        </>
                                     )}
                                 </div>
                             </div>
@@ -1243,8 +1459,8 @@ export default function Page() {
                             <button
                                 onClick={handleTrade}
                                 disabled={isPending || isSuccess}
-                                className={`w-full py-5 rounded-2xl font-black text-lg uppercase tracking-widest shadow-xl transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden group ${isSuccess ? 'bg-[#10B981] text-black' :
-                                    tradeMode === 'BUY' ? 'bg-[#10B981] text-black hover:bg-emerald-400' : 'bg-[#EF4444] text-white hover:bg-red-600'
+                                className={`w-full py-6 rounded-[2rem] font-bold text-lg uppercase tracking-[0.25em] shadow-2xl transition-all duration-300 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden group mt-6 ${isSuccess ? 'bg-gradient-to-r from-[#10B981] to-[#059669] text-black' :
+                                    tradeMode === 'BUY' ? 'bg-gradient-to-r from-[#10B981] to-[#059669] text-black hover:shadow-[#10B981]/50 hover:shadow-2xl hover:scale-[1.02]' : 'bg-gradient-to-r from-[#EF4444] to-[#DC2626] text-white hover:shadow-[#EF4444]/50 hover:shadow-2xl hover:scale-[1.02]'
                                     }`}
                             >
                                 {isPending ? (
@@ -1253,7 +1469,7 @@ export default function Page() {
                                     </div>
                                 ) : isSuccess ? (
                                     <div className="flex items-center justify-center gap-2">
-                                        <CheckCircle2 /> <span style={{ fontFamily: 'var(--font-adriane), serif' }} className="text-xl pt-1">SUCCESS!</span>
+                                        <CheckCircle2 /> <span className="text-lg">Success</span>
                                     </div>
                                 ) : (
                                     <span>
@@ -1261,6 +1477,27 @@ export default function Page() {
                                     </span>
                                 )}
                             </button>
+
+                            {/* SUCCESS BUBBLE - Shows after successful trade */}
+                            {tradeSuccessInfo && (
+                                <div className="mt-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                    <div className="bg-gradient-to-r from-emerald-500/20 to-emerald-600/10 border-2 border-emerald-500/40 rounded-[1.5rem] p-4 text-center shadow-xl shadow-emerald-500/10">
+                                        <p className="text-emerald-400 font-bold text-sm">
+                                            ✓ Successfully purchased {tradeSuccessInfo.shares.toFixed(2)} {tradeSuccessInfo.side} shares
+                                        </p>
+                                        {tradeSuccessInfo.txSignature && (
+                                            <a
+                                                href={`https://solscan.io/tx/${tradeSuccessInfo.txSignature}?cluster=devnet`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-xs text-emerald-500/70 hover:text-emerald-400 underline underline-offset-2 mt-2 inline-block transition-all hover:scale-105"
+                                            >
+                                                View on Solscan →
+                                            </a>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -1285,36 +1522,6 @@ export default function Page() {
                     />
                 )}
 
-                {/* Active Positions Widget (Bottom Right) */}
-                <ActivePositionsWidget
-                    walletAddress={publicKey?.toBase58() || null}
-                    currentSlug={effectiveSlug}
-                    onSell={(position) => {
-                        if (position.market_slug !== effectiveSlug) {
-                            window.location.href = `/market/${position.market_slug}`;
-                        }
-                    }}
-                    onCollect={async (position) => {
-                        try {
-                            await supabaseDb.claimPayout(position.id);
-                            setDjinnToast({
-                                isVisible: true,
-                                type: 'SUCCESS',
-                                title: 'Payout Claimed!',
-                                message: `Successfully claimed $${position.payout?.toFixed(2)}.`,
-                            });
-                            setTimeout(() => window.location.reload(), 2000);
-                        } catch (e) {
-                            console.error('Error claiming:', e);
-                            setDjinnToast({
-                                isVisible: true,
-                                type: 'ERROR',
-                                title: 'Claim Failed',
-                                message: 'Could not claim payout. Please try again.'
-                            });
-                        }
-                    }}
-                />
 
                 {/* Djinn Toast */}
                 <DjinnToast

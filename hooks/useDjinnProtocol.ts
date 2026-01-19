@@ -47,6 +47,7 @@ export const useDjinnProtocol = () => {
         title: string,
         description: string,
         endDate: Date,
+        sourceUrl: string = '', // Veritas Protocol: Source URL for verification
         initialBuyAmount: number = 0,
         initialBuySide: 'yes' | 'no' = 'yes'
     ) => {
@@ -65,14 +66,46 @@ export const useDjinnProtocol = () => {
             if (balance < 0.01 * 1e9) {
                 throw new Error('Insufficient SOL balance (need ~0.01 SOL for transaction)');
             }
+
+            // Generate ABSOLUTELY UNIQUE nonce: timestamp + random
+            const nonce = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+            console.log("[Djinn] 🎲 Unique nonce generated:", nonce);
+            // Manual little-endian i64 conversion (browser compatible)
+            const nonceBuffer = new Uint8Array(8);
+            let n = BigInt(nonce);
+            for (let i = 0; i < 8; i++) {
+                nonceBuffer[i] = Number(n & BigInt(0xff));
+                n >>= BigInt(8);
+            }
+
             const [marketPda] = await PublicKey.findProgramAddress(
                 [
                     Buffer.from("market"),
                     wallet.publicKey.toBuffer(),
-                    Buffer.from(title)
+                    Buffer.from(title),
+                    nonceBuffer
                 ],
                 program.programId
             );
+
+            // CHECK: Does this market PDA already exist on-chain?
+            const existingAccount = await provider.connection.getAccountInfo(marketPda);
+            console.log("[Djinn] 🔎 Market PDA:", marketPda.toBase58());
+            console.log("[Djinn] 🔎 PDA exists on-chain?:", existingAccount !== null);
+
+            if (existingAccount !== null) {
+                console.warn("[Djinn] ⚠️ Market already exists! Returning existing PDA.");
+                // Market already created - return success
+                const [yesMintPda] = await PublicKey.findProgramAddress(
+                    [Buffer.from("yes_mint"), marketPda.toBuffer()],
+                    program.programId
+                );
+                const [noMintPda] = await PublicKey.findProgramAddress(
+                    [Buffer.from("no_mint"), marketPda.toBuffer()],
+                    program.programId
+                );
+                return { tx: 'existing_market', marketPda, yesMintPda, noMintPda };
+            }
 
             const [yesMintPda] = await PublicKey.findProgramAddress(
                 [Buffer.from("yes_mint"), marketPda.toBuffer()],
@@ -122,7 +155,8 @@ export const useDjinnProtocol = () => {
                     title,
                     new BN(Math.floor(endDate.getTime() / 1000)),
                     new BN(2), // Force BN for u8 serialization safety
-                    new BN(1_000_000_000) // Heavyweight 1B Anchor
+                    new BN(1_000_000_000), // Heavyweight 1B Anchor
+                    new BN(nonce) // Unique nonce for duplicate titles
                 )
                 .accounts({
                     market: marketPda,
@@ -141,10 +175,15 @@ export const useDjinnProtocol = () => {
             // Send Transaction
             if (!provider) throw new Error("Provider not available");
 
-            console.log("[Djinn] Sending transaction...");
+            // CRITICAL: Get fresh blockhash to prevent "already processed" error
+            const { blockhash, lastValidBlockHeight } = await provider.connection.getLatestBlockhash('confirmed');
+            tx.recentBlockhash = blockhash;
+            tx.feePayer = wallet.publicKey;
+
+            console.log("[Djinn] Sending transaction with nonce:", nonce, "blockhash:", blockhash.slice(0, 10) + "...");
             const signature = await provider.sendAndConfirm(tx, [], {
                 commitment: 'confirmed',
-                skipPreflight: false
+                skipPreflight: true // BYPASS simulation caching issues
             });
             console.log("[Djinn] ✅ Transaction confirmed:", signature);
 
@@ -168,56 +207,54 @@ export const useDjinnProtocol = () => {
 
         try {
             const amountLamports = new BN(amountSol * web3.LAMPORTS_PER_SOL);
-            const minSharesBN = new BN(minSharesOut * 1_000_000_000);
 
-            const { getAssociatedTokenAddress, createAssociatedTokenAccountIdempotentInstruction } = await import('@solana/spl-token');
-
-            const userYesATA = await getAssociatedTokenAddress(yesMint, wallet.publicKey);
-            const userNoATA = await getAssociatedTokenAddress(noMint, wallet.publicKey);
-
-            const transaction = new web3.Transaction();
-            transaction.add(
-                web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
-                web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50000 }), // Priority Fee
-                createAssociatedTokenAccountIdempotentInstruction(wallet.publicKey, userYesATA, wallet.publicKey, yesMint),
-                createAssociatedTokenAccountIdempotentInstruction(wallet.publicKey, userNoATA, wallet.publicKey, noMint)
-            );
+            // CRITICAL FIX: JS Number limit is 9e15. 2B shares * 1e9 = 2e18.
+            // We must use BN multiplication, NOT JS multiplication.
+            const minSharesBN = new BN(Math.floor(minSharesOut)).mul(new BN(1_000_000_000));
 
             // Side -> Outcome Index (0=Yes, 1=No for V1 Binary)
-            // But V3 uses u8 index. 
-            // NOTE: This assumes Protocol V1 Binary (0=Yes, 1=No).
-            // Logic must match contract expectation if contract simply mapped outcomes.
-            // V3 has `outcomeIndex` u8. 'yes' is usually index 0, 'no' index 1?
-            // Actually, `initializeMarket` creates N outcomes.
-            // If binary, traditionally 0 = Yes, 1 = No.
-            // Let's verify standard: Usually outcome[0] is YES, outcome[1] is NO.
             const outcomeIndex = side.toLowerCase() === 'yes' ? 0 : 1;
 
-            const buyIx = await program.methods
+            // CRITICAL DEBUG: Log arguments before calling contract
+            console.log("🛠️ BUY ARGS DEBUG:");
+            console.log("- outcomeIndex:", outcomeIndex);
+            console.log("- amountLamports:", amountLamports.toString());
+            console.log("- minSharesBN:", minSharesBN.toString());
+
+            // Set to 99.99% (9999 bps) for new markets with low liquidity where ANY buy has huge impact.
+            const maxPriceImpactBps = 9999; // u16 max is ~65535
+
+            // FIX: Use .rpc() instead of sendAndConfirm to avoid duplicate transaction issues.
+            // .rpc() creates a fresh transaction with new blockhash each time.
+            // V2: PDA now includes outcome_index to allow holding both YES and NO positions
+            const userPositionPda = PublicKey.findProgramAddressSync(
+                [Buffer.from("user_pos"), marketPda.toBuffer(), wallet.publicKey.toBuffer(), Buffer.from([outcomeIndex])],
+                program.programId
+            )[0];
+
+            const txHash = await program.methods
                 .buyShares(
                     outcomeIndex,
                     amountLamports,
                     minSharesBN,
-                    new BN(Date.now() / 1000 + 60) // Deadline
+                    maxPriceImpactBps
                 )
                 .accounts({
                     market: marketPda,
-                    mapketVault: marketPda, // Anchor might resolve PDA, but usually need vault PDA
-                    // Wait, IDL says "marketVault".
-                    // We need to derive vault PDA.
                     marketVault: PublicKey.findProgramAddressSync([Buffer.from("market_vault"), marketPda.toBuffer()], program.programId)[0],
-                    userPosition: PublicKey.findProgramAddressSync([Buffer.from("user_pos"), marketPda.toBuffer(), wallet.publicKey.toBuffer()], program.programId)[0],
+                    userPosition: userPositionPda,
                     user: wallet.publicKey,
                     protocolTreasury: MASTER_TREASURY,
-                    marketCreator: marketCreator, // PASSED ARG
+                    marketCreator: marketCreator,
                     systemProgram: SystemProgram.programId,
                 })
-                .instruction();
+                .preInstructions([
+                    web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
+                    web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50000 }),
+                ])
+                .rpc({ skipPreflight: true, commitment: 'confirmed' });
 
-            transaction.add(buyIx);
-
-            // @ts-ignore
-            const txHash = await program.provider.sendAndConfirm(transaction);
+            console.log("✅ Buy TX Hash:", txHash);
             return txHash;
 
         } catch (error) {
@@ -333,52 +370,110 @@ export const useDjinnProtocol = () => {
     ) => {
         if (!program || !wallet) throw new Error("Wallet not connected");
 
+        // DEBUG: Verify program is loaded correctly
+        console.log("🔍 SELL DEBUG - Program Check:");
+        console.log("- Program ID:", program.programId.toBase58());
+        console.log("- IDL Instructions:", (program.idl as any).instructions?.map((i: any) => i.name));
+        console.log("- sellShares exists?:", !!(program.methods as any).sellShares);
+
         try {
-            const { getAssociatedTokenAddress, createAssociatedTokenAccountIdempotentInstruction } = await import('@solana/spl-token');
+            const { getAssociatedTokenAddress } = await import('@solana/spl-token');
             const userYesATA = await getAssociatedTokenAddress(yesMint, wallet.publicKey);
             const userNoATA = await getAssociatedTokenAddress(noMint, wallet.publicKey);
 
-            // Robust Rounding for BN
-            let sharesRaw = new BN(Math.floor(sharesAmount * 1_000_000_000));
-            const minSolBN = new BN(Math.floor(minSolOut * web3.LAMPORTS_PER_SOL));
+            // V2: Derive outcome index from side
+            const outcomeIndex = side.toLowerCase() === 'yes' ? 0 : 1;
 
-            // Just simplistic logic for now
-            if (sellMax) {
-                const targetATA = side === 'yes' ? userYesATA : userNoATA;
-                try {
-                    const balance = await connection.getTokenAccountBalance(targetATA);
-                    sharesRaw = new BN(balance.value.amount);
-                } catch (e) { }
+            console.error("🔍 SELL - PDA Derivation Debug:");
+            console.error("- marketPda:", marketPda.toBase58());
+            console.error("- wallet:", wallet.publicKey.toBase58());
+            console.error("- outcomeIndex:", outcomeIndex);
+            console.error("- program.programId:", program.programId.toBase58());
+
+            // ALWAYS read shares directly from on-chain UserPosition PDA
+            // This avoids all JavaScript precision issues with large numbers
+            const userPositionPda = PublicKey.findProgramAddressSync(
+                [Buffer.from("user_pos"), marketPda.toBuffer(), wallet.publicKey.toBuffer(), Buffer.from([outcomeIndex])],
+                program.programId
+            )[0];
+            console.error("- userPositionPda:", userPositionPda.toBase58());
+
+            let onChainSharesRaw = BigInt(0);
+            try {
+                const posAcct = await connection.getAccountInfo(userPositionPda);
+                console.error("📦 UserPosition account exists?:", posAcct !== null);
+                console.error("📦 Account data length:", posAcct?.data?.length);
+
+                if (posAcct?.data && posAcct.data.length >= 57) {
+                    // Debug: Print first 66 bytes
+                    console.error("📦 Account data (first 66 bytes hex):", posAcct.data.subarray(0, 66).toString('hex'));
+
+                    // Parse shares from UserPosition: offset 41, 16 bytes (u128)
+                    const lo = posAcct.data.readBigUInt64LE(41);
+                    const hi = posAcct.data.readBigUInt64LE(49);
+                    onChainSharesRaw = lo + (hi * BigInt(2 ** 64));
+                    console.error("📊 On-chain raw shares u128:", onChainSharesRaw.toString());
+                    console.error("📊 On-chain normalized shares:", Number(onChainSharesRaw) / 1e9);
+                } else {
+                    console.error("⚠️ UserPosition account not found or too small");
+                    console.error("⚠️ This means you either haven't bought shares ON-CHAIN, or the PDA derivation is wrong");
+                    console.error("⚠️ The UI shows DB shares, but on-chain position is 0!");
+                }
+            } catch (e) {
+                console.error("Failed to get on-chain position:", e);
             }
 
-            if (sharesRaw.isZero()) throw new Error("Amount too small to sell");
+            let sharesToBurnBN: BN;
+            if (sellMax || sharesAmount >= Number(onChainSharesRaw) / 1e9 * 0.99) {
+                // For MAX sell or selling almost all, use exact on-chain balance
+                sharesToBurnBN = new BN(onChainSharesRaw.toString());
+                console.log("🔥 SELL ALL - Using exact on-chain balance:", sharesToBurnBN.toString());
+            } else {
+                // For partial sell, calculate from sharesAmount
+                // sharesAmount is normalized (e.g., 7.5 shares)
+                // Need to convert to raw (7.5 * 1e9 = 7,500,000,000)
+                // Use string multiplication to avoid JS precision loss
+                const sharesStr = sharesAmount.toFixed(9); // e.g., "7.500000000"
+                const [intPart, decPart = ''] = sharesStr.split('.');
+                const paddedDec = decPart.padEnd(9, '0').slice(0, 9);
+                const rawStr = intPart + paddedDec; // e.g., "7500000000"
+                sharesToBurnBN = new BN(rawStr);
+                console.log("📊 Partial sell - calculated shares:", sharesToBurnBN.toString());
+            }
 
-            const transaction = new web3.Transaction();
-            // Ensure BOTH ATAs exist for the contract to validate them
-            transaction.add(
-                web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
-                web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50000 }),
-                createAssociatedTokenAccountIdempotentInstruction(wallet.publicKey, userYesATA, wallet.publicKey, yesMint),
-                createAssociatedTokenAccountIdempotentInstruction(wallet.publicKey, userNoATA, wallet.publicKey, noMint)
-            );
+            console.log("🛠️ SELL ARGS DEBUG:");
+            console.log("- sharesAmount (UI):", sharesAmount);
+            console.log("- onChainSharesRaw:", onChainSharesRaw.toString());
+            console.log("- sharesToBurnBN:", sharesToBurnBN.toString());
+            console.log("- outcomeIndex:", outcomeIndex);
+            console.log("- sellMax:", sellMax);
 
-            const sellIx = await program.methods
-                .sellShares(sharesRaw)
+            if (sharesToBurnBN.isZero() || sharesToBurnBN.isNeg()) {
+                throw new Error("No shares to sell. Check your position.");
+            }
+
+            console.log("📍 PDAs:");
+            console.log("- userPositionPda:", userPositionPda.toBase58());
+            console.log("- marketVault:", PublicKey.findProgramAddressSync([Buffer.from("market_vault"), marketPda.toBuffer()], program.programId)[0].toBase58());
+
+            // FIX: Use .rpc() with skipPreflight like buyShares to avoid duplicate tx errors
+            const tx = await program.methods
+                .sellShares(outcomeIndex, sharesToBurnBN)
                 .accounts({
                     market: marketPda,
                     marketVault: PublicKey.findProgramAddressSync([Buffer.from("market_vault"), marketPda.toBuffer()], program.programId)[0],
-                    userPosition: PublicKey.findProgramAddressSync([Buffer.from("user_pos"), marketPda.toBuffer(), wallet.publicKey.toBuffer()], program.programId)[0],
+                    userPosition: userPositionPda,
                     user: wallet.publicKey,
                     protocolTreasury: MASTER_TREASURY,
                     marketCreator: marketCreator,
                     systemProgram: SystemProgram.programId,
                 })
-                .instruction();
+                .preInstructions([
+                    web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
+                    web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50000 }),
+                ])
+                .rpc({ skipPreflight: true, commitment: 'confirmed' });
 
-            transaction.add(sellIx);
-
-            // @ts-ignore
-            const tx = await program.provider.sendAndConfirm(transaction);
             console.log("✅ Shares sold:", tx);
             return tx;
         } catch (error) {

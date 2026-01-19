@@ -8,7 +8,8 @@ import MarketCard from '@/components/MarketCard';
 import { MarketGridSkeleton } from '@/components/ui/Skeletons';
 import { useCategory } from '@/lib/CategoryContext';
 import { getMarkets as getSupabaseMarkets } from '@/lib/supabase-db';
-import ActivePositionsWidget from '@/components/market/ActivePositionsWidget';
+import { formatCompact } from '@/lib/utils';
+
 import TheGreatPyramid from '@/components/TheGreatPyramid';
 
 
@@ -205,9 +206,8 @@ export default function Home() {
           finalMarkets = supabaseMarkets.map((m, index) => ({
             id: m.id || `sb-${index}`,
             title: m.title,
-            icon: m.banner_url || '🔮',
             chance: Math.round((m.total_yes_pool / (m.total_yes_pool + m.total_no_pool + 1)) * 100) || 50,
-            volume: `$${((m.total_yes_pool + m.total_no_pool) / 1000).toFixed(1)}K`,
+            volume: `$${formatCompact(m.total_yes_pool + m.total_no_pool)}`,
             type: 'binary',
             category: (m as any).category || 'Trending',
             endDate: m.end_date ? new Date(m.end_date) : new Date('2026-12-31'),
@@ -466,24 +466,7 @@ export default function Home() {
 
 
 
-      {/* Active Positions Widget (Bottom Right - Same as Profile) */}
-      <ActivePositionsWidget
-        walletAddress={publicKey?.toBase58() || null}
-        onSell={(position) => {
-          router.push(`/market/${position.market_slug}`);
-        }}
-        onCollect={async (position) => {
-          try {
-            const { claimPayout } = await import('@/lib/supabase-db');
-            await claimPayout(position.id);
-            alert(`Claimed $${position.payout?.toFixed(2)}! Funds will be sent to your wallet.`);
-            window.location.reload();
-          } catch (e) {
-            console.error('Error claiming:', e);
-            alert('Error claiming payout.');
-          }
-        }}
-      />
+
 
     </div>
   );

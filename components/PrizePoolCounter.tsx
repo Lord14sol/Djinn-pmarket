@@ -17,10 +17,10 @@ export const PrizePoolCounter = ({ totalSol }: PrizePoolCounterProps) => {
     const formattedPool = totalSol.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
     return (
-        <div className="relative flex flex-col items-center justify-center p-6 bg-black/40 rounded-2xl border border-[#FF0096]/30 shadow-[0_0_30px_rgba(255,0,150,0.1)] overflow-hidden">
+        <div className="relative flex flex-col items-center justify-center p-6 bg-black/40 rounded-2xl border border-white/10 shadow-[0_0_30px_rgba(255,255,255,0.05)] overflow-hidden">
 
-            {/* Background Glow */}
-            <div className={`absolute inset-0 bg-[#FF0096] opacity-[0.05] ${intensity >= 2 ? 'animate-pulse' : ''}`} />
+            {/* Background Glow - Subtle */}
+            <div className={`absolute inset-0 bg-white opacity-[0.02] ${intensity >= 2 ? 'animate-pulse' : ''}`} />
 
             <span className="text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2 z-10">
                 Current Prize Pool
@@ -28,9 +28,9 @@ export const PrizePoolCounter = ({ totalSol }: PrizePoolCounterProps) => {
 
             <div className="relative z-10 flex items-baseline gap-2">
                 <motion.span
-                    className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-[#FF0096] italic transform -skew-x-12"
+                    className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#10B981] to-[#34D399] italic transform -skew-x-12"
                     animate={intensity >= 3 ? {
-                        textShadow: ["0 0 10px #FF0096", "0 0 20px #FF0096", "0 0 10px #FF0096"],
+                        textShadow: ["0 0 10px #10B981", "0 0 20px #10B981", "0 0 10px #10B981"],
                         scale: [1, 1.02, 1]
                     } : {}}
                     transition={{ duration: 0.5, repeat: Infinity }}
@@ -47,7 +47,7 @@ export const PrizePoolCounter = ({ totalSol }: PrizePoolCounterProps) => {
                     {[...Array(5)].map((_, i) => (
                         <motion.div
                             key={i}
-                            className="absolute w-1 h-1 bg-[#FF0096] rounded-full"
+                            className="absolute w-1 h-1 bg-white/30 rounded-full"
                             initial={{ x: "50%", y: "50%", opacity: 1 }}
                             animate={{
                                 x: `${Math.random() * 200 - 100}%`,

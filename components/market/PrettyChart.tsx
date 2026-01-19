@@ -58,8 +58,29 @@ const Chart = ({ series, width, height }: { series: OutcomeSeries[]; width: numb
 
     // 1. SCALES
     const allData = useMemo(() => series.flatMap(s => s.data), [series]);
-    const minDate = Math.min(...allData.map(d => d.date));
-    const maxDate = Math.max(...allData.map(d => d.date));
+
+    // POLYMARKET STYLE FIX: If only 1 point (new market), create a fake start point 24h ago
+    // This draws a flat line instead of a single dot
+    const processedSeries = useMemo(() => {
+        return series.map(s => {
+            if (s.data.length === 1) {
+                const now = s.data[0].date;
+                const yesterday = now - (24 * 60 * 60 * 1000);
+                return {
+                    ...s,
+                    data: [
+                        { date: yesterday, value: s.data[0].value },
+                        { date: now, value: s.data[0].value }
+                    ]
+                };
+            }
+            return s;
+        });
+    }, [series]);
+
+    const processedData = useMemo(() => processedSeries.flatMap(s => s.data), [processedSeries]);
+    const minDate = Math.min(...processedData.map(d => d.date));
+    const maxDate = Math.max(...processedData.map(d => d.date));
 
     const xScale = useMemo(() => scaleTime({
         domain: [minDate, maxDate],
@@ -78,7 +99,7 @@ const Chart = ({ series, width, height }: { series: OutcomeSeries[]; width: numb
         const x0 = xScale.invert(x);
 
         // Find closest point for EACH series
-        const hoverData = series.map(s => {
+        const hoverData = processedSeries.map(s => {
             const index = bisectDate(s.data, x0, 1);
             const d0 = s.data[index - 1];
             const d1 = s.data[index];
@@ -101,7 +122,7 @@ const Chart = ({ series, width, height }: { series: OutcomeSeries[]; width: numb
                 tooltipTop: 0, // Not used for positioning list
             });
         }
-    }, [xScale, series, showTooltip]);
+    }, [xScale, processedSeries, showTooltip]);
 
     return (
         <div className="relative">
@@ -118,7 +139,7 @@ const Chart = ({ series, width, height }: { series: OutcomeSeries[]; width: numb
                 />
 
                 {/* Series Lines & Dots */}
-                {series.map((s, i) => {
+                {processedSeries.map((s, i) => {
                     const lastPoint = s.data[s.data.length - 1];
                     return (
                         <g key={`series-${i}`}>
@@ -130,16 +151,31 @@ const Chart = ({ series, width, height }: { series: OutcomeSeries[]; width: numb
                                 strokeWidth={3} // 3px Sharp
                                 curve={curveStepAfter} // Step Interpolation
                             />
-                            {/* Live Indicator Dot */}
+                            {/* Live Indicator Dot with Pulse Animation */}
                             {lastPoint && (
-                                <Circle
-                                    cx={xScale(lastPoint.date)}
-                                    cy={yScale(lastPoint.value)}
-                                    r={4}
-                                    fill={s.color || '#fff'}
-                                    stroke={THEME.BG}
-                                    strokeWidth={2}
-                                />
+                                <g>
+                                    {/* Pulse Ring (Outer Glow) */}
+                                    <Circle
+                                        cx={xScale(lastPoint.date)}
+                                        cy={yScale(lastPoint.value)}
+                                        r={8}
+                                        fill="transparent"
+                                        stroke={s.color || '#fff'}
+                                        strokeWidth={1}
+                                        opacity={0.4}
+                                        className="animate-ping"
+                                        style={{ transformOrigin: `${xScale(lastPoint.date)}px ${yScale(lastPoint.value)}px` }}
+                                    />
+                                    {/* Main Dot */}
+                                    <Circle
+                                        cx={xScale(lastPoint.date)}
+                                        cy={yScale(lastPoint.value)}
+                                        r={5}
+                                        fill={s.color || '#fff'}
+                                        stroke={THEME.BG}
+                                        strokeWidth={2}
+                                    />
+                                </g>
                             )}
                         </g>
                     );
