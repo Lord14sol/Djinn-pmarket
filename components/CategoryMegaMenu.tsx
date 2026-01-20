@@ -2,6 +2,7 @@
 import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCategory } from '@/lib/CategoryContext';
+import { AnimatePresence, motion } from 'framer-motion';
 
 interface Category {
     id: string;
@@ -28,6 +29,21 @@ const CATEGORIES: Category[] = [
         glowColor: '#10B981'
     },
     {
+        id: 'earth',
+        name: 'Earth',
+        slug: 'Earth',
+        image: '/category-earth-v2.png',
+        glowColor: '#06B6D4',
+        subcategories: [
+            { id: 'north-america', name: 'North America', image: '/region-north-america.png' },
+            { id: 'south-america', name: 'South America', image: '/region-south-america.png' },
+            { id: 'europe', name: 'Europe', image: '/region-europe.jpg' },
+            { id: 'asia', name: 'Asia', image: '/region-asia.png' },
+            { id: 'africa', name: 'Africa', image: '/region-africa.jpg' },
+            { id: 'oceania', name: 'Oceania', image: '/region-oceania.png' }
+        ]
+    },
+    {
         id: 'crypto',
         name: 'Crypto',
         slug: 'Crypto',
@@ -49,19 +65,11 @@ const CATEGORIES: Category[] = [
         glowColor: '#EC4899'
     },
     {
-        id: 'earth',
-        name: 'Earth',
-        slug: 'Earth',
-        image: '/category-earth-v2.png',
-        glowColor: '#06B6D4',
-        subcategories: [
-            { id: 'north-america', name: 'North America', image: '/region-north-america.png' },
-            { id: 'south-america', name: 'South America', image: '/region-south-america.png' },
-            { id: 'europe', name: 'Europe', image: '/region-europe.jpg' },
-            { id: 'asia', name: 'Asia', image: '/region-asia.png' },
-            { id: 'africa', name: 'Africa', image: '/region-africa.jpg' },
-            { id: 'oceania', name: 'Oceania', image: '/region-oceania.png' }
-        ]
+        id: 'trenches',
+        name: 'Trenches',
+        slug: 'Trenches',
+        image: '/trenches-header.png',
+        glowColor: '#84CC16'
     },
     {
         id: 'movies',
@@ -232,39 +240,44 @@ export default function CategoryMegaMenu() {
                                 </button>
 
                                 {/* Subcategory Carousel (Earth) */}
-                                {category.subcategories && hoveredCategory === category.id && (
-                                    <div
-                                        className="absolute top-full left-1/2 -translate-x-1/2 mt-3 z-20
-                                            bg-[#0A0A0A]/95 backdrop-blur-xl border border-white/10 rounded-2xl p-4
-                                            animate-in fade-in slide-in-from-top-2 duration-300
-                                            min-w-[450px] shadow-2xl"
-                                    >
-                                        <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
-                                            {category.subcategories.map((sub) => (
-                                                <button
-                                                    key={sub.id}
-                                                    onClick={() => handleSubcategoryClick(category.slug, sub.name)}
-                                                    className="flex-shrink-0 group/sub relative w-[100px] h-[80px] rounded-xl overflow-hidden
-                                                        border-2 border-white/10 hover:border-[#F492B7] transition-all duration-300"
-                                                >
-                                                    {sub.image ? (
-                                                        <img
-                                                            src={sub.image}
-                                                            alt={sub.name}
-                                                            className="w-full h-full object-cover group-hover/sub:scale-110 transition-transform duration-500"
-                                                        />
-                                                    ) : (
-                                                        <div className="w-full h-full bg-gradient-to-br from-[#06B6D4]/20 to-[#F492B7]/20" />
-                                                    )}
-                                                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
-                                                    <span className="absolute bottom-1.5 left-1.5 right-1.5 text-[9px] font-bold text-white uppercase tracking-wider text-center truncate">
-                                                        {sub.name}
-                                                    </span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
+                                <AnimatePresence>
+                                    {category.subcategories && hoveredCategory === category.id && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                                            exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                                            transition={{ duration: 0.2, ease: "easeOut" }}
+                                            className="absolute top-full left-1/2 -translate-x-1/2 mt-3 z-20
+                                                bg-[#0A0A0A]/95 backdrop-blur-xl border border-white/10 rounded-2xl p-4
+                                                min-w-[450px] shadow-2xl"
+                                        >
+                                            <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
+                                                {category.subcategories.map((sub) => (
+                                                    <button
+                                                        key={sub.id}
+                                                        onClick={() => handleSubcategoryClick(category.slug, sub.name)}
+                                                        className="flex-shrink-0 group/sub relative w-[100px] h-[80px] rounded-xl overflow-hidden
+                                                            border-2 border-white/10 hover:border-[#F492B7] transition-all duration-300"
+                                                    >
+                                                        {sub.image ? (
+                                                            <img
+                                                                src={sub.image}
+                                                                alt={sub.name}
+                                                                className="w-full h-full object-cover group-hover/sub:scale-110 transition-transform duration-500"
+                                                            />
+                                                        ) : (
+                                                            <div className="w-full h-full bg-gradient-to-br from-[#06B6D4]/20 to-[#F492B7]/20" />
+                                                        )}
+                                                        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+                                                        <span className="absolute bottom-1.5 left-1.5 right-1.5 text-[9px] font-bold text-white uppercase tracking-wider text-center truncate">
+                                                            {sub.name}
+                                                        </span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
                             </div>
                         ))}
                     </div>
