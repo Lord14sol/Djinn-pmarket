@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { formatCompact } from '@/lib/utils';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
-import { Clock, DollarSign, Wallet, Activity, Users, CheckCircle2, AlertCircle, Loader2, Edit2, ExternalLink, Share2, Scale, MessageCircle } from 'lucide-react';
+import { Clock, DollarSign, Wallet, Activity, Users, CheckCircle2, AlertCircle, Loader2, Edit2, ExternalLink, Share2, Scale, MessageCircle, Star } from 'lucide-react';
 import Link from 'next/link';
 import { useDjinnProtocol } from '@/hooks/useDjinnProtocol';
 import { simulateBuy, estimatePayoutInternal, CURVE_CONSTANT, VIRTUAL_OFFSET, getSpotPrice, getSupplyFromPrice, calculateImpliedProbability, getIgnitionStatus, getIgnitionProgress, ANCHOR_THRESHOLD } from '@/lib/core-amm';
@@ -181,6 +181,12 @@ export default function Page() {
     const [bottomTab, setBottomTab] = useState<'ACTIVITY' | 'COMMENTS' | 'HOLDERS'>('ACTIVITY');
     const [slippageTolerance, setSlippageTolerance] = useState<number>(5); // Default 5%
 
+    // Star/Save feature
+    const [isStarred, setIsStarred] = useState(false);
+
+    // Purchase bubble notifications (shows when someone buys)
+    const [purchaseBubbles, setPurchaseBubbles] = useState<{ id: number; side: 'YES' | 'NO'; amount: number }[]>([]);
+
     // Helper to safely normalize shares if they come in raw (e.g. > 1e12)
     const normalizeShares = (val: number) => {
         if (val > 10_000_000_000) {
@@ -200,6 +206,12 @@ export default function Page() {
     const isMultiOutcome = (MULTI_OUTCOMES[slug] || []).length > 0;
     const staticMarketInfo = marketDisplayData[slug] || { title: 'Unknown Market', icon: '❓', description: 'Market not found' };
     const effectiveSlug = slug;
+
+    // Load starred state from localStorage on mount
+    useEffect(() => {
+        const saved = JSON.parse(localStorage.getItem('djinn_saved_markets') || '[]');
+        setIsStarred(saved.includes(effectiveSlug));
+    }, [effectiveSlug]);
 
     // --- INITIALIZATION ---
     useEffect(() => {
@@ -874,6 +886,14 @@ export default function Page() {
                 txSignature: txSignature || ''
             });
 
+            // Show purchase bubble notification
+            const bubbleId = Date.now();
+            setPurchaseBubbles(prev => [...prev, { id: bubbleId, side: selectedSide, amount: sim.sharesReceived / 1e9 }]);
+            // Auto-dismiss after 3 seconds
+            setTimeout(() => {
+                setPurchaseBubbles(prev => prev.filter(b => b.id !== bubbleId));
+            }, 3000);
+
             setIsSuccess(true);
             setBetAmount('');
 
@@ -1276,7 +1296,40 @@ export default function Page() {
                                             <span>Share</span>
                                         </button>
 
-
+                                        {/* STAR/SAVE Button */}
+                                        <button
+                                            onClick={() => {
+                                                const newStarred = !isStarred;
+                                                setIsStarred(newStarred);
+                                                // Save to localStorage
+                                                const saved = JSON.parse(localStorage.getItem('djinn_saved_markets') || '[]');
+                                                if (newStarred) {
+                                                    if (!saved.includes(effectiveSlug)) {
+                                                        saved.push(effectiveSlug);
+                                                    }
+                                                } else {
+                                                    const idx = saved.indexOf(effectiveSlug);
+                                                    if (idx > -1) saved.splice(idx, 1);
+                                                }
+                                                localStorage.setItem('djinn_saved_markets', JSON.stringify(saved));
+                                                setDjinnToast({
+                                                    isVisible: true,
+                                                    type: 'SUCCESS',
+                                                    title: newStarred ? 'Saved!' : 'Removed',
+                                                    message: newStarred ? 'Market saved to your watchlist' : 'Market removed from watchlist'
+                                                });
+                                            }}
+                                            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-bold uppercase tracking-widest group ${isStarred
+                                                ? 'bg-[#F492B7]/20 border-[#F492B7]/40 text-[#F492B7]'
+                                                : 'bg-white/5 hover:bg-white/10 border-white/10 text-gray-400 hover:text-white'
+                                                }`}
+                                        >
+                                            <Star
+                                                size={12}
+                                                className={`transition-all ${isStarred ? 'fill-[#F492B7] text-[#F492B7]' : 'group-hover:text-[#F492B7]'}`}
+                                            />
+                                            <span>{isStarred ? 'Saved!' : 'Save'}</span>
+                                        </button>
 
                                         {/* SOURCE Link (Moved here) */}
                                         {marketAccount?.resolution_source && (
@@ -1825,12 +1878,40 @@ export default function Page() {
                                     </div>
                                 </div>
                             )}
+
+                            {/* Terms of Use Link */}
+                            <div className="mt-4 text-center">
+                                <p className="text-[10px] text-gray-500">
+                                    By trading, you agree to the{' '}
+                                    <Link href="/legal" className="text-[#F492B7] hover:underline hover:text-white transition-colors">
+                                        Terms of Use
+                                    </Link>
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-
+            {/* PURCHASE BUBBLES - Fixed position notifications */}
+            <div className="fixed top-24 right-6 z-50 flex flex-col gap-2 pointer-events-none">
+                {purchaseBubbles.map((bubble) => (
+                    <div
+                        key={bubble.id}
+                        className="animate-in slide-in-from-right-5 fade-in duration-300 pointer-events-auto"
+                    >
+                        <div className={`px-4 py-2 rounded-full font-bold text-sm shadow-xl flex items-center gap-2 ${bubble.side === 'YES'
+                            ? 'bg-[#10B981] text-white shadow-[#10B981]/30'
+                            : 'bg-[#F492B7] text-white shadow-[#F492B7]/30'
+                            }`}
+                        >
+                            <span className="text-lg">+</span>
+                            <span>{bubble.side}</span>
+                            <span className="font-mono">{formatCompact(bubble.amount)}</span>
+                        </div>
+                    </div>
+                ))}
+            </div>
 
             {/* Purchase Toast Notification */}
             <PurchaseToast
@@ -1844,16 +1925,13 @@ export default function Page() {
             />
 
             {/* Share Modal */}
-            {
-                lastBetDetails && (
-                    <ShareModal
-                        isOpen={showShareModal}
-                        onClose={() => setShowShareModal(false)}
-                        betDetails={lastBetDetails}
-                    />
-                )
-            }
-
+            {lastBetDetails && (
+                <ShareModal
+                    isOpen={showShareModal}
+                    onClose={() => setShowShareModal(false)}
+                    betDetails={lastBetDetails}
+                />
+            )}
 
             {/* Djinn Toast */}
             <DjinnToast
@@ -1865,7 +1943,7 @@ export default function Page() {
                 actionLink={djinnToast.actionLink}
                 actionLabel={djinnToast.actionLabel}
             />
-        </div >
+        </div>
     );
 }
 
