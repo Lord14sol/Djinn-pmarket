@@ -158,8 +158,8 @@ pub struct Market {
     pub creator: Pubkey,
     pub title: String,
     pub nonce: i64,              // Unique nonce for duplicate titles
-    pub yes_supply: u128,      // Current YES shares minted
-    pub no_supply: u128,       // Current NO shares minted
+    pub num_outcomes: u8,        // Number of outcomes (2-6)
+    pub outcome_supplies: [u128; 6], // Supply for each outcome (max 6)
     pub vault_balance: u128,   // Total SOL in vault (Lamports)
     pub status: MarketStatus,
     pub resolution_time: i64,
@@ -190,20 +190,24 @@ pub struct UserPosition {
 pub mod djinn_market {
     use super::*;
 
-    /// Create a new prediction market
+    /// Create a new prediction market with multiple outcomes (2-6)
     pub fn initialize_market(
         ctx: Context<InitializeMarket>,
         title: String,
         resolution_time: i64,
         nonce: i64,
+        num_outcomes: u8, // 2-6
     ) -> Result<()> {
         let market = &mut ctx.accounts.market;
-        
+
+        // Validate outcome count
+        require!(num_outcomes >= 2 && num_outcomes <= 6, DjinnError::InvalidOutcomeCount);
+
         market.creator = ctx.accounts.creator.key();
         market.title = title;
         market.nonce = nonce;
-        market.yes_supply = 0;
-        market.no_supply = 0;
+        market.num_outcomes = num_outcomes;
+        market.outcome_supplies = [0; 6]; // Initialize all to 0
         market.vault_balance = 0;
         market.status = MarketStatus::Active;
         market.resolution_time = resolution_time;
@@ -237,38 +241,35 @@ pub mod djinn_market {
 
     pub fn buy_shares(
         ctx: Context<BuyShares>,
-        outcome: u8, // 0 = YES, 1 = NO
+        outcome_index: u8, // 0, 1, 2, ... (up to num_outcomes - 1)
         sol_in: u64,
         min_shares_out: u64,
     ) -> Result<()> {
         let market = &mut ctx.accounts.market;
         require!(market.status == MarketStatus::Active, DjinnError::MarketNotActive);
-        
+        require!(outcome_index < market.num_outcomes, DjinnError::InvalidOutcome);
+
         let sol_in_u128 = sol_in as u128;
-        
+
         // 1. Calculate Entry Fee (1%)
         let fee = (sol_in_u128 * ENTRY_FEE_BPS) / BPS_DENOMINATOR;
         let net_sol = sol_in_u128 - fee;
-        
+
         // 2. Get current supply for outcome
-        let current_supply = if outcome == 0 { market.yes_supply } else { market.no_supply };
-        
+        let current_supply = market.outcome_supplies[outcome_index as usize];
+
         // 3. Calculate shares
         let shares = calculate_shares_from_sol(net_sol, current_supply)?;
         require!(shares >= min_shares_out as u128, DjinnError::SlippageExceeded);
-        
+
         // 4. Update state
-        if outcome == 0 {
-            market.yes_supply = market.yes_supply.checked_add(shares).unwrap();
-        } else {
-            market.no_supply = market.no_supply.checked_add(shares).unwrap();
-        }
+        market.outcome_supplies[outcome_index as usize] = current_supply.checked_add(shares).unwrap();
         market.vault_balance = market.vault_balance.checked_add(net_sol).unwrap();
         
         // 5. Update user position
         let position = &mut ctx.accounts.user_position;
         position.market = market.key();
-        position.outcome = outcome;
+        position.outcome = outcome_index;
         position.shares = position.shares.checked_add(shares).unwrap();
         
         // 6. Transfer SOL
@@ -336,32 +337,29 @@ pub mod djinn_market {
 
     pub fn sell_shares(
         ctx: Context<SellShares>,
-        outcome: u8,
+        outcome_index: u8,
         shares_to_sell: u64,
     ) -> Result<()> {
         let market = &mut ctx.accounts.market;
         let position = &mut ctx.accounts.user_position;
-        
+
         require!(market.status == MarketStatus::Active, DjinnError::MarketNotActive);
+        require!(outcome_index < market.num_outcomes, DjinnError::InvalidOutcome);
         require!(position.shares >= shares_to_sell as u128, DjinnError::InsufficientShares);
-        
+
         let shares_u128 = shares_to_sell as u128;
-        let current_supply = if outcome == 0 { market.yes_supply } else { market.no_supply };
-        
+        let current_supply = market.outcome_supplies[outcome_index as usize];
+
         // 1. Calculate SOL value of shares
         let new_supply = current_supply.checked_sub(shares_u128).unwrap();
         let refund = calculate_cost(new_supply, current_supply)?;
-        
+
         // 2. Exit fee (1%)
         let fee = (refund * EXIT_FEE_BPS) / BPS_DENOMINATOR;
         let net_refund = refund - fee;
-        
+
         // 3. Update state
-        if outcome == 0 {
-            market.yes_supply = new_supply;
-        } else {
-            market.no_supply = new_supply;
-        }
+        market.outcome_supplies[outcome_index as usize] = new_supply;
         market.vault_balance = market.vault_balance.checked_sub(refund).unwrap();
         position.shares = position.shares.checked_sub(shares_u128).unwrap();
         
@@ -441,7 +439,7 @@ pub mod djinn_market {
     /// Claim winnings after market resolution
     pub fn claim_winnings(
         ctx: Context<ClaimWinnings>,
-        outcome: u8,
+        outcome_index: u8,
     ) -> Result<()> {
         let market = &mut ctx.accounts.market;
         let position = &mut ctx.accounts.user_position;
@@ -451,14 +449,10 @@ pub mod djinn_market {
         require!(position.shares > 0, DjinnError::NoShares);
         
         let winning_outcome = market.winning_outcome.unwrap();
-        require!(outcome == winning_outcome, DjinnError::NotWinner);
+        require!(outcome_index == winning_outcome, DjinnError::NotWinner);
         
         // Calculate payout: user_shares / total_winning_shares * vault_balance
-        let total_winning_shares = if winning_outcome == 0 { 
-            market.yes_supply 
-        } else { 
-            market.no_supply 
-        };
+        let total_winning_shares = market.outcome_supplies[winning_outcome as usize];
         
         if total_winning_shares == 0 {
             return Ok(());
@@ -503,12 +497,15 @@ pub mod djinn_market {
 
 // InitializeMarket context with nonce in PDA seeds
 #[derive(Accounts)]
-#[instruction(title: String, resolution_time: i64, nonce: i64)]
+#[instruction(title: String, resolution_time: i64, nonce: i64, num_outcomes: u8)]
 pub struct InitializeMarket<'info> {
     #[account(
         init,
         payer = creator,
-        space = 8 + 32 + 4 + 64 + 8 + 16 + 16 + 16 + 1 + 8 + 2 + 1 + 1, // discriminator + pubkey + title_len + title_max + nonce + supplies + vault + status + resolution + outcome + bumps
+        space = 8 + 32 + (4 + 64) + 8 + 1 + (6 * 16) + 16 + 1 + 8 + 2 + 1 + 1,
+        // 8 (discriminator) + 32 (creator) + (4 + 64) (title) + 8 (nonce) + 1 (num_outcomes)
+        // + (6 * 16) (outcome_supplies array) + 16 (vault_balance) + 1 (status)
+        // + 8 (resolution_time) + 2 (winning_outcome) + 1 (bump) + 1 (vault_bump)
         seeds = [b"market", creator.key().as_ref(), title.as_bytes(), &nonce.to_le_bytes()],
         bump
     )]
@@ -533,7 +530,7 @@ pub struct InitializeMarket<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(outcome: u8)]
+#[instruction(outcome_index: u8)]
 pub struct BuyShares<'info> {
     #[account(mut)]
     pub market: Box<Account<'info, Market>>,
@@ -546,7 +543,7 @@ pub struct BuyShares<'info> {
         init_if_needed,
         payer = user,
         space = 8 + 32 + 1 + 16 + 1,
-        seeds = [b"user_pos", market.key().as_ref(), user.key().as_ref(), &[outcome]],
+        seeds = [b"user_pos", market.key().as_ref(), user.key().as_ref(), &[outcome_index]],
         bump
     )]
     pub user_position: Box<Account<'info, UserPosition>>,
@@ -566,7 +563,7 @@ pub struct BuyShares<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(outcome: u8)]
+#[instruction(outcome_index: u8)]
 pub struct SellShares<'info> {
     #[account(mut)]
     pub market: Box<Account<'info, Market>>,
@@ -577,7 +574,7 @@ pub struct SellShares<'info> {
     
     #[account(
         mut,
-        seeds = [b"user_pos", market.key().as_ref(), user.key().as_ref(), &[outcome]],
+        seeds = [b"user_pos", market.key().as_ref(), user.key().as_ref(), &[outcome_index]],
         bump
     )]
     pub user_position: Box<Account<'info, UserPosition>>,
@@ -613,7 +610,7 @@ pub struct ResolveMarket<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(outcome: u8)]
+#[instruction(outcome_index: u8)]
 pub struct ClaimWinnings<'info> {
     #[account(mut)]
     pub market: Box<Account<'info, Market>>,
@@ -624,7 +621,7 @@ pub struct ClaimWinnings<'info> {
     
     #[account(
         mut,
-        seeds = [b"user_pos", market.key().as_ref(), user.key().as_ref(), &[outcome]],
+        seeds = [b"user_pos", market.key().as_ref(), user.key().as_ref(), &[outcome_index]],
         bump
     )]
     pub user_position: Box<Account<'info, UserPosition>>,
@@ -659,6 +656,8 @@ pub enum DjinnError {
     NotWinner,
     #[msg("Invalid outcome")]
     InvalidOutcome,
+    #[msg("Invalid outcome count (must be 2-6)")]
+    InvalidOutcomeCount,
     #[msg("Math error")]
     MathError,
 }

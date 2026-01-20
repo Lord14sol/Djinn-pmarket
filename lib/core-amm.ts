@@ -20,10 +20,10 @@ export const PHASE2_END = 90_000_000;    // 90M → 15x price
 export const PHASE3_START = 90_000_000;  // 90M → MONSTRUOSO
 
 // PRICE CONSTANTS (in SOL, matches Lamports conversion in lib.rs)
-const P_START = 0.000001;   // 1 nanoSOL (1 Lamport / 1e9)
-const P_50 = 0.000006;      // 6000 nanoSOL (6x from start) - Phase 1 end
-const P_90 = 0.000015;      // 15000 nanoSOL (15x from start) - Phase 2 end
-const P_MAX = 0.95;         // 950M nanoSOL (0.95 SOL cap)
+const P_START = 0.000000001;   // 1 nanoSOL (1 Lamport = 1e-9 SOL)
+const P_50 = 0.000006;         // 6000 nanoSOL (6 microSOL) - Phase 1 end (6x from start)
+const P_90 = 0.000015;         // 15000 nanoSOL (15 microSOL) - Phase 2 end (15x from start)
+const P_MAX = 0.95;            // 950M nanoSOL (0.95 SOL cap)
 
 // SIGMOID CALIBRATION - ORIGINAL "GRADUAL GROWTH" DESIGN
 // ⚠️ LINEAR APPROXIMATION: norm_sig = k * x (not full sigmoid!)

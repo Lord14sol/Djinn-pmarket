@@ -1,6 +1,6 @@
 import { PublicKey } from '@solana/web3.js';
 
-// Djinn Prediction Market - Program ID (New Heavyweight Deployment with Nonce Support)
+// Djinn Prediction Market - Program ID (New simplified contract)
 export const PROGRAM_ID = "HkjMQFag41pUutseBpXSXUuEwSKuc2CByRJjyiwAvGjL";
 
 // Fee constants (Matches V3 Verified Smart Contract)

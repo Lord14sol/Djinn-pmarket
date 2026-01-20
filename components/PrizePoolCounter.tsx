@@ -23,7 +23,7 @@ export const PrizePoolCounter = ({ totalSol }: PrizePoolCounterProps) => {
             <div className={`absolute inset-0 bg-white opacity-[0.02] ${intensity >= 2 ? 'animate-pulse' : ''}`} />
 
             <span className="text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2 z-10">
-                Current Prize Pool
+                Total Pool
             </span>
 
             <div className="relative z-10 flex items-baseline gap-2">

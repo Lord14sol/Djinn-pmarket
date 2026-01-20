@@ -415,6 +415,8 @@ export interface Market {
     no_token_mint?: string;
     tx_signature?: string;
     resolution_source?: string;
+    // Multi-outcome support
+    options?: string[]; // Array of outcome names (e.g., ["Yes", "No"] or ["Brasil", "Argentina", "Chile"])
 }
 
 export async function createMarket(market: Partial<Market> & { slug: string; title: string; creator_wallet: string }) {

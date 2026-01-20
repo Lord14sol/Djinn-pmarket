@@ -9,6 +9,7 @@ import { useCategory } from '@/lib/CategoryContext';
 import { useModal } from '@/lib/ModalContext';
 import OnboardingModal from './OnboardingModal';
 import CustomWalletModal from './CustomWalletModal';
+import CategoryMegaMenu from './CategoryMegaMenu';
 
 // --- ICONOS ---
 // Premium multi-layer animated fire for Trending
@@ -349,37 +350,8 @@ function NavbarContent() {
                 )}
             </div>
 
-            <div className="border-t border-white/5 flex overflow-x-auto scrollbar-hide py-5 px-6 md:px-12 gap-10 bg-black/40 items-center">
-                {mainCategories.map((cat) => (
-                    <button
-                        key={cat}
-                        onClick={() => {
-                            setActiveCategory(cat);
-                            if (cat !== "Earth") setActiveSubcategory("");
-                        }}
-                        className={`relative text-[14px] font-black uppercase tracking-[0.25em] transition-all whitespace-nowrap 
-                        ${activeCategory === cat ? "text-[#F492B7]" : "text-gray-400 hover:text-gray-200"}`}
-                    >
-
-                        {cat}
-                    </button>
-                ))}
-            </div>
-
-            {activeCategory === "Earth" && (
-                <div className="border-t border-[#F492B7]/10 flex overflow-x-auto scrollbar-hide py-4 px-10 md:px-20 gap-10 bg-[#F492B7]/5 animate-in slide-in-from-top-2 duration-300">
-                    {earthSubcategories.map((sub) => (
-                        <button
-                            key={sub}
-                            onClick={() => setActiveSubcategory(sub)}
-                            className={`text-[12px] font-bold uppercase tracking-widest transition-all whitespace-nowrap
-                            ${activeSubcategory === sub ? "text-[#F492B7]" : "text-white/60 hover:text-white"}`}
-                        >
-                            {sub}
-                        </button>
-                    ))}
-                </div>
-            )}
+            {/* Category Mega Menu */}
+            <CategoryMegaMenu />
 
             <OnboardingModal
                 isOpen={showOnboarding}

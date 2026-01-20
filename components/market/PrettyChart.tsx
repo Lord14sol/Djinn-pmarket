@@ -257,10 +257,15 @@ export default function PrettyChartWrapper({ series, trigger }: { series: Outcom
             </ParentSize>
 
             {/* Platform Watermark */}
-            <div className="absolute top-4 right-4 pointer-events-none opacity-30">
-                <span className="text-[10px] uppercase font-black tracking-widest text-gray-500">
-                    DJINN :: DEVNET
-                </span>
+            <div className="absolute top-4 right-4 pointer-events-none opacity-60">
+                <div className="flex items-center gap-0">
+                    <div className="relative w-12 h-12">
+                        <img src="/star.png" alt="Djinn" className="w-full h-full object-contain" />
+                    </div>
+                    <span className="text-2xl text-white -ml-2 mt-1" style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}>
+                        Djinn
+                    </span>
+                </div>
             </div>
         </div>
     );

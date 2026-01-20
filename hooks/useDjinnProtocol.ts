@@ -2,12 +2,16 @@ import { useCallback, useMemo, useEffect } from 'react';
 import { useAnchorWallet, useConnection } from '@solana/wallet-adapter-react';
 import { Program, AnchorProvider, Idl, BN, web3 } from '@coral-xyz/anchor';
 import { PublicKey, SystemProgram } from '@solana/web3.js';
-import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '@solana/spl-token';
-import idl from '../lib/idl/djinn_market.json';
+import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddress, createAssociatedTokenAccountIdempotentInstruction } from '@solana/spl-token';
 
-import { PROGRAM_ID } from '../lib/program-config';
+// Import IDL - now has address field at root level
+import idlJson from '../lib/idl/djinn_market.json';
 
 const MASTER_TREASURY = new PublicKey("G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma");
+
+// Get program ID from IDL (more reliable than separate config)
+const PROGRAM_ID = (idlJson as any).address;
+const PROGRAM_PUBKEY = new PublicKey(PROGRAM_ID);
 
 export const useDjinnProtocol = () => {
     const { connection } = useConnection();
@@ -22,7 +26,24 @@ export const useDjinnProtocol = () => {
 
     const program = useMemo(() => {
         if (!provider) return null;
-        return new Program(idl as Idl, PROGRAM_ID, provider);
+        try {
+            console.log('[Djinn] Initializing Program with IDL:', {
+                name: (idlJson as any).name,
+                address: (idlJson as any).address,
+                instructionCount: (idlJson as any).instructions?.length
+            });
+
+            // Cast to Idl type - Anchor 0.28 expects address at root level
+            const p = new Program(idlJson as Idl, PROGRAM_PUBKEY, provider);
+
+            console.log('[Djinn] Program initialized successfully');
+            console.log('[Djinn] Available methods:', Object.keys(p.methods));
+
+            return p;
+        } catch (e) {
+            console.error('[Djinn] Failed to initialize program:', e);
+            return null;
+        }
     }, [provider]);
 
     const isContractReady = useMemo(() => {
@@ -34,12 +55,18 @@ export const useDjinnProtocol = () => {
             program: !!program,
             provider: !!provider,
             wallet: !!wallet,
-            isReady: isContractReady
+            isReady: isContractReady,
+            programId: PROGRAM_ID
         });
 
         if (program) {
-            const idlInstruction = (program.idl as any).instructions.find((i: any) => i.name === 'initializeMarket');
-            console.log("🔍 ARGS EN IDL VIVO (AUTOMÁTICO):", idlInstruction?.args);
+            console.log("🔍 IDL NAME:", (program.idl as any).name);
+            console.log("🔍 IDL INSTRUCTIONS:", (program.idl as any).instructions?.map((i: any) => i.name));
+            const idlInstruction = (program.idl as any).instructions?.find((i: any) => i.name === 'initializeMarket');
+            console.log("🔍 initializeMarket instruction found?:", !!idlInstruction);
+            console.log("🔍 initializeMarket ARGS:", idlInstruction?.args);
+            console.log("🔍 program.methods:", Object.keys(program.methods));
+            console.log("🔍 program.methods.initializeMarket:", typeof (program.methods as any).initializeMarket);
         }
     }, [isContractReady, program, provider, wallet]);
 
@@ -47,9 +74,11 @@ export const useDjinnProtocol = () => {
         title: string,
         description: string,
         endDate: Date,
-        sourceUrl: string = '', // Veritas Protocol: Source URL for verification
+        sourceUrl: string = '',
+        metadataUri: string, // Kept for API compatibility, stored in DB only
+        numOutcomes: number = 2, // 2-6 outcomes
         initialBuyAmount: number = 0,
-        initialBuySide: 'yes' | 'no' = 'yes'
+        initialBuySide: number = 0 // 0-based index
     ) => {
         if (!isContractReady || !program || !wallet || !provider) {
             console.warn('⚠️ Contract not ready - falling back to local mode');
@@ -97,62 +126,35 @@ export const useDjinnProtocol = () => {
 
             if (existingAccount !== null) {
                 console.warn("[Djinn] ⚠️ Market already exists! Returning existing PDA.");
-                // Market already created - return success
-                const [yesMintPda] = await PublicKey.findProgramAddress(
-                    [Buffer.from("yes_mint"), marketPda.toBuffer()],
-                    program.programId
-                );
-                const [noMintPda] = await PublicKey.findProgramAddress(
-                    [Buffer.from("no_mint"), marketPda.toBuffer()],
-                    program.programId
-                );
-                return { tx: 'existing_market', marketPda, yesMintPda, noMintPda };
+                return { tx: 'existing_market', marketPda, yesMintPda: marketPda, noMintPda: marketPda };
             }
-
-            const [yesMintPda] = await PublicKey.findProgramAddress(
-                [Buffer.from("yes_mint"), marketPda.toBuffer()],
-                program.programId
-            );
-
-            const [noMintPda] = await PublicKey.findProgramAddress(
-                [Buffer.from("no_mint"), marketPda.toBuffer()],
-                program.programId
-            );
-
-            const { getAssociatedTokenAddress } = await import('@solana/spl-token');
-            const userYesATA = await getAssociatedTokenAddress(yesMintPda, wallet.publicKey);
-            const userNoATA = await getAssociatedTokenAddress(noMintPda, wallet.publicKey);
 
             const [marketVaultPda] = await PublicKey.findProgramAddress(
                 [Buffer.from("market_vault"), marketPda.toBuffer()],
                 program.programId
             );
 
-            // 1. Create Market Instruction 
-            // (Standard 200k compute is enough for just creation, but we keep 600k for safety if bundled)
-            const modifyComputeUnits = web3.ComputeBudgetProgram.setComputeUnitLimit({
-                units: 600_000
-            });
-            const addPriorityFee = web3.ComputeBudgetProgram.setComputeUnitPrice({
-                microLamports: 50000 // Increased to ensure propagation
-            });
-
-            const tx = new web3.Transaction();
-            tx.add(modifyComputeUnits);
-            tx.add(addPriorityFee);
-
-            console.log("DEBUG: Sending InitializeMarket Params (V3 with Nonce):", {
-                title,
+            // ON-CHAIN IDL expects: title, resolutionTime, nonce, numOutcomes
+            console.log("DEBUG: Sending InitializeMarket Params:", {
+                title: title.slice(0, 32),
                 resolutionTime: Math.floor(endDate.getTime() / 1000),
-                nonce
+                nonce,
+                numOutcomes,
+                accounts: {
+                    market: marketPda.toBase58(),
+                    marketVault: marketVaultPda.toBase58(),
+                    creator: wallet.publicKey.toBase58(),
+                    protocolTreasury: MASTER_TREASURY.toBase58()
+                }
             });
 
-            // NEW: Contract now accepts 3 args: title, resolution_time, nonce
-            const createIx = await program.methods
+            // Use .rpc() directly - NEW IDL format
+            const signature = await program.methods
                 .initializeMarket(
-                    title.slice(0, 32), // Match seed truncation
+                    title.slice(0, 32),
                     new BN(Math.floor(endDate.getTime() / 1000)),
-                    new BN(nonce)
+                    new BN(nonce),
+                    numOutcomes
                 )
                 .accounts({
                     market: marketPda,
@@ -161,29 +163,15 @@ export const useDjinnProtocol = () => {
                     protocolTreasury: MASTER_TREASURY,
                     systemProgram: SystemProgram.programId,
                 })
-                .instruction();
+                .preInstructions([
+                    web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 300_000 }),
+                    web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50000 }),
+                ])
+                .rpc({ skipPreflight: true, commitment: 'confirmed' });
 
-            tx.add(createIx);
-
-
-
-
-            // Send Transaction
-            if (!provider) throw new Error("Provider not available");
-
-            // CRITICAL: Get fresh blockhash to prevent "already processed" error
-            const { blockhash, lastValidBlockHeight } = await provider.connection.getLatestBlockhash('confirmed');
-            tx.recentBlockhash = blockhash;
-            tx.feePayer = wallet.publicKey;
-
-            console.log("[Djinn] Sending transaction, blockhash:", blockhash.slice(0, 10) + "...");
-            const signature = await provider.sendAndConfirm(tx, [], {
-                commitment: 'confirmed',
-                skipPreflight: true // BYPASS simulation caching issues
-            });
             console.log("[Djinn] ✅ Transaction confirmed:", signature);
 
-            return { tx: signature, marketPda, yesMintPda, noMintPda };
+            return { tx: signature, marketPda, yesMintPda: marketPda, noMintPda: marketPda, numOutcomes };
         } catch (error) {
             console.error("Error creating market:", error);
             if (typeof error === 'object' && error !== null) {
@@ -224,23 +212,24 @@ export const useDjinnProtocol = () => {
             console.log("- amountLamports:", amountLamports.toString());
             console.log("- minSharesBN:", minSharesBN.toString());
 
-            // Set to 99.99% (9999 bps) for new markets with low liquidity where ANY buy has huge impact.
-            const maxPriceImpactBps = 9999; // u16 max is ~65535
-
             // FIX: Use .rpc() instead of sendAndConfirm to avoid duplicate transaction issues.
-            // .rpc() creates a fresh transaction with new blockhash each time.
             // V2: PDA now includes outcome_index to allow holding both YES and NO positions
             const userPositionPda = PublicKey.findProgramAddressSync(
                 [Buffer.from("user_pos"), marketPda.toBuffer(), wallet.publicKey.toBuffer(), Buffer.from([outcomeIndex])],
                 program.programId
             )[0];
 
+            // On-chain IDL expects: outcomeIndex, solIn, minSharesOut
+            const preInstructions = [
+                web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
+                web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50000 }),
+            ];
+
             const txHash = await program.methods
                 .buyShares(
                     outcomeIndex,
                     amountLamports,
-                    minSharesBN,
-                    maxPriceImpactBps
+                    minSharesBN
                 )
                 .accounts({
                     market: marketPda,
@@ -251,10 +240,7 @@ export const useDjinnProtocol = () => {
                     marketCreator: marketCreator,
                     systemProgram: SystemProgram.programId,
                 })
-                .preInstructions([
-                    web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
-                    web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50000 }),
-                ])
+                .preInstructions(preInstructions)
                 .rpc({ skipPreflight: true, commitment: 'confirmed' });
 
             console.log("✅ Buy TX Hash:", txHash);
@@ -280,19 +266,23 @@ export const useDjinnProtocol = () => {
         if (!program || !wallet) throw new Error("Wallet not connected");
 
         try {
-            const [protocolStatePda] = await PublicKey.findProgramAddress(
-                [Buffer.from("protocol")],
+            // Derive market vault PDA
+            const [marketVaultPda] = await PublicKey.findProgramAddress(
+                [Buffer.from("market_vault"), marketPda.toBuffer()],
                 program.programId
             );
 
-            const outcomeArg = outcome === 'yes' ? { yes: {} } : outcome === 'no' ? { no: {} } : { void: {} };
+            // IDL expects winningOutcome as u8: 0=Yes, 1=No (void is not in IDL)
+            const winningOutcome = outcome === 'yes' ? 0 : 1;
 
             const tx = await program.methods
-                .resolveMarket(outcomeArg)
+                .resolveMarket(winningOutcome)
                 .accounts({
                     market: marketPda,
+                    marketVault: marketVaultPda,
                     authority: wallet.publicKey,
-                    protocolState: protocolStatePda,
+                    protocolTreasury: MASTER_TREASURY,
+                    systemProgram: SystemProgram.programId,
                 })
                 .rpc();
 
@@ -306,52 +296,41 @@ export const useDjinnProtocol = () => {
     const claimReward = useCallback(async (
         marketPda: PublicKey,
         yesMint: PublicKey,
-        noMint: PublicKey
+        noMint: PublicKey,
+        side: 'yes' | 'no' = 'yes'
     ) => {
         if (!program || !wallet) throw new Error("Wallet not connected");
 
         try {
-            const { getAssociatedTokenAddress, createAssociatedTokenAccountIdempotentInstruction } = await import('@solana/spl-token');
-            const userYesATA = await getAssociatedTokenAddress(yesMint, wallet.publicKey);
-            const userNoATA = await getAssociatedTokenAddress(noMint, wallet.publicKey);
+            // IDL method is 'claimWinnings', takes outcome (u8) as argument
+            const outcomeIndex = side.toLowerCase() === 'yes' ? 0 : 1;
 
-            const [protocolStatePda] = await PublicKey.findProgramAddress(
-                [Buffer.from("protocol")],
+            // Derive required PDAs
+            const [marketVaultPda] = await PublicKey.findProgramAddress(
+                [Buffer.from("market_vault"), marketPda.toBuffer()],
                 program.programId
             );
-            const stateAccount = await program.account.protocolState.fetchNullable(protocolStatePda);
-            const treasuryKey = stateAccount ? (stateAccount as any).treasury : MASTER_TREASURY;
 
-            const transaction = new web3.Transaction();
-            // Ensure ATAs exist (needed for contract validation even if empty)
-            transaction.add(
-                createAssociatedTokenAccountIdempotentInstruction(wallet.publicKey, userYesATA, wallet.publicKey, yesMint),
-                createAssociatedTokenAccountIdempotentInstruction(wallet.publicKey, userNoATA, wallet.publicKey, noMint)
-            );
+            const userPositionPda = PublicKey.findProgramAddressSync(
+                [Buffer.from("user_pos"), marketPda.toBuffer(), wallet.publicKey.toBuffer(), Buffer.from([outcomeIndex])],
+                program.programId
+            )[0];
 
-            const claimIx = await program.methods
-                .claimReward()
+            const tx = await program.methods
+                .claimWinnings(outcomeIndex)
                 .accounts({
                     market: marketPda,
+                    marketVault: marketVaultPda,
+                    userPosition: userPositionPda,
                     user: wallet.publicKey,
-                    yesTokenMint: yesMint,
-                    noTokenMint: noMint,
-                    userYesAccount: userYesATA,
-                    userNoAccount: userNoATA,
-                    protocolTreasury: treasuryKey,
-                    tokenProgram: TOKEN_PROGRAM_ID,
                     systemProgram: SystemProgram.programId,
                 })
-                .instruction();
+                .rpc({ skipPreflight: true, commitment: 'confirmed' });
 
-            transaction.add(claimIx);
-
-            // @ts-ignore
-            const tx = await program.provider.sendAndConfirm(transaction);
-            console.log("✅ Reward claimed:", tx);
+            console.log("✅ Winnings claimed:", tx);
             return tx;
         } catch (error) {
-            console.error("Error claiming reward:", error);
+            console.error("Error claiming winnings:", error);
             throw error;
         }
     }, [program, wallet]);
@@ -374,7 +353,6 @@ export const useDjinnProtocol = () => {
         sharesAmount: number,
         yesMint: PublicKey,
         noMint: PublicKey,
-        marketCreator: PublicKey,
         minSolOut: number = 0,
         sellMax: boolean = false
     ) => {
@@ -466,7 +444,7 @@ export const useDjinnProtocol = () => {
             console.log("- userPositionPda:", userPositionPda.toBase58());
             console.log("- marketVault:", PublicKey.findProgramAddressSync([Buffer.from("market_vault"), marketPda.toBuffer()], program.programId)[0].toBase58());
 
-            // FIX: Use .rpc() with skipPreflight like buyShares to avoid duplicate tx errors
+            // On-chain IDL expects: outcomeIndex, sharesToSell - and 6 accounts (no marketCreator)
             const tx = await program.methods
                 .sellShares(outcomeIndex, sharesToBurnBN)
                 .accounts({
@@ -475,7 +453,6 @@ export const useDjinnProtocol = () => {
                     userPosition: userPositionPda,
                     user: wallet.publicKey,
                     protocolTreasury: MASTER_TREASURY,
-                    marketCreator: marketCreator,
                     systemProgram: SystemProgram.programId,
                 })
                 .preInstructions([

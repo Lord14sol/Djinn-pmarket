@@ -6,6 +6,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useDjinnProtocol } from '@/hooks/useDjinnProtocol';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { compressImage } from '@/lib/utils';
+import { uploadToIPFS } from '@/lib/ipfs';
 import { checkMarketMilestones, createMarket, updateMarketPrice } from '@/lib/supabase-db';
 import Link from 'next/link';
 
@@ -126,7 +127,15 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
             const slug = `${sanitizedName}-${timestamp}`;
 
             const resolutionTime = Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60); // 7 days
-            const finalBanner = mainImage ? await compressImage(mainImage) : "🔮";
+            // Upload image to IPFS (returns short URL, not base64)
+            // This is required because Solana transactions have ~1KB limit
+            let finalBanner = "https://arweave.net/djinn-placeholder";
+            if (mainImage) {
+                console.log("📷 Uploading image to IPFS...");
+                const compressed = await compressImage(mainImage);
+                finalBanner = await uploadToIPFS(compressed);
+                console.log("✅ IPFS URL:", finalBanner);
+            }
 
             let marketPDA = '';
             let txSignature = '';
@@ -144,13 +153,16 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                     );
 
                     const buyAmount = parseFloat(initialBuyAmount) || 0;
+                    const numOutcomes = options.length; // Use number of options (2-6)
                     const contractPromise = createMarketOnChain(
-                        slug,
                         poolName,
+                        poolName, // Using poolName as description for now
                         new Date(resolutionTime * 1000),
-                        sourceUrl, // NEW: Veritas
+                        sourceUrl, // Veritas
+                        finalBanner || "https://arweave.net/placeholder", // metadataUri (Metaplex)
+                        numOutcomes, // Send number of outcomes
                         buyAmount,
-                        initialBuySide
+                        initialBuySide === 'yes' ? 0 : 1 // Convert to index
                     );
 
                     const result = await Promise.race([contractPromise, timeoutPromise]) as any;
@@ -192,7 +204,8 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                 total_no_pool: 0,
                 resolved: false,
                 resolution_source: sourceUrl || 'DERIVED', // Save actual source URL if provided
-                banner_url: finalBanner
+                banner_url: finalBanner,
+                options: options.map(opt => opt.name || '').filter(name => name.trim() !== '') // Save outcome names
             });
 
             // INITIALIZE MARKET DATA (Price & Volume)
@@ -290,15 +303,14 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
 
                 {isSuccess && successData ? (
                     <div className="p-8 md:p-12 text-center flex flex-col items-center justify-center space-y-6">
-                        {/* Animated Pink Checkmark with Scale-In */}
-                        <div className="relative animate-[scale-in_0.5s_ease-out]">
-                            <div className="w-28 h-28 bg-gradient-to-br from-[#F492B7] via-[#FF0096] to-[#F492B7] rounded-full flex items-center justify-center shadow-[0_0_80px_rgba(244,146,183,0.6)]">
-                                <svg className="w-14 h-14 text-white animate-[check-draw_0.6s_ease-out_0.3s_forwards]" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ strokeDasharray: 100, strokeDashoffset: 100 }}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path>
+                        {/* Pink Checkmark - Visible */}
+                        <div className="relative">
+                            <div className="w-24 h-24 bg-[#F492B7] rounded-full flex items-center justify-center shadow-[0_0_60px_rgba(244,146,183,0.5)]">
+                                <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                                 </svg>
                             </div>
-                            <div className="absolute -inset-4 bg-gradient-to-br from-[#F492B7]/30 to-[#FF0096]/20 rounded-full blur-2xl -z-10 animate-pulse"></div>
-                            <div className="absolute -inset-1 bg-[#F492B7]/40 rounded-full blur-md -z-10 animate-ping"></div>
+                            <div className="absolute -inset-3 bg-[#F492B7]/20 rounded-full blur-xl -z-10"></div>
                         </div>
 
                         {/* Title with Djinn styling */}
@@ -325,28 +337,28 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                             </div>
                         </div>
 
-                        {/* Solscan Link */}
-                        <a
-                            href={`https://solscan.io/tx/${successData.txSignature}?cluster=devnet`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-2 text-[#F492B7] hover:text-white transition-colors underline underline-offset-4"
-                        >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
-                            </svg>
-                            View on Solscan
-                        </a>
+                        {/* Solscan Link - Only show for real transactions */}
+                        {successData.txSignature && !successData.txSignature.startsWith('local') && (
+                            <button
+                                onClick={() => window.open(`https://solscan.io/tx/${successData.txSignature}?cluster=devnet`, '_blank')}
+                                className="flex items-center gap-2 text-[#F492B7] hover:text-white transition-colors underline underline-offset-4 cursor-pointer bg-transparent border-none"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                                </svg>
+                                View on Solscan
+                            </button>
+                        )}
 
-                        {/* Action Button - Go to Market Only */}
+                        {/* Action Button - Solid Pink, No Pulse, No Emoji */}
                         <button
                             onClick={() => {
                                 onClose();
                                 router.push(`/market/${successData.slug}`);
                             }}
-                            className="w-full py-4 bg-gradient-to-r from-[#F492B7] via-[#FF0096] to-[#F492B7] text-white font-black text-lg rounded-2xl hover:brightness-110 transition-all shadow-[0_0_30px_rgba(244,146,183,0.4)] animate-pulse"
+                            className="w-full py-4 bg-[#F492B7] text-white font-black text-lg rounded-2xl hover:brightness-110 transition-all"
                         >
-                            🚀 Go to Market
+                            Go to Market
                         </button>
                     </div>
                 ) : (

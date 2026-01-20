@@ -19,6 +19,32 @@ DJINN represents a paradigm shift in on-chain prediction markets. By leveraging 
 
 ---
 
+## ✨ **V4.5 Update: SPL Token Integration** (January 2026)
+
+DJINN now mints **standard SPL tokens** that appear directly in Solana wallets (Phantom, Solflare, etc.) with full Metaplex metadata integration.
+
+### What This Means:
+- ✅ **Wallet Visibility**: Shares appear in your wallet as `[YES] - Market Name` with market image
+- ✅ **Transferable**: Tokens can be sent between wallets (peer-to-peer trading)
+- ✅ **Universal Compatibility**: Works with any SPL-compatible wallet or DEX
+- ✅ **Metaplex Metadata**: Full name, symbol, and image stored on-chain
+
+### Technical Architecture:
+DJINN uses a **hybrid ledger system**:
+- **UserPosition PDAs**: Track precise share balances for bonding curve calculations (u128 precision)
+- **SPL Tokens**: Minted 1:1 with PDA shares for wallet compatibility
+- **Synchronized State**: Both systems stay in perfect sync via atomic mint/burn operations
+
+### Cost Structure:
+| Action | First Time | Subsequent |
+|--------|-----------|------------|
+| Buy Shares | ~0.002 SOL (~$0.30) | ~0.00002 SOL (~$0.003) |
+| Sell Shares | ~0.00002 SOL | ~0.00002 SOL |
+
+**Note**: The ~0.002 SOL first-time cost creates your Associated Token Accounts (ATAs) and is paid to Solana validators, not the protocol.
+
+---
+
 ## 📜 Technical Manifesto: The End of Traditional Liquidity
 
 ### I. The Death of Legacy Liquidity Models
@@ -190,9 +216,9 @@ PHASE2_END   = 90,000,000    // 90M → 15x multiplier
 PHASE3_START = 90,000,000    // Sigmoid activation
 
 // Price Constants (SOL)
-P_START = 0.000001           // 1 nanoSOL
-P_50    = 0.000006           // 6x from start
-P_90    = 0.000015           // 15x from start
+P_START = 0.000000001        // 1 nanoSOL (1 Lamport)
+P_50    = 0.000006           // 6 microSOL (6000x from start)
+P_90    = 0.000015           // 15 microSOL (15000x from start)
 P_MAX   = 0.95               // Logic cap
 
 // Sigmoid Steepness
@@ -211,14 +237,28 @@ K_SIGMOID = 0.00047          // Calibrated for gradual growth
 
 ---
 
-## � Token Economics
+## 💰 Token Economics & Fee Structure
 
+### Protocol Fees
+| Parameter | Value | Destination | Rationale |
+|-----------|-------|-------------|-----------|
+| Entry Fee | 1% | 50% Treasury / 50% Market Creator | Sustainable revenue |
+| Exit Fee | 1% | Protocol | Discourages speculation |
+| Resolution Fee | 2% | Protocol | Oracle incentivization |
+
+### Network Costs (Paid to Solana Validators)
+| Action | Cost | Frequency |
+|--------|------|-----------|
+| Create Market | ~0.015 SOL | Once per market |
+| First Buy (create ATAs) | ~0.002 SOL | Once per user per market |
+| Subsequent Trades | ~0.00002 SOL | Per transaction |
+
+### Supply & Decimals
 | Parameter | Value | Rationale |
 |-----------|-------|-----------|
-| Total Supply | 1B per outcome | Sufficient granularity |
-| Entry Fee | 1% | Sustainable revenue |
-| Exit Fee | 1% | Discourages churn |
-| Resolution Fee | 2% | Oracle incentivization |
+| Total Supply | 1B per outcome (YES/NO) | Sufficient granularity for bonding curve |
+| Token Decimals | 9 (SPL standard) | Matches Solana's native SOL decimals |
+| Max Per Transaction | 10B shares | Overflow protection |
 
 ---
 
@@ -350,22 +390,50 @@ anchor build && anchor deploy --provider.cluster devnet
 
 ### Contract Addresses
 
-| Network | Program ID |
-|---------|------------|
-| **Devnet** | `HkjMQFag41pUutseBpXSXUuEwSKuc2CByRJjyiwAvGjL` |
-| Mainnet | *Coming Soon* |
+| Network | Program ID | Version |
+|---------|------------|---------|
+| **Devnet** | `DY1X52RW55bpNU5ZA8E3m6w1w7VG1ioHKpUt7jUkYSV9` | V4.5 (SPL Tokens) |
+| Devnet (Legacy) | `HkjMQFag41pUutseBpXSXUuEwSKuc2CByRJjyiwAvGjL` | V4.0 (PDA Only) |
+| Mainnet | *Coming Soon* | TBD |
+
+**Important**: Only markets created with V4.5+ will have tokens visible in wallets. Legacy markets use PDA-only tracking.
 
 ---
 
-## 🔬 Verification
+## 🔬 Verification & Testing
 
 ```bash
 # Verify curve mathematics
 npx tsx verify-curve.ts
 
-# Expected output at 120M shares:
-# price: 0.000030 (~30x from start)
+# Expected output at key milestones:
+# At 50M shares:  price ≈ 0.000006 SOL (6000x from genesis)
+# At 90M shares:  price ≈ 0.000015 SOL (15000x from genesis)
+# At 120M shares: price ≈ 0.000030 SOL (30000x from genesis)
 ```
+
+### Debug Mode
+
+Check console logs during trades for detailed execution data:
+```typescript
+console.log("Buy Shares:", {
+  outcome: 'YES',
+  solIn: 1.0,
+  sharesOut: 4050000,
+  priceImpact: 0.05%
+});
+```
+
+### Wallet Verification
+
+After buying shares, verify in Phantom:
+1. Open Phantom wallet
+2. Go to "Tokens" tab
+3. You should see: `[YES] - Your Market Name`
+4. Balance: Your share count
+5. Image: Your market banner
+
+**Note**: First buy creates Associated Token Accounts (~0.002 SOL rent). Subsequent buys are nearly free.
 
 ---
 

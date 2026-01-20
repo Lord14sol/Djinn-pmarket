@@ -9,17 +9,30 @@ interface PriceContextType {
 const PriceContext = createContext<PriceContextType | undefined>(undefined);
 
 export function PriceProvider({ children }: { children: React.ReactNode }) {
-    const [solPrice, setSolPrice] = useState<number>(250); // Default placeholder
+    const [solPrice, setSolPrice] = useState<number>(0); // Start at 0 to indicate loading
 
     const fetchPrice = async () => {
         try {
-            const res = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=SOLUSDT');
+            // 1. Try Jupiter API (Fastest)
+            const res = await fetch('https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112');
             const data = await res.json();
-            if (data.price) {
-                setSolPrice(parseFloat(data.price));
+            const price = data?.data?.['So11111111111111111111111111111111111111112']?.price;
+            if (price) {
+                setSolPrice(parseFloat(price));
+                return;
             }
+            throw new Error("Jupiter failed");
         } catch (error) {
-            console.error('Error fetching SOL price:', error);
+            // 2. Fallback to CoinGecko
+            try {
+                const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
+                const data = await res.json();
+                if (data.solana.usd) {
+                    setSolPrice(data.solana.usd);
+                }
+            } catch (e) {
+                console.warn('All price APIs failed');
+            }
         }
     };
 
