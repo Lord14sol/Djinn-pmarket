@@ -903,27 +903,33 @@ export default function Page() {
                     const marketPda = new PublicKey(marketAccount.market_pda);
                     const PROGRAM_ID = new PublicKey('HkjMQFag41pUutseBpXSXUuEwSKuc2CByRJjyiwAvGjL');
 
-                    // Read UserPosition for both YES (0) and NO (1)
-                    const outcomeIndex = selectedSide === 'YES' ? 0 : 1;
-                    const [userPositionPda] = PublicKey.findProgramAddressSync(
-                        [Buffer.from("user_pos"), marketPda.toBuffer(), publicKey.toBuffer(), Buffer.from([outcomeIndex])],
-                        PROGRAM_ID
-                    );
+                    // Read BOTH UserPositions (YES and NO) after any trade
+                    for (const outcomeIndex of [0, 1]) {
+                        const [userPositionPda] = PublicKey.findProgramAddressSync(
+                            [Buffer.from("user_pos"), marketPda.toBuffer(), publicKey.toBuffer(), Buffer.from([outcomeIndex])],
+                            PROGRAM_ID
+                        );
 
-                    const posAcct = await connection.getAccountInfo(userPositionPda);
-                    if (posAcct?.data) {
-                        // Parse shares from UserPosition (u128 at offset 33)
-                        const lo = posAcct.data.readBigUInt64LE(33);
-                        const hi = posAcct.data.readBigUInt64LE(41);
-                        const shares128 = (BigInt(hi) << 64n) | BigInt(lo);
-                        const normalized = Number(shares128) / 1e9;
+                        const posAcct = await connection.getAccountInfo(userPositionPda);
+                        if (posAcct?.data && posAcct.data.length >= 57) {
+                            // Parse shares from UserPosition: offset 41-49 (u128) - matching hook
+                            const lo = posAcct.data.readBigUInt64LE(41);
+                            const hi = posAcct.data.readBigUInt64LE(49);
+                            const shares128 = (BigInt(hi) << 64n) | BigInt(lo);
+                            const normalized = Number(shares128) / 1e9;
 
-                        if (selectedSide === 'YES') {
-                            updateMyShares('YES', normalized);
+                            if (outcomeIndex === 0) {
+                                updateMyShares('YES', normalized);
+                                console.log(`✅ Refreshed YES shares from contract:`, normalized);
+                            } else {
+                                updateMyShares('NO', normalized);
+                                console.log(`✅ Refreshed NO shares from contract:`, normalized);
+                            }
                         } else {
-                            updateMyShares('NO', normalized);
+                            // No position exists for this side - set to 0
+                            if (outcomeIndex === 0) updateMyShares('YES', 0);
+                            else updateMyShares('NO', 0);
                         }
-                        console.log(`✅ Refreshed ${selectedSide} shares from contract:`, normalized);
                     }
 
                     // Read market account to get real supplies and calculate actual price
@@ -945,6 +951,12 @@ export default function Page() {
                         if (totalSupply > 0) {
                             const actualPrice = (yesSupply / totalSupply) * 100;
                             setLivePrice(actualPrice);
+                            // Also update chart with new data point
+                            setChartData(prev => {
+                                const newData = [...prev, { date: Date.now(), value: actualPrice }];
+                                if (newData.length > 50) newData.shift();
+                                return newData;
+                            });
                             console.log(`✅ Refreshed price from contract:`, actualPrice);
                         }
 
@@ -1172,26 +1184,33 @@ export default function Page() {
                         const marketPda = new PublicKey(marketAccount.market_pda);
                         const PROGRAM_ID = new PublicKey('HkjMQFag41pUutseBpXSXUuEwSKuc2CByRJjyiwAvGjL');
 
-                        // Read UserPosition for the side we sold
-                        const outcomeIndex = selectedSide === 'YES' ? 0 : 1;
-                        const [userPositionPda] = PublicKey.findProgramAddressSync(
-                            [Buffer.from("user_pos"), marketPda.toBuffer(), publicKey.toBuffer(), Buffer.from([outcomeIndex])],
-                            PROGRAM_ID
-                        );
+                        // Read BOTH UserPositions (YES and NO) after sell
+                        for (const outcomeIndex of [0, 1]) {
+                            const [userPositionPda] = PublicKey.findProgramAddressSync(
+                                [Buffer.from("user_pos"), marketPda.toBuffer(), publicKey.toBuffer(), Buffer.from([outcomeIndex])],
+                                PROGRAM_ID
+                            );
 
-                        const posAcct = await connection.getAccountInfo(userPositionPda);
-                        if (posAcct?.data) {
-                            const lo = posAcct.data.readBigUInt64LE(33);
-                            const hi = posAcct.data.readBigUInt64LE(41);
-                            const shares128 = (BigInt(hi) << 64n) | BigInt(lo);
-                            const normalized = Number(shares128) / 1e9;
+                            const posAcct = await connection.getAccountInfo(userPositionPda);
+                            if (posAcct?.data && posAcct.data.length >= 57) {
+                                // Parse shares from UserPosition: offset 41-49 (u128) - matching hook
+                                const lo = posAcct.data.readBigUInt64LE(41);
+                                const hi = posAcct.data.readBigUInt64LE(49);
+                                const shares128 = (BigInt(hi) << 64n) | BigInt(lo);
+                                const normalized = Number(shares128) / 1e9;
 
-                            if (selectedSide === 'YES') {
-                                updateMyShares('YES', normalized);
+                                if (outcomeIndex === 0) {
+                                    updateMyShares('YES', normalized);
+                                    console.log(`✅ Refreshed YES shares after sell:`, normalized);
+                                } else {
+                                    updateMyShares('NO', normalized);
+                                    console.log(`✅ Refreshed NO shares after sell:`, normalized);
+                                }
                             } else {
-                                updateMyShares('NO', normalized);
+                                // No position exists for this side - set to 0
+                                if (outcomeIndex === 0) updateMyShares('YES', 0);
+                                else updateMyShares('NO', 0);
                             }
-                            console.log(`✅ Refreshed ${selectedSide} shares after sell:`, normalized);
                         }
 
                         // Read market to update price
@@ -1209,6 +1228,12 @@ export default function Page() {
                             if (totalSupply > 0) {
                                 const actualPrice = (yesSupply / totalSupply) * 100;
                                 setLivePrice(actualPrice);
+                                // Also update chart with new data point
+                                setChartData(prev => {
+                                    const newData = [...prev, { date: Date.now(), value: actualPrice }];
+                                    if (newData.length > 50) newData.shift();
+                                    return newData;
+                                });
                                 console.log(`✅ Refreshed price after sell:`, actualPrice);
                             }
 
@@ -1219,7 +1244,7 @@ export default function Page() {
                             );
                             const vaultBalance = await connection.getBalance(marketVaultPda);
                             setVaultBalanceSol(vaultBalance / LAMPORTS_PER_SOL);
-                            console.log(`💰 Refreshed vault:`, vaultBalance / LAMPORTS_PER_SOL, "SOL");
+                            console.log(`💰 Refreshed vault after sell:`, vaultBalance / LAMPORTS_PER_SOL, "SOL");
                         }
                     } catch (e) {
                         console.warn("Failed to refresh after sell:", e);
