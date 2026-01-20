@@ -2,6 +2,35 @@
 import { useState, useEffect } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
+// Animated dot component for last data point
+const AnimatedDot = ({ cx, cy, fill }: any) => {
+    if (!cx || !cy) return null;
+    return (
+        <g>
+            {/* Pulsing ring */}
+            <circle
+                cx={cx}
+                cy={cy}
+                r={8}
+                fill="none"
+                stroke={fill}
+                strokeWidth={2}
+                opacity={0.4}
+                className="animate-ping"
+            />
+            {/* Main dot */}
+            <circle
+                cx={cx}
+                cy={cy}
+                r={5}
+                fill={fill}
+                stroke="#0A0A0A"
+                strokeWidth={2}
+            />
+        </g>
+    );
+};
+
 interface ChartDataPoint {
     time: number;
     yes: number; // 0-1 (probability)
@@ -19,7 +48,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         return (
             <div className="bg-[#0A0A0A] border border-white/10 px-3 py-2 rounded-lg shadow-xl backdrop-blur-md">
                 <p className="text-[#10B981] font-mono text-sm">YES: {(payload[0]?.value * 100).toFixed(1)}%</p>
-                <p className="text-[#EC4899] font-mono text-sm">NO: {(payload[1]?.value * 100).toFixed(1)}%</p>
+                <p className="text-[#F492B7] font-mono text-sm">NO: {(payload[1]?.value * 100).toFixed(1)}%</p>
             </div>
         );
     }
@@ -57,14 +86,24 @@ export default function DjinnChart({ data, volume = "$0", settlementDate = "TBD"
             <div className="h-[320px] w-full relative">
                 <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={safeData} margin={{ top: 10, right: 50, left: 0, bottom: 0 }}>
+                        {/* Animated End Dots */}
+                        <defs>
+                            <style>{`
+                                @keyframes pulse {
+                                    0%, 100% { opacity: 1; r: 5px; }
+                                    50% { opacity: 0.5; r: 8px; }
+                                }
+                                .pulse-dot { animation: pulse 2s ease-in-out infinite; }
+                            `}</style>
+                        </defs>
                         <defs>
                             <linearGradient id="yesGradient" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="5%" stopColor="#10B981" stopOpacity={0.25} />
                                 <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
                             </linearGradient>
                             <linearGradient id="noGradient" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#EC4899" stopOpacity={0.15} />
-                                <stop offset="95%" stopColor="#EC4899" stopOpacity={0} />
+                                <stop offset="5%" stopColor="#F492B7" stopOpacity={0.2} />
+                                <stop offset="95%" stopColor="#F492B7" stopOpacity={0} />
                             </linearGradient>
                         </defs>
 
@@ -89,17 +128,27 @@ export default function DjinnChart({ data, volume = "$0", settlementDate = "TBD"
                             strokeWidth={3}
                             fill="url(#yesGradient)"
                             animationDuration={1000}
+                            dot={false}
+                            activeDot={(props: any) => {
+                                const isLast = props.index === safeData.length - 1;
+                                return isLast ? <AnimatedDot {...props} fill="#10B981" /> : null;
+                            }}
                         />
 
-                        {/* NO Line (Secondary/Ghosted) */}
+                        {/* NO Line (Djinn Pink Bubble Gum) */}
                         <Area
                             type="monotone"
                             dataKey="no"
-                            stroke="#EC4899"
-                            strokeWidth={2}
-                            strokeOpacity={0.6}
+                            stroke="#F492B7"
+                            strokeWidth={3}
+                            strokeOpacity={1}
                             fill="url(#noGradient)"
                             animationDuration={1000}
+                            dot={false}
+                            activeDot={(props: any) => {
+                                const isLast = props.index === safeData.length - 1;
+                                return isLast ? <AnimatedDot {...props} fill="#F492B7" /> : null;
+                            }}
                         />
                     </AreaChart>
                 </ResponsiveContainer>
@@ -109,12 +158,12 @@ export default function DjinnChart({ data, volume = "$0", settlementDate = "TBD"
             <div className="flex items-center justify-between border-t border-white/5 pt-4 mt-4">
                 <div className="flex gap-6 text-xs font-mono text-gray-500">
                     <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-blue-500/50"></span>
-                        <span>VOL: <span className="text-white font-medium">{volume}</span></span>
+                        <span className="w-2 h-2 rounded-full bg-[#F492B7]/70"></span>
+                        <span>VOL: <span className="text-[#F492B7] font-medium">{volume}</span></span>
                     </div>
                     <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-purple-500/50"></span>
-                        <span>ENDS: <span className="text-white font-medium">{settlementDate}</span></span>
+                        <span className="w-2 h-2 rounded-full bg-[#F492B7]/70"></span>
+                        <span>ENDS: <span className="text-[#F492B7] font-medium">{settlementDate}</span></span>
                     </div>
                 </div>
 

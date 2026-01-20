@@ -391,6 +391,17 @@ export function subscribeToMarketData(slug: string, callback: (payload: any) => 
         .subscribe();
 }
 
+export function subscribeToMarkets(callback: (payload: any) => void) {
+    return supabase
+        .channel('markets:public')
+        .on('postgres_changes', {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'markets'
+        }, callback)
+        .subscribe();
+}
+
 // ============================================
 // MARKETS (Resolution System)
 // ============================================
@@ -419,7 +430,20 @@ export interface Market {
     options?: string[]; // Array of outcome names (e.g., ["Yes", "No"] or ["Brasil", "Argentina", "Chile"])
 }
 
-export async function createMarket(market: Partial<Market> & { slug: string; title: string; creator_wallet: string }) {
+export async function createMarket(market: Partial<Market> & {
+    slug: string;
+    title: string;
+    creator_wallet: string;
+    category: string; // REQUIRED - auto-detected from title
+}) {
+    // Valid categories (including 'Trending' as fallback)
+    const validCategories = ['Trending', 'Crypto', 'Politics', 'Sports', 'Earth', 'Movies',
+        'Culture', 'Tech', 'AI', 'Science', 'Finance', 'Gaming'];
+
+    if (!market.category || !validCategories.includes(market.category)) {
+        throw new Error('Invalid or missing category. Must be one of: ' + validCategories.join(', '));
+    }
+
     return withRetry(async () => {
         const { data, error } = await supabase
             .from('markets')

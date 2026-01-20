@@ -38,6 +38,14 @@ export const useDjinnProtocol = () => {
 
             console.log('[Djinn] Program initialized successfully');
             console.log('[Djinn] Available methods:', Object.keys(p.methods));
+            console.log('[Djinn] buyShares method exists?', typeof p.methods.buyShares);
+            console.log('[Djinn] Program ID:', p.programId.toString());
+
+            // CRITICAL CHECK: Verify buyShares exists
+            if (!p.methods.buyShares) {
+                console.error('❌ buyShares method not found in program!');
+                console.error('Available methods:', Object.keys(p.methods));
+            }
 
             return p;
         } catch (e) {
@@ -218,6 +226,19 @@ export const useDjinnProtocol = () => {
                 [Buffer.from("user_pos"), marketPda.toBuffer(), wallet.publicKey.toBuffer(), Buffer.from([outcomeIndex])],
                 program.programId
             )[0];
+
+            // CRITICAL CHECK: Verify method exists before calling
+            if (!program.methods || !program.methods.buyShares) {
+                console.error('❌ CRITICAL: buyShares method not found!');
+                console.error('Available methods:', Object.keys(program.methods || {}));
+                throw new Error('buyShares method not available in program');
+            }
+
+            console.log('✅ buyShares method found, calling with args:', {
+                outcomeIndex,
+                amountLamports: amountLamports.toString(),
+                minSharesBN: minSharesBN.toString()
+            });
 
             // On-chain IDL expects: outcomeIndex, solIn, minSharesOut
             const preInstructions = [

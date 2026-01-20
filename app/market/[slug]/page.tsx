@@ -1622,17 +1622,15 @@ export default function Page() {
                                                 key={pct}
                                                 onClick={() => {
                                                     const sharesOwned = selectedSide === 'YES' ? myYesShares : myNoShares;
-                                                    // Logic: Total Value = Shares * PriceInSol
-                                                    // Price In Sol = Price / 100
-                                                    // Value to receive = (Shares * (pct/100)) * (Price/100)
                                                     if (sharesOwned <= 0) return;
 
                                                     const cPrice = selectedSide === 'YES' ? (livePrice ?? 50) : (100 - (livePrice ?? 50));
-                                                    // Calculate estimated value (what the input expects)
-                                                    // Input logic earlier: sharesToSell = betAmount / (price/100)
-                                                    // So betAmount = sharesToSell * (price/100)
                                                     const sharesToSell = sharesOwned * (pct / 100);
-                                                    const estimatedValue = sharesToSell * (cPrice / 100);
+                                                    // Raw estimate based on price
+                                                    let estimatedValue = sharesToSell * (cPrice / 100);
+                                                    // CAP at vault balance (can't receive more than what's in the vault)
+                                                    const maxPayout = Math.max(0, vaultBalanceSol * 0.95); // 5% buffer for fees
+                                                    estimatedValue = Math.min(estimatedValue, maxPayout);
                                                     setBetAmount(estimatedValue.toFixed(4));
                                                 }}
                                                 className="flex-1 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-[10px] font-bold text-gray-400 hover:text-white transition-colors border border-white/5"
@@ -1771,7 +1769,7 @@ export default function Page() {
                                             <div className="text-right">
                                                 <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">You Get</span>
                                                 <span className="text-xl font-bold text-[#10B981] font-mono">
-                                                    ◎{formatCompact(parseFloat(betAmount || '0') * 0.99)}
+                                                    ◎{(parseFloat(betAmount || '0') * 0.99).toFixed(4)} SOL
                                                 </span>
                                             </div>
                                         </div>

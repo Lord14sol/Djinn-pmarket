@@ -68,6 +68,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                 setInitialBuyAmount('0');
                 setInitialBuySide('yes');
                 setSuccessData(null);
+                setSourceUrl('');
             }, 300); // Small delay for fade out
             return () => clearTimeout(t);
         }
@@ -92,6 +93,35 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
         );
     };
 
+    // Auto-detect category from market title using keywords
+    const autoDetectCategory = (title: string): string => {
+        const lowerTitle = title.toLowerCase();
+
+        // Keyword patterns for each category
+        const patterns = {
+            'Crypto': ['bitcoin', 'btc', 'ethereum', 'eth', 'crypto', 'solana', 'sol', 'token', 'nft', 'defi', 'blockchain', 'coin', 'pump', 'airdrop', 'wallet'],
+            'Politics': ['election', 'president', 'trump', 'biden', 'congress', 'senate', 'vote', 'political', 'minister', 'government', 'democrat', 'republican', 'policy'],
+            'Sports': ['world cup', 'nba', 'nfl', 'fifa', 'olympics', 'football', 'soccer', 'basketball', 'baseball', 'tennis', 'match', 'championship', 'league', 'team', 'player'],
+            'Movies': ['movie', 'film', 'oscar', 'box office', 'cinema', 'director', 'actor', 'hollywood', 'netflix', 'streaming', 'premiere'],
+            'Tech': ['apple', 'google', 'microsoft', 'meta', 'amazon', 'tech', 'iphone', 'android', 'software', 'hardware', 'startup', 'launch'],
+            'AI': ['ai', 'artificial intelligence', 'chatgpt', 'openai', 'gpt', 'llm', 'machine learning', 'neural', 'model', 'anthropic', 'claude'],
+            'Science': ['nasa', 'space', 'climate', 'research', 'study', 'scientist', 'discovery', 'experiment', 'quantum', 'physics', 'biology'],
+            'Finance': ['stock', 'market', 'dow', 's&p', 'nasdaq', 'fed', 'interest rate', 'inflation', 'economy', 'gdp', 'bank', 'treasury'],
+            'Gaming': ['gta', 'game', 'gaming', 'xbox', 'playstation', 'nintendo', 'steam', 'esports', 'twitch', 'rockstar'],
+            'Culture': ['music', 'artist', 'album', 'concert', 'festival', 'grammy', 'fashion', 'art', 'culture', 'taylor swift', 'drake']
+        };
+
+        // Check each category for keyword matches
+        for (const [category, keywords] of Object.entries(patterns)) {
+            if (keywords.some(keyword => lowerTitle.includes(keyword))) {
+                return category;
+            }
+        }
+
+        // Default to Trending if no match
+        return 'Trending';
+    };
+
     // --- MAIN LOGIC (Ported from Hero.tsx) ---
     const handleCreateMarket = async () => {
         // ✅ Check if Supabase is configured
@@ -107,6 +137,9 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
         }
         if (!poolName) return alert("Please enter a question");
 
+        // Auto-detect category from title
+        const finalCategory = autoDetectCategory(poolName);
+        console.log(`📁 Auto-detected category: ${finalCategory} (from title: "${poolName}")`);
 
         setIsLoading(true);
 
@@ -195,6 +228,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                 slug,
                 title: poolName,
                 creator_wallet: publicKey.toString(),
+                category: finalCategory, // Auto-detected category
                 end_date: new Date(resolutionTime * 1000).toISOString(),
                 market_pda: marketPDA,
                 yes_token_mint: yesTokenMint,
@@ -243,7 +277,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                 volume: "$0", // Initial volume
                 chance: 50,
                 icon: finalBanner,
-                category: 'New', // Force category to New
+                category: finalCategory, // Auto-detected category
                 createdAt: Date.now(),
                 marketPDA,
                 yesTokenMint,
@@ -376,11 +410,21 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                             </div>
 
                             <div className="space-y-6">
-                                <div>
-                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest block mb-2">Market Banner (Top Image)</label>
-                                    <div className="w-full h-32 rounded-2xl border border-white/10 bg-white/5 flex items-center justify-center cursor-pointer overflow-hidden"
-                                        onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.onchange = (e: any) => handleImageUpload(e.target.files[0]); input.click(); }}>
-                                        {mainImage ? <img src={mainImage} className="w-full h-full object-cover" /> : <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Upload Banner</span>}
+                                <div className="flex justify-center">
+                                    <div className="w-full max-w-sm">
+                                        <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest block mb-2 text-center">Upload Image</label>
+                                        <div className="w-full aspect-square rounded-2xl border-2 border-dashed border-white/10 bg-white/5 flex items-center justify-center cursor-pointer overflow-hidden hover:border-[#F492B7] transition-all"
+                                            onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.onchange = (e: any) => handleImageUpload(e.target.files[0]); input.click(); }}>
+                                            {mainImage ? (
+                                                <img src={mainImage} className="w-full h-full object-cover" />
+                                            ) : (
+                                                <div className="text-center">
+                                                    <div className="text-4xl mb-2">🖼️</div>
+                                                    <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Click to Upload</span>
+                                                    <p className="text-[10px] text-gray-600 mt-1">JPG, PNG, WEBP</p>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 
@@ -397,8 +441,6 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                                     />
                                     <p className="text-[10px] text-gray-600">Protocol Veritas: If this link fails verification, the market will be invalidated.</p>
                                 </div>
-
-
 
                                 <div className="space-y-3">
 

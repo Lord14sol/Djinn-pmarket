@@ -3,14 +3,21 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useWallet } from '@solana/wallet-adapter-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import Hero from '@/components/Hero';
 import MarketCard from '@/components/MarketCard';
 import { MarketGridSkeleton } from '@/components/ui/Skeletons';
 import { useCategory } from '@/lib/CategoryContext';
-import { getMarkets as getSupabaseMarkets } from '@/lib/supabase-db';
+import { getMarkets as getSupabaseMarkets, subscribeToMarkets } from '@/lib/supabase-db';
 import { formatCompact } from '@/lib/utils';
+import PumpEffect from '@/components/PumpEffect';
 
 import TheGreatPyramid from '@/components/TheGreatPyramid';
+
+// Fresh start timestamp - hide markets created before this
+const FRESH_START_TIMESTAMP = process.env.NEXT_PUBLIC_FRESH_START_TIMESTAMP
+  ? parseInt(process.env.NEXT_PUBLIC_FRESH_START_TIMESTAMP)
+  : 0;
 
 
 export default function Home() {
@@ -206,6 +213,7 @@ export default function Home() {
           finalMarkets = supabaseMarkets.map((m, index) => ({
             id: m.id || `sb-${index}`,
             title: m.title,
+            icon: m.banner_url || '🔮', // Use uploaded image as icon
             chance: Math.round((m.total_yes_pool / (m.total_yes_pool + m.total_no_pool + 1)) * 100) || 50,
             volume: `$${formatCompact(m.total_yes_pool + m.total_no_pool)}`,
             type: 'binary',
@@ -276,6 +284,43 @@ export default function Home() {
 
     loadMarkets();
 
+    // NEW: Real-time subscription to markets table
+    const channel = subscribeToMarkets((payload) => {
+      if (payload.eventType === 'INSERT' && payload.new) {
+        console.log("🔴 LIVE: New market created!", payload.new);
+        const newMarket = {
+          id: payload.new.id,
+          title: payload.new.title,
+          chance: Math.round((payload.new.total_yes_pool / (payload.new.total_yes_pool + payload.new.total_no_pool + 1)) * 100) || 50,
+          volume: `$${formatCompact(payload.new.total_yes_pool + payload.new.total_no_pool)}`,
+          type: 'binary',
+          category: payload.new.category || 'Trending',
+          endDate: payload.new.end_date ? new Date(payload.new.end_date) : new Date('2026-12-31'),
+          slug: payload.new.slug,
+          createdAt: new Date(payload.new.created_at).getTime(),
+          resolved: payload.new.resolved,
+          winningOutcome: payload.new.winning_outcome,
+          marketPDA: payload.new.market_pda,
+          yesTokenMint: payload.new.yes_token_mint,
+          noTokenMint: payload.new.no_token_mint,
+          resolutionSource: payload.new.resolution_source,
+          banner_url: payload.new.banner_url,
+          icon: payload.new.banner_url,
+          isNew: true,
+          justArrived: true // Flag for pump animation (10s)
+        };
+
+        setMarkets(prev => [newMarket, ...prev]);
+
+        // Remove pump flag after 10 seconds
+        setTimeout(() => {
+          setMarkets(prev => prev.map(m =>
+            m.slug === newMarket.slug ? { ...m, justArrived: false } : m
+          ));
+        }, 10000);
+      }
+    });
+
     const handleMarketCreated = (event: any) => {
       if (event.detail) {
         console.log("⚡ Optimistic UI Update: New Market", event.detail);
@@ -290,6 +335,7 @@ export default function Home() {
     window.addEventListener('market-created', handleMarketCreated);
 
     return () => {
+      channel.unsubscribe();
       window.removeEventListener('storage', loadMarkets);
       window.removeEventListener('market-created', handleMarketCreated);
     };
@@ -320,6 +366,14 @@ export default function Home() {
   const oneDayAgo = now - 86400000; // 24 horas
 
   const filteredMarkets = markets.filter(market => {
+    // Hide archived markets
+    if ((market as any).is_archived) return false;
+
+    // Hide old markets before fresh start timestamp
+    if (FRESH_START_TIMESTAMP > 0 && (market.createdAt || 0) < FRESH_START_TIMESTAMP) {
+      return false;
+    }
+
     const age = now - (market.createdAt || 0);
     const oneHour = 3600000;
     const twelveHours = 43200000;
@@ -447,20 +501,70 @@ export default function Home() {
         {isLoading ? (
           <MarketGridSkeleton count={8} />
         ) : sortedMarkets.length === 0 ? (
-          <div className="text-center py-20 border-2 border-dashed border-white/10 rounded-3xl">
-            <p className="text-gray-500 text-xl font-bold uppercase tracking-widest">No markets in this category yet</p>
-            <p className="text-gray-600 mt-2">Create one to be the first!</p>
+          <div className="text-center py-32 border-2 border-dashed border-white/10 rounded-3xl bg-gradient-to-br from-[#0A0A0A] to-[#1A1A1A]">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="flex flex-col items-center gap-6"
+            >
+              {/* Pink Crystal Icon */}
+              <div className="w-24 h-24 bg-gradient-to-br from-[#F492B7] to-[#FF007A] rounded-2xl rotate-45 flex items-center justify-center shadow-[0_0_60px_rgba(244,146,183,0.3)]">
+                <span className="text-5xl -rotate-45">🔮</span>
+              </div>
+
+              <div>
+                <p className="text-white text-2xl font-black uppercase tracking-widest">
+                  No Markets Yet
+                </p>
+                <p className="text-gray-500 mt-3 text-lg">
+                  Be the first to summon a prediction market
+                </p>
+              </div>
+
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent('open-create-modal'))}
+                className="bg-[#F492B7] text-black text-lg font-black py-4 px-10 rounded-xl shadow-[0_0_30px_rgba(244,146,183,0.3)] hover:scale-105 active:scale-95 transition-all uppercase mt-4"
+              >
+                Create First Market
+              </button>
+            </motion.div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {sortedMarkets.map((market, index) => (
-              <MarketCard
-                key={`${market.id}-${index}`}
-                {...market}
-                isNew={market.createdAt && market.createdAt > oneDayAgo}
-              />
-            ))}
-          </div>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeCategory}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+            >
+              {sortedMarkets.map((market, index) => {
+                const isPumping = (market as any).justArrived;
+
+                return (
+                  <motion.div
+                    key={`${market.slug}-${index}`}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{
+                      duration: 0.2,
+                      delay: index * 0.03 // Stagger animation
+                    }}
+                  >
+                    <PumpEffect isActive={isPumping}>
+                      <MarketCard
+                        {...market}
+                        isNew={market.createdAt && market.createdAt > oneDayAgo}
+                      />
+                    </PumpEffect>
+                  </motion.div>
+                );
+              })}
+            </motion.div>
+          </AnimatePresence>
         )}
       </section>
 

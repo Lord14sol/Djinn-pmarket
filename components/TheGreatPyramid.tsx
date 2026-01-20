@@ -47,13 +47,13 @@ export default function TheGreatPyramid({ topMarket }: TheGreatPyramidProps) {
                     {/* LEFT SIDE: Visual / Icon - FULL BLEED HBO STYLE */}
                     <div className="w-full md:w-[400px] bg-black border-r border-white/5 flex flex-col items-center justify-center relative overflow-hidden group">
 
-                        {typeof topMarket.icon === 'string' && topMarket.icon.startsWith('data:image') ? (
+                        {typeof topMarket.icon === 'string' && (topMarket.icon.startsWith('data:image') || topMarket.icon.startsWith('http') || topMarket.icon.startsWith('/')) ? (
                             <>
                                 {/* 1. Blurred Backdrop */}
                                 <img src={topMarket.icon} alt="" className="absolute inset-0 w-full h-full object-cover opacity-50 blur-2xl scale-125 pointer-events-none" />
-                                {/* 2. Main Image (No Crop) */}
-                                <div className="absolute inset-0 flex items-center justify-center p-8 z-10">
-                                    <img src={topMarket.icon} alt="" className="w-full h-full object-contain drop-shadow-[0_20px_50px_rgba(0,0,0,0.5)] group-hover:scale-105 transition-transform duration-700" />
+                                {/* 2. Main Image (Perfect Square Crop) */}
+                                <div className="absolute inset-0 flex items-center justify-center z-10">
+                                    <img src={topMarket.icon} alt="" className="w-full h-full object-cover drop-shadow-[0_20px_50px_rgba(0,0,0,0.5)] group-hover:scale-105 transition-transform duration-700" />
                                 </div>
                             </>
                         ) : (
