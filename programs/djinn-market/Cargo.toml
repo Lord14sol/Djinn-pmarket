@@ -15,15 +15,4 @@ incremental = false
 codegen-units = 1
 
 [patch.crates-io]
-# Pin solana-program to exact version compatible with Anchor 0.28.0
-solana-program = { version = "=1.16.27" }
-solana-zk-token-sdk = { version = "=1.16.27" }
-
-# Pin wit-bindgen to avoid edition2024 requirement
-wit-bindgen = { version = "=0.24.0" }
-wit-bindgen-rust = { version = "=0.24.0" }
-wit-bindgen-rust-macro = { version = "=0.24.0" }
-
-# Pin ahash to avoid build issues with newer Rust
-ahash = { version = "=0.7.8" }
 
