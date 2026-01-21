@@ -36,10 +36,10 @@ This stack overflow was happening in **Solana's internal ABI generation code**, 
 
 ### Solution Applied
 ✅ **Locked Rust to 1.75.0** via `rust-toolchain.toml`
-✅ **Pinned solana-program to 1.16.27** (exact version)
-✅ **Pinned wit-bindgen to 0.24.0** (avoids edition2024)
-✅ **Added [patch.crates-io]** to force versions across dependency tree
-✅ **Created automated build script** for easy rebuilds
+✅ **Pinned solana-program to =1.16.27** (exact version in program Cargo.toml)
+✅ **Removed incorrect [patch.crates-io]** entries (caused patch errors)
+✅ **Build verified** - cargo build completes successfully in 2m
+✅ **Created automated scripts** (verify-setup.sh, fix-and-build.sh)
 
 ---
 
@@ -49,9 +49,11 @@ This stack overflow was happening in **Solana's internal ABI generation code**, 
 programs/djinn-market/
 ├── rust-toolchain.toml                    [NEW] Lock to Rust 1.75.0
 ├── .cargo/config.toml                     [NEW] BPF build settings
-├── Cargo.toml                             [MODIFIED] Added [patch.crates-io]
-├── programs/djinn-market/Cargo.toml       [MODIFIED] Exact solana-program version
-└── fix-and-build.sh                       [NEW] Automated build script
+├── Cargo.toml                             [MODIFIED] Empty [patch.crates-io]
+├── Cargo.lock                             [MODIFIED] Version 3, deps resolved
+├── programs/djinn-market/Cargo.toml       [MODIFIED] solana-program = "=1.16.27"
+├── fix-and-build.sh                       [NEW] Automated build script
+└── verify-setup.sh                        [NEW] Environment verification
 ```
 
 ---
@@ -166,11 +168,10 @@ This is the ABI visitor for `InstructionError` (Solana's internal enum). Boxing 
 
 ## Summary
 
-**The Fix**: Comprehensive version pinning
+**The Fix**: Rust toolchain lock + exact version pinning
 - Rust 1.75.0 (via rust-toolchain.toml)
-- solana-program =1.16.27
-- wit-bindgen =0.24.0
-- [patch.crates-io] to enforce across dependency tree
+- solana-program =1.16.27 (exact version in program Cargo.toml)
+- No patches needed (Cargo resolves correctly with Rust 1.75.0)
 
 **Result**: Stable build environment compatible with Anchor 0.28.0
 

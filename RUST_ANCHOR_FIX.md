@@ -20,22 +20,20 @@ channel = "1.75.0"
 - ABI stack overflow issues
 
 ### 2. Exact Dependency Pinning
-**File**: `programs/djinn-market/Cargo.toml` - `[patch.crates-io]` section
+**File**: `programs/djinn-market/programs/djinn-market/Cargo.toml`
 
 ```toml
-[patch.crates-io]
-solana-program = { version = "=1.16.27" }
-solana-zk-token-sdk = { version = "=1.16.27" }
-wit-bindgen = { version = "=0.24.0" }
-wit-bindgen-rust = { version = "=0.24.0" }
-wit-bindgen-rust-macro = { version = "=0.24.0" }
-ahash = { version = "=0.7.8" }
+solana-program = "=1.16.27"  # Exact version
 ```
 
 **Why**:
 - **solana-program =1.16.27**: Exact version prevents ABI recursion issues
-- **wit-bindgen =0.24.0**: Avoids edition2024 requirement (0.51.0 requires it)
-- **ahash =0.7.8**: Prevents newer versions that conflict with Rust 1.75.0
+- The exact version specification (with `=`) ensures Cargo uses precisely this version
+- No [patch.crates-io] needed - patches can't be used for same-source version pinning
+
+**Note**: Initial attempt used `[patch.crates-io]` but this caused errors because patches
+must point to different sources (git, path, etc.), not the same crates.io source with
+a different version. The correct approach is exact version specification in dependencies.
 
 ### 3. Program Dependency Update
 **File**: `programs/djinn-market/programs/djinn-market/Cargo.toml`
