@@ -2582,3 +2582,18 @@ name = "zmij"
 version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bd8f3f50b848df28f887acb68e41201b5aea6bc8a8dacc00fb40635ff9a72fea"
+
+[[patch.unused]]
+name = "wit-bindgen"
+version = "0.24.0"
+source = "git+https://github.com/bytecodealliance/wit-bindgen?tag=v0.24.0#e7e18d718614f011527fe30203ffe3ff61dd7e45"
+
+[[patch.unused]]
+name = "wit-bindgen-rust"
+version = "0.24.0"
+source = "git+https://github.com/bytecodealliance/wit-bindgen?tag=v0.24.0#e7e18d718614f011527fe30203ffe3ff61dd7e45"
+
+[[patch.unused]]
+name = "wit-bindgen-rust-macro"
+version = "0.24.0"
+source = "git+https://github.com/bytecodealliance/wit-bindgen?tag=v0.24.0#e7e18d718614f011527fe30203ffe3ff61dd7e45"

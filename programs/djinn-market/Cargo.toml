@@ -15,4 +15,9 @@ incremental = false
 codegen-units = 1
 
 [patch.crates-io]
+# Force wit-bindgen to 0.24.0 from git (avoids edition2024 requirement)
+# This prevents cargo from pulling 0.51.0 which requires nightly Rust
+wit-bindgen = { git = "https://github.com/bytecodealliance/wit-bindgen", tag = "v0.24.0" }
+wit-bindgen-rust = { git = "https://github.com/bytecodealliance/wit-bindgen", tag = "v0.24.0" }
+wit-bindgen-rust-macro = { git = "https://github.com/bytecodealliance/wit-bindgen", tag = "v0.24.0" }
 
