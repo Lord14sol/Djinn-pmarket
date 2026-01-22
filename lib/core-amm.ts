@@ -9,7 +9,7 @@ import { PublicKey } from "@solana/web3.js";
 
 // --- GLOBAL CONSTANTS (MUST MATCH lib.rs) ---
 export const TOTAL_SUPPLY = 1_000_000_000; // 1B Shares
-export const VIRTUAL_OFFSET = 30_000_000;   // 30M Shares (~30 SOL Depth - Pump.fun style)
+export const VIRTUAL_OFFSET = 30_000_000;    // 30M Shares (Pump.fun Depth for Stability)
 
 // PHASE BOUNDARIES (Shares)
 export const PHASE1_END = 100_000_000;    // 100M
@@ -17,8 +17,8 @@ export const PHASE2_END = 200_000_000;    // 200M
 export const PHASE3_START = 200_000_000;
 
 // PRICE CONSTANTS (in SOL, matches Lamports conversion in lib.rs)
-// UPDATED FOR 50 SOL LIQUIDITY DEPTH
-const P_START = 0.000001;      // 1000 lamports (Was 100) -> Base Price
+// UPDATED FOR "BALANCED PUMP" (Stability + Low Mcap)
+const P_START = 0.00000001;    // 10 lamports -> Starts at ~$60 Mcap despite 30M depth
 const P_50 = 0.000005;         // 5000 lamports (Target at 100M) - kept low for gains
 const P_90 = 0.000025;         // 25000 lamports
 const P_MAX = 0.95;            // 950M nanoSOL (0.95 SOL cap)
@@ -192,12 +192,15 @@ export function simulateBuy(
 
 // --- UTILITY FUNCTIONS ---
 
-export function calculateImpliedProbability(yesMcap: number, noMcap: number): number {
-    const total = yesMcap + noMcap;
-    if (total <= 0) return 50; // No bets yet, 50/50
-    if (noMcap === 0) return 100; // All YES, 100% probability
-    if (yesMcap === 0) return 0;  // All NO, 0% probability
-    return (yesMcap / total) * 100;
+export function calculateImpliedProbability(yesSupply: number, noSupply: number): number {
+    // STABILIZER: Use Spot Price ratio instead of Share counts
+    // This allows for 'Virtual Liquidity' where a 0-supply side still has a base price
+    // derived from the bonding curve's starting point.
+    const priceYes = getSpotPrice(yesSupply);
+    const priceNo = getSpotPrice(noSupply);
+
+    const total = priceYes + priceNo;
+    return (priceYes / total) * 100;
 }
 
 /**

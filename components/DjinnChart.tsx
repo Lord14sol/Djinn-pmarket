@@ -1,394 +1,378 @@
 "use client";
-import { useState, useEffect, useMemo } from 'react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, ComposedChart, Bar, Cell } from 'recharts';
-import { format } from 'date-fns';
 
-// Types
-interface ChartDataPoint {
-    time: number;
-    yes: number; // 0-1 (probability)
-    no: number;  // 0-1 (probability)
-    timestamp?: Date;
+import { useState, useEffect, useRef, useMemo } from "react";
+import {
+    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from "recharts";
+import { createChart, ColorType, CrosshairMode, CandlestickSeries, CandlestickData, Time } from "lightweight-charts";
+import { motion, AnimatePresence } from "framer-motion";
+import { cn, formatCompact } from "@/lib/utils";
+import { TrendingUp, Activity } from "lucide-react";
+
+// --- TIPOS & CONSTANTES ---
+type MarketMode = "PROBABILITY" | "DJINN";
+export type TradeEvent = { id: string; outcome: string; amount: number; color: string };
+
+interface OutcomeObject {
+    id: string;
+    title: string;
+    [key: string]: any;
 }
 
-interface CandleDataPoint {
-    time: number;
-    open: number;
-    close: number;
-    high: number;
-    low: number;
-}
-
-interface DjinnChartProps {
-    data: ChartDataPoint[];
-    volume?: string;
-    settlementDate?: string;
-    onTimeframeChange?: (tf: string) => void;
-    yesLabel?: string;
-    noLabel?: string;
-}
-
-// Timeframe options
-const TIMEFRAMES = ['1m', '5m', '15m', '1H', '4H', '1D'];
-
-// Helper to aggregate data into candles
-const aggregateToCandles = (data: ChartDataPoint[], intervalMs: number): CandleDataPoint[] => {
-    if (!data.length) return [];
-
-    const sorted = [...data].sort((a, b) => a.time - b.time);
-    const candles: CandleDataPoint[] = [];
-
-    // Align to interval
-    let currentBucketStart = Math.floor(sorted[0].time / intervalMs) * intervalMs;
-    let currentBucket: ChartDataPoint[] = [];
-
-    sorted.forEach(point => {
-        if (point.time >= currentBucketStart + intervalMs) {
-            // Close current bucket
-            if (currentBucket.length > 0) {
-                const open = currentBucket[0].yes;
-                const close = currentBucket[currentBucket.length - 1].yes;
-                const highs = currentBucket.map(p => p.yes);
-                const high = Math.max(...highs);
-                const low = Math.min(...highs);
-                candles.push({ time: currentBucketStart, open, close, high, low });
-            }
-            // Start new bucket
-            currentBucketStart = Math.floor(point.time / intervalMs) * intervalMs;
-            currentBucket = [];
-        }
-        currentBucket.push(point);
-    });
-
-    // Push last bucket
-    if (currentBucket.length > 0) {
-        const open = currentBucket[0].yes;
-        const close = currentBucket[currentBucket.length - 1].yes;
-        const highs = currentBucket.map(p => p.yes);
-        const high = Math.max(...highs);
-        const low = Math.min(...highs);
-        candles.push({ time: currentBucketStart, open, close, high, low });
-    }
-
-    return candles;
+const COLORS: Record<string, string> = {
+    Brazil: "#FCD116",    // Amarillo
+    Argentina: "#75AADB", // Celeste
+    France: "#002395",    // Azul
+    Yes: "#10B981",       // Verde
+    No: "#EF4444",        // Rojo
 };
 
-// Custom Candle Shape
-const Candlestick = (props: any) => {
-    const { x, y, width, height, payload } = props;
-    const { open, close, high, low } = payload || props; // Safely get data
+// --- SUB-COMPONENTES ---
 
-    const isUp = close >= open;
-    const color = isUp ? '#10B981' : '#F492B7'; // Green or Pink
+// 1. Header estilo Pump.fun con Bonding Curve
+const PumpHeader = ({ data, outcome, supply, firstCandle }: { data: any, outcome: string, supply?: number, firstCandle?: any }) => {
+    // Progress relative to 100M (PHASE1_END in lib/core-amm)
+    const progress = useMemo(() => {
+        if (supply !== undefined) return Math.min((supply / 100_000_000) * 100, 100);
+        // Fallback to price-based derivation if supply missing
+        return Math.min(((data.close || 0) / 0.8) * 100, 100);
+    }, [supply, data.close]);
 
-    // Calculate Coordinates
-    let yOpen, yClose, yHigh, yLow;
+    // ROI based on session inception price (first candle)
+    const safeInceptionOpen = firstCandle?.open || data.open || 0.000001;
+    const safeClose = data.close || 0.000001;
+    const roi = ((safeClose - safeInceptionOpen) / safeInceptionOpen) * 100;
 
-    if (props.yAxis && props.yAxis.scale) {
-        // Use Recharts Axis Scale if available
-        const { yAxis } = props;
-        yOpen = yAxis.scale(open);
-        yClose = yAxis.scale(close);
-        yHigh = yAxis.scale(high);
-        yLow = yAxis.scale(low);
-    } else {
-        // Fallback: Calculate scale from Bar dimensions (assuming dataKey="high" so y corresponds to high)
-        // Recharts draws bars from 0 (bottom) to value (top).
-        // height = bar height (pixels)
-        // y = top of the bar (pixels)
-        // zeroY = y + height (bottom of the bar, corresponds to value 0)
-        // scale = height / value (pixels per unit)
-
-        // However, we are switching Bar dataKey to "high" to ensure the full wick fits.
-        // So `y` is the position of `high`.
-        // `height` is the distance from 0 to `high`.
-
-        const zeroY = y + height;
-        const scale = high !== 0 ? height / high : 0;
-
-        yHigh = y; // Since dataKey is high
-        yLow = zeroY - low * scale;
-        yOpen = zeroY - open * scale;
-        yClose = zeroY - close * scale;
-    }
-
-    const barWidth = Math.max(width * 0.6, 2);
-    const xCenter = x + width / 2;
+    // Mcap = Supply * Price. 
+    const mcapSol = (supply || 0) * safeClose;
 
     return (
-        <g>
-            {/* Vick */}
-            <line x1={xCenter} y1={yHigh} x2={xCenter} y2={yLow} stroke={color} strokeWidth={1} />
-            {/* Body */}
-            <rect
-                x={xCenter - barWidth / 2}
-                y={Math.min(yOpen, yClose)}
-                width={barWidth}
-                height={Math.max(Math.abs(yOpen - yClose), 1)}
-                fill={color}
-                rx={1}
-            />
-        </g>
-    );
-};
-
-// Format X-axis based on timeframe
-const formatXAxis = (timestamp: number, timeframe: string): string => {
-    const date = new Date(timestamp);
-    if (isNaN(date.getTime())) return '';
-    return timeframe === '1D' || timeframe === '4H'
-        ? format(date, 'MMM d')
-        : format(date, 'h:mm a');
-};
-
-// Custom Tooltip for Candles
-const CandleTooltip = ({ active, payload, label }: any) => {
-    if (!active || !payload || payload.length === 0) return null;
-    const data = payload[0].payload; // Access the full data object
-    return (
-        <div className="bg-[#0B0E14] border border-white/10 p-3 rounded-lg shadow-xl">
-            <div className="text-gray-400 text-xs mb-2 font-mono">
-                {format(new Date(label), 'MMM d, h:mm a')}
+        <div className="mb-4 space-y-3 font-mono border-b border-zinc-800 pb-4">
+            <div className="flex justify-between items-end">
+                <div>
+                    <h2 className="text-white text-lg font-bold flex items-center gap-2">
+                        {outcome} / SOL <span className="text-[10px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded border border-zinc-700">MEME/BONDING</span>
+                    </h2>
+                    <div className="text-zinc-500 text-xs mt-1">
+                        Market Cap: <span className="text-[#10B981] font-bold">{formatCompact(mcapSol)} SOL</span>
+                    </div>
+                </div>
+                <div className="text-right">
+                    <div className="text-[10px] text-zinc-500 mb-0.5 uppercase tracking-wider">ROI since inception</div>
+                    <div className={`text-xl font-bold tracking-tight ${roi >= 0 ? 'text-[#10B981]' : 'text-red-500'}`}>
+                        {roi >= 0 ? '🚀 +' : '🔻 '}{Math.abs(roi).toFixed(2)}%
+                    </div>
+                </div>
             </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs font-mono">
-                <span className="text-gray-500">O:</span> <span className="text-white">{(data.open * 100).toFixed(1)}%</span>
-                <span className="text-gray-500">H:</span> <span className="text-white">{(data.high * 100).toFixed(1)}%</span>
-                <span className="text-gray-500">L:</span> <span className="text-white">{(data.low * 100).toFixed(1)}%</span>
-                <span className="text-gray-500">C:</span> <span className={`${data.close >= data.open ? 'text-[#10B981]' : 'text-[#F492B7]'}`}>{(data.close * 100).toFixed(1)}%</span>
+
+            {/* BARRA DE PROGRESO DE BONDING CURVE */}
+            <div className="relative w-full h-6 bg-zinc-900 rounded-sm border border-zinc-700 overflow-hidden group cursor-help">
+                <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progress}%` }}
+                    transition={{ duration: 0.8, ease: "circOut" }}
+                    className="h-full bg-yellow-400 relative z-10 shadow-[0_0_15px_rgba(250,204,21,0.5)]"
+                />
+                <div className="absolute inset-0 flex items-center justify-between px-2 z-20 pointer-events-none mix-blend-difference text-white">
+                    <span className="text-[10px] font-bold uppercase tracking-widest">Bonding Curve Progress</span>
+                    <span className="text-[10px] font-mono">{progress.toFixed(1)}%</span>
+                </div>
             </div>
         </div>
     );
 };
 
-export default function DjinnChart({
-    data,
-    volume = "$0",
-    settlementDate = "TBD",
-    onTimeframeChange,
-    yesLabel = "YES",
-    noLabel = "NO"
-}: DjinnChartProps) {
-    const [timeframe, setTimeframe] = useState('1H');
-    const [chartMode, setChartMode] = useState<'line' | 'djinn'>('line');
-    const [mounted, setMounted] = useState(false);
+// 2. Punto Palpitante (Kalshi Style) para Recharts
+const PulsingDot = (props: any) => {
+    const { cx, cy, stroke, payload, dataKey, chartData } = props;
+    const isLast = payload.time === chartData[chartData.length - 1].time;
+    if (!isLast) return null;
+    return (
+        <g>
+            <circle cx={cx} cy={cy} r="10" fill={stroke} opacity="0.2">
+                <animate attributeName="r" from="4" to="14" dur="1.5s" begin="0s" repeatCount="indefinite" />
+                <animate attributeName="opacity" from="0.6" to="0" dur="1.5s" begin="0s" repeatCount="indefinite" />
+            </circle>
+            <circle cx={cx} cy={cy} r="4" fill={stroke} stroke="#fff" strokeWidth={2} />
+        </g>
+    );
+};
 
-    useEffect(() => { setMounted(true); }, []);
+// 3. Burbuja de Trading Flotante
+const TradeBubble = ({ trade }: { trade: TradeEvent }) => (
+    <motion.div
+        initial={{ opacity: 0, y: 50, scale: 0.5 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: -20, scale: 0.9 }}
+        transition={{ type: "spring", stiffness: 300, damping: 20 }}
+        className="absolute bottom-16 right-4 flex items-center gap-3 px-4 py-2 rounded-full shadow-2xl border border-white/10 backdrop-blur-md z-30"
+        style={{ background: `linear-gradient(to right, ${trade.color}20, black)` }}
+    >
+        <div className="w-2 h-2 rounded-full animate-pulse shadow-[0_0_10px_currentColor]" style={{ color: trade.color, backgroundColor: trade.color }} />
+        <div className="flex flex-col leading-none">
+            <span className="text-[10px] text-zinc-400 font-bold uppercase">Bought {trade.outcome}</span>
+            <span className="text-sm font-bold text-white font-mono">+{formatCompact(trade.amount)} Shares</span>
+        </div>
+    </motion.div>
+);
 
-    // Handle timeframe change
-    const handleTimeframeChange = (tf: string) => {
-        setTimeframe(tf);
-        onTimeframeChange?.(tf);
+// --- COMPONENTE PRINCIPAL ---
+
+interface TheDjinnChartProps {
+    outcomes?: (string | OutcomeObject)[];
+    candleData?: Record<string, CandlestickData[]>;
+    probabilityData?: any[];
+    tradeEvent?: TradeEvent | null;
+    selectedOutcome?: string;
+    onOutcomeChange?: (outcome: string) => void;
+    outcomeSupplies?: Record<string, number>;
+}
+
+export default function TheDjinnChart({
+    outcomes = ["YES", "NO"],
+    candleData = {},
+    probabilityData = [],
+    tradeEvent,
+    selectedOutcome: propSelectedOutcome,
+    onOutcomeChange,
+    outcomeSupplies = {}
+}: TheDjinnChartProps) {
+    const [mode, setMode] = useState<MarketMode>("PROBABILITY");
+    const [internalSelectedOutcome, setInternalSelectedOutcome] = useState(() => {
+        const first = outcomes[0];
+        return typeof first === 'string' ? first : first?.title || 'YES';
+    });
+    const selectedOutcome = propSelectedOutcome || internalSelectedOutcome;
+
+    const [hoverData, setHoverData] = useState<any>(null);
+    const [bubbles, setBubbles] = useState<TradeEvent[]>([]);
+    const chartContainerRef = useRef<HTMLDivElement>(null);
+    const chartInstanceRef = useRef<any>(null);
+    const seriesRef = useRef<any>(null);
+
+    // Watch for trade events passed from parent
+    useEffect(() => {
+        if (tradeEvent) {
+            const newTrade = {
+                id: Math.random().toString(),
+                outcome: tradeEvent.outcome,
+                amount: tradeEvent.amount,
+                color: COLORS[tradeEvent.outcome] || (tradeEvent.outcome === 'YES' ? COLORS.Yes : COLORS.No) || "#fff",
+            };
+            setBubbles(prev => [...prev.slice(-2), newTrade]);
+            setTimeout(() => setBubbles(prev => prev.filter(p => p.id !== newTrade.id)), 4000);
+        }
+    }, [tradeEvent]);
+
+    // Derived State for Header
+    // If no probability data, use empty array to avoid crash
+    const safeProbData = useMemo(() => {
+        if (probabilityData.length > 0) return probabilityData;
+        const fallbackPoint: any = { time: Math.floor(Date.now() / 1000), dateStr: 'Now' };
+        outcomes.forEach(o => {
+            const title = typeof o === 'string' ? o : o.title;
+            fallbackPoint[title] = 100 / outcomes.length;
+        });
+        return [fallbackPoint];
+    }, [probabilityData, outcomes]);
+    const activePoint = hoverData || safeProbData[safeProbData.length - 1];
+
+    // Get current candle for selected outcome
+    const currentCandles = candleData[selectedOutcome] || [];
+    const activeCandle = currentCandles.length > 0 ? currentCandles[currentCandles.length - 1] : { open: 0, high: 0, low: 0, close: 0 };
+
+    // Unified data object 
+    const activeData = {
+        ...activePoint,
+        ...activeCandle
     };
 
-    // Filter AND Aggregate Data
-    const { lineData, candleData } = useMemo(() => {
-        if (!data || data.length === 0) return { lineData: [], candleData: [] };
+    // Efecto para renderizar TradingView (Djinn Mode)
+    useEffect(() => {
+        if (mode !== "DJINN" || !chartContainerRef.current) return;
 
-        const now = Date.now();
-        let cutoffTime = 0;
-        let intervalMs = 60 * 1000; // Default 1m
-
-        switch (timeframe) {
-            case '1m':
-                cutoffTime = now - 60 * 60 * 1000; // Last hour
-                intervalMs = 60 * 1000;
-                break;
-            case '5m':
-                cutoffTime = now - 6 * 60 * 60 * 1000; // Last 6h
-                intervalMs = 5 * 60 * 1000;
-                break;
-            case '15m':
-                cutoffTime = now - 24 * 60 * 60 * 1000; // Last 24h
-                intervalMs = 15 * 60 * 1000;
-                break;
-            case '1H':
-                cutoffTime = now - 7 * 24 * 60 * 60 * 1000; // Last 7d
-                intervalMs = 60 * 60 * 1000;
-                break;
-            case '4H':
-                cutoffTime = now - 30 * 24 * 60 * 60 * 1000; // Last 30d
-                intervalMs = 4 * 60 * 60 * 1000;
-                break;
-            case '1D':
-                cutoffTime = 0; // All time
-                intervalMs = 24 * 60 * 60 * 1000;
-                break;
-            default: cutoffTime = now - 24 * 60 * 60 * 1000;
+        // Cleanup previous chart
+        if (chartInstanceRef.current) {
+            chartInstanceRef.current.remove();
         }
 
-        const filtered = data.filter(d => d.time >= cutoffTime);
-        // fallback
-        const finalData = filtered.length > 0 ? filtered : data.slice(-50);
+        const chart = createChart(chartContainerRef.current, {
+            layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#71717a' },
+            grid: { vertLines: { color: '#27272a' }, horzLines: { color: '#27272a' } },
+            width: chartContainerRef.current.clientWidth,
+            height: 350,
+            crosshair: { mode: CrosshairMode.Normal },
+            timeScale: { borderColor: '#27272a', shiftVisibleRangeOnNewBar: true },
+            rightPriceScale: { borderColor: '#27272a', scaleMargins: { top: 0.2, bottom: 0.1 } },
+        });
 
-        if (chartMode === 'djinn') {
-            return { lineData: [], candleData: aggregateToCandles(finalData, intervalMs) };
-        } else {
-            return { lineData: finalData, candleData: [] };
+        const series = chart.addSeries(CandlestickSeries, {
+            upColor: '#10B981', downColor: '#EF4444', borderVisible: false, wickUpColor: '#10B981', wickDownColor: '#EF4444',
+        });
+
+        // Load data for the selected outcome
+        const data = candleData[selectedOutcome] || [];
+        // Ensure time is sorted and unique mostly handled by parent, but basic check
+        // LWCharts expects { time, open, high, low, close }
+        // We cast to any because our time might be number (Unix) which valid 
+        if (data.length > 0) {
+            series.setData(data as any);
         }
-    }, [data, timeframe, chartMode]);
 
-    const currentYes = data[data.length - 1]?.yes ?? 0.5;
-    const currentNo = data[data.length - 1]?.no ?? 0.5;
+        chart.timeScale().fitContent();
 
-    if (!mounted) {
-        return <div className="h-[450px] w-full bg-[#020202] animate-pulse rounded-xl" />;
-    }
+        chartInstanceRef.current = chart;
+        seriesRef.current = series;
+
+        const handleResize = () => chart.applyOptions({ width: chartContainerRef.current?.clientWidth || 0 });
+        window.addEventListener('resize', handleResize);
+        return () => {
+            window.removeEventListener('resize', handleResize);
+            chart.remove();
+            chartInstanceRef.current = null;
+        };
+    }, [mode, selectedOutcome]); // Re-create chart when outcome changes to ensure fresh state
+
+    // Independent Effect to update data without destroying chart if only data changes
+    useEffect(() => {
+        if (mode === "DJINN" && seriesRef.current && candleData[selectedOutcome]) {
+            seriesRef.current.setData(candleData[selectedOutcome] as any);
+        }
+    }, [candleData, mode, selectedOutcome]);
+
+
+    const displayValue = mode === "PROBABILITY"
+        ? `${(activeData[selectedOutcome] || 50).toFixed(1)}%`
+        : `${(activeData.close || 0).toFixed(6)} SOL`;
 
     return (
-        <div className="flex flex-col w-full h-full bg-[#020202] rounded-2xl border border-white/5 p-6 relative overflow-hidden">
-            {/* HEADER ROW */}
-            <div className="flex items-center justify-between mb-6 z-10 relative">
+        <div className="w-full max-w-4xl mx-auto p-1 bg-black rounded-xl border border-zinc-800 shadow-2xl overflow-hidden relative font-sans">
 
-                {/* Mode Toggle */}
-                <div className="flex items-center bg-white/5 rounded-lg p-0.5 border border-white/5">
-                    <button
-                        onClick={() => setChartMode('line')}
-                        className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-md transition-all flex items-center gap-1 ${chartMode === 'line' ? 'bg-[#1A1A1A] text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>
-                        Focus
-                    </button>
-                    <button
-                        onClick={() => setChartMode('djinn')}
-                        className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-md transition-all flex items-center gap-1 ${chartMode === 'djinn' ? 'bg-[#F492B7] text-black shadow-[0_0_10px_rgba(244,146,183,0.3)]' : 'text-gray-500 hover:text-gray-300'}`}
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3"><path d="M2 20h20" /><path d="M6 16v-4" /><path d="M10 18v-8" /><path d="M14 14v-4" /><path d="M18 12v-2" /></svg>
-                        Djinn Mode
-                    </button>
-                </div>
+            {/* HEADER CONTROL */}
+            <div className="p-4 border-b border-zinc-900 bg-zinc-950/80 backdrop-blur">
+                {mode === "DJINN" && (
+                    <PumpHeader
+                        data={activeData}
+                        outcome={selectedOutcome}
+                        supply={outcomeSupplies[selectedOutcome]}
+                        firstCandle={candleData[selectedOutcome]?.[0]}
+                    />
+                )}
+                <div className="flex flex-wrap justify-between items-start gap-4">
+                    <div className="flex flex-col gap-2">
+                        {/* Outcome Tabs (ONLY VISIBLE IN DJINN MODE) */}
+                        {mode === "DJINN" && (
+                            <div className="flex gap-1 bg-zinc-900/50 p-1 rounded-lg w-fit">
+                                {outcomes.map(o => {
+                                    const title = typeof o === 'string' ? o : o.title;
+                                    const id = typeof o === 'string' ? o : o.id;
+                                    return (
+                                        <button
+                                            key={id}
+                                            onClick={() => {
+                                                setInternalSelectedOutcome(title);
+                                                if (onOutcomeChange) onOutcomeChange(title);
+                                            }}
+                                            className={cn(
+                                                "px-3 py-1 rounded text-[10px] font-bold uppercase transition-all flex items-center gap-2 border border-transparent",
+                                                selectedOutcome === title
+                                                    ? "bg-zinc-800 text-white border-zinc-700 shadow-sm"
+                                                    : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
+                                            )}
+                                        >
+                                            <div className="w-1.5 h-1.5 rounded-full" style={{
+                                                background: COLORS[title] || (title === 'YES' ? COLORS.Yes : COLORS.No) || '#fff'
+                                            }} />
+                                            {title} / SOL
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
 
-                {/* Date / Refresh */}
-                <div className="flex items-center gap-4 text-xs font-mono text-gray-500">
-                    <div className="flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                        </svg>
-                        <span>Ends {settlementDate}</span>
+                        {/* Main Number Display (Solo visible en Prob Mode, en Djinn Mode lo maneja PumpHeader) */}
+                        {mode === "PROBABILITY" && (
+                            <div>
+                                <div className="text-zinc-500 text-[10px] uppercase tracking-widest mb-0.5">Winning Probability</div>
+                                <div className="text-6xl font-bold tracking-tighter text-white" style={{
+                                    color: COLORS[selectedOutcome] || (selectedOutcome === 'YES' ? COLORS.Yes : COLORS.No) || '#fff'
+                                }}>
+                                    {displayValue}
+                                </div>
+                            </div>
+                        )}
                     </div>
-                    <button className="hover:text-white transition-colors">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 animate-reverse-spin hover:animate-spin">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
-                        </svg>
-                    </button>
-                </div>
-            </div>
 
-            {/* CHART AREA */}
-            <div className="h-[320px] w-full relative">
-                <ResponsiveContainer width="100%" height="100%">
-                    {chartMode === 'line' ? (
-                        <LineChart data={lineData}>
-                            <defs>
-                                <linearGradient id="yesGradient" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor="#10B981" stopOpacity={0.2} />
-                                    <stop offset="100%" stopColor="#10B981" stopOpacity={0} />
-                                </linearGradient>
-                            </defs>
-                            <ReferenceLine y={0.5} stroke="#333" strokeDasharray="3 3" />
-                            <XAxis
-                                dataKey="time"
-                                tickFormatter={(val) => formatXAxis(val, timeframe)}
-                                axisLine={false}
-                                tickLine={false}
-                                tick={{ fill: '#666', fontSize: 10, fontFamily: 'monospace' }}
-                                minTickGap={40}
-                            />
-                            <YAxis
-                                orientation="right"
-                                tickFormatter={(val) => `${(val * 100).toFixed(0)}%`}
-                                domain={[0, 1]}
-                                ticks={[0, 0.25, 0.5, 0.75, 1]}
-                                axisLine={false}
-                                tickLine={false}
-                                tick={{ fill: '#666', fontSize: 10, fontFamily: 'monospace' }}
-                                width={40}
-                            />
-                            <Tooltip
-                                contentStyle={{ backgroundColor: '#0B0E14', borderColor: '#333' }}
-                                itemStyle={{ fontFamily: 'monospace', fontSize: '12px' }}
-                                labelStyle={{ color: '#888', marginBottom: '5px' }}
-                                labelFormatter={(label) => format(new Date(label), 'MMM d, h:mm a')}
-                                formatter={(val: number) => [`${(val * 100).toFixed(1)}%`]}
-                            />
-                            <Line
-                                type="stepAfter"
-                                dataKey="yes"
-                                stroke="#10B981"
-                                strokeWidth={2}
-                                dot={false}
-                                activeDot={{ r: 4, fill: '#10B981' }}
-                            />
-                            <Line
-                                type="stepAfter"
-                                dataKey="no"
-                                stroke="#F492B7"
-                                strokeWidth={2}
-                                dot={false}
-                                activeDot={{ r: 4, fill: '#F492B7' }}
-                            />
-                        </LineChart>
-                    ) : (
-                        <ComposedChart data={candleData}>
-                            <ReferenceLine y={0.5} stroke="#333" strokeDasharray="3 3" />
-                            <XAxis
-                                dataKey="time"
-                                tickFormatter={(val) => formatXAxis(val, timeframe)}
-                                axisLine={false}
-                                tickLine={false}
-                                tick={{ fill: '#666', fontSize: 10, fontFamily: 'monospace' }}
-                                minTickGap={40}
-                            />
-                            <YAxis
-                                orientation="right"
-                                tickFormatter={(val) => `${(val * 100).toFixed(0)}%`}
-                                domain={[0, 1]}
-                                ticks={[0, 0.25, 0.5, 0.75, 1]}
-                                axisLine={false}
-                                tickLine={false}
-                                tick={{ fill: '#666', fontSize: 10, fontFamily: 'monospace' }}
-                                width={40}
-                            />
-                            <Tooltip content={<CandleTooltip />} cursor={{ stroke: '#555', strokeWidth: 1, strokeDasharray: '3 3' }} />
-                            {/* We use Bar with Custom Shape for Candles */}
-                            <Bar
-                                dataKey="high" // Using 'high' ensures the bar covers the full candle range for scaling
-                                shape={<Candlestick />}
-                                isAnimationActive={false}
-                            >
-                                {candleData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.close >= entry.open ? '#10B981' : '#F492B7'} />
-                                ))}
-                            </Bar>
-                        </ComposedChart>
-                    )}
-                </ResponsiveContainer>
-            </div>
-
-            {/* TIMEFRAME CONTROLS */}
-            <div className="flex items-center justify-between border-t border-white/5 pt-4 mt-2">
-                <div className="flex items-center gap-4">
-                    <span className="text-[#10B981] font-bold text-sm">YES {(currentYes * 100).toFixed(0)}%</span>
-                    <span className="text-[#F492B7] font-bold text-sm">NO {(currentNo * 100).toFixed(0)}%</span>
-                </div>
-
-                <div className="flex bg-white/5 rounded-lg p-1 gap-1">
-                    {TIMEFRAMES.map(t => (
+                    {/* Mode Switcher */}
+                    <div className="bg-zinc-900 p-1 rounded-lg flex border border-zinc-800">
                         <button
-                            key={t}
-                            onClick={() => handleTimeframeChange(t)}
-                            className={`px-2.5 py-1 text-[10px] font-bold rounded transition-all ${timeframe === t
-                                ? 'bg-[#333] text-white shadow-sm'
-                                : 'text-gray-500 hover:text-white'
-                                }`}
+                            onClick={() => setMode("PROBABILITY")}
+                            className={cn("px-4 py-2 rounded text-xs font-bold transition-all flex items-center gap-2", mode === "PROBABILITY" ? "bg-zinc-800 text-white shadow" : "text-zinc-500")}
                         >
-                            {t}
+                            <Activity size={14} /> Market %
                         </button>
-                    ))}
+                        <button
+                            onClick={() => setMode("DJINN")}
+                            className={cn("px-4 py-2 rounded text-xs font-bold transition-all flex items-center gap-2", mode === "DJINN" ? "bg-[#10B981] text-zinc-950 shadow-[0_0_15px_rgba(16,185,129,0.4)]" : "text-zinc-500")}
+                        >
+                            <TrendingUp size={14} /> Djinn Mode
+                        </button>
+                    </div>
                 </div>
             </div>
 
-            {/* Background Glow */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[80%] bg-[#F492B7] opacity-[0.03] blur-[100px] pointer-events-none" />
+            {/* CHART CANVAS */}
+            <div className="h-[420px] w-full relative bg-[#09090b]">
+                {mode === "PROBABILITY" ? (
+                    <div className="w-full h-full pt-4" onMouseLeave={() => setHoverData(null)}>
+                        {probabilityData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={safeProbData} onMouseMove={(e) => { if (e.activePayload) setHoverData(e.activePayload[0].payload); }}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#222" />
+                                    <XAxis dataKey="dateStr" hide />
+                                    <YAxis domain={[0, 100]} hide />
+                                    <Tooltip content={() => null} cursor={{ stroke: '#52525b', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                                    {outcomes.map(o => {
+                                        const title = typeof o === 'string' ? o : o.title;
+                                        return (
+                                            <Line
+                                                key={title}
+                                                type="monotone"
+                                                dataKey={title}
+                                                stroke={COLORS[title] || (title === 'YES' ? COLORS.Yes : COLORS.No) || "#fff"}
+                                                strokeWidth={3}
+                                                strokeOpacity={1}
+                                                dot={<PulsingDot chartData={safeProbData} />}
+                                                activeDot={{ r: 6, strokeWidth: 0, fill: "#fff" }}
+                                                animationDuration={400}
+                                            />
+                                        );
+                                    })}
+                                </LineChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            // Fallback if truly no data (should basically never happen with safeProbData)
+                            <div className="flex items-center justify-center h-full text-zinc-600">
+                                <Activity className="animate-pulse mr-2" /> Initializing Market Data...
+                            </div>
+                        )}
+                        <AnimatePresence>
+                            {bubbles.map(b => <TradeBubble key={b.id} trade={b} />)}
+                        </AnimatePresence>
+                    </div>
+                ) : (
+                    <div className="w-full h-full flex flex-col p-4 animate-in fade-in duration-300">
+                        <PumpHeader data={activeData} outcome={selectedOutcome} />
+                        <div ref={chartContainerRef} className="flex-1 w-full min-h-0 border border-zinc-800 rounded bg-black/40" />
+                        <div className="mt-2 flex gap-4 text-[10px] text-zinc-600 font-mono select-none">
+                            <span>O: <span className="text-zinc-400">{activeData.open?.toFixed(8)}</span></span>
+                            <span>H: <span className="text-zinc-400">{activeData.high?.toFixed(8)}</span></span>
+                            <span>L: <span className="text-zinc-400">{activeData.low?.toFixed(8)}</span></span>
+                            <span>C: <span className={(activeData.close || 0) >= (activeData.open || 0) ? "text-green-500" : "text-red-500"}>{activeData.close?.toFixed(8)}</span></span>
+                        </div>
+                    </div>
+                )}
+            </div>
         </div>
     );
 }

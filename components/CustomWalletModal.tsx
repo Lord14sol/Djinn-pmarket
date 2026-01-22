@@ -11,22 +11,28 @@ interface CustomWalletModalProps {
 }
 
 export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModalProps) {
-    const { wallets, select, connecting, wallet } = useWallet();
+    const { wallets, select, connecting, connected, wallet } = useWallet();
     const [isConnecting, setIsConnecting] = React.useState(false);
 
     // Sync local connecting state with wallet adapter
+    // ARTIFICIAL DELAY: Keep 'Connecting' state visible longer (1.5s) for a smoother feel
     React.useEffect(() => {
         if (connecting) setIsConnecting(true);
         else {
-            // Small delay to prevent flickering on fast connections or failures
-            const t = setTimeout(() => setIsConnecting(false), 500);
+            const t = setTimeout(() => setIsConnecting(false), 1500);
             return () => clearTimeout(t);
         }
     }, [connecting]);
 
+    // PREVENT DUPLICATE MODAL: Auto-close when connected
+    React.useEffect(() => {
+        if (connected && isOpen) {
+            onClose();
+        }
+    }, [connected, isOpen, onClose]);
+
     const handleConnect = (walletName: any) => {
         select(walletName);
-        // The wallet adapter 'connecting' state should trigger the view change
     };
 
     // Filter and deduplicate wallets
@@ -60,41 +66,29 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
 
             {/* BACKDROP */}
             <div
-                className="absolute inset-0 bg-black/80 backdrop-blur-md"
+                className="absolute inset-0 bg-black/80 backdrop-blur-md animate-in fade-in duration-500"
                 onClick={onClose}
             />
 
             {/* MODAL CONTAINER */}
-            <div className="relative w-full max-w-sm bg-[#1A1A1A] border border-white/10 rounded-[2rem] shadow-2xl flex flex-col max-h-[90vh] z-10 animate-in zoom-in-95 duration-200 overflow-hidden">
+            <div className="relative w-full max-w-sm bg-[#1A1A1A] border border-white/10 rounded-[2rem] shadow-2xl flex flex-col max-h-[90vh] z-10 animate-in zoom-in-95 slide-in-from-bottom-5 duration-500 overflow-hidden">
 
                 {isConnecting ? (
                     // CONNECTING STATE (Pink Djinn Style)
-                    <div className="flex flex-col items-center justify-center py-16 px-8 text-center space-y-6">
+                    <div className="flex flex-col items-center justify-center py-16 px-8 text-center space-y-8 animate-in fade-in duration-500">
                         {/* Pink Spinner Wrapper */}
-                        <div className="relative w-24 h-24 flex items-center justify-center">
-                            {/* Spinning Gradient Ring */}
-                            <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-[#F492B7] border-r-[#F492B7]/50 animate-spin" style={{ animationDuration: '1s' }} />
+                        <div className="relative w-32 h-32 flex items-center justify-center">
+                            {/* Spinning Gradient Ring - SLOWER (3s) */}
+                            <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-[#F492B7] border-r-[#F492B7]/30 animate-spin" style={{ animationDuration: '3s' }} />
                             {/* Inner Static Glow */}
-                            <div className="absolute inset-2 bg-[#F492B7]/10 rounded-full blur-md" />
-
-                            {/* Central Icon */}
-                            <div className="relative w-12 h-12">
-                                <img src="/star.png" alt="Loading" className="w-full h-full object-contain animate-pulse" />
-                            </div>
+                            <div className="absolute inset-4 bg-[#F492B7]/5 rounded-full blur-xl" />
                         </div>
 
-                        <div className="space-y-2">
-                            <h3 className="text-xl font-bold text-white">Sign to verify</h3>
-                            <p className="text-gray-400 text-sm max-w-[200px] mx-auto leading-relaxed">
-                                Check your {wallet?.adapter.name || "wallet"} browser window to connect.
+                        <div className="space-y-3">
+                            <h3 className="text-2xl font-black text-white tracking-tight">Connecting...</h3>
+                            <p className="text-gray-400 text-sm max-w-[220px] mx-auto leading-relaxed">
+                                Please approve the request in your wallet.
                             </p>
-                        </div>
-
-                        <div className="w-full bg-[#111] rounded-xl p-4 mt-4 border border-white/5">
-                            <div className="flex items-center justify-center gap-2 text-xs text-gray-500 font-mono animate-pulse">
-                                <span className="w-2 h-2 bg-[#F492B7] rounded-full"></span>
-                                Establishing secure channel...
-                            </div>
                         </div>
                     </div>
                 ) : (
@@ -104,28 +98,26 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
                         <div className="relative pt-6 pb-2 text-center flex-shrink-0">
                             <button
                                 onClick={onClose}
-                                className="absolute right-5 top-5 text-gray-400 hover:text-white transition-colors"
+                                className="absolute right-6 top-6 text-gray-400 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-full"
                             >
                                 <X size={20} />
                             </button>
-                            <h2 className="text-white font-bold text-lg tracking-wide">Log in or sign up</h2>
+                            <h2 className="text-white/50 font-bold text-xs uppercase tracking-[0.2em] mt-2">Sign In</h2>
                         </div>
 
-                        {/* LOGO SECTION */}
-                        <div className="flex justify-center py-6 flex-shrink-0">
-                            <div className="relative w-44 h-44">
-                                <div className="absolute inset-0 bg-[#FF0096]/20 blur-2xl rounded-full" />
-                                <img
-                                    src="/star.png"
-                                    alt="Djinn"
-                                    className="w-full h-full object-contain relative z-10 drop-shadow-[0_0_20px_rgba(255,0,150,0.6)]"
-                                    style={{
-                                        filter: "drop-shadow(0 0 20px rgba(255,0,150,0.5))",
-                                        transform: "translateZ(0)",
-                                        imageRendering: "auto"
-                                    }}
-                                />
+                        {/* LOGO SECTION - RESTYLED */}
+                        <div className="flex flex-col items-center justify-center py-8 flex-shrink-0 gap-4">
+                            <div className="relative">
+                                {/* Glow behind */}
+                                <div className="absolute inset-0 bg-[#FF0096]/20 blur-3xl rounded-full scale-150" />
+
+                                <div className="relative z-10 flex justify-center">
+                                    <span className="text-6xl md:text-7xl text-white tracking-tighter" style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}>
+                                        Djinn
+                                    </span>
+                                </div>
                             </div>
+                            <p className="text-gray-400 text-sm font-medium">Choose your wallet to continue</p>
                         </div>
 
                         {/* WALLET LIST */}
@@ -134,15 +126,15 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
                                 <button
                                     key={wallet.adapter.name}
                                     onClick={() => handleConnect(wallet.adapter.name)}
-                                    className="w-full bg-[#252525] hover:bg-[#333] border border-white/5 hover:border-white/20 rounded-xl p-4 flex items-center justify-between transition-all group shrink-0"
+                                    className="w-full bg-[#252525] hover:bg-[#333] border border-white/5 hover:border-white/20 rounded-xl p-4 flex items-center justify-between transition-all group shrink-0 active:scale-[0.98] duration-200"
                                 >
                                     <div className="flex items-center gap-4">
-                                        <div className="w-10 h-10 rounded-lg overflow-hidden bg-black/20 flex items-center justify-center">
+                                        <div className="w-10 h-10 rounded-lg overflow-hidden bg-black/20 flex items-center justify-center border border-white/5">
                                             {wallet.adapter.icon ? (
                                                 <img
                                                     src={wallet.adapter.icon}
                                                     alt={wallet.adapter.name}
-                                                    className="w-8 h-8 object-contain"
+                                                    className="w-6 h-6 object-contain"
                                                 />
                                             ) : (
                                                 <span className="text-xl">💼</span>
@@ -153,17 +145,17 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
                                         </span>
                                     </div>
 
-                                    <span className="text-[10px] font-bold text-gray-500 bg-black/30 px-3 py-1 rounded border border-white/5 uppercase tracking-wide">
-                                        Solana
-                                    </span>
+                                    <div className="flex items-center gap-2">
+                                        {wallet.adapter.readyState === WalletReadyState.Installed && (
+                                            <span className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]"></span>
+                                        )}
+                                    </div>
                                 </button>
                             ))}
 
                             {uniqueWallets.length === 0 && (
-                                <div className="text-center text-gray-500 text-xs py-6">
-                                    No supported Solana wallets detected.
-                                    <br />
-                                    Please install Phantom, Solflare, or Backpack.
+                                <div className="text-center text-gray-500 text-xs py-6 bg-white/5 rounded-xl border border-white/5 mx-2">
+                                    No Solana wallets found.
                                 </div>
                             )}
                         </div>

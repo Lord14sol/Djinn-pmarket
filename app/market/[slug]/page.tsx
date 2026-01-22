@@ -14,6 +14,7 @@ import { simulateBuy, estimatePayoutInternal, CURVE_CONSTANT, VIRTUAL_OFFSET, ge
 
 // Components
 import PrettyChart from '@/components/market/PrettyChart';
+import TheDjinnChart from '@/components/DjinnChart';
 // TradingView & Switcher REMOVED
 import CommentsSection from '@/components/market/CommentsSection';
 import OutcomeList, { Outcome } from '@/components/market/OutcomeList';
@@ -23,8 +24,9 @@ import DjinnToast, { DjinnToastType } from '@/components/ui/DjinnToast';
 import { usePrice } from '@/lib/PriceContext';
 import * as supabaseDb from '@/lib/supabase-db';
 import { PrizePoolCounter } from '@/components/PrizePoolCounter';
-import DjinnChart from '@/components/DjinnChart';
+
 import IgnitionBar from '@/components/market/IgnitionBar';
+import bs58 from 'bs58';
 
 // Utils
 const TREASURY_WALLET = new PublicKey("G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma");
@@ -55,31 +57,7 @@ const marketDisplayData: Record<string, any> = {
 
 // Generate chart data for single outcome with Bonding Curve "Origin" logic
 // Generate chart data for single outcome with Bonding Curve "Origin" logic
-const generateChartData = (currentPrice: number) => {
-    const data = [];
-    const points = 50;
-    // "Zero-Start" Logic: Start strictly at 0 (or close to it) and curve up
-    const startValue = 0.5; // Starts at effectively 0 (0.5 for visibility line)
 
-    for (let i = 0; i < points; i++) {
-        const date = new Date();
-        date.setHours(date.getHours() - (points - i));
-
-        // Exponential growth simulation: value = start + (current - start) * (i/points)^shape
-        const progress = i / (points - 1);
-        const curveFactor = Math.pow(progress, 2.5); // Steep exponential "Explosion" curve
-        const baseValue = startValue + (currentPrice - startValue) * curveFactor;
-
-        // Add micro-variance for visual interest (less variance at 0)
-        const variance = Math.sin(i * 0.5) * (0.5 * progress);
-
-        data.push({
-            date: date.getTime(), // Visx expects number/Date
-            value: Math.max(0, baseValue + variance)
-        });
-    }
-    return data;
-};
 
 // ... (Multi-outcome generator removed or simplified if unused, but let's keep consistent)
 
@@ -97,9 +75,16 @@ export default function Page() {
     const [marketAccount, setMarketAccount] = useState<any>(null);
     const [selectedOutcomeId, setSelectedOutcomeId] = useState<string>('');
     const [selectedOutcomeName, setSelectedOutcomeName] = useState<string>('');
+    const [hoveredPrice, setHoveredPrice] = useState<number | null>(null);
     const [livePrice, setLivePrice] = useState<number>(50);
-    const [chartSeries, setChartSeries] = useState<any[]>([]);
-    const [chartData, setChartData] = useState<any[]>([]);
+
+
+    // --- CHART HISTORY STATE ---
+    // Stores the full history for the session (since page load)
+    const [historyState, setHistoryState] = useState<{
+        probability: any[]; // Array of { time, [outcome]: val }
+        candles: Record<string, any[]>; // Map of OutcomeName -> CandlestickData[]
+    }>({ probability: [], candles: {} });
     const [isLoading, setIsLoading] = useState(false);
     const { solPrice } = usePrice();
     const [mounted, setMounted] = useState(false);
@@ -129,27 +114,31 @@ export default function Page() {
             // Fallback: Infer supply from price ONLY for demo local markets
             const p = livePrice ?? 50;
             const impliedProb = p / 100;
-            // Map probability to the actual curve SOL price range
-            const approxPrice = 0.0000001 + (impliedProb * (0.95 - 0.0000001));
+
+            // FIX: Do NOT map probability directly to 0.95 SOL (Phase 3).
+            // This causes "Mcap Explosion" when probability > 50%.
+            // Instead, assume we are in the early/linear phase for simulated markets.
+            // Max fallback price: 0.00005 SOL (Phase 2 start).
+            const approxPrice = 0.000001 + (impliedProb * 0.00005);
+
             sYes = getSupplyFromPrice(approxPrice);
-            sNo = getSupplyFromPrice(0.0000001 + ((1 - impliedProb) * (0.95 - 0.0000001)));
+            sNo = getSupplyFromPrice(0.000001 + ((1 - impliedProb) * 0.00005));
         }
 
-        // MCAP = Total Locked Value * Probability (Simpler and matches Total Pool)
-        // User Logic: "Whatever is in the pool but for YES or NO independently"
-        // This ensures Yes + No = Total Pool (roughly).
-        const totalS = sYes + sNo;
-        const poolSol = marketAccount?.vault_balance || 0;
+        // MCAP = Supply * Price * SOL_Price (Market Cap)
+        // This represents the total value of all shares in circulation if sold at current price
 
-        const mYes = totalS > 0 ? (poolSol * (sYes / totalS)) : 0;
-        const mNo = totalS > 0 ? (poolSol * (sNo / totalS)) : 0;
 
         const currentSpotYes = getSpotPrice(sYes);
         const currentSpotNo = getSpotPrice(sNo);
 
-        // Weight % based on spot price ratio (50/50 if prices equal)
-        const totalP = currentSpotYes + currentSpotNo;
-        const yP = (totalP > 0) ? (currentSpotYes / totalP) * 100 : 50;
+        // MCAP = Supply * Price * SOL_Price (Market Cap)
+        // This represents the total value of all shares in circulation if sold at current price
+
+        const mYes = sYes * currentSpotYes; // SOL Value
+        const mNo = sNo * currentSpotNo;    // SOL Value
+
+        const yP = calculateImpliedProbability(sYes, sNo);
 
         return {
             yesMcap: mYes,
@@ -165,24 +154,46 @@ export default function Page() {
 
     // Reactive Market Outcomes
     const marketOutcomes = useMemo(() => {
-        const base = (MULTI_OUTCOMES[slug] || [
-            { id: 'yes', title: 'YES', volume: '0', yesPrice: 50, noPrice: 50, chance: 50 },
-            { id: 'no', title: 'NO', volume: '0', yesPrice: 50, noPrice: 50, chance: 50 },
-        ]).map(o => ({ ...o }));
+        let base: Outcome[] = [];
 
-        if (base.length >= 2) {
-            // YES
+        // 1. Try Hardcoded Multi-Outcomes
+        if (MULTI_OUTCOMES[slug]) {
+            base = MULTI_OUTCOMES[slug].map(o => ({ ...o }));
+        }
+        // 2. Try Dynamic Market Options (from DB/OnChain)
+        else if (marketAccount?.options && marketAccount.options.length >= 2) {
+            base = marketAccount.options.map((title: string, idx: number) => ({
+                id: `${slug}-${idx}`,
+                title: title, // Use the actual outcome name!
+                volume: idx === 0 ? formatCompact(yesMcap) : formatCompact(noMcap),
+                yesPrice: idx === 0 ? (spotYes * 100) : (spotNo * 100),
+                noPrice: 100 - (idx === 0 ? (spotYes * 100) : (spotNo * 100)),
+                chance: idx === 0 ? yesPercent : noPercent
+            }));
+        }
+        // 3. Fallback Default
+        else {
+            base = [
+                { id: 'yes', title: 'YES', volume: '0', yesPrice: 50, noPrice: 50, chance: 50 },
+                { id: 'no', title: 'NO', volume: '0', yesPrice: 50, noPrice: 50, chance: 50 },
+            ];
+        }
+
+        // Apply Live Updates (Only for Binary Markets currently optimized)
+        if (base.length === 2) {
+            // YES / Outcome A
             base[0].chance = yesPercent;
-            base[0].yesPrice = spotYes * 100; // in "cents" for display
+            base[0].yesPrice = spotYes * 100;
             base[0].volume = formatCompact(yesMcap);
 
-            // NO
+            // NO / Outcome B
             base[1].chance = noPercent;
             base[1].yesPrice = spotNo * 100;
             base[1].volume = formatCompact(noMcap);
         }
+
         return base;
-    }, [slug, yesPercent, noPercent, yesMcap, noMcap, spotYes, spotNo]);
+    }, [slug, yesPercent, noPercent, yesMcap, noMcap, spotYes, spotNo, marketAccount]);
 
 
     // User Data
@@ -197,6 +208,22 @@ export default function Page() {
     const [betAmount, setBetAmount] = useState('');
     const [selectedSide, setSelectedSide] = useState<'YES' | 'NO'>('YES');
     const [isPending, setIsPending] = useState(false);
+
+    // Derive on-chain supplies map for the chart header
+    const outcomeSuppliesMap = useMemo(() => {
+        const map: Record<string, number> = {};
+        if (marketAccount?.outcome_supplies && marketOutcomes.length >= marketAccount.outcome_supplies.length) {
+            marketAccount.outcome_supplies.forEach((supply: any, idx: number) => {
+                const title = marketOutcomes[idx]?.title || `Outcome ${idx}`;
+                map[title] = Number(supply) / 1e9;
+            });
+        } else if (marketOutcomes.length === 2 && marketAccount?.outcome_supplies) {
+            // Binary fallback
+            map[marketOutcomes[0].title] = Number(marketAccount.outcome_supplies[0]) / 1e9;
+            map[marketOutcomes[1].title] = Number(marketAccount.outcome_supplies[1]) / 1e9;
+        }
+        return map;
+    }, [marketAccount, marketOutcomes]);
     const [isSuccess, setIsSuccess] = useState(false);
     const [tradeSuccessInfo, setTradeSuccessInfo] = useState<{ shares: number; side: string; txSignature: string } | null>(null);
     const [djinnToast, setDjinnToast] = useState<{ isVisible: boolean; type: DjinnToastType; title?: string; message: string; actionLink?: string; actionLabel?: string }>({ isVisible: false, type: 'INFO', message: '' });
@@ -240,121 +267,65 @@ export default function Page() {
 
     // --- INITIALIZATION ---
     useEffect(() => {
-        const initialOutcomes = MULTI_OUTCOMES[slug] || [];
+        const initialOutcomes = (MULTI_OUTCOMES[slug] || []).length > 0
+            ? MULTI_OUTCOMES[slug]
+            : [
+                { id: 'yes', title: 'YES', yesPrice: 50, chance: 50 },
+                { id: 'no', title: 'NO', yesPrice: 50, chance: 50 }
+            ];
 
-        if (initialOutcomes.length > 0) {
+        if (true) { // Always initialize if we have outcomes (which we now do)
             setSelectedOutcomeId(initialOutcomes[0].id);
             setSelectedOutcomeName(initialOutcomes[0].title);
             setLivePrice(initialOutcomes[0].yesPrice);
 
-            // Generate Initial Stable Chart History for all outcomes
-            // Standardize colors: YES = Blue (#3b82f6), NO = Red (#ef4444)
-            const initialSeries = initialOutcomes.map((o) => {
-                const isYes = o.title.toUpperCase() === 'YES';
-                const color = isYes ? '#22C55E' : '#F59E0B'; // Green/Orange
+            setLivePrice(initialOutcomes[0].yesPrice);
 
-                return {
-                    name: o.title,
-                    color: color,
-                    data: Array.from({ length: 50 }, (_, i) => {
-                        const date = new Date();
-                        date.setHours(date.getHours() - (50 - i));
+            // Generate Initial "Inception" History if empty
+            // This mocks a "Launch Day" history: Flat candles at 0.000001 SOL, 50/50 probability
+            setHistoryState(prev => {
+                if (prev.probability.length > 0) return prev;
 
-                        // "Cold Start" Logic: 50% baseline as requested
-                        const baseVal = o.chance || 50;
+                const outcomes = initialOutcomes.map(o => o.title);
+                const count = 100;
+                const now = Math.floor(Date.now() / 1000);
+                const probData = [];
+                const candleData: Record<string, any[]> = {};
 
-                        // Small variance to show it's "live" but stable
-                        const variance = Math.sin(i * 0.5) * 1;
+                outcomes.forEach(o => candleData[o] = []);
 
-                        return {
-                            date: date.getTime(),
-                            value: Math.max(1, Math.min(99, baseVal + variance))
-                        };
-                    })
-                };
+                for (let i = count; i > 0; i--) {
+                    const time = now - (i * 60); // 1 minute candles
+
+                    // 1. Probability Point (Flat 50/50 or derived from initial)
+                    const point: any = {
+                        time: time,
+                        dateStr: new Date(time * 1000).toLocaleTimeString()
+                    };
+                    outcomes.forEach((o, idx) => {
+                        point[o] = initialOutcomes[idx]?.chance || (100 / outcomes.length);
+                    });
+                    probData.push(point);
+
+                    // 2. Candle Point (Flat "Pre-Pump" Inception)
+                    outcomes.forEach(o => {
+                        const base = 0.00000001; // Matches P_START in core-amm.ts
+                        const noise = (Math.random() - 0.5) * 0.000000001;
+                        const price = base + noise;
+                        candleData[o].push({
+                            time: time as any, // Cast for Lightweight Charts
+                            open: price,
+                            high: price,
+                            low: price,
+                            close: price
+                        });
+                    });
+                }
+
+                return { probability: probData, candles: candleData };
             });
-            // Ensure we have both YES and NO if only one exists (simulate the inverse)
-            if (initialSeries.length === 1 && initialOutcomes[0].title === 'YES') {
-                initialSeries.push({
-                    name: 'NO',
-                    color: '#ef4444',
-                    data: initialSeries[0].data.map(d => ({ ...d, value: 100 - d.value }))
-                });
-            }
-
-            setChartSeries(initialSeries);
-        } else {
-            // Single Market Init
-            setChartData(generateChartData(50));
         }
     }, [slug]);
-
-    // --- PARI-MUTUEL LOGIC ---
-    const updateExectutionPrices = (targetId: string, priceDelta: number) => {
-        if (!isMultiOutcome) {
-            // Single market logic
-            setLivePrice(prev => {
-                const newP = Math.max(1, Math.min(99, prev + priceDelta));
-                setChartData(cPrev => [...cPrev.slice(1), { date: Date.now(), value: newP }]);
-                return newP;
-            });
-            return Math.max(1, Math.min(99, livePrice + priceDelta));
-        }
-
-        // Multi-Market Logic
-        // 1. Calculate New Target Price
-        const targetIndex = marketOutcomes.findIndex(o => o.id === targetId);
-        if (targetIndex === -1) return livePrice;
-
-        const oldTargetPrice = marketOutcomes[targetIndex].chance; // Using chance as price
-        const newTargetPrice = Math.max(1, Math.min(99, oldTargetPrice + priceDelta));
-        const actualDelta = newTargetPrice - oldTargetPrice;
-
-        if (actualDelta === 0) return oldTargetPrice;
-
-        // 2. Redistribute the delta (inverted) among others to keep sum constant
-        // We need to decrease others if target increases, and vice versa.
-        // sum(others_new) = sum(others_old) - actualDelta
-        const othersIndices = marketOutcomes.map((_, i) => i).filter(i => i !== targetIndex);
-        const sumOthers = othersIndices.reduce((acc, i) => acc + marketOutcomes[i].chance, 0);
-
-        const newOutcomes = [...marketOutcomes];
-        const newSeries = [...chartSeries];
-
-        // Update Target
-        newOutcomes[targetIndex] = { ...newOutcomes[targetIndex], chance: Math.round(newTargetPrice), yesPrice: Math.round(newTargetPrice) };
-
-        // Update Others
-        othersIndices.forEach(i => {
-            const weight = marketOutcomes[i].chance / sumOthers;
-            const deduction = actualDelta * weight; // If delta is positive (price up), deduction creates decrease.
-            const newPriceOther = Math.max(1, Math.min(99, marketOutcomes[i].chance - deduction));
-
-            newOutcomes[i] = {
-                ...newOutcomes[i],
-                chance: Math.round(newPriceOther),
-                yesPrice: Math.round(newPriceOther)
-            };
-        });
-
-        // Update State
-        setLivePrice(newTargetPrice);
-
-        // Update Chart Series (Append new point for EVERY outcome)
-        newOutcomes.forEach((o, i) => {
-            // Find corresponding series by name (assuming unique names)
-            const sIndex = newSeries.findIndex(s => s.name === o.title);
-            if (sIndex !== -1) {
-                const newData = [...newSeries[sIndex].data];
-                newData.push({ date: Date.now(), value: o.chance });
-                if (newData.length > 50) newData.shift();
-                newSeries[sIndex] = { ...newSeries[sIndex], data: newData };
-            }
-        });
-        setChartSeries(newSeries);
-
-        return newTargetPrice;
-    };
 
     // Handler for when user clicks YES/NO on an outcome
     const handleOutcomeBuyClick = (outcomeId: string, outcomeName: string, side: 'YES' | 'NO', price: number) => {
@@ -418,7 +389,53 @@ export default function Page() {
         if (!connection) return;
         // Priority: Supabase -> Static Outcome Defaults -> 50
         const dbData = await supabaseDb.getMarketData(effectiveSlug);
-        const marketInfo = await supabaseDb.getMarket(effectiveSlug);
+        let marketInfo = await supabaseDb.getMarket(effectiveSlug);
+
+        // RESILIENCY FALLBACK: If Supabase fails, search On-Chain by Title
+        if (!marketInfo && connection && program) {
+            try {
+                console.log("⚠️ Market not in DB, searching On-Chain...");
+                // Guess title from slug: "quien-gana-el-mundial" -> "quien gana el mundial"
+                const titleGuess = effectiveSlug.replace(/-/g, ' ');
+                const titleBytes = new TextEncoder().encode(titleGuess);
+
+                // Discriminator (8) + Creator (32) + Title Length (4)
+                // We blindly search for the bytes starting at offset 44
+                const accounts = await connection.getProgramAccounts(program.programId, {
+                    filters: [
+                        { memcmp: { offset: 44, bytes: bs58.encode(titleBytes) } }
+                    ]
+                });
+
+                if (accounts.length > 0) {
+                    console.log("✅ Found Market On-Chain:", accounts[0].pubkey.toBase58());
+                    const acc = accounts[0];
+                    const decoded = program.coder.accounts.decode('Market', acc.account.data);
+
+                    marketInfo = {
+                        ...decoded,
+                        market_pda: acc.pubkey.toBase58(),
+                        creator_wallet: decoded.creator.toBase58(),
+                        outcome_supplies: decoded.outcomeSupplies,
+                        yes_token_mint: "So11111111111111111111111111111111111111112", // Mock/Native
+                        no_token_mint: "So11111111111111111111111111111111111111112",
+                        title: decoded.title,
+                        description: 'Recovered from On-Chain Data',
+                        // Map other fields as best effort
+                        options: ['YES', 'NO'],
+                        end_date: new Date(decoded.resolutionTime.toNumber() * 1000).toISOString(),
+                        resolution_source: 'Pyth/Oracle',
+                        banner_url: '/placeholder-market.jpg' // Default
+                    };
+
+                    // Also try to upsert this back to Supabase so we don't scan every time?
+                    // supabaseDb.createMarket(marketInfo)... (Optional, maybe risky if user is just viewer)
+                }
+            } catch (err) {
+                console.warn("On-Chain Search failed:", err);
+            }
+        }
+
         console.log("MARKET INFO DEBUG:", marketInfo); // Debug Real Market detection
         if (marketInfo) {
             // Fetch Creator Profile to display avatar
@@ -438,13 +455,11 @@ export default function Page() {
 
         if (dbData) {
             setLivePrice(dbData.live_price);
-            setChartData(generateChartData(dbData.live_price));
         } else {
             // Try initial default from outcomes list if available
             const initialOutcome = marketOutcomes.find(o => o.id === effectiveSlug);
             const initialPrice = initialOutcome ? initialOutcome.yesPrice : 50;
             setLivePrice(initialPrice);
-            setChartData(generateChartData(initialPrice));
         }
 
         // Load Activity - Optimised DB Filter
@@ -499,15 +514,10 @@ export default function Page() {
                     const decodedMarket = program.coder.accounts.decode('Market', marketAccInfo.data);
                     const sYes = Number(decodedMarket.outcomeSupplies[0]) / 1e9;
                     const sNo = Number(decodedMarket.outcomeSupplies[1]) / 1e9;
-                    const totalS = sYes + sNo;
-                    if (totalS > 0) {
-                        const newPrice = (sYes / totalS) * 100;
+                    if (sYes + sNo >= 0) {
+                        const newPrice = calculateImpliedProbability(sYes, sNo);
                         setLivePrice(newPrice);
-                        setChartData(prev => {
-                            const newData = [...prev, { date: Date.now(), value: newPrice }];
-                            if (newData.length > 50) newData.shift();
-                            return newData;
-                        });
+
                     }
 
                     const vSol = Number(decodedMarket.vaultBalance) / LAMPORTS_PER_SOL;
@@ -539,13 +549,7 @@ export default function Page() {
             if (payload.new?.live_price) {
                 const newPrice = payload.new.live_price;
                 setLivePrice(newPrice);
-                setChartData(prev => {
-                    const newData = [...prev];
-                    const date = new Date();
-                    newData.push({ date: date.getTime(), value: newPrice });
-                    if (newData.length > 50) newData.shift();
-                    return newData;
-                });
+
             }
         });
 
@@ -591,30 +595,28 @@ export default function Page() {
     let estimatedSupply = 0;
 
     if (marketAccount && (marketAccount.yes_supply || marketAccount.no_supply)) {
-        // Use Real On-Chain Supply if available (Assuming 6 decimals)
-        // Checks both snake_case (Supabase) and camelCase (potential Anchor fetch)
+        // Use Real On-Chain Supply if available (Assuming 9 decimals per lib.rs)
         const rawYes = marketAccount.yes_supply ?? marketAccount.yesSupply;
         const rawNo = marketAccount.no_supply ?? marketAccount.noSupply;
 
         const rawSupply = selectedSide === 'YES' ? rawYes : rawNo;
 
-        // Safety check: Number(null) is 0, Number(undefined) is NaN.
+        // Safety check: Number(null) is 0.
         const supplyNum = rawSupply ? Number(rawSupply) : 0;
         estimatedSupply = isNaN(supplyNum) ? 0 : supplyNum / 1_000_000_000;
 
-    } else if (Math.abs(currentPriceForSide - 50) < 0.5) {
-        // If price is ~50% and no market data, assume New Market (0 Supply)
-        estimatedSupply = 0;
     } else {
-        // Fallback: Infer supply from price
-        estimatedSupply = getSupplyFromPrice(approxSolPrice);
+        // Fallback: If no explicit market data, assume NEW MARKET (0 Supply).
+        // Do NOT infer high supply from 50% price, as that triggers Phase 3 logic.
+        // We want new markets to start at P_START (Linear Phase).
+        estimatedSupply = 0;
     }
 
     const previewSim = simulateBuy(amountNum, {
         virtualSolReserves: 0,
         virtualShareReserves: 0,
         realSolReserves: 0,
-        totalSharesMinted: estimatedSupply
+        totalSharesMinted: estimatedSupply // Now correctly 0 for new markets
     });
 
     const estimatedShares = previewSim.sharesReceived;
@@ -778,7 +780,7 @@ export default function Page() {
             // STABILIZER: For fresh markets, clamp divisor price to avoid 100% explosion.
             // If other side has 0 liquidity (price ~0), a small buy feels like 100%.
             // We force a minimum "virtual liquidity price" of 0.0001 for the ratio calc.
-            const otherSidePrice = Math.max(rawOtherSidePrice, 0.0001);
+            const otherSidePrice = rawOtherSidePrice;
 
             // Calculate new probability for the outcome we bought
             const newLikelihood = (sim.endPrice / (sim.endPrice + otherSidePrice)) * 100;
@@ -802,8 +804,7 @@ export default function Page() {
             // Safety Cap: Don't let huge jumps happen if calculation is weird
             if (Math.abs(probDelta) > 20) probDelta = probDelta > 0 ? 20 : -20;
 
-            const newPrice = updateExectutionPrices(effectiveSlug, probDelta);
-            await supabaseDb.updateMarketPrice(effectiveSlug, newPrice, usdValueInTrading);
+
 
             // 3. Log Activity
             const profile = await supabaseDb.getProfile(publicKey.toBase58());
@@ -860,11 +861,15 @@ export default function Page() {
                 imageUrl: marketAccount?.icon || (typeof staticMarketInfo.icon === 'string' && staticMarketInfo.icon.startsWith('http') ? staticMarketInfo.icon : undefined)
             });
 
+            const tradeSideName = selectedSide === 'YES'
+                ? (marketOutcomes[0]?.title || 'YES')
+                : (marketOutcomes[1]?.title || 'NO');
+
             setDjinnToast({
                 isVisible: true,
                 type: 'SUCCESS',
                 title: 'SUCCESS',
-                message: `Successfully bought ${formatCompact(sim.sharesReceived)} ${selectedSide} shares.`,
+                message: `Successfully bought ${formatCompact(sim.sharesReceived)} ${tradeSideName} shares.`,
                 actionLink: txSignature ? `https://solscan.io/tx/${txSignature}?cluster=devnet` : undefined,
                 actionLabel: 'View on Solscan'
             });
@@ -872,7 +877,7 @@ export default function Page() {
             // Store success info for inline bubble display
             setTradeSuccessInfo({
                 shares: sim.sharesReceived,
-                side: selectedSide,
+                side: tradeSideName,
                 txSignature: txSignature || ''
             });
 
@@ -930,13 +935,66 @@ export default function Page() {
                         // Calculate actual price from supplies
                         const totalSupply = yesSupply + noSupply;
                         if (totalSupply > 0) {
-                            const actualPrice = (yesSupply / totalSupply) * 100;
+                            const actualPrice = calculateImpliedProbability(yesSupply, noSupply);
                             setLivePrice(actualPrice);
-                            // Also update chart with new data point
-                            setChartData(prev => {
-                                const newData = [...prev, { date: Date.now(), value: actualPrice }];
-                                if (newData.length > 50) newData.shift();
-                                return newData;
+                            // Update History State (Charts)
+                            setHistoryState(prev => {
+                                const now = Math.floor(Date.now() / 1000);
+                                const lastProbTime = prev.probability.length > 0 ? prev.probability[prev.probability.length - 1].time : (now - 60);
+                                const currentTime = Math.max(now, (lastProbTime || 0) + 1);
+
+                                // 1. Update Probability Line
+                                const newProbPoint: any = {
+                                    time: currentTime,
+                                    dateStr: new Date(currentTime * 1000).toLocaleTimeString()
+                                };
+
+                                // Mapping: If selected is YES, then YES=actualPrice, NO=100-actualPrice
+                                // We need to map this to outcome titles
+                                const outcome0 = marketOutcomes[0]?.title || 'YES';
+                                const outcome1 = marketOutcomes[1]?.title || 'NO';
+
+                                // actualPrice is implied probability of YES (or Outcome 0)
+                                newProbPoint[outcome0] = actualPrice;
+                                newProbPoint[outcome1] = 100 - actualPrice;
+
+                                // 2. Update Candles (Price in SOL)
+                                const newCandles = { ...prev.candles };
+
+                                // Price Calculation (Spot Price in SOL)
+                                const price0 = getSpotPrice(yesSupply);
+                                const price1 = getSpotPrice(noSupply);
+
+                                const updateCandleForOutcome = (outcomeIdx: number, currentPrice: number) => {
+                                    const outcomeName = marketOutcomes[outcomeIdx]?.title || `Outcome ${outcomeIdx}`;
+                                    const prevSeries = prev.candles[outcomeName] || [];
+                                    const lastCandle = prevSeries.length > 0 ? prevSeries[prevSeries.length - 1] : { close: 0.00000001 };
+
+                                    const open = lastCandle.close;
+                                    const close = currentPrice;
+
+                                    // Make it look like a real candle
+                                    const high = Math.max(open, close) * 1.001;
+                                    const low = Math.min(open, close) * 0.999;
+
+                                    if (!newCandles[outcomeName]) newCandles[outcomeName] = [];
+                                    newCandles[outcomeName] = [
+                                        ...newCandles[outcomeName],
+                                        { time: currentTime as any, open, high, low, close }
+                                    ];
+                                };
+
+                                // Update candles for ALL outcomes (ensuring alignment)
+                                decodedMarket.outcomeSupplies.forEach((_supply: any, idx: number) => {
+                                    const s = Number(decodedMarket.outcomeSupplies[idx]) / 1e9;
+                                    const p = getSpotPrice(s);
+                                    updateCandleForOutcome(idx, p);
+                                });
+
+                                return {
+                                    probability: [...prev.probability, newProbPoint],
+                                    candles: newCandles
+                                };
                             });
                             console.log(`✅ Refreshed price from contract:`, actualPrice);
                         }
@@ -1287,6 +1345,10 @@ export default function Page() {
 
                         {/* HEADER (Moved Inside Left Column) */}
                         {/* HEADER (Moved Inside Left Column) - Refined Layout */}
+                        <h1 className="text-4xl md:text-5xl font-black tracking-tight leading-tight text-white mb-6 w-full">
+                            {marketAccount?.title || staticMarketInfo.title}
+                        </h1>
+
                         <div className="flex flex-col md:flex-row justify-between items-end gap-6 mb-2">
                             {/* LEFT: Image + Title */}
                             <div className="flex items-end gap-5 flex-1">
@@ -1307,7 +1369,6 @@ export default function Page() {
                                         : staticMarketInfo.icon}
                                 </div>
                                 <div className="pb-2 flex-1">
-                                    <h1 className="text-4xl font-black tracking-tight leading-none text-white mb-2">{marketAccount?.title || staticMarketInfo.title}</h1>
                                     <p className="text-gray-500 text-sm font-medium line-clamp-2 leading-relaxed mb-3">{marketAccount?.description || staticMarketInfo.description}</p>
 
                                     <div className="flex items-center gap-4 flex-wrap">
@@ -1401,10 +1462,7 @@ export default function Page() {
                                         </span>
                                         <div className="flex flex-col items-center">
                                             <span className="text-2xl font-extrabold text-white tracking-tight">
-                                                {formatCompact(yesMcap)} SOL
-                                            </span>
-                                            <span className="text-[11px] font-bold text-gray-400">
-                                                ${mounted ? formatCompact(yesMcap * (solPrice || 200)) : '0'} USD
+                                                {formatCompact(yesMcap)}
                                             </span>
                                         </div>
                                     </div>
@@ -1426,10 +1484,7 @@ export default function Page() {
                                         </span>
                                         <div className="flex flex-col items-center">
                                             <span className="text-2xl font-extrabold text-white tracking-tight">
-                                                {formatCompact(noMcap)} SOL
-                                            </span>
-                                            <span className="text-[11px] font-bold text-gray-400">
-                                                ${mounted ? formatCompact(noMcap * (solPrice || 200)) : '0'} USD
+                                                {formatCompact(noMcap)}
                                             </span>
                                         </div>
                                     </div>
@@ -1442,14 +1497,31 @@ export default function Page() {
 
 
                             {/* Dual-line Chart (Bazaar of Answers Style) */}
-                            <DjinnChart
-                                data={chartData.map(d => ({
-                                    time: d.date,
-                                    yes: d.value / 100,  // Convert 0-100 to 0-1
-                                    no: (100 - d.value) / 100
-                                }))}
-                                volume={`$${formatCompact((marketAccount?.total_yes_pool || 0) + (marketAccount?.total_no_pool || 0))}`}
-                                settlementDate={marketAccount?.end_date ? new Date(marketAccount.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'TBD'}
+                            {/* Dual-line Chart (Bazaar of Answers Style) */}
+                            <TheDjinnChart
+                                outcomes={marketOutcomes.map(o => o.title)}
+                                probabilityData={historyState.probability}
+                                candleData={historyState.candles}
+                                tradeEvent={lastTradeEvent ? {
+                                    id: Date.now().toString(),
+                                    outcome: lastTradeEvent.side === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO'),
+                                    amount: lastTradeEvent.amount,
+                                    color: lastTradeEvent.side === 'YES' ? '#10B981' : '#EF4444' // Provide fallback colors if needed
+                                } : null}
+                                selectedOutcome={selectedOutcomeName || (selectedSide === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO'))}
+                                onOutcomeChange={(name) => {
+                                    setSelectedOutcomeName(name);
+                                    // Also find the ID and Side to keep everything in sync
+                                    const outcome = marketOutcomes.find(o => o.title === name);
+                                    if (outcome) {
+                                        setSelectedOutcomeId(outcome.id);
+                                        // For binary markets, map to YES/NO sides
+                                        if (marketOutcomes.length === 2) {
+                                            setSelectedSide(outcome.title === marketOutcomes[0].title ? 'YES' : 'NO');
+                                        }
+                                    }
+                                }}
+                                outcomeSupplies={outcomeSuppliesMap}
                             />
 
                             {/* Multi-outcome Selector (if applicable) */}
@@ -1745,12 +1817,18 @@ export default function Page() {
                                                         setIsMaxSell(false);
                                                     }
 
-                                                    const cPrice = selectedSide === 'YES' ? (livePrice ?? 50) : (100 - (livePrice ?? 50));
+                                                    // content: Use Start Spot Price for estimation
+                                                    // This matches the 'Sell Logic' inside handleTrade
+                                                    const spotPrice = getSpotPrice(estimatedSupply);
+                                                    const safePrice = Math.max(spotPrice, 0.0000001);
+
                                                     const sharesToSell = sharesOwned * (pct / 100);
-                                                    let estimatedValue = sharesToSell * (cPrice / 100);
-                                                    const maxPayout = Math.max(0, vaultBalanceSol * 0.95);
-                                                    estimatedValue = Math.min(estimatedValue, maxPayout);
-                                                    setBetAmount(estimatedValue.toFixed(4));
+                                                    let estimatedValue = sharesToSell * safePrice;
+
+                                                    // Removed maxPayout clamp to prevent UI blocking if vault data is stale.
+                                                    // The contract will enforce balance limits.
+
+                                                    setBetAmount(estimatedValue.toFixed(6)); // More decimals for small curve prices
                                                 }}
                                                 className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${(pct === 100 && isMaxSell)
                                                     ? 'bg-white/20 text-white border-white/20'
@@ -1798,7 +1876,7 @@ export default function Page() {
                                                     ? 'bg-[#10B981] border-[#10B981] text-white shadow-[0_0_20px_rgba(16,185,129,0.4)] scale-[1.02]'
                                                     : 'bg-[#1A1A1A] border-white/5 text-gray-500 hover:border-[#10B981]/50 hover:bg-[#10B981]/10'}`}
                                             >
-                                                <span className="text-xs font-black uppercase tracking-widest mb-0.5">YES</span>
+                                                <span className="text-xs font-black uppercase tracking-widest mb-0.5">{marketOutcomes[0]?.title || 'YES'}</span>
                                                 <span className={`text-2xl font-bold ${selectedSide === 'YES' ? 'text-white' : 'text-[#10B981]'}`}>
                                                     {(livePrice ?? 50).toFixed(0)}%
                                                 </span>
@@ -1809,7 +1887,7 @@ export default function Page() {
                                                     ? 'bg-[#EF4444] border-[#EF4444] text-white shadow-[0_0_20px_rgba(239,68,68,0.4)] scale-[1.02]'
                                                     : 'bg-[#1A1A1A] border-white/5 text-gray-500 hover:border-[#EF4444]/50 hover:bg-[#EF4444]/10'}`}
                                             >
-                                                <span className="text-xs font-black uppercase tracking-widest mb-0.5">NO</span>
+                                                <span className="text-xs font-black uppercase tracking-widest mb-0.5">{marketOutcomes[1]?.title || 'NO'}</span>
                                                 <span className={`text-2xl font-bold ${selectedSide === 'NO' ? 'text-white' : 'text-[#EF4444]'}`}>
                                                     {(100 - (livePrice ?? 50)).toFixed(0)}%
                                                 </span>
@@ -1827,7 +1905,7 @@ export default function Page() {
                                         <div className="flex justify-between items-center text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em]">
                                             <span>Rate</span>
                                             <span className="font-mono text-xs lowercase text-gray-300">
-                                                1 SOL ≈ {amountNum > 0 ? formatCompact(estimatedShares / amountNum) : formatCompact(1 / ((livePrice ?? 50) / 100))} shares
+                                                1 SOL ≈ {amountNum > 0 ? formatCompact(estimatedShares / amountNum) : formatCompact(1 / getSpotPrice(estimatedSupply))} shares
                                             </span>
                                         </div>
                                         <div className="flex justify-between items-center text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em]">
@@ -1934,7 +2012,9 @@ export default function Page() {
                                     </div>
                                 ) : (
                                     <span>
-                                        {tradeMode === 'BUY' ? `Buy ${selectedSide}` : `Sell ${selectedSide}`}
+                                        {tradeMode === 'BUY'
+                                            ? `Buy ${selectedSide === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO')}`
+                                            : `Sell ${selectedSide === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO')}`}
                                     </span>
                                 )}
                             </button>
@@ -1987,7 +2067,7 @@ export default function Page() {
                             }`}
                         >
                             <span className="text-lg">+</span>
-                            <span>{bubble.side}</span>
+                            <span>{bubble.side === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO')}</span>
                             <span className="font-mono">{formatCompact(bubble.amount)}</span>
                         </div>
                     </div>

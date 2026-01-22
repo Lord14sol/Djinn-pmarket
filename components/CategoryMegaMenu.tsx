@@ -145,14 +145,12 @@ export default function CategoryMegaMenu() {
         setActiveCategory(category.slug);
         setActiveSubcategory('');
         setIsExpanded(false);
-        router.push('/');
     };
 
     const handleSubcategoryClick = (categorySlug: string, subcategory: string) => {
         setActiveCategory(categorySlug);
         setActiveSubcategory(subcategory);
         setIsExpanded(false);
-        router.push('/');
     };
 
     return (
@@ -245,35 +243,39 @@ export default function CategoryMegaMenu() {
                                         <motion.div
                                             initial={{ opacity: 0, y: 10, scale: 0.98 }}
                                             animate={{ opacity: 1, y: 0, scale: 1 }}
-                                            exit={{ opacity: 0, y: 10, scale: 0.98 }}
-                                            transition={{ duration: 0.2, ease: "easeOut" }}
-                                            className="absolute top-full left-1/2 -translate-x-1/2 mt-3 z-20
-                                                bg-[#0A0A0A]/95 backdrop-blur-xl border border-white/10 rounded-2xl p-4
-                                                min-w-[450px] shadow-2xl"
+                                            exit={{ opacity: 0, y: 5, scale: 0.98, transition: { duration: 0.1 } }}
+                                            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                                            className="absolute top-[85%] left-1/2 -translate-x-1/2 pt-4 z-50
+                                                min-w-[480px]"
                                         >
-                                            <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
-                                                {category.subcategories.map((sub) => (
-                                                    <button
-                                                        key={sub.id}
-                                                        onClick={() => handleSubcategoryClick(category.slug, sub.name)}
-                                                        className="flex-shrink-0 group/sub relative w-[100px] h-[80px] rounded-xl overflow-hidden
-                                                            border-2 border-white/10 hover:border-[#F492B7] transition-all duration-300"
-                                                    >
-                                                        {sub.image ? (
-                                                            <img
-                                                                src={sub.image}
-                                                                alt={sub.name}
-                                                                className="w-full h-full object-cover group-hover/sub:scale-110 transition-transform duration-500"
-                                                            />
-                                                        ) : (
-                                                            <div className="w-full h-full bg-gradient-to-br from-[#06B6D4]/20 to-[#F492B7]/20" />
-                                                        )}
-                                                        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
-                                                        <span className="absolute bottom-1.5 left-1.5 right-1.5 text-[9px] font-bold text-white uppercase tracking-wider text-center truncate">
-                                                            {sub.name}
-                                                        </span>
-                                                    </button>
-                                                ))}
+                                            <div className="bg-[#0A0A0A]/95 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-2xl">
+                                                <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
+                                                    {category.subcategories.map((sub) => (
+                                                        <button
+                                                            key={sub.id}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation(); // Stop bubbling to prevent immediate close issues
+                                                                handleSubcategoryClick(category.slug, sub.name);
+                                                            }}
+                                                            className="flex-shrink-0 group/sub relative w-[100px] h-[80px] rounded-xl overflow-hidden
+                                                                border-2 border-white/10 hover:border-[#F492B7] transition-all duration-300"
+                                                        >
+                                                            {sub.image ? (
+                                                                <img
+                                                                    src={sub.image}
+                                                                    alt={sub.name}
+                                                                    className="w-full h-full object-cover group-hover/sub:scale-110 transition-transform duration-500"
+                                                                />
+                                                            ) : (
+                                                                <div className="w-full h-full bg-gradient-to-br from-[#06B6D4]/20 to-[#F492B7]/20" />
+                                                            )}
+                                                            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+                                                            <span className="absolute bottom-1.5 left-1.5 right-1.5 text-[9px] font-bold text-white uppercase tracking-wider text-center truncate">
+                                                                {sub.name}
+                                                            </span>
+                                                        </button>
+                                                    ))}
+                                                </div>
                                             </div>
                                         </motion.div>
                                     )}
