@@ -10,20 +10,19 @@ import { PublicKey } from "@solana/web3.js";
 
 // --- GLOBAL CONSTANTS (MUST MATCH lib.rs) ---
 export const TOTAL_SUPPLY = 1_000_000_000; // 1B Shares
-export const ANCHOR_THRESHOLD = 100_000_000; // 100M (10%)
+export const VIRTUAL_OFFSET = 20_000_000;   // 20M Shares "Virtual Support"
 
-// PHASE BOUNDARIES (Scaled to match Rust: shares * 1e9 on-chain)
-// ⚠️ AGGRESSIVE CURVE: Early birds get progressive gains (2x, 3x, 4x, 5x, 6x)
-export const PHASE1_END = 50_000_000;    // 50M → 6x price
-const PHASE2_START = 50_000_000;  // 50M (internal only)
-export const PHASE2_END = 90_000_000;    // 90M → 15x price
-export const PHASE3_START = 90_000_000;  // 90M → MONSTRUOSO
+// PHASE BOUNDARIES (Shares)
+export const PHASE1_END = 100_000_000;    // 100M
+export const PHASE2_END = 200_000_000;    // 200M
+export const PHASE3_START = 200_000_000;
 
 // PRICE CONSTANTS (in SOL, matches Lamports conversion in lib.rs)
-const P_START = 0.000000001;   // 1 nanoSOL (1 Lamport = 1e-9 SOL)
-const P_50 = 0.000006;         // 6000 nanoSOL (6 microSOL) - Phase 1 end (6x from start)
-const P_90 = 0.000015;         // 15000 nanoSOL (15 microSOL) - Phase 2 end (15x from start)
+const P_START = 0.0000001;     // 100 lamports
+const P_50 = 0.000005;         // 5000 lamports
+const P_90 = 0.000025;         // 25000 lamports
 const P_MAX = 0.95;            // 950M nanoSOL (0.95 SOL cap)
+
 
 // SIGMOID CALIBRATION - ORIGINAL "GRADUAL GROWTH" DESIGN
 // ⚠️ LINEAR APPROXIMATION: norm_sig = k * x (not full sigmoid!)
@@ -35,9 +34,9 @@ const K_SIGMOID = 0.00047; // 4.7e-4 - Original gradual curve
 
 // LEGACY/COMPATIBILITY
 export const TOTAL_SUPPLY_CHAINHEAD = TOTAL_SUPPLY;
-export const VIRTUAL_OFFSET = 0;
 export const FEE_RESOLUTION_PCT = 0.02;
 export const CURVE_CONSTANT = 375_000_000_000_000;
+
 
 // --- TYPES ---
 export interface MarketState {
@@ -91,105 +90,67 @@ const LINEAR_SLOPE = (P_50 - P_START) / PHASE1_END;
  * ⚠️ MATCHES smart contract calculate_spot_price() exactly
  */
 export function getSpotPrice(sharesSupply: number): number {
-    if (sharesSupply <= 0) return P_START;
+    // VIRTUAL ANCHOR: We add this to make the curve start at a stable point
+    const effectiveSupply = sharesSupply + VIRTUAL_OFFSET;
 
-    if (sharesSupply <= PHASE1_END) {
-        // PHASE 1: LINEAR RAMP (lib.rs line 60-64)
-        // P = P_START + (slope * supply)
-        return P_START + LINEAR_SLOPE * sharesSupply;
-
-    } else if (sharesSupply <= PHASE2_END) {
-        // PHASE 2: QUADRATIC ACCELERATION (50M-90M)
-        // P = P_50 + (P_90 - P_50) * t²
-        const progress = sharesSupply - PHASE1_END;
-        const range = PHASE2_END - PHASE1_END; // 40M
-
-        const ratio = progress / range; // 0 to 1
+    if (effectiveSupply <= PHASE1_END) {
+        // PHASE 1: LINEAR RAMP
+        return P_START + LINEAR_SLOPE * effectiveSupply;
+    } else if (effectiveSupply <= PHASE2_END) {
+        // PHASE 2: QUADRATIC BRIDGE
+        const progress = effectiveSupply - PHASE1_END;
+        const range = PHASE2_END - PHASE1_END;
+        const ratio = progress / range;
         const ratio_sq = ratio * ratio;
-
         const price_delta = (P_90 - P_50) * ratio_sq;
         return P_50 + price_delta;
-
     } else {
-        // PHASE 3: SIGMOID MONSTRUOSO (90M+)
-        const x_rel = sharesSupply - PHASE3_START;
-
+        // PHASE 3: SIGMOID
+        const x_rel = effectiveSupply - PHASE3_START;
         const kz = K_SIGMOID * x_rel;
         const norm_sig = Math.min(1_000_000_000, Math.max(0, kz));
-
-        // P = P_90 + (P_MAX - P_90) * norm_sig / 1e9
         const price_delta = (P_MAX - P_90) * norm_sig / 1_000_000_000;
         return P_90 + price_delta;
     }
 }
 
+
 /**
  * Integrated Cost Function - Total SOL to buy from 0 to x shares
  * ⚠️ MATCHES smart contract calculate_cost() logic
+ * We use trapezoidal approximation (Contract Method) for exact match
  */
-function getIntegratedCost(x: number): number {
-    if (x <= 0) return 0;
-
-    if (x <= PHASE1_END) {
-        // PHASE 1: ∫(P_START + m*s)ds = P_START*x + (m/2)*x²
-        return P_START * x + (LINEAR_SLOPE / 2) * x * x;
-
-    } else if (x <= PHASE2_END) {
-        // PHASE 1 full cost
-        const phase1Cost = P_START * PHASE1_END + (LINEAR_SLOPE / 2) * PHASE1_END * PHASE1_END;
-
-        // PHASE 2: ∫[P_50 + (P_90 - P_50) * ((s - 50M) / 40M)²]ds
-        const progress = x - PHASE1_END;
-        const range = PHASE2_END - PHASE1_END;
-        const phase2Cost = P_50 * progress + (P_90 - P_50) * (progress ** 3) / (3 * range * range);
-
-        return phase1Cost + phase2Cost;
-
-    } else {
-        // PHASE 1 + PHASE 2 full
-        const phase1Cost = P_START * PHASE1_END + (LINEAR_SLOPE / 2) * PHASE1_END * PHASE1_END;
-
-        const fullRange = PHASE2_END - PHASE1_END;
-        const phase2Cost = P_50 * fullRange + (P_90 - P_50) * (fullRange ** 3) / (3 * fullRange * fullRange);
-
-        // PHASE 3: ∫[P_90 + (P_MAX - P_90) * k * (s - 90M) / 1e9]ds
-        const x_rel = x - PHASE3_START;
-        const phase3Cost = P_90 * x_rel + (P_MAX - P_90) * K_SIGMOID * (x_rel ** 2) / (2 * 1_000_000_000);
-
-        return phase1Cost + phase2Cost + phase3Cost;
-    }
+function getCostInContract(supplyOld: number, supplyNew: number): number {
+    if (supplyNew <= supplyOld) return 0;
+    const pOld = getSpotPrice(supplyOld);
+    const pNew = getSpotPrice(supplyNew);
+    const delta = supplyNew - supplyOld;
+    return (pOld + pNew) / 2 * delta;
 }
+
 
 /**
- * Newton-Raphson Solver for Shares from SOL
+ * Binary Search Solver for Shares from SOL (Matches Contract)
  */
 function solveForShares(currentSupply: number, netSolInvested: number): number {
-    const startCost = getIntegratedCost(currentSupply);
-    const targetCostTotal = startCost + netSolInvested;
+    let low = currentSupply;
+    let high = TOTAL_SUPPLY;
 
-    const pCurrent = getSpotPrice(currentSupply);
-    let guessShares = netSolInvested / Math.max(pCurrent, P_START * 10);
+    for (let i = 0; i < 50; i++) {
+        const mid = (low + high) / 2;
+        const cost = getCostInContract(currentSupply, mid);
 
-    const remaining = TOTAL_SUPPLY - currentSupply;
-    if (guessShares > remaining) guessShares = remaining;
+        if (cost < netSolInvested) {
+            low = mid;
+        } else {
+            high = mid;
+        }
 
-    let x = currentSupply + guessShares;
-    if (x > TOTAL_SUPPLY) x = TOTAL_SUPPLY;
-
-    for (let i = 0; i < 25; i++) {
-        const costAtX = getIntegratedCost(x);
-        const error = costAtX - targetCostTotal;
-        if (Math.abs(error) < 0.00000001) break;
-
-        const priceAtX = getSpotPrice(x);
-        if (priceAtX <= 0) break;
-        x = x - (error / priceAtX);
-
-        if (x < currentSupply) x = currentSupply;
-        if (x > TOTAL_SUPPLY) x = TOTAL_SUPPLY;
+        if (high - low < 0.001) break;
     }
-    return x - currentSupply;
+    return low - currentSupply;
 }
+
 
 // --- EXPORTED SIMULATION ---
 

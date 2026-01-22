@@ -1,4 +1,4 @@
- Djinn: Redefining Price Discovery on Solana 
+# Djinn: Redefining Price Discovery on Solana
 
 <div align="center">
 
@@ -13,367 +13,128 @@
 
 ## 🎯 Executive Summary
 
-DJINN represents a paradigm shift in on-chain prediction markets. By leveraging a proprietary **Golden S Mutant Curve**, we eliminate the fundamental liquidity constraints that plague traditional order-book architectures. The result: **instantaneous, autonomous price discovery from the first transaction**.
+DJINN represents a paradigm shift in on-chain prediction markets. By leveraging a proprietary **Golden S Mutant Curve (V4 Aggressive)**, we eliminate the fundamental liquidity constraints that plague traditional order-book architectures. The result: **instantaneous, autonomous price discovery from the first transaction**.
 
 > *"Where others require market makers, DJINN requires only believers."*
 
 ---
 
-## ✨ **V4.5 Update: SPL Token Integration** (January 2026)
+## ✨ **V4.0 Architecture: PDA-Based Derivatives** (Active)
 
-DJINN now mints **standard SPL tokens** that appear directly in Solana wallets (Phantom, Solflare, etc.) with full Metaplex metadata integration.
+DJINN operates on a **high-efficiency internal ledger system** using Solana Program Derived Addresses (PDAs). Unlike standard AMMs that rely on token swaps, Djinn uses direct state management for maximum speed and solvency.
 
-### What This Means:
-- ✅ **Wallet Visibility**: Shares appear in your wallet as `[YES] - Market Name` with market image
-- ✅ **Transferable**: Tokens can be sent between wallets (peer-to-peer trading)
-- ✅ **Universal Compatibility**: Works with any SPL-compatible wallet or DEX
-- ✅ **Metaplex Metadata**: Full name, symbol, and image stored on-chain
-
-### Technical Architecture:
-DJINN uses a **hybrid ledger system**:
-- **UserPosition PDAs**: Track precise share balances for bonding curve calculations (u128 precision)
-- **SPL Tokens**: Minted 1:1 with PDA shares for wallet compatibility
-- **Synchronized State**: Both systems stay in perfect sync via atomic mint/burn operations
+### Key Features:
+- ✅ **PDA-Based Positions**: User shares are tracked in `UserPosition` accounts with u128 precision.
+- ✅ **Zero-Rent Drift**: Optimized account structure minimizes rent costs compared to ATAs.
+- ✅ **Atomic Settlement**: Buys, sells, and merging positions happen in single atomic transactions.
+- ✅ **Flash-Liquidity**: Markets are instantly liquid from moment zero.
 
 ### Cost Structure:
-| Action | First Time | Subsequent |
-|--------|-----------|------------|
-| Buy Shares | ~0.002 SOL (~$0.30) | ~0.00002 SOL (~$0.003) |
-| Sell Shares | ~0.00002 SOL | ~0.00002 SOL |
-
-**Note**: The ~0.002 SOL first-time cost creates your Associated Token Accounts (ATAs) and is paid to Solana validators, not the protocol.
+| Action | Network Cost | Protocol Fee |
+|--------|--------------|--------------|
+| Create Market | ~0.012 SOL | 0.01 SOL (Anti-Spam) |
+| Buy Shares | ~0.000005 SOL | 1.0% |
+| Sell Shares | ~0.000005 SOL | 1.0% |
 
 ---
 
 ## 📜 Technical Manifesto: The End of Traditional Liquidity
 
-### I. The Death of Legacy Liquidity Models
+### I. The Innovation: Autonomous Liquidity Engineering
 
-For decades, financial markets have operated under a singular assumption: **liquidity must be externally provisioned**. Legacy Order-Book Systems require market makers—institutional entities with deep capital reserves—to populate bid-ask spreads and absorb volatility. Without these intermediaries, markets become "empty libraries"—architecturally complete, yet functionally useless.
+The **Golden S Mutant Curve** is an **Autonomous Liquidity Engine**—a self-sustaining mathematical construct that generates guaranteed liquidity from the first transaction.
 
-This model suffers from two fundamental deficiencies:
-
-**1. The Cold Start Problem**
-New markets cannot bootstrap themselves. They require capital injection, incentive programs, and often months of loss-leading market-making before achieving critical mass. This creates an insurmountable barrier for experimental or time-sensitive markets.
-
-**2. Flat Reward Structures**
-Standard AMMs and order books offer equivalent returns regardless of entry timing. An investor who identifies opportunity at genesis receives no premium over one who arrives after consensus has formed. This fundamentally misaligns incentives—**early conviction goes unrewarded**.
-
-### II. The Innovation: Autonomous Liquidity Engineering
-
-The **Golden S Mutant Curve** represents a categorical departure from these legacy paradigms. It is not a liquidity pool; it is an **Autonomous Liquidity Engine**—a self-sustaining mathematical construct that generates guaranteed liquidity from the first transaction.
-
-#### The Three-Phase Transformation Engine
+#### The Three-Phase Transformation Engine (V4 Aggressive)
 
 ```
 ┌───────────────────────────────────────────────────────────────────────┐
 │        PHASE 1              PHASE 2              PHASE 3              │
 │        IGNITION             BRIDGE               SIGMOID              │
+│      (0 - 100M)          (100M - 200M)           (200M+)              │
 │                                                                       │
 │   ╔═══════════════╗    ╔═══════════════╗    ╔═══════════════╗        │
 │   ║  UNCERTAINTY  ║ →  ║  TRANSITION   ║ →  ║   CERTAINTY   ║        │
-│   ║               ║    ║               ║    ║               ║        │
-│   ║  Maximum      ║    ║  Momentum     ║    ║  Efficient    ║        │
-│   ║  Asymmetry    ║    ║  Scaling      ║    ║  Pricing      ║        │
+│   ║  (Linear)     ║    ║  (Quadratic)  ║    ║  (Sigmoid)    ║        │
 │   ╚═══════════════╝    ╚═══════════════╝    ╚═══════════════╝        │
 │                                                                       │
-│   Entry: 1 nanoSOL        Quadratic            Asymptotic → 0.95     │
-│   ROI: 100x-500x+         Acceleration         ROI: 1x-2x            │
+│   Price: 100 lamports  Accel: High          Cap: 0.95 SOL        │
+│   Target: 5k lamports  Target: 25k lamps                          │
+│                                                                       │
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
-**Phase 1 (Ignition):** The curve begins at near-zero valuation, rewarding early participants with extreme asymmetric upside. This is the **conviction premium**—compensation for bearing maximum uncertainty.
+**Phase 1 (Ignition):** The curve begins at ~0 (100 lamports), rewarding early participants with extreme asymmetric upside. This is the **conviction premium**.
 
-**Phase 2 (Bridge):** A quadratic acceleration zone that scales rewards with market momentum. The curve's first derivative is mathematically smoothed to prevent discontinuities.
+**Phase 2 (Bridge):** A quadratic acceleration zone that scales rewards with market momentum between 100M and 200M shares.
 
-**Phase 3 (Sigmoid):** Asymptotic convergence toward the 0.95 SOL logic-cap. Late participants purchase stability rather than asymmetry—a rational exchange for high-probability outcomes.
+**Phase 3 (Sigmoid):** Asymptotic convergence toward the 0.95 SOL logic-cap. Late participants purchase stability rather than asymmetry.
 
-### III. Architectural Backbone: C³ Continuity
+### II. Architectural Backbone: C³ Continuity
 
-The integrity of the Golden S Mutant Curve rests upon the **C³ Continuity Framework**—a mathematical guarantee that the curve and its first two derivatives transition smoothly across phase boundaries.
-
-| Continuity Level | Mathematical Guarantee | Market Benefit |
-|-----------------|------------------------|----------------|
-| **C⁰** | `P(x)` is continuous | No price jumps at phase boundaries |
-| **C¹** | `P'(x)` is continuous | Smooth momentum, predictable slippage |
-| **C²** | `P''(x)` is continuous | No acceleration discontinuities |
-
-This framework eliminates the **Liquidity Gaps** that plague standard bonding curves—sudden price spikes that occur when mathematical functions transition abruptly. The result: **100% on-chain solvency at every point of the supply curve**.
-
-### IV. Conclusion: The Mathematical Judge
-
-DJINN is not merely a trading venue. It is a **Mathematical Judge**—an impartial arbiter that converts collective belief into precise, liquid, 100% collateralized positions.
-
-Where legacy systems require:
-- External market makers → DJINN generates autonomous liquidity
-- Capital-heavy bootstrapping → DJINN activates from transaction zero
-- Flat reward structures → DJINN rewards conviction timing
-
-> **DJINN is the first protocol to transform Probability itself into a tradeable, liquid, and mathematically-guaranteed asset.**
+The curve guarantees smooth transitions across all phases to ensure solvency and prevent arbitrage gaps.
 
 ---
 
-## 🧬 Core Innovation: The Golden S Mutant Curve
+## 🧬 Core Innovation: The Golden S Mutant Curve (Math Specs)
 
-DJINN employs a revolutionary **3-Phase Hybrid Bonding Curve** that creates mathematically-guaranteed liquidity at every price point.
+DJINN employs a **3-Phase Piecewise Bonding Curve** (`V4 AGGRESSIVE`).
 
-### Phase Architecture
+### Constants (Verified in `lib.rs`)
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    THE GOLDEN S MUTANT CURVE                                │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  PRICE                                                                      │
-│  (SOL)                                                    ════════ 0.95     │
-│    │                                               ╱╱╱                      │
-│    │                                          ╱╱╱                           │
-│    │                                     ╱╱╱   ← Phase 3: Stability         │
-│    │                                ╱╱╱         Sigmoid                     │
-│    │                           ▓▓▓▓                                         │
-│    │                      ▓▓▓▓     ← Phase 2: Acceleration                  │
-│    │                 ▓▓▓▓           Quadratic Bridge                        │
-│    │            ░░░░                                                        │
-│    │       ░░░░  ← Phase 1: Ignition                                        │
-│    │  ░░░░        Linear Ramp                                               │
-│    └────────────────────────────────────────────────────── SUPPLY           │
-│         0    50M       90M              200M            1B                  │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
+```rust
+// Supply Boundaries ( 9 decimals )
+PHASE1_END   = 100,000,000    // 100M Shares
+PHASE2_END   = 200,000,000    // 200M Shares (Bridge End)
+PHASE3_START = 200,000,000    // Sigmoid Start
+
+// Price Points (Lamports)
+P_START = 100             // 0.0000001 SOL (Genesis)
+P_50    = 5,000           // 0.000005  SOL (Target at 100M)
+P_90    = 25,000          // 0.000025  SOL (Target at 200M)
+P_MAX   = 950,000,000     // 0.95      SOL (Hard Cap)
+
+// Virtual Support
+VIRTUAL_ANCHOR = 20,000,000 // 20M Shares phantom liquidity
 ```
 
-### Phase 1: Ignition (0 → 50M shares)
+### Phase Formulas
 
-**Mathematical Model:** `P(x) = P_start + m·x`
+#### 1. Ignition Phase (Linear) `Supply <= 100M`
+A steep linear ramp designed to reward early adopters.
+`P(x) = P_START + m · x`
+- **Slope (m)**: `(P_50 - P_START) / PHASE1_END`
+- **Behavior**: Price grows linearly from **100 lamports** to **5,000 lamports**.
 
-The Ignition Phase implements a **linear price ramp** optimized for extreme asymmetric returns. Early visionaries who identify market opportunities during this phase capture maximum value:
+#### 2. Acceleration Bridge (Quadratic) `100M < Supply <= 200M`
+A quadratic bridge to accelerate price discovery.
+`P(x) = P_50 + (P_90 - P_50) · (progress / 100M)²`
+- **Behavior**: fast acceleration from **5,000** to **25,000 lamports**.
 
-| Entry Point | ROI Multiple | Psychology |
-|-------------|--------------|------------|
-| 0-10M | **2x-6x** | First believers, maximum conviction |
-| 10M-30M | **3x-5x** | Early majority, validated thesis |
-| 30M-50M | **1.5x-2x** | Momentum traders |
-
-### Phase 2: Acceleration Bridge (50M → 90M shares)
-
-**Mathematical Model:** `P(x) = P_50 + (P_90 - P_50)·(t)²`
-
-The Quadratic Bridge creates **momentum-amplified growth**. As market conviction increases, price acceleration compounds—rewarding sustained belief over speculation.
-
-**Key Innovation:** C² continuity at phase boundaries ensures zero liquidity gaps.
-
-### Phase 3: Stability Sigmoid (90M+ shares)
-
-**Mathematical Model:** `P(x) = P_90 + (P_max - P_90)·σ(x - 90M)`
-
-Where σ(z) = k·z (linearized sigmoid approximation)
-
-The Sigmoid Phase introduces **asymptotic price behavior**, approaching but never exceeding the logic-cap of 0.95 SOL. This prevents:
-- Irrational price discovery
-- Whale manipulation at scale
-- Unsustainable valuation bubbles
+#### 3. Stability Sigmoid `Supply > 200M`
+Linear approximation of a sigmoid function for stability.
+`P(x) = P_90 + (P_MAX - P_90) · NormalizedSigmoid(x - 200M)`
+- **Behavior**: Asymptotically approaches **0.95 SOL** but slows down as it gets there.
 
 ---
 
-## 🏗️ Technical Architecture: C³ Continuity Framework
-
-### What is C³ Continuity?
-
-DJINN's curve transitions are **mathematically smoothed** across three dimensions:
-
-| Continuity Level | Guarantee | Benefit |
-|-----------------|-----------|---------|
-| **C⁰** | Price continuity | No sudden jumps |
-| **C¹** | Slope continuity | Smooth momentum |
-| **C²** | Curvature continuity | Predictable acceleration |
-
-This triple-continuity framework ensures:
-
-✅ **100% On-Chain Solvency** — Every share is backed by real SOL in the vault  
-✅ **Zero External Dependencies** — No market makers, no liquidity providers, no oracles for pricing  
-✅ **Deterministic Execution** — Same input always produces same output
-
-### Competitive Edge: Autonomous Liquidity
-
-| Platform | Liquidity Model | Cold Start Problem |
-|----------|-----------------|-------------------|
-| **Polymarket** | Order book + LPs | ❌ "Empty Library" syndrome |
-| **Limitless** | AMM + seed liquidity | ❌ Requires capital injection |
-| **DJINN** | Golden S Mutant Curve | ✅ **Instantaneous from tx #1** |
-
-> The Golden S Mutant Curve generates autonomous liquidity from the first transaction. Where competitors suffer from "Empty Library" liquidity issues, DJINN markets are tradeable immediately upon creation.
-
----
-
-## 📐 Mathematical Specification
-
-### Constants (Synchronized: Frontend ↔ Smart Contract)
-
-```typescript
-// Phase Boundaries (shares)
-PHASE1_END   = 50,000,000    // 50M → 6x multiplier
-PHASE2_END   = 90,000,000    // 90M → 15x multiplier  
-PHASE3_START = 90,000,000    // Sigmoid activation
-
-// Price Constants (SOL)
-P_START = 0.000000001        // 1 nanoSOL (1 Lamport)
-P_50    = 0.000006           // 6 microSOL (6000x from start)
-P_90    = 0.000015           // 15 microSOL (15000x from start)
-P_MAX   = 0.95               // Logic cap
-
-// Sigmoid Steepness
-K_SIGMOID = 0.00047          // Calibrated for gradual growth
-```
-
-### Progressive Multipliers
-
-| Supply | Price (SOL) | Entry→Exit Multiple | Market Cap (@ $200 SOL) |
-|--------|-------------|---------------------|-------------------------|
-| 10M | 0.000002 | **2x** | $8,000 |
-| 30M | 0.000004 | **4x** | $48,000 |
-| 50M | 0.000006 | **6x** | $120,000 |
-| 90M | 0.000015 | **15x** | $540,000 |
-| 200M | 0.0001 | **100x** | $8,000,000 |
-
----
-
-## 💰 Token Economics & Fee Structure
+## 💰 Economics & Fee Structure
 
 ### Protocol Fees
 | Parameter | Value | Destination | Rationale |
 |-----------|-------|-------------|-----------|
-| Entry Fee | 1% | 50% Treasury / 50% Market Creator | Sustainable revenue |
-| Exit Fee | 1% | Protocol | Discourages speculation |
-| Resolution Fee | 2% | Protocol | Oracle incentivization |
+| Entry Fee | 1% | 50% Treasury / 50% Creator | Sustainable revenue & Creator Reward |
+| Exit Fee | 1% | 50% Treasury / 50% Creator | Discourages wash trading |
+| Resolution Fee | 2% | Protocol Treasury | Oracle incentivization |
 
-### Network Costs (Paid to Solana Validators)
-| Action | Cost | Frequency |
-|--------|------|-----------|
-| Create Market | ~0.015 SOL | Once per market |
-| First Buy (create ATAs) | ~0.002 SOL | Once per user per market |
-| Subsequent Trades | ~0.00002 SOL | Per transaction |
+### Solvency Model
+DJINN is **100% On-Chain Solvent**. The vault always holds enough SOL to pay out the winning side.
+`Vault_Balance >= (Winning_Shares * Payout_Per_Share)`
 
-### Supply & Decimals
-| Parameter | Value | Rationale |
-|-----------|-------|-----------|
-| Total Supply | 1B per outcome (YES/NO) | Sufficient granularity for bonding curve |
-| Token Decimals | 9 (SPL standard) | Matches Solana's native SOL decimals |
-| Max Per Transaction | 10B shares | Overflow protection |
+Unlike pump.fun or others, there is no "migration". The liquidity is the bonding curve itself until resolution. Upon resolution, the **losing side's collateral** subsidizes the **winning side's payout**.
 
 ---
 
-## � Technical Whitepaper: Financial Architecture
-
-### I. The Probability Filter Engine
-
-The Golden S Mutant Curve is not merely a pricing mechanism—it is a **mathematical filter for outcome probability**.
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│              PROBABILITY FILTER: UNCERTAINTY → CERTAINTY                   │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  UNCERTAINTY                                              CERTAINTY         │
-│  (Maximum)                                                (Filtered)        │
-│      │                                                         │            │
-│      ▼                                                         ▼            │
-│   ┌─────┐        ┌─────────────┐        ┌──────────────┐   ┌───────┐       │
-│   │ 1ns │   →    │  Ignition   │   →    │ Acceleration │ → │ 0.95  │       │
-│   │ SOL │        │   Phase     │        │    Bridge    │   │  SOL  │       │
-│   └─────┘        └─────────────┘        └──────────────┘   └───────┘       │
-│                                                                             │
-│   "Reward risk-takers       "Scale with            "Converge to            │
-│    with asymmetric           market                 efficient               │
-│    upside"                   momentum"              pricing"                │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-**Initial Supply (0-50M):** Represents maximum uncertainty. Price is near-zero (1 nanoSOL) to reward risk-takers who identify opportunities before consensus forms.
-
-**Terminal Supply (Phase 3+):** As supply increases, the curve asymptotically filters out noise, converging toward the 0.95 SOL logic-cap. High prices signal high-probability outcomes.
-
----
-
-### II. Late-Game Solvency Model
-
-Unlike memecoin AMMs (e.g., Pump.fun) which require "Liquidity Migration" to centralized exchanges, DJINN implements **perpetual on-chain solvency**.
-
-#### The Certainty Premium
-
-Late-stage buyers pay a **Certainty Premium**—approaching 0.95 SOL for high-probability outcomes. This capital structure ensures permanent over-collateralization:
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    VAULT SOLVENCY MODEL                         │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│   VAULT_TOTAL = YES_POOL + NO_POOL                              │
-│                                                                 │
-│   On Resolution (e.g., YES wins):                               │
-│   ├── YES holders claim: VAULT_TOTAL / YES_SUPPLY × shares      │
-│   └── NO holders claim: 0 (capital absorbed)                    │
-│                                                                 │
-│   The "Loser's Pool" (NO_POOL) subsidizes winner payouts,       │
-│   guaranteeing the vault is ALWAYS over-collateralized.         │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**Mathematical Guarantee:**
-
-```
-Vault_SOL ≥ (Winning_Shares × Payout_Per_Share) - Fees
-
-Where:
-  Payout_Per_Share = Vault_Total / Winning_Supply
-```
-
-This model eliminates:
-- ❌ Liquidity migration risk
-- ❌ Rug pull vectors
-- ❌ External dependency on market makers
-
----
-
-### III. Zero-Slippage Settlement
-
-DJINN separates **trading mechanics** from **settlement mechanics**:
-
-| Phase | Mechanism | Slippage |
-|-------|-----------|----------|
-| **Live Trading** | Bonding Curve (C³-smoothed) | Variable (curve-dependent) |
-| **Final Settlement** | Proportional Vault Distribution | **Zero** |
-
-#### How Settlement Works:
-
-1. **Market Resolves** — Oracle confirms outcome (YES or NO)
-2. **Vault Locks** — No more trading, total SOL frozen
-3. **Proportional Claim** — Each winning share receives: `Vault_Total / Winning_Supply`
-
-**This eliminates:**
-- ❌ "Exit scams" where early sellers drain liquidity
-- ❌ "Liquidity crunches" at high redemption
-- ❌ MEV extraction during settlement
-
----
-
-### IV. Strategic Summary
-
-> **DJINN rewards vision by allowing early participants to buy uncertainty and sell certainty to the mass market.**
-
-| Participant | Strategy | Reward Profile |
-|-------------|----------|----------------|
-| **Visionary** (0-10M) | Identify opportunity before consensus | 100x-200x potential |
-| **Early Believer** (10-50M) | Validate thesis early | 6x-20x potential |
-| **Momentum Trader** (50-90M) | Ride confirmed trends | 2x-6x potential |
-| **Certainty Buyer** (90M+) | Pay premium for high-probability | 1.1x-1.5x (low risk) |
-
-The curve transforms speculation into **structured risk-reward**, where position timing directly correlates with conviction level.
-
----
-
-## �🚀 Quick Start
+## 🚀 Quick Start (Devnet)
 
 ```bash
 # Clone and install
@@ -385,70 +146,29 @@ npm run dev
 
 # Smart Contract Deployment
 cd programs/djinn-market
-anchor build && anchor deploy --provider.cluster devnet
+anchor build && anchor deploy
 ```
 
 ### Contract Addresses
 
 | Network | Program ID | Version |
 |---------|------------|---------|
-| **Devnet** | `DY1X52RW55bpNU5ZA8E3m6w1w7VG1ioHKpUt7jUkYSV9` | V4.5 (SPL Tokens) |
-| Devnet (Legacy) | `HkjMQFag41pUutseBpXSXUuEwSKuc2CByRJjyiwAvGjL` | V4.0 (PDA Only) |
-| Mainnet | *Coming Soon* | TBD |
-
-**Important**: Only markets created with V4.5+ will have tokens visible in wallets. Legacy markets use PDA-only tracking.
+| **Devnet** | `HkjMQFag41pUutseBpXSXUuEwSKuc2CByRJjyiwAvGjL` | V4.0 (PDA/Aggressive) |
 
 ---
 
-## 🔬 Verification & Testing
+## 🔬 Verification
 
 ```bash
 # Verify curve mathematics
 npx tsx verify-curve.ts
-
-# Expected output at key milestones:
-# At 50M shares:  price ≈ 0.000006 SOL (6000x from genesis)
-# At 90M shares:  price ≈ 0.000015 SOL (15000x from genesis)
-# At 120M shares: price ≈ 0.000030 SOL (30000x from genesis)
 ```
 
 ### Debug Mode
-
-Check console logs during trades for detailed execution data:
+Console logs will show specific execution paths:
 ```typescript
-console.log("Buy Shares:", {
-  outcome: 'YES',
-  solIn: 1.0,
-  sharesOut: 4050000,
-  priceImpact: 0.05%
-});
+console.log("On-Chain Shares (fetched via Anchor):", "405000000000"); // 405 shares
 ```
-
-### Wallet Verification
-
-After buying shares, verify in Phantom:
-1. Open Phantom wallet
-2. Go to "Tokens" tab
-3. You should see: `[YES] - Your Market Name`
-4. Balance: Your share count
-5. Image: Your market banner
-
-**Note**: First buy creates Associated Token Accounts (~0.002 SOL rent). Subsequent buys are nearly free.
-
----
-
-## 🧠 The Philosophy
-
-**Traditional prediction markets** require institutional liquidity to function.  
-**Traditional memecoins** are zero-sum games with no resolution.
-
-**DJINN synthesizes both paradigms:**
-
-- Memecoin mechanics (bonding curve, viral potential)
-- Prediction market resolution (markets end, winners are paid)
-- Democratized returns (early community wins together)
-
-> *"The curve that turns believers into winners, and predictions into self-fulfilling prophecies."*
 
 ---
 

@@ -30,8 +30,8 @@ export default function ClaimButton({ marketPda, yesTokenMint, noTokenMint, winn
 
         const checkWinnings = async () => {
             try {
-                const mintToCheck = winningOutcome === 'YES' ? yesTokenMint : noTokenMint;
-                const balance = await getUserBalance(new PublicKey(mintToCheck));
+                const outcomeIndex = winningOutcome === 'YES' ? 0 : 1;
+                const balance = await getUserBalance(new PublicKey(marketPda), outcomeIndex);
                 setWinningShares(balance || 0);
             } catch (err) {
                 console.error("Error checking winnings:", err);
@@ -41,7 +41,7 @@ export default function ClaimButton({ marketPda, yesTokenMint, noTokenMint, winn
         };
 
         checkWinnings();
-    }, [isReady, publicKey, marketPda, winningOutcome, getUserBalance, yesTokenMint, noTokenMint]);
+    }, [isReady, publicKey, marketPda, winningOutcome, getUserBalance]);
 
     const handleClaim = async () => {
         if (!marketPda) return;

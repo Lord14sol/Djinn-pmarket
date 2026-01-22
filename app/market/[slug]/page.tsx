@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import { useRouter } from 'next/navigation';
@@ -10,7 +10,7 @@ import { LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from '@solana
 import { Clock, DollarSign, Wallet, Activity, Users, CheckCircle2, AlertCircle, Loader2, Edit2, ExternalLink, Share2, Scale, MessageCircle, Star } from 'lucide-react';
 import Link from 'next/link';
 import { useDjinnProtocol } from '@/hooks/useDjinnProtocol';
-import { simulateBuy, estimatePayoutInternal, CURVE_CONSTANT, VIRTUAL_OFFSET, getSpotPrice, getSupplyFromPrice, calculateImpliedProbability, getIgnitionStatus, getIgnitionProgress, ANCHOR_THRESHOLD } from '@/lib/core-amm';
+import { simulateBuy, estimatePayoutInternal, CURVE_CONSTANT, VIRTUAL_OFFSET, getSpotPrice, getSupplyFromPrice, calculateImpliedProbability, getIgnitionStatus, getIgnitionProgress } from '@/lib/core-amm';
 
 // Components
 import PrettyChart from '@/components/market/PrettyChart';
@@ -90,12 +90,11 @@ export default function Page() {
     const slug = params?.slug as string || '';
     const { publicKey, signTransaction } = useWallet();
     const { connection } = useConnection();
-    const { buyShares, sellShares, isReady: isContractReady } = useDjinnProtocol();
+    const { program, buyShares, sellShares, isReady: isContractReady } = useDjinnProtocol();
 
     // --- STATE ---
     // Market Data
     const [marketAccount, setMarketAccount] = useState<any>(null);
-    const [marketOutcomes, setMarketOutcomes] = useState<Outcome[]>([]);
     const [selectedOutcomeId, setSelectedOutcomeId] = useState<string>('');
     const [selectedOutcomeName, setSelectedOutcomeName] = useState<string>('');
     const [livePrice, setLivePrice] = useState<number>(50);
@@ -107,59 +106,89 @@ export default function Page() {
     useEffect(() => setMounted(true), []);
 
     // --- DJINN V3 METRICS ---
-    const { yesMcap, noMcap, yesPercent, noPercent, ignitionProgress, ignitionStatus } = useMemo(() => {
-        const p = livePrice ?? 50;
+    const {
+        yesMcap,
+        noMcap,
+        yesPercent,
+        noPercent,
+        ignitionProgress,
+        ignitionStatus,
+        spotYes,
+        spotNo
+    } = useMemo(() => {
+        let sYes = 0; let sNo = 0;
 
-        // If price is exactly 50/50, it means no trades yet - show 0 Mcap
-        if (p === 50) {
-            return {
-                yesMcap: 0,
-                noMcap: 0,
-                yesPercent: 50,
-                noPercent: 50,
-                ignitionProgress: 0,
-                ignitionStatus: 'accumulation' as const
-            };
+        // Use outcome_supplies from marketAccount if available (populated by on-chain fetch)
+        if (marketAccount?.outcome_supplies && marketAccount.outcome_supplies.length >= 2) {
+            sYes = Number(marketAccount.outcome_supplies[0]) / 1e9;
+            sNo = Number(marketAccount.outcome_supplies[1]) / 1e9;
+        } else if (marketAccount?.yes_supply !== undefined) {
+            sYes = Number(marketAccount.yes_supply) / 1e9;
+            sNo = Number(marketAccount.no_supply) / 1e9;
+        } else {
+            // Fallback: Infer supply from price ONLY for demo local markets
+            const p = livePrice ?? 50;
+            const impliedProb = p / 100;
+            // Map probability to the actual curve SOL price range
+            const approxPrice = 0.0000001 + (impliedProb * (0.95 - 0.0000001));
+            sYes = getSupplyFromPrice(approxPrice);
+            sNo = getSupplyFromPrice(0.0000001 + ((1 - impliedProb) * (0.95 - 0.0000001)));
         }
 
-        const priceSolOfYes = p / 100;
-        const priceSolOfNo = (100 - p) / 100;
+        // MCAP = Total Locked Value * Probability (Simpler and matches Total Pool)
+        // User Logic: "Whatever is in the pool but for YES or NO independently"
+        // This ensures Yes + No = Total Pool (roughly).
+        const totalS = sYes + sNo;
+        const poolSol = marketAccount?.vault_balance || 0;
 
-        // Reverse calculate supply
-        const sYes = getSupplyFromPrice(priceSolOfYes);
-        const sNo = getSupplyFromPrice(priceSolOfNo);
+        const mYes = totalS > 0 ? (poolSol * (sYes / totalS)) : 0;
+        const mNo = totalS > 0 ? (poolSol * (sNo / totalS)) : 0;
 
-        // Calculate Mcap (Price * Supply)
-        const spotYes = getSpotPrice(sYes);
-        const spotNo = getSpotPrice(sNo);
+        const currentSpotYes = getSpotPrice(sYes);
+        const currentSpotNo = getSpotPrice(sNo);
 
-        const mYes = sYes * spotYes;
-        const mNo = sNo * spotNo;
-
-        // Calculate percentages based on Mcap weight
-        const totalMcap = mYes + mNo;
-        const yP = totalMcap > 0 ? (mYes / totalMcap) * 100 : 50;
-        const nP = totalMcap > 0 ? (mNo / totalMcap) * 100 : 50;
-
-        // IGNITION STATUS (Based on YES pool)
-        const ignProg = getIgnitionProgress(sYes);
-        const ignStat = getIgnitionStatus(sYes);
+        // Weight % based on spot price ratio (50/50 if prices equal)
+        const totalP = currentSpotYes + currentSpotNo;
+        const yP = (totalP > 0) ? (currentSpotYes / totalP) * 100 : 50;
 
         return {
             yesMcap: mYes,
             noMcap: mNo,
             yesPercent: yP,
-            noPercent: nP,
-            ignitionProgress: ignProg,
-            ignitionStatus: ignStat
+            noPercent: 100 - yP,
+            ignitionProgress: getIgnitionProgress(sYes + sNo),
+            ignitionStatus: getIgnitionStatus(sYes + sNo),
+            spotYes: currentSpotYes,
+            spotNo: currentSpotNo
         };
-    }, [livePrice]);
+    }, [marketAccount, livePrice]);
+
+    // Reactive Market Outcomes
+    const marketOutcomes = useMemo(() => {
+        const base = (MULTI_OUTCOMES[slug] || [
+            { id: 'yes', title: 'YES', volume: '0', yesPrice: 50, noPrice: 50, chance: 50 },
+            { id: 'no', title: 'NO', volume: '0', yesPrice: 50, noPrice: 50, chance: 50 },
+        ]).map(o => ({ ...o }));
+
+        if (base.length >= 2) {
+            // YES
+            base[0].chance = yesPercent;
+            base[0].yesPrice = spotYes * 100; // in "cents" for display
+            base[0].volume = formatCompact(yesMcap);
+
+            // NO
+            base[1].chance = noPercent;
+            base[1].yesPrice = spotNo * 100;
+            base[1].volume = formatCompact(noMcap);
+        }
+        return base;
+    }, [slug, yesPercent, noPercent, yesMcap, noMcap, spotYes, spotNo]);
+
 
     // User Data
     const [solBalance, setSolBalance] = useState<number>(0);
     const [vaultBalanceSol, setVaultBalanceSol] = useState<number>(0); // On-chain vault balance for Prize Pool
-    const [myYesShares, setMyYesShares] = useState<number>(0);
-    const [myNoShares, setMyNoShares] = useState<number>(0);
+    const [myShares, setMyShares] = useState<Record<number, number>>({});
     const [holders, setHolders] = useState<any[]>([]);
     const [activityList, setActivityList] = useState<any[]>([]);
     const [userProfile, setUserProfile] = useState({ username: '', avatarUrl: '' });
@@ -189,17 +218,13 @@ export default function Page() {
 
     // Helper to safely normalize shares if they come in raw (e.g. > 1e12)
     const normalizeShares = (val: number) => {
-        if (val > 10_000_000_000) {
-            console.warn("⚠️ Detected RAW shares, normalizing:", val);
-            return val / 1e9;
-        }
+        // Just return the value, we'll ensure it's normalized at the source
         return val;
     };
 
-    const updateMyShares = (side: 'YES' | 'NO', amount: number) => {
+    const updateMyShares = (index: number, amount: number) => {
         const safeAmount = normalizeShares(amount);
-        if (side === 'YES') setMyYesShares(safeAmount);
-        else setMyNoShares(safeAmount);
+        setMyShares(prev => ({ ...prev, [index]: safeAmount }));
     };
 
     // Derived
@@ -215,9 +240,7 @@ export default function Page() {
 
     // --- INITIALIZATION ---
     useEffect(() => {
-        // Load Outcomes from Constant or DB (Mocking DB load from constant for now)
         const initialOutcomes = MULTI_OUTCOMES[slug] || [];
-        setMarketOutcomes(initialOutcomes);
 
         if (initialOutcomes.length > 0) {
             setSelectedOutcomeId(initialOutcomes[0].id);
@@ -315,7 +338,6 @@ export default function Page() {
         });
 
         // Update State
-        setMarketOutcomes(newOutcomes);
         setLivePrice(newTargetPrice);
 
         // Update Chart Series (Append new point for EVERY outcome)
@@ -348,34 +370,11 @@ export default function Page() {
 
     // Manual Refresh for User (in case of indexer lag)
     // Manual Refresh for User (in case of indexer lag)
+    // Manual Refresh triggers a reload of all on-chain data
     const refreshBalances = async () => {
         setIsLoading(true);
-        if (!marketAccount || !publicKey || !marketAccount.yes_token_mint || !marketAccount.no_token_mint) {
-            setIsLoading(false);
-            return;
-        }
         try {
-            const { getAssociatedTokenAddress } = await import('@solana/spl-token');
-            const yesMint = new PublicKey(marketAccount.yes_token_mint);
-            const noMint = new PublicKey(marketAccount.no_token_mint);
-
-            const yesAta = await getAssociatedTokenAddress(yesMint, publicKey);
-            const noAta = await getAssociatedTokenAddress(noMint, publicKey);
-
-            const [yesBal, noBal] = await Promise.all([
-                connection.getTokenAccountBalance(yesAta).then(r => r.value.uiAmount || 0).catch(() => 0),
-                connection.getTokenAccountBalance(noAta).then(r => r.value.uiAmount || 0).catch(() => 0)
-            ]);
-
-            console.log("Manual Refresh Balance:", { yesBal, noBal });
-            if (yesBal > 0) updateMyShares('YES', yesBal);
-            if (noBal > 0) updateMyShares('NO', noBal);
-            setMyNoShares(noBal);
-
-            // Re-fetch bets to update history if needed
-            const userBets = await supabaseDb.getUserBets(publicKey.toBase58());
-            const myBetsForSlug = userBets.filter(b => b.market_slug === effectiveSlug && !b.claimed);
-            // We trust on-chain more, but DB sync happens eventually
+            await loadMarketData();
         } catch (e) {
             console.error("Manual Refresh Failed:", e);
         } finally {
@@ -415,161 +414,120 @@ export default function Page() {
     }, [connection, publicKey]);
 
     // LOAD MARKET DATA (When effectiveSlug changes)
-    useEffect(() => {
-        const loadMarketData = async () => {
-            // Priority: Supabase -> Static Outcome Defaults -> 50
-            const dbData = await supabaseDb.getMarketData(effectiveSlug);
-            const marketInfo = await supabaseDb.getMarket(effectiveSlug);
-            console.log("MARKET INFO DEBUG:", marketInfo); // Debug Real Market detection
-            if (marketInfo) {
-                // Fetch Creator Profile to display avatar
-                if (marketInfo.creator_wallet) {
-                    try {
-                        const creatorProfile = await supabaseDb.getProfile(marketInfo.creator_wallet);
-                        if (creatorProfile) {
-                            // @ts-ignore
-                            marketInfo.creator_username = creatorProfile.username;
-                            // @ts-ignore
-                            marketInfo.creator_avatar = creatorProfile.avatar_url;
-                        }
-                    } catch (err) { console.warn("Failed to load creator profile", err); }
-                }
-                setMarketAccount(marketInfo);
-            }
-
-            if (dbData) {
-                setLivePrice(dbData.live_price);
-                setChartData(generateChartData(dbData.live_price));
-            } else {
-                // Try initial default from outcomes list if available
-                const initialOutcome = marketOutcomes.find(o => o.id === effectiveSlug);
-                const initialPrice = initialOutcome ? initialOutcome.yesPrice : 50;
-                setLivePrice(initialPrice);
-                setChartData(generateChartData(initialPrice));
-            }
-
-            // Load Activity - Optimised DB Filter
-            // We want activity for: Parent Market (slug), Current Outcome (effectiveSlug), and All Outcomes (outcomeIds)
-            const outcomeIds = marketOutcomes.map(o => o.id);
-            const targetSlugs = Array.from(new Set([slug, effectiveSlug, ...outcomeIds])); // Deduplicate
-
-            const relevantActivity = await supabaseDb.getActivity(0, 50, targetSlugs);
-            setActivityList(relevantActivity);
-
-            // Load Holders
-            const topHolders = await supabaseDb.getTopHolders(effectiveSlug);
-            setHolders(topHolders);
-
-            // Load User's Position from DB (to persist Sell button after refresh)
-            // 1. Try DB first (Optimized: Check all bets for this user in this market)
-            if (publicKey) {
-                const userBets = await supabaseDb.getUserBets(publicKey.toBase58());
-                const myBetsForSlug = userBets.filter(b => b.market_slug === effectiveSlug && !b.claimed);
-
-                // Aggregate from DB
-                const dbYes = myBetsForSlug.filter(b => b.side === 'YES').reduce((acc, b) => acc + (b.shares || 0), 0);
-                const dbNo = myBetsForSlug.filter(b => b.side === 'NO').reduce((acc, b) => acc + (b.shares || 0), 0);
-
-                if (dbYes > 0) updateMyShares('YES', dbYes);
-                if (dbNo > 0) updateMyShares('NO', dbNo);
-            }
-
-            // 2. On-Chain Fallback - Fetch from UserPosition PDA (V2 structure with outcome_index)
-            if (marketInfo?.market_pda && publicKey) {
+    const loadMarketData = useCallback(async () => {
+        if (!connection) return;
+        // Priority: Supabase -> Static Outcome Defaults -> 50
+        const dbData = await supabaseDb.getMarketData(effectiveSlug);
+        const marketInfo = await supabaseDb.getMarket(effectiveSlug);
+        console.log("MARKET INFO DEBUG:", marketInfo); // Debug Real Market detection
+        if (marketInfo) {
+            // Fetch Creator Profile to display avatar
+            if (marketInfo.creator_wallet) {
                 try {
-                    const marketPda = new PublicKey(marketInfo.market_pda);
-                    const PROGRAM_ID = new PublicKey('HkjMQFag41pUutseBpXSXUuEwSKuc2CByRJjyiwAvGjL');
-
-                    console.log("🔍 PAGE.TSX - PDA Derivation Debug:");
-                    console.log("- marketPda:", marketPda.toBase58());
-                    console.log("- publicKey:", publicKey.toBase58());
-                    console.log("- PROGRAM_ID:", PROGRAM_ID.toBase58());
-
-                    // YES Position PDA (outcome_index = 0)
-                    const [yesPda] = PublicKey.findProgramAddressSync(
-                        [Buffer.from("user_pos"), marketPda.toBuffer(), publicKey.toBuffer(), Buffer.from([0])],
-                        PROGRAM_ID
-                    );
-                    // NO Position PDA (outcome_index = 1)
-                    const [noPda] = PublicKey.findProgramAddressSync(
-                        [Buffer.from("user_pos"), marketPda.toBuffer(), publicKey.toBuffer(), Buffer.from([1])],
-                        PROGRAM_ID
-                    );
-
-                    console.log("- yesPda:", yesPda.toBase58());
-                    console.log("- noPda:", noPda.toBase58());
-
-                    // Fetch both accounts
-                    const [yesAcct, noAcct] = await Promise.all([
-                        connection.getAccountInfo(yesPda),
-                        connection.getAccountInfo(noPda)
-                    ]);
-
-                    console.log("📦 yesAcct exists?:", yesAcct !== null, "length:", yesAcct?.data?.length);
-                    console.log("📦 noAcct exists?:", noAcct !== null, "length:", noAcct?.data?.length);
-
-                    // Parse shares from UserPosition account data
-                    // Layout according to lib.rs UserPosition struct:
-                    // - 8 bytes: Anchor discriminator
-                    // - 32 bytes: market (Pubkey)
-                    // - 1 byte: outcome_index (u8)
-                    // - 16 bytes: shares (u128)
-                    // - 1 byte: claimed (bool)
-                    // - 8 bytes: claim_timestamp (i64)
-                    // Total: 66 bytes, shares starts at offset 41
-                    const parseShares = (data: Buffer): number => {
-                        console.log("📦 UserPosition buffer length:", data.length);
-                        console.log("📦 First 66 bytes (hex):", data.subarray(0, 66).toString('hex'));
-
-                        if (data.length < 57) {
-                            console.warn("⚠️ UserPosition buffer too small:", data.length);
-                            return 0;
-                        }
-
-                        // Debug: show the specific bytes we're reading for shares
-                        console.log("📦 Bytes 41-57 (shares u128 bytes):", data.subarray(41, 57).toString('hex'));
-
-                        // Read u128 as two u64s (little endian)
-                        const lo = data.readBigUInt64LE(41);
-                        const hi = data.readBigUInt64LE(49);
-                        const shares128 = lo + (hi * BigInt(2 ** 64));
-
-                        console.log("🔍 lo (u64):", lo.toString());
-                        console.log("🔍 hi (u64):", hi.toString());
-                        console.log("🔍 Raw shares u128:", shares128.toString());
-
-                        // On-chain stores raw bonding curve shares
-                        // Normalize by dividing by 1e9 for human-readable display
-                        const normalized = Number(shares128) / 1e9;
-                        console.log("🔍 Normalized shares:", normalized);
-
-                        return normalized;
-                    };
-
-                    if (yesAcct?.data) {
-                        const yesBal = parseShares(yesAcct.data);
-                        console.log("📊 YES Shares On-Chain:", yesBal);
-                        if (yesBal > 0) updateMyShares('YES', yesBal);
+                    const creatorProfile = await supabaseDb.getProfile(marketInfo.creator_wallet);
+                    if (creatorProfile) {
+                        // @ts-ignore
+                        marketInfo.creator_username = creatorProfile.username;
+                        // @ts-ignore
+                        marketInfo.creator_avatar = creatorProfile.avatar_url;
                     }
-                    if (noAcct?.data) {
-                        const noBal = parseShares(noAcct.data);
-                        console.log("📊 NO Shares On-Chain:", noBal);
-                        if (noBal > 0) updateMyShares('NO', noBal);
-                    }
-
-                    // Read vault balance for Prize Pool
-                    const [marketVaultPda] = PublicKey.findProgramAddressSync(
-                        [Buffer.from("market_vault"), marketPda.toBuffer()],
-                        PROGRAM_ID
-                    );
-                    const vaultBalance = await connection.getBalance(marketVaultPda);
-                    const vaultSol = vaultBalance / LAMPORTS_PER_SOL;
-                    console.log("💰 Vault Balance:", vaultSol, "SOL");
-                    setVaultBalanceSol(vaultSol);
-
-                } catch (e) { console.warn("On-chain UserPosition check failed:", e); }
+                } catch (err) { console.warn("Failed to load creator profile", err); }
             }
-        };
+            setMarketAccount(marketInfo);
+        }
+
+        if (dbData) {
+            setLivePrice(dbData.live_price);
+            setChartData(generateChartData(dbData.live_price));
+        } else {
+            // Try initial default from outcomes list if available
+            const initialOutcome = marketOutcomes.find(o => o.id === effectiveSlug);
+            const initialPrice = initialOutcome ? initialOutcome.yesPrice : 50;
+            setLivePrice(initialPrice);
+            setChartData(generateChartData(initialPrice));
+        }
+
+        // Load Activity - Optimised DB Filter
+        const outcomeIds = marketOutcomes.map(o => o.id);
+        const targetSlugs = Array.from(new Set([slug, effectiveSlug, ...outcomeIds])); // Deduplicate
+        const relevantActivity = await supabaseDb.getActivity(0, 50, targetSlugs);
+        setActivityList(relevantActivity);
+
+        // Load Holders
+        const topHolders = await supabaseDb.getTopHolders(effectiveSlug);
+        setHolders(topHolders);
+
+        // On-Chain Fallback
+        if (marketInfo?.market_pda && publicKey && program) {
+            try {
+                const marketPda = new PublicKey(marketInfo.market_pda);
+                // PROGRAM_ID is already imported from @/lib/program-config at the top of file (if not, we should import it)
+                // However, checking imports... it IS imported as PROGRAM_ID.
+                // But wait, line 20 of current file (based on view) has: import { PROGRAM_ID } from '@/lib/program-config';
+
+                // So we can just use it.
+
+                const decodePosition = (accInfo: any) => {
+                    if (!accInfo?.data) return 0;
+                    try {
+                        const decoded = program.coder.accounts.decode('UserPosition', accInfo.data);
+                        return Number(decoded.shares) / 1e9;
+                    } catch (e) {
+                        return 0;
+                    }
+                };
+
+                const numOutcomes = (marketInfo as any).num_outcomes || 2;
+                const pdas = [];
+                for (let n = 0; n < numOutcomes; n++) {
+                    const [pda] = PublicKey.findProgramAddressSync(
+                        [Buffer.from("user_pos"), marketPda.toBuffer(), publicKey.toBuffer(), Buffer.from([n])],
+                        PROGRAM_ID
+                    );
+                    pdas.push(pda);
+                }
+
+                const [marketAccInfo, ...pdaInfos] = await connection.getMultipleAccountsInfo([marketPda, ...pdas]);
+                const newShares: Record<number, number> = {};
+                pdaInfos.forEach((info, idx) => {
+                    newShares[idx] = decodePosition(info);
+                });
+                setMyShares(newShares);
+
+                if (marketAccInfo) {
+                    // Use coder.decode for safety with variable length data
+                    const decodedMarket = program.coder.accounts.decode('Market', marketAccInfo.data);
+                    const sYes = Number(decodedMarket.outcomeSupplies[0]) / 1e9;
+                    const sNo = Number(decodedMarket.outcomeSupplies[1]) / 1e9;
+                    const totalS = sYes + sNo;
+                    if (totalS > 0) {
+                        const newPrice = (sYes / totalS) * 100;
+                        setLivePrice(newPrice);
+                        setChartData(prev => {
+                            const newData = [...prev, { date: Date.now(), value: newPrice }];
+                            if (newData.length > 50) newData.shift();
+                            return newData;
+                        });
+                    }
+
+                    const vSol = Number(decodedMarket.vaultBalance) / LAMPORTS_PER_SOL;
+                    setVaultBalanceSol(vSol);
+                    setMarketAccount((prev: any) => ({
+                        ...prev,
+                        ...decodedMarket,
+                        outcome_supplies: decodedMarket.outcomeSupplies,
+                        creator: decodedMarket.creator.toBase58(),
+                        vault_balance: vSol
+                    }));
+                }
+            } catch (e) {
+                console.warn("On-chain UserPosition check failed:", e);
+            }
+        }
+    }, [connection, effectiveSlug, publicKey, program, marketOutcomes, slug]);
+
+    useEffect(() => {
+        loadMarketData();
 
 
 
@@ -601,16 +559,16 @@ export default function Page() {
             marketSub.unsubscribe();
             activitySub.unsubscribe();
         };
-    }, [effectiveSlug, marketOutcomes, publicKey]);
+    }, [effectiveSlug, publicKey]);
 
     // CALCULATIONS (Real-Time CPMM Simulation)
     const amountNum = parseFloat(betAmount) || 0;
     const isOverBalance = amountNum > solBalance;
     const currentPriceForSide = selectedSide === 'YES' ? livePrice : (100 - livePrice);
 
-    // User Position Helper
-    const myHeldSide = myYesShares > 0.001 ? 'YES' : (myNoShares > 0.001 ? 'NO' : null);
-    const myHeldAmount = myHeldSide === 'YES' ? myYesShares : myNoShares;
+    // User Position Helper 
+    const myHeldSide = (myShares[0] > 0.001) ? 'YES' : ((myShares[1] > 0.001) ? 'NO' : null);
+    const myHeldAmount = selectedSide === 'YES' ? (myShares[0] || 0) : (myShares[1] || 0);
     const myHeldAmountStr = (myHeldAmount || 0).toFixed(2);
 
     // Trading Preview Calculations (V3 Hybrid Curve Logic)
@@ -642,7 +600,7 @@ export default function Page() {
 
         // Safety check: Number(null) is 0, Number(undefined) is NaN.
         const supplyNum = rawSupply ? Number(rawSupply) : 0;
-        estimatedSupply = isNaN(supplyNum) ? 0 : supplyNum / 1_000_000;
+        estimatedSupply = isNaN(supplyNum) ? 0 : supplyNum / 1_000_000_000;
 
     } else if (Math.abs(currentPriceForSide - 50) < 0.5) {
         // If price is ~50% and no market data, assume New Market (0 Supply)
@@ -750,14 +708,20 @@ export default function Page() {
                 // Use dummy mints if not present (V4 doesn't use them in contract, but hook signature might expect them)
                 const dummyMint = new PublicKey("So11111111111111111111111111111111111111112");
 
+                const outcomeIndex = isMultiOutcome
+                    ? marketOutcomes.findIndex(o => o.id === selectedOutcomeId)
+                    : (selectedSide === 'YES' ? 0 : 1);
+
+                if (outcomeIndex === -1) throw new Error("Invalid outcome selection");
+
                 try {
                     txSignature = await buyShares(
                         new PublicKey(marketAccount.market_pda),
-                        selectedSide.toLowerCase() as 'yes' | 'no',
+                        outcomeIndex,
                         amountNum,
-                        marketAccount.yes_token_mint ? new PublicKey(marketAccount.yes_token_mint) : dummyMint,
-                        marketAccount.no_token_mint ? new PublicKey(marketAccount.no_token_mint) : dummyMint,
-                        new PublicKey(marketAccount.creator_wallet),
+                        new PublicKey(marketAccount.yes_token_mint || dummyMint.toBase58()),
+                        new PublicKey(marketAccount.no_token_mint || dummyMint.toBase58()),
+                        new PublicKey(marketAccount.creator || marketAccount.creator_wallet), // Use 'creator' from on-chain fetch
                         safeMinShares
                     );
                     console.log("✅ Buy TX:", txSignature);
@@ -791,19 +755,54 @@ export default function Page() {
                 virtualSolReserves: 0,
                 virtualShareReserves: 0,
                 realSolReserves: 0,
-                totalSharesMinted: getSupplyFromPrice(safePrice) // Use getSupplyFromPrice
+                totalSharesMinted: estimatedSupply // Use correct supply from scope
             });
 
             // 2. Update Price Locally (Pari-Mutuel Inverse) and in DB
-            // If Buy YES -> Price UP. If Buy NO -> Price DOWN?
-            // Actually `updateExectutionPrices` logic handles direction if passed signed impact?
-            // "If Buy YES -> Price Up". `priceImpact` is positive.
-            // If Buy NO -> "Price of NO goes up", so "Price of YES goes down".
-            // So if NO, impact should be negative?
-            // `simulateBuy` returns positive impact.
-            const impactSigned = selectedSide === 'YES' ? sim.priceImpact : -sim.priceImpact;
+            // Calculate NEW Probability from NEW Spot Price
+            // sim.endPrice is the predicted price after buy.
+            // sim.endPrice is the predicted price after buy.
+            let outcome0Supply = 0;
+            let outcome1Supply = 0;
+            if (marketAccount?.outcome_supplies && marketAccount.outcome_supplies.length >= 2) {
+                outcome0Supply = Number(marketAccount.outcome_supplies[0]) / 1e9;
+                outcome1Supply = Number(marketAccount.outcome_supplies[1]) / 1e9;
+            } else if (marketAccount?.yes_supply !== undefined) {
+                outcome0Supply = Number(marketAccount.yes_supply) / 1e9;
+                outcome1Supply = Number(marketAccount.no_supply) / 1e9;
+            }
 
-            const newPrice = updateExectutionPrices(effectiveSlug, impactSigned);
+            const otherSideSupply = selectedSide === 'YES' ? outcome1Supply : outcome0Supply;
+            const rawOtherSidePrice = getSpotPrice(otherSideSupply);
+
+            // STABILIZER: For fresh markets, clamp divisor price to avoid 100% explosion.
+            // If other side has 0 liquidity (price ~0), a small buy feels like 100%.
+            // We force a minimum "virtual liquidity price" of 0.0001 for the ratio calc.
+            const otherSidePrice = Math.max(rawOtherSidePrice, 0.0001);
+
+            // Calculate new probability for the outcome we bought
+            const newLikelihood = (sim.endPrice / (sim.endPrice + otherSidePrice)) * 100;
+
+            // Calculate Delta for the Main Chart (YES Probability)
+            let probDelta = 0;
+
+            if (selectedSide === 'YES') {
+                // Bought YES. YES Prob goes UP.
+                // newLikelihood (YES) > livePrice.
+                probDelta = newLikelihood - livePrice;
+            } else {
+                // Bought NO. NO Prob goes UP. YES Prob goes DOWN.
+                // newLikelihood is NO Prob.
+                // Main Chart is YES Prob.
+                // New YES = 100 - newLikelihood.
+                // Old YES = livePrice.
+                probDelta = (100 - newLikelihood) - livePrice;
+            }
+
+            // Safety Cap: Don't let huge jumps happen if calculation is weird
+            if (Math.abs(probDelta) > 20) probDelta = probDelta > 0 ? 20 : -20;
+
+            const newPrice = updateExectutionPrices(effectiveSlug, probDelta);
             await supabaseDb.updateMarketPrice(effectiveSlug, newPrice, usdValueInTrading);
 
             // 3. Log Activity
@@ -816,7 +815,7 @@ export default function Page() {
                 order_type: 'BUY',
                 amount: usdValueInTrading,
                 sol_amount: amountNum,
-                shares: sim.sharesReceived / 1e9,
+                shares: sim.sharesReceived,
                 market_title: staticMarketInfo.title,
                 market_slug: effectiveSlug,
                 created_at: new Date().toISOString()
@@ -832,23 +831,14 @@ export default function Page() {
                 side: selectedSide,
                 amount: usdValueInTrading,
                 sol_amount: amountNum,
-                shares: sim.sharesReceived / 1e9,
+                shares: sim.sharesReceived,
                 entry_price: safePrice * 100
             });
 
             // 5. Update UI State
             setSolBalance(prev => prev - amountNum);
 
-            // SYNC FIX: Wait for DB propagation then update holders immediately
-            await new Promise(r => setTimeout(r, 500));
-            const updatedHolders = await supabaseDb.getTopHolders(effectiveSlug);
-            setHolders(updatedHolders);
-            if (selectedSide === "YES") {
-                // normalizeShares handles it even if sharesReceived is already normalized or raw
-                setMyYesShares(prev => normalizeShares(prev + (sim.sharesReceived / 1e9)));
-            } else {
-                setMyNoShares(prev => normalizeShares(prev + (sim.sharesReceived / 1e9)));
-            }
+            await loadMarketData();
 
             // Trigger Bubble with calculated USD amount
             // usdValueInTrading is already calculated at component level and is safe to use here
@@ -874,21 +864,21 @@ export default function Page() {
                 isVisible: true,
                 type: 'SUCCESS',
                 title: 'SUCCESS',
-                message: `Successfully bought ${(sim.sharesReceived / 1e9).toFixed(2)} ${selectedSide} shares.`,
+                message: `Successfully bought ${formatCompact(sim.sharesReceived)} ${selectedSide} shares.`,
                 actionLink: txSignature ? `https://solscan.io/tx/${txSignature}?cluster=devnet` : undefined,
                 actionLabel: 'View on Solscan'
             });
 
             // Store success info for inline bubble display
             setTradeSuccessInfo({
-                shares: sim.sharesReceived / 1e9,
+                shares: sim.sharesReceived,
                 side: selectedSide,
                 txSignature: txSignature || ''
             });
 
             // Show purchase bubble notification
             const bubbleId = Date.now();
-            setPurchaseBubbles(prev => [...prev, { id: bubbleId, side: selectedSide, amount: sim.sharesReceived / 1e9 }]);
+            setPurchaseBubbles(prev => [...prev, { id: bubbleId, side: selectedSide, amount: sim.sharesReceived }]);
             // Auto-dismiss after 3 seconds
             setTimeout(() => {
                 setPurchaseBubbles(prev => prev.filter(b => b.id !== bubbleId));
@@ -918,31 +908,22 @@ export default function Page() {
                             const shares128 = (BigInt(hi) << 64n) | BigInt(lo);
                             const normalized = Number(shares128) / 1e9;
 
-                            if (outcomeIndex === 0) {
-                                updateMyShares('YES', normalized);
-                                console.log(`✅ Refreshed YES shares from contract:`, normalized);
-                            } else {
-                                updateMyShares('NO', normalized);
-                                console.log(`✅ Refreshed NO shares from contract:`, normalized);
-                            }
+                            updateMyShares(outcomeIndex, normalized);
+                            console.log(`✅ Refreshed shares for index ${outcomeIndex} from contract:`, normalized);
                         } else {
-                            // No position exists for this side - set to 0
-                            if (outcomeIndex === 0) updateMyShares('YES', 0);
-                            else updateMyShares('NO', 0);
+                            // No position exists for this index - set to 0
+                            updateMyShares(outcomeIndex, 0);
                         }
                     }
 
                     // Read market account to get real supplies and calculate actual price
-                    const marketAcct = await connection.getAccountInfo(marketPda);
-                    if (marketAcct?.data) {
-                        // Parse outcome_supplies (2 u128 values starting at offset 77)
-                        const yesSupplyLo = marketAcct.data.readBigUInt64LE(77);
-                        const yesSupplyHi = marketAcct.data.readBigUInt64LE(85);
-                        const yesSupply = Number((BigInt(yesSupplyHi) << 64n) | BigInt(yesSupplyLo)) / 1e9;
+                    // Refactored to use Anchor Fetch for safety against variable-length data
+                    try {
+                        // @ts-ignore
+                        const decodedMarket = await program.account.market.fetch(marketPda);
 
-                        const noSupplyLo = marketAcct.data.readBigUInt64LE(93);
-                        const noSupplyHi = marketAcct.data.readBigUInt64LE(101);
-                        const noSupply = Number((BigInt(noSupplyHi) << 64n) | BigInt(noSupplyLo)) / 1e9;
+                        const yesSupply = Number(decodedMarket.outcomeSupplies[0]) / 1e9;
+                        const noSupply = Number(decodedMarket.outcomeSupplies[1]) / 1e9;
 
                         console.log(`✅ Real supplies from contract - YES: ${yesSupply}, NO: ${noSupply}`);
 
@@ -961,13 +942,12 @@ export default function Page() {
                         }
 
                         // Refresh vault balance for Prize Pool
-                        const [marketVaultPda] = PublicKey.findProgramAddressSync(
-                            [Buffer.from("market_vault"), marketPda.toBuffer()],
-                            PROGRAM_ID
-                        );
-                        const vaultBalance = await connection.getBalance(marketVaultPda);
-                        setVaultBalanceSol(vaultBalance / LAMPORTS_PER_SOL);
-                        console.log(`💰 Refreshed vault after buy:`, vaultBalance / LAMPORTS_PER_SOL, "SOL");
+                        const vBalance = Number(decodedMarket.vaultBalance) / LAMPORTS_PER_SOL;
+                        setVaultBalanceSol(vBalance);
+                        console.log(`💰 Refreshed vault after buy:`, vBalance, "SOL");
+
+                    } catch (err) {
+                        console.error("Failed to fetch market via Anchor:", err);
                     }
                 } catch (e) {
                     console.warn("Failed to refresh from contract:", e);
@@ -1013,11 +993,24 @@ export default function Page() {
             await handlePlaceBet();
         } else {
             // --- SELL LOGIC (SOL Input -> Shares) ---
-            const currentPrice = selectedSide === 'YES' ? livePrice : (100 - livePrice);
-            const priceRatio = currentPrice / 100;
-            const sharesToSell = amountVal / priceRatio; // Convert SOL input to Shares
+            // const currentPrice = selectedSide === 'YES' ? livePrice : (100 - livePrice);
+            // const priceRatio = currentPrice / 100;
+            // FIX: Use actual AMM spot price for value estimation, NOT probability.
+            // Probability (livePrice) is high (e.g. 50%), but Curve Price is low (e.g. 0.000005).
+            const spotPrice = getSpotPrice(estimatedSupply);
+            const safePrice = spotPrice > 0 ? spotPrice : 0.0000001;
 
-            const availableShares = selectedSide === 'YES' ? myYesShares : myNoShares;
+            console.log("💰 SELL LOGIC DEBUG:");
+            console.log("- estimatedSupply (Normalized):", estimatedSupply);
+            console.log("- Spot Price:", spotPrice);
+            console.log("- Safe Price:", safePrice);
+
+            const sharesToSell = amountVal / safePrice; // Convert SOL input to Shares using REAL price
+            console.log("- Shares to Sell:", sharesToSell);
+
+            const availableShares = isMultiOutcome
+                ? (myShares[marketOutcomes.findIndex(o => o.id === selectedOutcomeId)] || 0)
+                : (selectedSide === 'YES' ? (myShares[0] || 0) : (myShares[1] || 0));
 
             // Allow small buffer for floating point issues or just cap it
             if (sharesToSell > availableShares * 1.001) { // 0.1% tolerance
@@ -1039,10 +1032,15 @@ export default function Page() {
                 const isRealMarket = marketAccount?.market_pda && !marketAccount.market_pda.startsWith('local_');
 
                 // Estimate Value & Fee (EXIT_FEE_BPS = 100 = 1% on-chain)
-                const estimatedSolReturn = finalSharesToSell * priceRatio; // Should match input roughly
-                const feeParam = 0.01; // 1% (matches EXIT_FEE_BPS in contract)
+                const estimatedSolReturn = finalSharesToSell * safePrice; // Use safePrice (Spot Price)
+                const feeParam = 0.01; // 1%
                 const feeAmount = estimatedSolReturn * feeParam;
                 const netSolReturn = estimatedSolReturn - feeAmount;
+
+                console.log("🧮 CALCULATION DEBUG:");
+                console.log("- Final Shares:", finalSharesToSell);
+                console.log("- Estimated SOL Return:", estimatedSolReturn);
+                console.log("- Net SOL Return:", netSolReturn);
 
                 if (isRealMarket) {
                     try {
@@ -1050,18 +1048,54 @@ export default function Page() {
                         console.log("🔗 SELL CALL - marketAccount.market_pda:", marketAccount.market_pda);
                         console.log("🔗 SELL CALL - Compare with PAGE.TSX marketInfo.market_pda above");
 
+                        // Debugging Creator
+                        // Assuming TREASURY_WALLET is defined elsewhere, e.g., in constants.ts
+                        // For now, using a placeholder if not defined in this scope.
+                        const TREASURY_WALLET = new PublicKey('Djinn4Xg2s9SPjE8g2d2222222222222222222222'); // Placeholder, replace with actual if needed
+                        const creatorKey = marketAccount.creator ? new PublicKey(marketAccount.creator) : TREASURY_WALLET;
+                        console.log("🔗 SELL CALL - Creator Key passed:", creatorKey.toBase58());
+                        console.log("🔗 SELL CALL - Is Treasury?", creatorKey.equals(TREASURY_WALLET));
+
                         // Calculate slippage protection for sell (user-configured tolerance)
                         const slippageMultiplier = 1 - (slippageTolerance / 100);
                         const minSolOut = Math.floor((netSolReturn * slippageMultiplier) * LAMPORTS_PER_SOL);
 
+                        const outcomeIndex = isMultiOutcome
+                            ? marketOutcomes.findIndex(o => o.id === selectedOutcomeId)
+                            : (selectedSide === 'YES' ? 0 : 1);
+
+                        if (outcomeIndex === -1) throw new Error("Invalid outcome for sell");
+
+                        // Safe PublicKey Construction for Mints
+                        const safeYesMint = typeof marketAccount.yes_token_mint === 'string' && marketAccount.yes_token_mint.length > 30
+                            ? new PublicKey(marketAccount.yes_token_mint)
+                            : new PublicKey("So11111111111111111111111111111111111111112");
+
+                        const safeNoMint = typeof marketAccount.no_token_mint === 'string' && marketAccount.no_token_mint.length > 30
+                            ? new PublicKey(marketAccount.no_token_mint)
+                            : new PublicKey("So11111111111111111111111111111111111111112");
+
+                        console.log("🔑 Key Debug:", {
+                            yes: safeYesMint.toBase58(),
+                            no: safeNoMint.toBase58(),
+                            creator: creatorKey.toBase58()
+                        });
+
+                        // Safe Market PDA
+                        if (!marketAccount.market_pda || marketAccount.market_pda.length < 30) {
+                            throw new Error("Invalid Market PDA: " + marketAccount.market_pda);
+                        }
+                        const safeMarketPda = new PublicKey(marketAccount.market_pda);
+
                         const tx = await sellShares(
-                            new PublicKey(marketAccount.market_pda),
-                            selectedSide.toLowerCase() as 'yes' | 'no',
+                            safeMarketPda,
+                            outcomeIndex,
                             finalSharesToSell,
-                            new PublicKey(marketAccount.yes_token_mint),
-                            new PublicKey(marketAccount.no_token_mint),
-                            minSolOut, // Slippage protection: reject if <95% of expected SOL
-                            isMaxSell // PASS MAX FLAG
+                            safeYesMint,
+                            safeNoMint,
+                            creatorKey,
+                            minSolOut,
+                            isMaxSell
                         );
                         console.log("✅ Sell TX:", tx);
                         txSignature = tx;
@@ -1092,25 +1126,52 @@ export default function Page() {
 
                 // --- COMMON UPDATES ---
                 // 1. Calculate Sell Impact (Negative)
-                // Impact Logic: Buying X amount moves price Y. Selling X should move price -Y.
-                const usdValue = finalSharesToSell * (currentPrice / 100) * solPrice;
-                // S = Price * K
-                const currentS = (currentPrice / 100) * CURVE_CONSTANT;
-                // const virtualShareReserves = INITIAL_VIRTUAL_SOL / (currentPrice / 100); // legacy
+                // Impact Logic: Selling X amount moves price DOWN.
+                const currentPrice = selectedSide === 'YES' ? livePrice : (100 - livePrice); // Re-define for scope
+
+                // Use ACTUAL value received for USD calculation
+                const usdValue = estimatedSolReturn * solPrice;
 
                 const sim = simulateBuy(estimatedSolReturn, {
                     virtualSolReserves: 0,
                     virtualShareReserves: 0,
                     realSolReserves: 0,
-                    totalSharesMinted: getSupplyFromPrice(currentPrice) // Use currentPrice
+                    totalSharesMinted: estimatedSupply // Use correct supply
                 });
 
                 // For Sell, we INVERT the impact.
-                const impactMagnitude = sim.priceImpact;
-                const impactSigned = selectedSide === 'YES' ? -impactMagnitude : impactMagnitude;
+                // For Sell, we need to calculate the NEW probability from the NEW spot price.
+                // sim.endPrice is the predicted price after sell.
+                const otherSideSupply = selectedSide === 'YES' ? noSupply : yesSupply; // Grab from scope or refetch
+                const rawOtherSidePrice = getSpotPrice(otherSideSupply);
+
+                // STABILIZER: Same floor for Sell logic to keep it symmetric
+                const otherSidePrice = Math.max(rawOtherSidePrice, 0.0001);
+
+                const newLikelihood = (sim.endPrice / (sim.endPrice + otherSidePrice)) * 100;
+                const currentLikelihood = selectedSide === 'YES' ? livePrice : (100 - livePrice);
+
+                // The delta to apply to the main chart price (which is ALWAYS YES Probability)
+                let probDelta = 0;
+
+                if (selectedSide === 'YES') {
+                    // We sold YES. Prob should go DOWN.
+                    // newLikelihood should be < currentLikelihood.
+                    probDelta = newLikelihood - currentLikelihood; // Negative
+                } else {
+                    // We sold NO. NO Prob goes DOWN. YES Prob goes UP.
+                    // newLikelihood is NO Prob. 
+                    // Main Chart is YES Prob.
+                    // New YES Prob = 100 - newLikelihood.
+                    // Old YES Prob = livePrice.
+                    probDelta = (100 - newLikelihood) - livePrice; // Positive
+                }
+
+                // Safety Cap: Don't let huge jumps happen if calculation is weird
+                if (Math.abs(probDelta) > 20) probDelta = probDelta > 0 ? 20 : -20;
 
                 // 2. Update Price
-                const newPrice = updateExectutionPrices(effectiveSlug, impactSigned);
+                const newPrice = updateExectutionPrices(effectiveSlug, probDelta);
                 await supabaseDb.updateMarketPrice(effectiveSlug, newPrice, -usdValue);
 
                 // 2b. Reduce Bet Position in DB (Wait for this!)
@@ -1148,10 +1209,11 @@ export default function Page() {
                 setSolBalance(prev => prev + netSolReturn);
 
                 // Update specific share count
-                if (selectedSide === 'YES') {
-                    setMyYesShares(prev => Math.max(0, normalizeShares(prev) - finalSharesToSell));
-                } else {
-                    setMyNoShares(prev => Math.max(0, normalizeShares(prev) - finalSharesToSell));
+                const outcomeIndex = isMultiOutcome
+                    ? marketOutcomes.findIndex(o => o.id === selectedOutcomeId)
+                    : (selectedSide === 'YES' ? 0 : 1);
+                if (outcomeIndex !== -1) {
+                    updateMyShares(outcomeIndex, Math.max(0, (myShares[outcomeIndex] || 0) - finalSharesToSell));
                 }
 
                 setLastBetDetails({
@@ -1184,68 +1246,7 @@ export default function Page() {
                         const marketPda = new PublicKey(marketAccount.market_pda);
                         const PROGRAM_ID = new PublicKey('HkjMQFag41pUutseBpXSXUuEwSKuc2CByRJjyiwAvGjL');
 
-                        // Read BOTH UserPositions (YES and NO) after sell
-                        for (const outcomeIndex of [0, 1]) {
-                            const [userPositionPda] = PublicKey.findProgramAddressSync(
-                                [Buffer.from("user_pos"), marketPda.toBuffer(), publicKey.toBuffer(), Buffer.from([outcomeIndex])],
-                                PROGRAM_ID
-                            );
-
-                            const posAcct = await connection.getAccountInfo(userPositionPda);
-                            if (posAcct?.data && posAcct.data.length >= 57) {
-                                // Parse shares from UserPosition: offset 41-49 (u128) - matching hook
-                                const lo = posAcct.data.readBigUInt64LE(41);
-                                const hi = posAcct.data.readBigUInt64LE(49);
-                                const shares128 = (BigInt(hi) << 64n) | BigInt(lo);
-                                const normalized = Number(shares128) / 1e9;
-
-                                if (outcomeIndex === 0) {
-                                    updateMyShares('YES', normalized);
-                                    console.log(`✅ Refreshed YES shares after sell:`, normalized);
-                                } else {
-                                    updateMyShares('NO', normalized);
-                                    console.log(`✅ Refreshed NO shares after sell:`, normalized);
-                                }
-                            } else {
-                                // No position exists for this side - set to 0
-                                if (outcomeIndex === 0) updateMyShares('YES', 0);
-                                else updateMyShares('NO', 0);
-                            }
-                        }
-
-                        // Read market to update price
-                        const marketAcct = await connection.getAccountInfo(marketPda);
-                        if (marketAcct?.data) {
-                            const yesSupplyLo = marketAcct.data.readBigUInt64LE(77);
-                            const yesSupplyHi = marketAcct.data.readBigUInt64LE(85);
-                            const yesSupply = Number((BigInt(yesSupplyHi) << 64n) | BigInt(yesSupplyLo)) / 1e9;
-
-                            const noSupplyLo = marketAcct.data.readBigUInt64LE(93);
-                            const noSupplyHi = marketAcct.data.readBigUInt64LE(101);
-                            const noSupply = Number((BigInt(noSupplyHi) << 64n) | BigInt(noSupplyLo)) / 1e9;
-
-                            const totalSupply = yesSupply + noSupply;
-                            if (totalSupply > 0) {
-                                const actualPrice = (yesSupply / totalSupply) * 100;
-                                setLivePrice(actualPrice);
-                                // Also update chart with new data point
-                                setChartData(prev => {
-                                    const newData = [...prev, { date: Date.now(), value: actualPrice }];
-                                    if (newData.length > 50) newData.shift();
-                                    return newData;
-                                });
-                                console.log(`✅ Refreshed price after sell:`, actualPrice);
-                            }
-
-                            // Refresh vault balance for Prize Pool
-                            const [marketVaultPda] = PublicKey.findProgramAddressSync(
-                                [Buffer.from("market_vault"), marketPda.toBuffer()],
-                                PROGRAM_ID
-                            );
-                            const vaultBalance = await connection.getBalance(marketVaultPda);
-                            setVaultBalanceSol(vaultBalance / LAMPORTS_PER_SOL);
-                            console.log(`💰 Refreshed vault after sell:`, vaultBalance / LAMPORTS_PER_SOL, "SOL");
-                        }
+                        await loadMarketData();
                     } catch (e) {
                         console.warn("Failed to refresh after sell:", e);
                     }
@@ -1398,11 +1399,24 @@ export default function Page() {
                                         <span className="text-[10px] font-bold uppercase text-gray-500 tracking-wide mb-1">
                                             {(marketAccount?.options && marketAccount.options[0]) || 'YES'} Mcap
                                         </span>
-                                        <span className="text-2xl font-extrabold text-white tracking-tight">
-                                            ${mounted ? formatCompact(yesMcap * (solPrice || 200)) : '0'}
-                                        </span>
+                                        <div className="flex flex-col items-center">
+                                            <span className="text-2xl font-extrabold text-white tracking-tight">
+                                                {formatCompact(yesMcap)} SOL
+                                            </span>
+                                            <span className="text-[11px] font-bold text-gray-400">
+                                                ${mounted ? formatCompact(yesMcap * (solPrice || 200)) : '0'} USD
+                                            </span>
+                                        </div>
                                     </div>
-                                    <div className="w-px h-16 bg-white/10" />
+
+                                    <div className="flex flex-col items-center px-4 border-l border-r border-white/10">
+                                        <span className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Total Pool</span>
+                                        <span className="text-xl font-black text-[#F492B7] drop-shadow-[0_0_8px_rgba(244,146,183,0.3)]">
+                                            {formatCompact(vaultBalanceSol)} SOL
+                                        </span>
+                                        <span className="text-[9px] font-bold text-gray-500 uppercase">Liquidity</span>
+                                    </div>
+
                                     <div className="flex flex-col items-center flex-1">
                                         <span className="text-3xl font-black text-[#EF4444] mb-1">
                                             {mounted ? noPercent.toFixed(0) : '50'}%
@@ -1410,9 +1424,14 @@ export default function Page() {
                                         <span className="text-[10px] font-bold uppercase text-gray-500 tracking-wide mb-1">
                                             {(marketAccount?.options && marketAccount.options[1]) || 'NO'} Mcap
                                         </span>
-                                        <span className="text-2xl font-extrabold text-white tracking-tight">
-                                            ${mounted ? formatCompact(noMcap * (solPrice || 200)) : '0'}
-                                        </span>
+                                        <div className="flex flex-col items-center">
+                                            <span className="text-2xl font-extrabold text-white tracking-tight">
+                                                {formatCompact(noMcap)} SOL
+                                            </span>
+                                            <span className="text-[11px] font-bold text-gray-400">
+                                                ${mounted ? formatCompact(noMcap * (solPrice || 200)) : '0'} USD
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -1557,33 +1576,41 @@ export default function Page() {
                                         {holders.filter(h => h.yesShares > 0.1).sort((a, b) => b.yesShares - a.yesShares).length === 0 ? (
                                             <div className="py-6 text-gray-500 text-sm italic">No holders</div>
                                         ) : (
-                                            holders.filter(h => h.yesShares > 0.1).sort((a, b) => b.yesShares - a.yesShares).map((h, i) => (
-                                                <div key={i} className="flex items-center justify-between py-3 border-b border-white/5 group hover:bg-white/5 hover:px-2 rounded transition-all -mx-2 px-2 cursor-pointer" onClick={() => window.location.href = `/profile/${h.name === h.wallet_address.slice(0, 6) + '...' ? h.wallet_address : h.name}`}>
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="relative">
-                                                            <div className="w-8 h-8 rounded-full bg-[#1A1A1A] overflow-hidden">
-                                                                {h.avatar ? <img src={h.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-gradient-to-br from-purple-500 to-indigo-600" />}
+                                            holders.filter(h => h.yesShares > 0.001).sort((a, b) => b.yesShares - a.yesShares).map((h: any, i: number) => {
+                                                const isMe = publicKey && h.wallet_address === publicKey.toBase58();
+                                                return (
+                                                    <div
+                                                        key={i}
+                                                        className={`flex items-center justify-between py-3 border-b border-white/5 group hover:bg-white/5 hover:px-2 rounded transition-all -mx-2 px-2 cursor-pointer ${isMe ? 'bg-white/5 border-l-2 border-l-[#10B981]' : ''}`}
+                                                        onClick={() => window.location.href = `/profile/${h.wallet_address}`}
+                                                    >
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="relative">
+                                                                <div className="w-8 h-8 rounded-full bg-[#1A1A1A] overflow-hidden border border-white/10">
+                                                                    {h.avatar ? <img src={h.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-gradient-to-br from-[#10B981] to-[#059669] opacity-80" />}
+                                                                </div>
+                                                                {/* Rank Badge */}
+                                                                <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold border border-[#0B0E14] 
+                                                                        ${i === 0 ? 'bg-gradient-to-br from-yellow-300 to-amber-500 text-black' :
+                                                                        i === 1 ? 'bg-gradient-to-br from-gray-300 to-gray-400 text-black' :
+                                                                            i === 2 ? 'bg-gradient-to-br from-orange-300 to-amber-700 text-white' :
+                                                                                'bg-gray-800 text-gray-400'}`}>
+                                                                    {i + 1}
+                                                                </div>
                                                             </div>
-                                                            {/* Rank Badge */}
-                                                            <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold border border-[#0B0E14] 
-                                                                    ${i === 0 ? 'bg-gradient-to-br from-yellow-300 to-amber-500 text-black' :
-                                                                    i === 1 ? 'bg-gradient-to-br from-gray-300 to-gray-400 text-black' :
-                                                                        i === 2 ? 'bg-gradient-to-br from-orange-300 to-amber-700 text-white' :
-                                                                            'bg-gray-800 text-gray-400'}`}>
-                                                                {i + 1}
-                                                            </div>
-                                                        </div>
-                                                        <div>
-                                                            <div className="text-sm font-bold text-white group-hover:text-[#F492B7] transition-colors truncat max-w-[120px]">
-                                                                {h.name}
-                                                            </div>
-                                                            <div className="text-xs font-medium text-[#10B981] font-mono">
-                                                                {h.yesShares.toLocaleString(undefined, { maximumFractionDigits: 0 })} shares
+                                                            <div>
+                                                                <div className="text-sm font-bold text-white group-hover:text-[#F492B7] transition-colors truncate max-w-[120px]">
+                                                                    {h.name} {isMe && <span className="text-[9px] bg-[#10B981]/20 text-[#10B981] px-1 rounded ml-1">YOU</span>}
+                                                                </div>
+                                                                <div className="text-xs font-medium text-[#10B981] font-mono flex items-center gap-1">
+                                                                    <span className="w-1.5 h-1.5 rounded-full bg-[#10B981]" />
+                                                                    {formatCompact(h.yesShares)} <span className="text-[10px] text-gray-500">YES</span>
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     </div>
-                                                </div>
-                                            ))
+                                                );
+                                            })
                                         )}
                                     </div>
                                 </div>
@@ -1598,33 +1625,41 @@ export default function Page() {
                                         {holders.filter(h => h.noShares > 0.1).sort((a, b) => b.noShares - a.noShares).length === 0 ? (
                                             <div className="py-6 text-gray-500 text-sm italic">No holders</div>
                                         ) : (
-                                            holders.filter(h => h.noShares > 0.1).sort((a, b) => b.noShares - a.noShares).map((h, i) => (
-                                                <div key={i} className="flex items-center justify-between py-3 border-b border-white/5 group hover:bg-white/5 hover:px-2 rounded transition-all -mx-2 px-2 cursor-pointer" onClick={() => window.location.href = `/profile/${h.name === h.wallet_address.slice(0, 6) + '...' ? h.wallet_address : h.name}`}>
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="relative">
-                                                            <div className="w-8 h-8 rounded-full bg-[#1A1A1A] overflow-hidden">
-                                                                {h.avatar ? <img src={h.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-gradient-to-br from-pink-500 to-rose-600" />}
+                                            holders.filter(h => h.noShares > 0.001).sort((a, b) => b.noShares - a.noShares).map((h: any, i: number) => {
+                                                const isMe = publicKey && h.wallet_address === publicKey.toBase58();
+                                                return (
+                                                    <div
+                                                        key={i}
+                                                        className={`flex items-center justify-between py-3 border-b border-white/5 group hover:bg-white/5 hover:px-2 rounded transition-all -mx-2 px-2 cursor-pointer ${isMe ? 'bg-white/5 border-l-2 border-l-[#EF4444]' : ''}`}
+                                                        onClick={() => window.location.href = `/profile/${h.wallet_address}`}
+                                                    >
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="relative">
+                                                                <div className="w-8 h-8 rounded-full bg-[#1A1A1A] overflow-hidden border border-white/10">
+                                                                    {h.avatar ? <img src={h.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-gradient-to-br from-[#EF4444] to-[#B91C1C] opacity-80" />}
+                                                                </div>
+                                                                {/* Rank Badge */}
+                                                                <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold border border-[#0B0E14] 
+                                                                        ${i === 0 ? 'bg-gradient-to-br from-yellow-300 to-amber-500 text-black' :
+                                                                        i === 1 ? 'bg-gradient-to-br from-gray-300 to-gray-400 text-black' :
+                                                                            i === 2 ? 'bg-gradient-to-br from-orange-300 to-amber-700 text-white' :
+                                                                                'bg-gray-800 text-gray-400'}`}>
+                                                                    {i + 1}
+                                                                </div>
                                                             </div>
-                                                            {/* Rank Badge */}
-                                                            <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold border border-[#0B0E14] 
-                                                                    ${i === 0 ? 'bg-gradient-to-br from-yellow-300 to-amber-500 text-black' :
-                                                                    i === 1 ? 'bg-gradient-to-br from-gray-300 to-gray-400 text-black' :
-                                                                        i === 2 ? 'bg-gradient-to-br from-orange-300 to-amber-700 text-white' :
-                                                                            'bg-gray-800 text-gray-400'}`}>
-                                                                {i + 1}
-                                                            </div>
-                                                        </div>
-                                                        <div>
-                                                            <div className="text-sm font-bold text-white group-hover:text-[#F492B7] transition-colors truncate max-w-[120px]">
-                                                                {h.name}
-                                                            </div>
-                                                            <div className="text-xs font-medium text-red-500 font-mono">
-                                                                {h.noShares.toLocaleString(undefined, { maximumFractionDigits: 0 })} shares
+                                                            <div>
+                                                                <div className="text-sm font-bold text-white group-hover:text-[#F492B7] transition-colors truncate max-w-[120px]">
+                                                                    {h.name} {isMe && <span className="text-[9px] bg-[#EF4444]/20 text-[#EF4444] px-1 rounded ml-1">YOU</span>}
+                                                                </div>
+                                                                <div className="text-xs font-medium text-[#EF4444] font-mono flex items-center gap-1">
+                                                                    <span className="w-1.5 h-1.5 rounded-full bg-[#EF4444]" />
+                                                                    {formatCompact(h.noShares)} <span className="text-[10px] text-gray-500">NO</span>
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     </div>
-                                                </div>
-                                            ))
+                                                );
+                                            })
                                         )}
                                     </div>
                                 </div>
@@ -1699,19 +1734,28 @@ export default function Page() {
                                             <button
                                                 key={pct}
                                                 onClick={() => {
-                                                    const sharesOwned = selectedSide === 'YES' ? myYesShares : myNoShares;
+                                                    const sharesOwned = isMultiOutcome
+                                                        ? (myShares[marketOutcomes.findIndex(o => o.id === selectedOutcomeId)] || 0)
+                                                        : (selectedSide === 'YES' ? (myShares[0] || 0) : (myShares[1] || 0));
                                                     if (sharesOwned <= 0) return;
+
+                                                    if (pct === 100) {
+                                                        setIsMaxSell(true);
+                                                    } else {
+                                                        setIsMaxSell(false);
+                                                    }
 
                                                     const cPrice = selectedSide === 'YES' ? (livePrice ?? 50) : (100 - (livePrice ?? 50));
                                                     const sharesToSell = sharesOwned * (pct / 100);
-                                                    // Raw estimate based on price
                                                     let estimatedValue = sharesToSell * (cPrice / 100);
-                                                    // CAP at vault balance (can't receive more than what's in the vault)
-                                                    const maxPayout = Math.max(0, vaultBalanceSol * 0.95); // 5% buffer for fees
+                                                    const maxPayout = Math.max(0, vaultBalanceSol * 0.95);
                                                     estimatedValue = Math.min(estimatedValue, maxPayout);
                                                     setBetAmount(estimatedValue.toFixed(4));
                                                 }}
-                                                className="flex-1 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-[10px] font-bold text-gray-400 hover:text-white transition-colors border border-white/5"
+                                                className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${(pct === 100 && isMaxSell)
+                                                    ? 'bg-white/20 text-white border-white/20'
+                                                    : 'bg-white/5 text-gray-400 border-white/5 hover:bg-white/10 hover:text-white'
+                                                    }`}
                                             >
                                                 {pct}%
                                             </button>
@@ -1823,7 +1867,9 @@ export default function Page() {
                                                 <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">Shares to Sell</span>
                                                 <span className="text-4xl font-extralight text-white leading-none tracking-tight">
                                                     {(() => {
-                                                        const sharesOwned = selectedSide === 'YES' ? myYesShares : myNoShares;
+                                                        const sharesOwned = isMultiOutcome
+                                                            ? (myShares[marketOutcomes.findIndex(o => o.id === selectedOutcomeId)] || 0)
+                                                            : (selectedSide === 'YES' ? (myShares[0] || 0) : (myShares[1] || 0));
                                                         const price = currentPriceForSide / 100;
 
                                                         console.log("🐞 SELL DISPLAY DEBUG:");
@@ -1831,15 +1877,11 @@ export default function Page() {
                                                         console.log("- price (0-1):", price);
                                                         console.log("- sharesOwned:", sharesOwned);
 
+                                                        if (isMaxSell) return formatCompact(sharesOwned);
                                                         if (!betAmount || price <= 0) return '0';
 
                                                         const shares = parseFloat(betAmount) / price;
-                                                        console.log("- Calculated shares:", shares);
-
-                                                        // Cap at shares owned
                                                         const capped = Math.min(shares, sharesOwned);
-                                                        console.log("- Capped shares:", capped);
-
                                                         return formatCompact(capped);
                                                     })()}
                                                 </span>
@@ -1847,7 +1889,21 @@ export default function Page() {
                                             <div className="text-right">
                                                 <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">You Get</span>
                                                 <span className="text-xl font-bold text-[#10B981] font-mono">
-                                                    ◎{(parseFloat(betAmount || '0') * 0.99).toFixed(4)} SOL
+                                                    ◎{(() => {
+                                                        // SELL LOGIC DISPLAY
+                                                        // Use same safe logic as handleTrade
+                                                        const spotPrice = getSpotPrice(estimatedSupply);
+                                                        const safePrice = spotPrice > 0 ? spotPrice : 0.0000001;
+                                                        // If Max Sell, use sharesOwned directly
+                                                        // If input amount is SOL, we reverse it? 
+                                                        // Wait, the input is SOL value user wants to extract?
+                                                        // OR is the input always SOL? 
+                                                        // "You Receive (Est)" -> 0.9405 SOL.
+                                                        // So betAmount IS SOL.
+                                                        // So "You Get" should be betAmount - fee?
+
+                                                        return (parseFloat(betAmount || '0') * 0.99).toFixed(4);
+                                                    })()} SOL
                                                 </span>
                                             </div>
                                         </div>

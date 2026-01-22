@@ -56,7 +56,10 @@ export default function OutcomeList({ outcomes, selectedId, onSelect, onBuyClick
                                 }`}
                             onClick={() => {
                                 onSelect(outcome.id);
-                                if (onBuyClick) onBuyClick(outcome.id, outcome.title, 'YES', outcome.yesPrice);
+                                if (onBuyClick) {
+                                    // For multi-outcome, we treat everything as a 'Buy' on that specific outcome
+                                    onBuyClick(outcome.id, outcome.title, 'YES', outcome.yesPrice);
+                                }
                             }}
                         >
                             {/* Left: Identity (Image + Name) */}

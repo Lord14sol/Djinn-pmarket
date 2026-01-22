@@ -139,11 +139,6 @@
           "name": "systemProgram",
           "isMut": false,
           "isSigner": false
-        },
-        {
-          "name": "marketCreator",
-          "isMut": true,
-          "isSigner": false
         }
       ],
       "args": [

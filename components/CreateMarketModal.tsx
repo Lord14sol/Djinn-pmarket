@@ -43,8 +43,11 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
         { id: 1, name: '' },
         { id: 2, name: '' }
     ]);
-    const [initialBuyAmount, setInitialBuyAmount] = useState('0');
+    const [initialBuyAmount, setInitialBuyAmount] = useState('50'); // Default Low
     const [initialBuySide, setInitialBuySide] = useState<'yes' | 'no'>('yes');
+    const [resolutionSeconds, setResolutionSeconds] = useState(7 * 24 * 60 * 60); // Default 7d
+    const [customDate, setCustomDate] = useState('');
+    const [showDatePicker, setShowDatePicker] = useState(false);
     const [error, setError] = useState('');
     const [successData, setSuccessData] = useState<{
         txSignature: string;
@@ -159,7 +162,14 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
 
             const slug = `${sanitizedName}-${timestamp}`;
 
-            const resolutionTime = Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60); // 7 days
+            // Calculate Resolution Time
+            let finalResolutionTime = 0;
+            if (showDatePicker && customDate) {
+                finalResolutionTime = Math.floor(new Date(customDate).getTime() / 1000);
+            } else {
+                finalResolutionTime = Math.floor(Date.now() / 1000) + resolutionSeconds;
+            }
+
             // Upload image to IPFS (returns short URL, not base64)
             // This is required because Solana transactions have ~1KB limit
             let finalBanner = "https://arweave.net/djinn-placeholder";
@@ -190,7 +200,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                     const contractPromise = createMarketOnChain(
                         poolName,
                         poolName, // Using poolName as description for now
-                        new Date(resolutionTime * 1000),
+                        new Date(finalResolutionTime * 1000),
                         sourceUrl, // Veritas
                         finalBanner || "https://arweave.net/placeholder", // metadataUri (Metaplex)
                         numOutcomes, // Send number of outcomes
@@ -229,7 +239,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                 title: poolName,
                 creator_wallet: publicKey.toString(),
                 category: finalCategory, // Auto-detected category
-                end_date: new Date(resolutionTime * 1000).toISOString(),
+                end_date: new Date(finalResolutionTime * 1000).toISOString(),
                 market_pda: marketPDA,
                 yes_token_mint: yesTokenMint,
                 no_token_mint: noTokenMint,
@@ -361,13 +371,17 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                                 <span className="text-gray-500">Market PDA</span>
                                 <span className="text-[#F492B7] truncate max-w-[180px]">{successData.marketPda.slice(0, 8)}...{successData.marketPda.slice(-6)}</span>
                             </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-gray-500">YES Token</span>
-                                <span className="text-green-400 truncate max-w-[180px]">{successData.yesMint.slice(0, 8)}...{successData.yesMint.slice(-6)}</span>
+                            <div className="flex justify-between items-center border-t border-white/5 pt-3">
+                                <span className="text-gray-500">Asset Model</span>
+                                <span className="text-white">Virtual Shares ⚡</span>
                             </div>
                             <div className="flex justify-between items-center">
-                                <span className="text-gray-500">NO Token</span>
-                                <span className="text-red-400 truncate max-w-[180px]">{successData.noMint.slice(0, 8)}...{successData.noMint.slice(-6)}</span>
+                                <span className="text-gray-500">Liquidity</span>
+                                <span className="text-white">Shared Vault 🏦</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-500">Outcomes</span>
+                                <span className="text-[#F492B7]">{options.length} (YES/NO/...)</span>
                             </div>
                         </div>
 
@@ -429,6 +443,89 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                                 </div>
 
                                 <input type="text" placeholder="Enter question..." className="w-full bg-black/40 border border-white/10 rounded-xl p-5 text-lg font-bold outline-none focus:border-[#F492B7]" value={poolName} onChange={(e) => setPoolName(e.target.value)} />
+
+                                {/* NEW: LIQUIDITY DEPTH */}
+                                <div>
+                                    <div className="flex justify-between items-center mb-2">
+                                        <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                                            Liquidity Depth (Optional)
+                                        </label>
+                                        <span className="text-xs text-[#F492B7] font-bold">
+                                            {initialBuyAmount} SOL
+                                        </span>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        {[
+                                            { label: '50 SOL', value: '50', desc: 'Low' },
+                                            { label: '150 SOL', value: '150', desc: 'Medium' },
+                                            { label: '400 SOL', value: '400', desc: 'High' }
+                                        ].map((preset) => (
+                                            <button
+                                                key={preset.value}
+                                                onClick={() => setInitialBuyAmount(preset.value)}
+                                                className={`p-3 rounded-xl border transition-all text-center ${initialBuyAmount === preset.value
+                                                    ? 'bg-[#F492B7] border-[#F492B7] text-black'
+                                                    : 'bg-white/5 border-white/5 text-gray-400 hover:border-white/20'
+                                                    }`}
+                                            >
+                                                <div className="text-lg font-black">{preset.label}</div>
+                                                <div className="text-[10px] uppercase opacity-70 font-bold">{preset.desc}</div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* NEW: RESOLUTION TIME */}
+                                <div>
+                                    <div className="flex justify-between items-center mb-2">
+                                        <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                                            Resolution Time
+                                        </label>
+                                    </div>
+
+                                    {/* Grid of Options */}
+                                    <div className="grid grid-cols-4 gap-2 mb-3">
+                                        {[
+                                            { label: '15 min', val: 15 * 60 },
+                                            { label: '1 hour', val: 60 * 60 },
+                                            { label: '4 hours', val: 4 * 60 * 60 },
+                                            { label: '1 day', val: 24 * 60 * 60 },
+                                            { label: '7 days', val: 7 * 24 * 60 * 60 },
+                                            { label: '30 days', val: 30 * 24 * 60 * 60 },
+                                            { label: '90 days', val: 90 * 24 * 60 * 60 }
+                                        ].map((opt) => (
+                                            <button
+                                                key={opt.label}
+                                                onClick={() => { setResolutionSeconds(opt.val); setShowDatePicker(false); }}
+                                                className={`px-2 py-2 rounded-lg text-xs font-bold transition-all ${!showDatePicker && resolutionSeconds === opt.val
+                                                    ? 'bg-white text-black'
+                                                    : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                                                    }`}
+                                            >
+                                                {opt.label}
+                                            </button>
+                                        ))}
+                                        <button
+                                            onClick={() => setShowDatePicker(true)}
+                                            className={`px-2 py-2 rounded-lg text-xs font-bold transition-all ${showDatePicker
+                                                ? 'bg-[#F492B7] text-black'
+                                                : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                                                }`}
+                                        >
+                                            Pick Date
+                                        </button>
+                                    </div>
+
+                                    {/* Custom Date Picker */}
+                                    {showDatePicker && (
+                                        <input
+                                            type="datetime-local"
+                                            className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-sm font-medium outline-none focus:border-[#F492B7] text-white color-scheme-dark"
+                                            value={customDate}
+                                            onChange={(e) => setCustomDate(e.target.value)}
+                                        />
+                                    )}
+                                </div>
 
                                 <div className="space-y-2">
                                     <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest block">Source of Truth (URL)</label>

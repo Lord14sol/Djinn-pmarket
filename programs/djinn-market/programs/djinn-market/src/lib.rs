@@ -14,15 +14,17 @@ pub const TOTAL_SUPPLY: u128 = 1_000_000_000_000_000_000; // 1B Shares * 1e9 (9 
 pub const ANCHOR_THRESHOLD: u128 = 100_000_000_000_000_000; // 100M * 1e9
 
 // PHASE BOUNDARIES (Scaled by 1e9) - AGGRESSIVE CURVE
-pub const PHASE1_END: u128 = 50_000_000_000_000_000;   // 50M → 6x price
-pub const PHASE2_END: u128 = 90_000_000_000_000_000;   // 90M → 15x price
-pub const PHASE3_START: u128 = 90_000_000_000_000_000; // 90M → MONSTRUOSO
+pub const PHASE1_END: u128 = 100_000_000_000_000_000;  // 100M
+pub const PHASE2_END: u128 = 200_000_000_000_000_000;  // 200M
+pub const PHASE3_START: u128 = 200_000_000_000_000_000;
 
 // PRICE CONSTANTS (in Lamports, 1 SOL = 1e9 Lamports)
-pub const P_START: u128 = 1;           // 0.000000001 SOL (for precision)
-pub const P_50: u128 = 6_000;          // 0.000006 SOL = 6x from start (Phase 1 end)
-pub const P_90: u128 = 15_000;         // 0.000015 SOL = 15x from start (Phase 2 end)
-pub const P_MAX: u128 = 950_000_000;   // 0.95 SOL = 950M nanoSOL
+pub const P_START: u128 = 100;         // Starting floor
+pub const P_50: u128 = 5_000;          // Progressive gains
+pub const P_90: u128 = 25_000;         // Acceleration
+pub const P_MAX: u128 = 950_000_000;   // 0.95 SOL Max
+pub const VIRTUAL_ANCHOR: u128 = 20_000_000_000_000_000; // 20M Shares "Virtual Support"
+
 
 // SIGMOID K (Scaled: k * 1e18 for fixed-point)
 // ⚠️ LINEAR APPROXIMATION: norm_sig = k * x (not exp-based sigmoid!)
@@ -53,27 +55,25 @@ fn get_linear_slope() -> u128 {
 
 /// Calculate spot price at given supply (in nanoSOL/Lamports)
 pub fn calculate_spot_price(supply: u128) -> Result<u128> {
-    if supply == 0 {
-        return Ok(P_START);
-    }
+    // VIRTUAL ANCHOR: We add this to make the curve start at a stable point (50/50 odds)
+    let effective_supply = supply.checked_add(VIRTUAL_ANCHOR).unwrap();
 
-    if supply <= PHASE1_END {
+    if effective_supply <= PHASE1_END {
         // PHASE 1: LINEAR RAMP
-        // P = P_START + (slope * supply)
         let slope = get_linear_slope();
-        let price_delta = (slope * supply) / K_SCALE_FACTOR;
+        let price_delta = (slope * effective_supply) / K_SCALE_FACTOR;
         return Ok(P_START + price_delta);
-    } else if supply <= PHASE2_END {
+    } else if effective_supply <= PHASE2_END {
         // PHASE 2: QUADRATIC BRIDGE
-        // Coefficients computed at runtime for precision
-        let price = calculate_bridge_price(supply)?;
+        let price = calculate_bridge_price(effective_supply)?;
         return Ok(price);
     } else {
-        // PHASE 3: SIGMOID (150x Strategy)
-        let price = calculate_sigmoid_price(supply)?;
+        // PHASE 3: SIGMOID
+        let price = calculate_sigmoid_price(effective_supply)?;
         return Ok(price);
     }
 }
+
 
 /// Quadratic Bridge: P = P_50 + (P_90 - P_50) * t²
 fn calculate_bridge_price(supply: u128) -> Result<u128> {
@@ -350,20 +350,28 @@ pub mod djinn_market {
         let shares_u128 = shares_to_sell as u128;
         let current_supply = market.outcome_supplies[outcome_index as usize];
 
-        // 1. Calculate SOL value of shares
+        // 1. Calculate SOL value of shares (Bonding Curve Value)
         let new_supply = current_supply.checked_sub(shares_u128).unwrap();
-        let refund = calculate_cost(new_supply, current_supply)?;
+        let refund_gross = calculate_cost(new_supply, current_supply)?;
 
-        // 2. Exit fee (1%)
-        let fee = (refund * EXIT_FEE_BPS) / BPS_DENOMINATOR;
-        let net_refund = refund - fee;
+        // 2. SAFETY CLAMP: Ensure we don't try to refund more than what's in the vault
+        // Fees and rounding can create small differences between curve value and actual SOL.
+        let actual_refund = if refund_gross > market.vault_balance {
+            market.vault_balance
+        } else {
+            refund_gross
+        };
 
-        // 3. Update state
+        // 3. Exit fee (1%)
+        let fee = (actual_refund * EXIT_FEE_BPS) / BPS_DENOMINATOR;
+        let net_refund = actual_refund - fee;
+
+        // 4. Update state
         market.outcome_supplies[outcome_index as usize] = new_supply;
-        market.vault_balance = market.vault_balance.checked_sub(refund).unwrap();
+        market.vault_balance = market.vault_balance.checked_sub(actual_refund).unwrap();
         position.shares = position.shares.checked_sub(shares_u128).unwrap();
         
-        // 4. Transfer from vault (CPI with signer)
+        // 5. Transfer SOL to User
         let market_key = market.key();
         let seeds = &[
             b"market_vault",
@@ -385,6 +393,58 @@ pub mod djinn_market {
                 net_refund as u64,
             )?;
         }
+
+        // 6. Transfer Fee (SPLIT LOGIC: 50/50 between Creator and Treasury)
+        if fee > 0 {
+            let creator = market.creator;
+            let treasury = ctx.accounts.protocol_treasury.key();
+            
+            if creator == treasury {
+                // G1 created market: 100% to treasury
+                anchor_lang::system_program::transfer(
+                    CpiContext::new_with_signer(
+                        ctx.accounts.system_program.to_account_info(),
+                        anchor_lang::system_program::Transfer {
+                            from: ctx.accounts.market_vault.to_account_info(),
+                            to: ctx.accounts.protocol_treasury.to_account_info(),
+                        },
+                        signer,
+                    ),
+                    fee as u64,
+                )?;
+            } else {
+                // User created market: 50/50 split
+                let creator_cut = fee / 2;
+                let treasury_cut = fee - creator_cut;
+                
+                // To Treasury
+                anchor_lang::system_program::transfer(
+                    CpiContext::new_with_signer(
+                        ctx.accounts.system_program.to_account_info(),
+                        anchor_lang::system_program::Transfer {
+                            from: ctx.accounts.market_vault.to_account_info(),
+                            to: ctx.accounts.protocol_treasury.to_account_info(),
+                        },
+                        signer,
+                    ),
+                     treasury_cut as u64,
+                )?;
+                
+                // To Creator
+                anchor_lang::system_program::transfer(
+                    CpiContext::new_with_signer(
+                        ctx.accounts.system_program.to_account_info(),
+                        anchor_lang::system_program::Transfer {
+                            from: ctx.accounts.market_vault.to_account_info(),
+                            to: ctx.accounts.market_creator.to_account_info(),
+                        },
+                        signer,
+                    ),
+                    creator_cut as u64,
+                )?;
+            }
+        }
+
         
         Ok(())
     }
@@ -585,6 +645,10 @@ pub struct SellShares<'info> {
     /// CHECK: Treasury
     #[account(mut)]
     pub protocol_treasury: AccountInfo<'info>,
+
+    /// CHECK: Market Creator for fee split
+    #[account(mut)]
+    pub market_creator: AccountInfo<'info>,
     
     pub system_program: Program<'info, System>,
 }
@@ -661,4 +725,3 @@ pub enum DjinnError {
     #[msg("Math error")]
     MathError,
 }
-

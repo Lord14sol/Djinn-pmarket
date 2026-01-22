@@ -20,4 +20,6 @@ codegen-units = 1
 wit-bindgen = { git = "https://github.com/bytecodealliance/wit-bindgen", tag = "v0.24.0" }
 wit-bindgen-rust = { git = "https://github.com/bytecodealliance/wit-bindgen", tag = "v0.24.0" }
 wit-bindgen-rust-macro = { git = "https://github.com/bytecodealliance/wit-bindgen", tag = "v0.24.0" }
+borsh = { git = "https://github.com/near/borsh-rs", tag = "borsh-v1.5.3" }
+
 
