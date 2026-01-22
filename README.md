@@ -131,22 +131,7 @@ Djinn V4.0 implements military-grade constraints to protect user funds.
 
 ---
 
-## 🚀 Quick Start (Devnet)
 
-```bash
-# Clone
-git clone https://github.com/Lord14sol/Djinn-pmarket.git
-
-# Install
-npm install
-
-# Run Frontend
-npm run dev
-
-# Deploy Contracts
-cd programs/djinn-market
-anchor build && anchor deploy
-```
 
 ### Contract Addresses
 | Network | ID | Version |
