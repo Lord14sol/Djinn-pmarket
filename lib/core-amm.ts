@@ -4,13 +4,12 @@ import { PublicKey } from "@solana/web3.js";
 // DJINN CURVE V4 AGGRESSIVE: "EARLY BIRD REWARDS"
 // ⚠️ SYNCHRONIZED WITH SMART CONTRACT (programs/djinn-market/src/lib.rs)
 // 3-Phase Piecewise Bonding Curve with Progressive Gains
-// Phase 1: Linear (0-50M → 6x) | Phase 2: Quadratic (50M-90M → 15x) | Phase 3: Sigmoid (90M+)
-// Progressive: 10M=2x, 20M=3x, 30M=4x, 40M=5x, 50M=6x
+// Phase 1: Linear (0-100M) | Phase 2: Quadratic (100M-200M) | Phase 3: Sigmoid (200M+)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // --- GLOBAL CONSTANTS (MUST MATCH lib.rs) ---
 export const TOTAL_SUPPLY = 1_000_000_000; // 1B Shares
-export const VIRTUAL_OFFSET = 20_000_000;   // 20M Shares "Virtual Support"
+export const VIRTUAL_OFFSET = 30_000_000;   // 30M Shares (~30 SOL Depth - Pump.fun style)
 
 // PHASE BOUNDARIES (Shares)
 export const PHASE1_END = 100_000_000;    // 100M
@@ -18,18 +17,15 @@ export const PHASE2_END = 200_000_000;    // 200M
 export const PHASE3_START = 200_000_000;
 
 // PRICE CONSTANTS (in SOL, matches Lamports conversion in lib.rs)
-const P_START = 0.0000001;     // 100 lamports
-const P_50 = 0.000005;         // 5000 lamports
+// UPDATED FOR 50 SOL LIQUIDITY DEPTH
+const P_START = 0.000001;      // 1000 lamports (Was 100) -> Base Price
+const P_50 = 0.000005;         // 5000 lamports (Target at 100M) - kept low for gains
 const P_90 = 0.000025;         // 25000 lamports
 const P_MAX = 0.95;            // 950M nanoSOL (0.95 SOL cap)
 
 
 // SIGMOID CALIBRATION - ORIGINAL "GRADUAL GROWTH" DESIGN
 // ⚠️ LINEAR APPROXIMATION: norm_sig = k * x (not full sigmoid!)
-// Philosophy: Long accumulation phase, sustainable growth (~19x at 120M)
-// Smart contract: k_scaled = 470 (with shares × 1e9)
-// Frontend: k = 4.7e-4 (shares not scaled)
-// Derivation: At 120M, kz should be 4700 → k = 4700 / 10M = 0.00047
 const K_SIGMOID = 0.00047; // 4.7e-4 - Original gradual curve
 
 // LEGACY/COMPATIBILITY
@@ -78,7 +74,7 @@ export function getIgnitionProgress(supply: number): number {
     return Math.min(100, (supply / PHASE3_START) * 100);
 }
 
-// --- LINEAR SLOPE (Phase 1: 0 → 50M, achieves 6x) ---
+// --- LINEAR SLOPE (Phase 1: 0 → 100M) ---
 const LINEAR_SLOPE = (P_50 - P_START) / PHASE1_END;
 
 // ═══════════════════════════════════════════════════════════════════════════════

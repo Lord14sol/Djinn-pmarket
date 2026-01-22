@@ -10,7 +10,7 @@ import idlJson from '../lib/idl/djinn_market.json';
 const MASTER_TREASURY = new PublicKey("G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma");
 
 // Get program ID (HARDCODED as it might be missing from IDL in some builds)
-const PROGRAM_ID = "HkjMQFag41pUutseBpXSXUuEwSKuc2CByRJjyiwAvGjL";
+const PROGRAM_ID = "ExdGFD3ucmvsNHFQnc7PQMkoNKZnQVcvrsQcYp1g2UHa";
 const PROGRAM_PUBKEY = new PublicKey(PROGRAM_ID);
 
 export const useDjinnProtocol = () => {

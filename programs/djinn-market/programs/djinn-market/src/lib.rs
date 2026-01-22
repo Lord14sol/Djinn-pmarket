@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-declare_id!("HkjMQFag41pUutseBpXSXUuEwSKuc2CByRJjyiwAvGjL");
+declare_id!("ExdGFD3ucmvsNHFQnc7PQMkoNKZnQVcvrsQcYp1g2UHa");
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // DJINN CURVE V4 AGGRESSIVE: "EARLY BIRD REWARDS"
@@ -19,11 +19,13 @@ pub const PHASE2_END: u128 = 200_000_000_000_000_000;  // 200M
 pub const PHASE3_START: u128 = 200_000_000_000_000_000;
 
 // PRICE CONSTANTS (in Lamports, 1 SOL = 1e9 Lamports)
-pub const P_START: u128 = 100;         // Starting floor
+pub const P_START: u128 = 1_000;       // 1000 lamports (0.000001 SOL) - Higher base for depth
 pub const P_50: u128 = 5_000;          // Progressive gains
 pub const P_90: u128 = 25_000;         // Acceleration
 pub const P_MAX: u128 = 950_000_000;   // 0.95 SOL Max
-pub const VIRTUAL_ANCHOR: u128 = 20_000_000_000_000_000; // 20M Shares "Virtual Support"
+
+// 🔥 MODIFICACIÓN DEGEN MODE: 30M Shares (~30 SOL Depth) - Igual que Pump.fun
+pub const VIRTUAL_ANCHOR: u128 = 30_000_000_000_000_000; 
 
 
 // SIGMOID K (Scaled: k * 1e18 for fixed-point)
@@ -131,7 +133,8 @@ pub fn calculate_shares_from_sol(sol_in: u128, supply_old: u128) -> Result<u128>
     let mut low = supply_old;
     let mut high = TOTAL_SUPPLY;
     
-    for _ in 0..50 {
+    // OPTIMIZATION (Point 7): Reduced from 50 to 30 to save gas
+    for _ in 0..30 {
         let mid = (low + high) / 2;
         let cost = calculate_cost(supply_old, mid)?;
         
@@ -161,6 +164,7 @@ pub struct Market {
     pub num_outcomes: u8,        // Number of outcomes (2-6)
     pub outcome_supplies: [u128; 6], // Supply for each outcome (max 6)
     pub vault_balance: u128,   // Total SOL in vault (Lamports)
+    pub total_pot_at_resolution: u64, // (Point 2) Snapshot of pot for fair distribution
     pub status: MarketStatus,
     pub resolution_time: i64,
     pub winning_outcome: Option<u8>,
@@ -209,6 +213,7 @@ pub mod djinn_market {
         market.num_outcomes = num_outcomes;
         market.outcome_supplies = [0; 6]; // Initialize all to 0
         market.vault_balance = 0;
+        market.total_pot_at_resolution = 0; // (Point 2) Initialize snapshot
         market.status = MarketStatus::Active;
         market.resolution_time = resolution_time;
         market.winning_outcome = None;
@@ -248,6 +253,10 @@ pub mod djinn_market {
         let market = &mut ctx.accounts.market;
         require!(market.status == MarketStatus::Active, DjinnError::MarketNotActive);
         require!(outcome_index < market.num_outcomes, DjinnError::InvalidOutcome);
+        
+        // (Point 5) Check Expiry
+        let now = Clock::get()?.unix_timestamp;
+        require!(now < market.resolution_time, DjinnError::MarketExpired);
 
         let sol_in_u128 = sol_in as u128;
 
@@ -339,6 +348,7 @@ pub mod djinn_market {
         ctx: Context<SellShares>,
         outcome_index: u8,
         shares_to_sell: u64,
+        min_sol_out: u64, // (Point 3) Slippage argument
     ) -> Result<()> {
         let market = &mut ctx.accounts.market;
         let position = &mut ctx.accounts.user_position;
@@ -346,6 +356,10 @@ pub mod djinn_market {
         require!(market.status == MarketStatus::Active, DjinnError::MarketNotActive);
         require!(outcome_index < market.num_outcomes, DjinnError::InvalidOutcome);
         require!(position.shares >= shares_to_sell as u128, DjinnError::InsufficientShares);
+
+        // (Point 5) Check Expiry
+        let now = Clock::get()?.unix_timestamp;
+        require!(now < market.resolution_time, DjinnError::MarketExpired);
 
         let shares_u128 = shares_to_sell as u128;
         let current_supply = market.outcome_supplies[outcome_index as usize];
@@ -355,7 +369,6 @@ pub mod djinn_market {
         let refund_gross = calculate_cost(new_supply, current_supply)?;
 
         // 2. SAFETY CLAMP: Ensure we don't try to refund more than what's in the vault
-        // Fees and rounding can create small differences between curve value and actual SOL.
         let actual_refund = if refund_gross > market.vault_balance {
             market.vault_balance
         } else {
@@ -365,6 +378,9 @@ pub mod djinn_market {
         // 3. Exit fee (1%)
         let fee = (actual_refund * EXIT_FEE_BPS) / BPS_DENOMINATOR;
         let net_refund = actual_refund - fee;
+
+        // (Point 3) Slippage Check
+        require!(net_refund >= min_sol_out as u128, DjinnError::SlippageExceeded);
 
         // 4. Update state
         market.outcome_supplies[outcome_index as usize] = new_supply;
@@ -457,7 +473,9 @@ pub mod djinn_market {
         let market = &mut ctx.accounts.market;
         
         require!(market.status == MarketStatus::Active, DjinnError::MarketNotActive);
-        require!(winning_outcome <= 1, DjinnError::InvalidOutcome);
+        
+        // (Point 4) Fixed Outcome Check
+        require!(winning_outcome < market.num_outcomes, DjinnError::InvalidOutcome);
         
         // Check resolution time
         let now = Clock::get()?.unix_timestamp;
@@ -490,6 +508,9 @@ pub mod djinn_market {
             market.vault_balance = market.vault_balance.checked_sub(resolution_fee).unwrap();
         }
         
+        // (Point 2) Snapshot the Pot Balance for fair Claiming
+        market.total_pot_at_resolution = market.vault_balance as u64;
+
         market.status = MarketStatus::Resolved;
         market.winning_outcome = Some(winning_outcome);
         
@@ -511,14 +532,16 @@ pub mod djinn_market {
         let winning_outcome = market.winning_outcome.unwrap();
         require!(outcome_index == winning_outcome, DjinnError::NotWinner);
         
-        // Calculate payout: user_shares / total_winning_shares * vault_balance
+        // (Point 2) Use total_pot_at_resolution instead of shrinking vault_balance
+        // Calculate payout: user_shares / total_winning_shares * SNAPSHOT_BALANCE
         let total_winning_shares = market.outcome_supplies[winning_outcome as usize];
         
         if total_winning_shares == 0 {
             return Ok(());
         }
         
-        let payout = (market.vault_balance * position.shares) / total_winning_shares;
+        let snapshot_pot = market.total_pot_at_resolution as u128;
+        let payout = (snapshot_pot * position.shares) / total_winning_shares;
         
         // Transfer payout
         let market_key = market.key();
@@ -542,6 +565,7 @@ pub mod djinn_market {
                 payout as u64,
             )?;
             
+            // We still decrease vault balance to track remaining funds, but it doesn't affect payout calculation
             market.vault_balance = market.vault_balance.checked_sub(payout).unwrap();
         }
         
@@ -562,9 +586,10 @@ pub struct InitializeMarket<'info> {
     #[account(
         init,
         payer = creator,
-        space = 8 + 32 + (4 + 64) + 8 + 1 + (6 * 16) + 16 + 1 + 8 + 2 + 1 + 1,
+        // (Point 2) Added +8 bytes for total_pot_at_resolution
+        space = 8 + 32 + (4 + 64) + 8 + 1 + (6 * 16) + 16 + 8 + 1 + 8 + 2 + 1 + 1,
         // 8 (discriminator) + 32 (creator) + (4 + 64) (title) + 8 (nonce) + 1 (num_outcomes)
-        // + (6 * 16) (outcome_supplies array) + 16 (vault_balance) + 1 (status)
+        // + (6 * 16) (outcome_supplies array) + 16 (vault_balance) + 8 (total_pot) + 1 (status)
         // + 8 (resolution_time) + 2 (winning_outcome) + 1 (bump) + 1 (vault_bump)
         seeds = [b"market", creator.key().as_ref(), title.as_bytes(), &nonce.to_le_bytes()],
         bump
@@ -616,7 +641,10 @@ pub struct BuyShares<'info> {
     pub protocol_treasury: AccountInfo<'info>,
     
     /// CHECK: Market Creator (for fee split)
-    #[account(mut)]
+    #[account(
+        mut, 
+        address = market.creator // (Point 1) Anti-Spoofing Fix
+    )]
     pub market_creator: AccountInfo<'info>,
     
     pub system_program: Program<'info, System>,
@@ -647,7 +675,10 @@ pub struct SellShares<'info> {
     pub protocol_treasury: AccountInfo<'info>,
 
     /// CHECK: Market Creator for fee split
-    #[account(mut)]
+    #[account(
+        mut, 
+        address = market.creator // (Point 1) Anti-Spoofing Fix
+    )]
     pub market_creator: AccountInfo<'info>,
     
     pub system_program: Program<'info, System>,
@@ -686,7 +717,8 @@ pub struct ClaimWinnings<'info> {
     #[account(
         mut,
         seeds = [b"user_pos", market.key().as_ref(), user.key().as_ref(), &[outcome_index]],
-        bump
+        bump,
+        close = user // (Point 6) Rent Refund Optimization
     )]
     pub user_position: Box<Account<'info, UserPosition>>,
     
@@ -724,4 +756,8 @@ pub enum DjinnError {
     InvalidOutcomeCount,
     #[msg("Math error")]
     MathError,
+    
+    // (Point 5) New Error
+    #[msg("Market has expired")]
+    MarketExpired,
 }

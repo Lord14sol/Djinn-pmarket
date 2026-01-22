@@ -1,8 +1,8 @@
-# Djinn: Redefining Price Discovery on Solana
+# Djinn: The Autonomous Prediction Protocol
 
 <div align="center">
 
-**The First Autonomous Liquidity Protocol for Prediction Markets**
+**V4.0 "Aggressive" | Self-Custodial | On-Chain Solvent**
 
 [![Solana](https://img.shields.io/badge/Solana-Devnet-9945FF?style=for-the-badge&logo=solana)](https://solana.com)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
@@ -11,164 +11,114 @@
 
 ---
 
-## 🎯 Executive Summary
+## 🧞‍♂️ Core Philosophy
 
-DJINN represents a paradigm shift in on-chain prediction markets. By leveraging a proprietary **Golden S Mutant Curve (V4 Aggressive)**, we eliminate the fundamental liquidity constraints that plague traditional order-book architectures. The result: **instantaneous, autonomous price discovery from the first transaction**.
+Djinn is a **Pure AMM (Automated Market Maker)** for binary and multi-outcome events. It eliminates the need for order books or matching counterparties by using a mathematical **Bonding Curve** to guarantee immediate liquidity for any trade size.
 
-> *"Where others require market makers, DJINN requires only believers."*
-
----
-
-## ✨ **V4.0 Architecture: PDA-Based Derivatives** (Active)
-
-DJINN operates on a **high-efficiency internal ledger system** using Solana Program Derived Addresses (PDAs). Unlike standard AMMs that rely on token swaps, Djinn uses direct state management for maximum speed and solvency.
-
-### Key Features:
-- ✅ **PDA-Based Positions**: User shares are tracked in `UserPosition` accounts with u128 precision.
-- ✅ **Zero-Rent Drift**: Optimized account structure minimizes rent costs compared to ATAs.
-- ✅ **Atomic Settlement**: Buys, sells, and merging positions happen in single atomic transactions.
-- ✅ **Flash-Liquidity**: Markets are instantly liquid from moment zero.
-
-### Cost Structure:
-| Action | Network Cost | Protocol Fee |
-|--------|--------------|--------------|
-| Create Market | ~0.012 SOL | 0.01 SOL (Anti-Spam) |
-| Buy Shares | ~0.000005 SOL | 1.0% |
-| Sell Shares | ~0.000005 SOL | 1.0% |
+Unlike traditional models, **Liquidity is the Market**. Every share purchased increases the price for the next buyer, creating a deterministic, tamper-proof price discovery mechanism.
 
 ---
 
-## 📜 Technical Manifesto: The End of Traditional Liquidity
+## ⚡ The Lifecycle Flow
 
-### I. The Innovation: Autonomous Liquidity Engineering
+Djinn operates on a strict 4-step lifecycle, enforced by the Solana Smart Contract (`lib.rs`).
 
-The **Golden S Mutant Curve** is an **Autonomous Liquidity Engine**—a self-sustaining mathematical construct that generates guaranteed liquidity from the first transaction.
+### 1. Creation (Genesis)
+*   **User Action**: Cues a new market (e.g., "Will BTC hit $100k?").
+*   **Protocol**: 
+    1.  Initializes a **Market PDA** (Program Derived Address).
+    2.  Sets the **Virtual Anchor** to 30M Shares (~30 SOL depth) to ensure price stability.
+    3.  Transfers creation fee (0.01 SOL) to Treasury.
+    4.  Status set to `Active`.
 
-#### The Three-Phase Transformation Engine (V4 Aggressive)
+### 2. Trading (Active Phase)
+*   **Buying**:
+    *   User sends SOL -> Vault.
+    *   Contract mints **Virtual Shares** based on the *Golden S Curve*.
+    *   Price adjusts upward automatically.
+    *   **Fee**: 1% (Split 50/50 between Creator & Treasury).
+*   **Selling**:
+    *   User burns Shares -> Contract.
+    *   **Anti-Crash Protection**: Contract verifies the payout meets the user's `min_sol_out` (Slippage Check).
+    *   Vault sends SOL -> User.
+    *   Price adjusts downward.
 
-```
-┌───────────────────────────────────────────────────────────────────────┐
-│        PHASE 1              PHASE 2              PHASE 3              │
-│        IGNITION             BRIDGE               SIGMOID              │
-│      (0 - 100M)          (100M - 200M)           (200M+)              │
-│                                                                       │
-│   ╔═══════════════╗    ╔═══════════════╗    ╔═══════════════╗        │
-│   ║  UNCERTAINTY  ║ →  ║  TRANSITION   ║ →  ║   CERTAINTY   ║        │
-│   ║  (Linear)     ║    ║  (Quadratic)  ║    ║  (Sigmoid)    ║        │
-│   ╚═══════════════╝    ╚═══════════════╝    ╚═══════════════╝        │
-│                                                                       │
-│   Price: 100 lamports  Accel: High          Cap: 0.95 SOL        │
-│   Target: 5k lamports  Target: 25k lamps                          │
-│                                                                       │
-└───────────────────────────────────────────────────────────────────────┘
-```
+### 3. Resolution (The Oracle)
+*   A certified Oracle (or G1 Authority) performs the **Truth Verification**.
+*   **Logic Check**: `timestamp >= resolution_time`.
+*   **Snapshot**: The contract freezes the pot and records `total_pot_at_resolution`. This ensures mathematically fair payouts for everyone, regardless of claim order.
+*   **Resolution Fee**: 2% deducted from the final pot.
+*   Status set to `Resolved`.
 
-**Phase 1 (Ignition):** The curve begins at ~0 (100 lamports), rewarding early participants with extreme asymmetric upside. This is the **conviction premium**.
-
-**Phase 2 (Bridge):** A quadratic acceleration zone that scales rewards with market momentum between 100M and 200M shares.
-
-**Phase 3 (Sigmoid):** Asymptotic convergence toward the 0.95 SOL logic-cap. Late participants purchase stability rather than asymmetry.
-
-### II. Architectural Backbone: C³ Continuity
-
-The curve guarantees smooth transitions across all phases to ensure solvency and prevent arbitrage gaps.
-
----
-
-## 🧬 Core Innovation: The Golden S Mutant Curve (Math Specs)
-
-DJINN employs a **3-Phase Piecewise Bonding Curve** (`V4 AGGRESSIVE`).
-
-### Constants (Verified in `lib.rs`)
-
-```rust
-// Supply Boundaries ( 9 decimals )
-PHASE1_END   = 100,000,000    // 100M Shares
-PHASE2_END   = 200,000,000    // 200M Shares (Bridge End)
-PHASE3_START = 200,000,000    // Sigmoid Start
-
-// Price Points (Lamports)
-P_START = 100             // 0.0000001 SOL (Genesis)
-P_50    = 5,000           // 0.000005  SOL (Target at 100M)
-P_90    = 25,000          // 0.000025  SOL (Target at 200M)
-P_MAX   = 950,000,000     // 0.95      SOL (Hard Cap)
-
-// Virtual Support
-VIRTUAL_ANCHOR = 20,000,000 // 20M Shares phantom liquidity
-```
-
-### Phase Formulas
-
-#### 1. Ignition Phase (Linear) `Supply <= 100M`
-A steep linear ramp designed to reward early adopters.
-`P(x) = P_START + m · x`
-- **Slope (m)**: `(P_50 - P_START) / PHASE1_END`
-- **Behavior**: Price grows linearly from **100 lamports** to **5,000 lamports**.
-
-#### 2. Acceleration Bridge (Quadratic) `100M < Supply <= 200M`
-A quadratic bridge to accelerate price discovery.
-`P(x) = P_50 + (P_90 - P_50) · (progress / 100M)²`
-- **Behavior**: fast acceleration from **5,000** to **25,000 lamports**.
-
-#### 3. Stability Sigmoid `Supply > 200M`
-Linear approximation of a sigmoid function for stability.
-`P(x) = P_90 + (P_MAX - P_90) · NormalizedSigmoid(x - 200M)`
-- **Behavior**: Asymptotically approaches **0.95 SOL** but slows down as it gets there.
+### 4. Settlement (Claiming)
+*   **Winners**: Call `claim_winnings`. 
+    *   Formula: `(My Shares / Total Winning Shares) * Final Pot`.
+    *   **Auto-Close**: The contract refunds the user's rent SOL (~0.002) alongside their winnings.
+*   **Losers**: Their share value is effectively 0, as their capital was absorbed into the pot to pay the winners.
 
 ---
 
-## 💰 Economics & Fee Structure
+## 📐 The Math: "Golden S" Mutant Curve
 
-### Protocol Fees
-| Parameter | Value | Destination | Rationale |
-|-----------|-------|-------------|-----------|
-| Entry Fee | 1% | 50% Treasury / 50% Creator | Sustainable revenue & Creator Reward |
-| Exit Fee | 1% | 50% Treasury / 50% Creator | Discourages wash trading |
-| Resolution Fee | 2% | Protocol Treasury | Oracle incentivization |
+Djinn uses a custom **3-Phase Piecewise Function** designed to reward early conviction while stabilizing late-stage speculation.
 
-### Solvency Model
-DJINN is **100% On-Chain Solvent**. The vault always holds enough SOL to pay out the winning side.
-`Vault_Balance >= (Winning_Shares * Payout_Per_Share)`
+### The Virtual Anchor (Stability Engine)
+We inject **30,000,000 Virtual Shares** into the equation at $t=0$. 
+*   **Effect**: The market behaves as if it already has 30 SOL of liquidity.
+*   **Benefit**: A 1 SOL buy moves the price by ~2% instead of 100%, preventing volatility shocks for early adopters.
 
-Unlike pump.fun or others, there is no "migration". The liquidity is the bonding curve itself until resolution. Upon resolution, the **losing side's collateral** subsidizes the **winning side's payout**.
+### Phase 1: Ignition (Linear) `0 - 100M Shares`
+*   **Goal**: Incentivize risk-takers.
+*   **Math**: `P(x) = Base + m*x`
+*   **Behavior**: Price rises steadily from **1,000 lamports** to **5,000 lamports**. Low cost, high potential multiplier.
+
+### Phase 2: Bridge (Quadratic) `100M - 200M Shares`
+*   **Goal**: Rapid price discovery.
+*   **Math**: `P(x) \propto x^2`
+*   **Behavior**: Price accelerates from 5k to 25k lamports. Buying pressure creates momentum.
+
+### Phase 3: Sigmoid (Asymptotic) `200M+ Shares`
+*   **Goal**: Final certainty.
+*   **Math**: `P(x) \rightarrow 0.95 SOL`
+*   **Behavior**: Price growth slows down as it approaches the logic cap (1 SOL = 100% Probability). At this stage, the market is pricing in "Certainty".
+
+---
+
+## 🛡️ Security & Solvency Architecture
+
+Djinn V4.0 implements military-grade constraints to protect user funds.
+
+| Feature | Implementation | Purpose |
+| :--- | :--- | :--- |
+| **Anti-Spoofing** | `address = market.creator` | Prevents hackers from redirecting creator fees to their own wallets. |
+| **Slippage Guard** | `require!(net >= min_sol_out)` | Auto-reverts a sell transaction if the price crashes while it is pending. |
+| **Snapshot Pot** | `total_pot_at_resolution` | Locks the final vault value to guarantee every winner gets the exact same share price. |
+| **Rent Refund** | `close = user` | Automatically reclaims unused storage data (SOL) for the user after claiming. |
+| **Time Lock** | `clock < resolution_time` | Hard-stops all trading the second the event expires. |
 
 ---
 
 ## 🚀 Quick Start (Devnet)
 
 ```bash
-# Clone and install
+# Clone
 git clone https://github.com/Lord14sol/Djinn-pmarket.git
-cd Djinn-pmarket && npm install
 
-# Development
+# Install
+npm install
+
+# Run Frontend
 npm run dev
 
-# Smart Contract Deployment
+# Deploy Contracts
 cd programs/djinn-market
 anchor build && anchor deploy
 ```
 
 ### Contract Addresses
-
-| Network | Program ID | Version |
-|---------|------------|---------|
-| **Devnet** | `HkjMQFag41pUutseBpXSXUuEwSKuc2CByRJjyiwAvGjL` | V4.0 (PDA/Aggressive) |
-
----
-
-## 🔬 Verification
-
-```bash
-# Verify curve mathematics
-npx tsx verify-curve.ts
-```
-
-### Debug Mode
-Console logs will show specific execution paths:
-```typescript
-console.log("On-Chain Shares (fetched via Anchor):", "405000000000"); // 405 shares
-```
+| Network | ID | Version |
+| :--- | :--- | :--- |
+| **Devnet** | `ExdGFD3ucmvsNHFQnc7PQMkoNKZnQVcvrsQcYp1g2UHa` | V4.0 (PDA/Aggressive) |
 
 ---
 
@@ -176,6 +126,6 @@ console.log("On-Chain Shares (fetched via Anchor):", "405000000000"); // 405 sha
 
 **Lord**
 
-*Prediction is the new speculation* 🧞‍♂️
+*Probability is the only truth.* 🧞‍♂️
 
 </div>

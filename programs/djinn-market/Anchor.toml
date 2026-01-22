@@ -12,13 +12,13 @@ solana_version = "1.18.20"
 djinn_market = "DY1X52RW55bpNU5ZA8E3m6w1w7VG1ioHKpUt7jUkYSV9"
 
 [programs.devnet]
-djinn_market = "DY1X52RW55bpNU5ZA8E3m6w1w7VG1ioHKpUt7jUkYSV9"
+djinn_market = "ExdGFD3ucmvsNHFQnc7PQMkoNKZnQVcvrsQcYp1g2UHa"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "Localnet"
+cluster = "devnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]

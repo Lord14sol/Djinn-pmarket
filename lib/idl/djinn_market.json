@@ -136,13 +136,13 @@
           "isSigner": false
         },
         {
-          "name": "systemProgram",
-          "isMut": false,
+          "name": "marketCreator",
+          "isMut": true,
           "isSigner": false
         },
         {
-          "name": "marketCreator",
-          "isMut": true,
+          "name": "systemProgram",
+          "isMut": false,
           "isSigner": false
         }
       ],
@@ -153,6 +153,10 @@
         },
         {
           "name": "sharesToSell",
+          "type": "u64"
+        },
+        {
+          "name": "minSolOut",
           "type": "u64"
         }
       ]
@@ -270,6 +274,10 @@
           {
             "name": "vaultBalance",
             "type": "u128"
+          },
+          {
+            "name": "totalPotAtResolution",
+            "type": "u64"
           },
           {
             "name": "status",
@@ -394,6 +402,14 @@
       "code": 6010,
       "name": "MathError",
       "msg": "Math error"
+    },
+    {
+      "code": 6011,
+      "name": "MarketExpired",
+      "msg": "Market has expired"
     }
-  ]
+  ],
+  "metadata": {
+    "address": "ExdGFD3ucmvsNHFQnc7PQMkoNKZnQVcvrsQcYp1g2UHa"
+  }
 }

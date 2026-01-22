@@ -43,7 +43,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
         { id: 1, name: '' },
         { id: 2, name: '' }
     ]);
-    const [initialBuyAmount, setInitialBuyAmount] = useState('50'); // Default Low
+    const [initialBuyAmount, setInitialBuyAmount] = useState('0'); // Default 0 - Protocol Virtual Liquidity Handles Depth
     const [initialBuySide, setInitialBuySide] = useState<'yes' | 'no'>('yes');
     const [resolutionSeconds, setResolutionSeconds] = useState(7 * 24 * 60 * 60); // Default 7d
     const [customDate, setCustomDate] = useState('');
@@ -444,36 +444,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
 
                                 <input type="text" placeholder="Enter question..." className="w-full bg-black/40 border border-white/10 rounded-xl p-5 text-lg font-bold outline-none focus:border-[#F492B7]" value={poolName} onChange={(e) => setPoolName(e.target.value)} />
 
-                                {/* NEW: LIQUIDITY DEPTH */}
-                                <div>
-                                    <div className="flex justify-between items-center mb-2">
-                                        <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
-                                            Liquidity Depth (Optional)
-                                        </label>
-                                        <span className="text-xs text-[#F492B7] font-bold">
-                                            {initialBuyAmount} SOL
-                                        </span>
-                                    </div>
-                                    <div className="grid grid-cols-3 gap-3">
-                                        {[
-                                            { label: '50 SOL', value: '50', desc: 'Low' },
-                                            { label: '150 SOL', value: '150', desc: 'Medium' },
-                                            { label: '400 SOL', value: '400', desc: 'High' }
-                                        ].map((preset) => (
-                                            <button
-                                                key={preset.value}
-                                                onClick={() => setInitialBuyAmount(preset.value)}
-                                                className={`p-3 rounded-xl border transition-all text-center ${initialBuyAmount === preset.value
-                                                    ? 'bg-[#F492B7] border-[#F492B7] text-black'
-                                                    : 'bg-white/5 border-white/5 text-gray-400 hover:border-white/20'
-                                                    }`}
-                                            >
-                                                <div className="text-lg font-black">{preset.label}</div>
-                                                <div className="text-[10px] uppercase opacity-70 font-bold">{preset.desc}</div>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
+                                { /* LIQUIDITY DEPTH REMOVED - Protocol Virtual Liquidity Handles This */}
 
                                 {/* NEW: RESOLUTION TIME */}
                                 <div>

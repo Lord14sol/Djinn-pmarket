@@ -9,6 +9,7 @@ import { CategoryProvider } from "@/lib/CategoryContext";
 import { ModalProvider } from "@/lib/ModalContext";
 import { PriceProvider } from "@/lib/PriceContext";
 import AchievementNotification from "@/components/achievements/AchievementNotification";
+import WalletSuccessModal from "@/components/WalletSuccessModal";
 import LavaLampBackground from "@/components/LavaLampBackground";
 
 const geistSans = Geist({
@@ -89,6 +90,7 @@ export default function RootLayout({
                   <Navbar />
                   <LavaLampBackground />
                   <AchievementNotification />
+                  <WalletSuccessModal />
                   <main className="pt-20 flex-grow">
                     {children}
                   </main>
