@@ -84,6 +84,39 @@ We inject **30,000,000 Virtual Shares** into the equation at $t=0$.
 
 ---
 
+## 🏛️ Mathematical Architecture
+
+The core innovation of Djinn is the use of **C3 Continuity** (Third-Order Smoothness) to link disparate pricing phases into a single, seamless bonding curve.
+
+```mermaid
+graph LR
+    subgraph "Phase 1: Ignition"
+    A[Linear Ramp] -->|Stable Accumulation| B(100M Shares)
+    end
+
+    subgraph "Phase 2: Bridge"
+    2A[Quadratic] -->|Parametric Acceleration| 2B(200M Shares)
+    end
+
+    subgraph "Phase 3: Sigmoid"
+    3A[Asymptotic] -->|Probability Certainty| 3B(1B Shares)
+    end
+
+    B -->|C3 Link| 2A
+    2B -->|C3 Link| 3A
+    
+    style B fill:#f9f,stroke:#333
+    style 2B fill:#bbf,stroke:#333
+```
+
+### Why C3 Continuity Matters?
+Most bonding curves (like Bancor) are a single equation. Djinn is a **Mutant Curve** composed of three distinct equations.
+*   **Tangent Continuity ($C^1$)**: Ensures no price jumps at transition points.
+*   **Curvature Continuity ($C^2$)**: Ensures the *rate of price change* is smooth (no sudden acceleration shocks).
+*   **C3 Continuity**: Ensures perfect smoothness for algorithmic trading bots.
+
+---
+
 ## 🛡️ Security & Solvency Architecture
 
 Djinn V4.0 implements military-grade constraints to protect user funds.
