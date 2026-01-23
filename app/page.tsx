@@ -103,12 +103,13 @@ export default function GenesisPage() {
                             style={{ backgroundImage: 'url(/genesis/poster.png)' }}
                         />
                     )}
-                    {/* Radial Fade Mask - Makes edges disappear into black */}
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_20%,black_70%)] md:bg-[radial-gradient(circle_at_center,transparent_30%,black_80%)]" />
+                    {/* Radial Fade Mask - Makes edges disappear into black (Aggressive for seamless blend) */}
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,black_65%)] md:bg-[radial-gradient(circle_at_center,transparent_10%,black_75%)]" />
                 </div>
 
-                {/* Secondary Deep Overlay */}
+                {/* Secondary Deep Overlay - Extra Layer of Blend */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black" />
+                <div className="absolute inset-0 bg-gradient-to-r from-black via-transparent to-black opacity-60" />
             </div>
 
             {/* --- MAIN CONTENT --- */}
