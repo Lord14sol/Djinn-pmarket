@@ -117,10 +117,14 @@ export default function GenesisPage() {
                     />
                 )}
                 {/* Aggressive Edge Masking */}
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,black_85%)]" />
-                <div className="absolute inset-0 bg-[linear-gradient(to_bottom,black_0%,transparent_40%,transparent_60%,black_100%)]" />
-                <div className="absolute inset-0 bg-gradient-to-b from-black to-transparent h-96 z-10" /> {/* Extra aggressive top fade */}
-                <div className="absolute inset-0 bg-gradient-to-r from-black via-transparent to-black opacity-50" />
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,black_80%)]" />
+
+                {/* --- MEGA VIGNETTE SYSTEM --- */}
+                <div className="absolute inset-0 bg-[linear-gradient(to_bottom,black_0%,transparent_30%,transparent_70%,black_100%)] z-10" />
+                <div className="absolute inset-0 bg-[linear-gradient(to_right,black_0%,transparent_30%,transparent_70%,black_100%)] z-10 opacity-70" />
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_20%,black_95%)] z-10" />
+
+                <div className="absolute inset-0 bg-gradient-to-b from-black via-black/20 to-transparent h-96 z-20" />
             </div>
 
             {/* --- MAIN CONTENT --- */}

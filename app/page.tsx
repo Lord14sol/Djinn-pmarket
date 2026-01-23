@@ -103,14 +103,20 @@ export default function GenesisPage() {
                             style={{ backgroundImage: 'url(/genesis/poster.png)' }}
                         />
                     )}
-                    {/* Radial Fade Mask - Makes edges disappear into black (Aggressive for seamless blend) */}
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,black_65%)] md:bg-[radial-gradient(circle_at_center,transparent_10%,black_75%)]" />
+                    {/* Radial Fade Mask - Ultra tight for maximum blend */}
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,black_60%)] md:bg-[radial-gradient(circle_at_center,transparent_0%,black_70%)]" />
                 </div>
 
-                {/* Secondary Deep Overlay - Extra Layer of Blend */}
-                <div className="absolute inset-0 bg-[linear-gradient(to_bottom,black_0%,transparent_40%,transparent_60%,black_100%)]" />
-                <div className="absolute inset-0 bg-gradient-to-b from-black to-transparent h-96 z-10" /> {/* Extra aggressive top fade */}
-                <div className="absolute inset-0 bg-gradient-to-r from-black via-transparent to-black opacity-60" />
+                {/* --- MEGA VIGNETTE SYSTEM --- */}
+                {/* Top/Bottom Fade */}
+                <div className="absolute inset-0 bg-[linear-gradient(to_bottom,black_0%,transparent_30%,transparent_70%,black_100%)] z-10" />
+                {/* Left/Right Fade */}
+                <div className="absolute inset-0 bg-[linear-gradient(to_right,black_0%,transparent_30%,transparent_70%,black_100%)] z-10" />
+                {/* Radial Vignette */}
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_20%,black_90%)] z-10 opacity-80" />
+
+                {/* Extra aggressive top protection */}
+                <div className="absolute inset-0 bg-gradient-to-b from-black via-black/40 to-transparent h-96 z-20" />
             </div>
 
             {/* --- MAIN CONTENT --- */}
