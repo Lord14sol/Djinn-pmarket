@@ -136,7 +136,7 @@ Djinn V4.0 implements military-grade constraints to protect user funds.
 ### Contract Addresses
 | Network | ID | Version |
 | :--- | :--- | :--- |
-| **Devnet** | `ExdGFD3ucmvsNHFQnc7PQMkoNKZnQVcvrsQcYp1g2UHa` | V4.0 (PDA/Aggressive) |
+| **Devnet** | `Fdbhx4cN5mPWzXneDm9XjaRgjYVjyXtpsJLGeQLPr7hg` | V4.0 (PDA/Aggressive) |
 
 ---
 

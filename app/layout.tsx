@@ -4,13 +4,13 @@ import { Geist, Geist_Mono, Libre_Baskerville } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import LayoutWrapper from "@/components/LayoutWrapper";
 import { SolanaProvider } from "@/components/SolanaProvider";
 import { CategoryProvider } from "@/lib/CategoryContext";
 import { ModalProvider } from "@/lib/ModalContext";
 import { PriceProvider } from "@/lib/PriceContext";
 import AchievementNotification from "@/components/achievements/AchievementNotification";
 import WalletSuccessModal from "@/components/WalletSuccessModal";
-import LavaLampBackground from "@/components/LavaLampBackground";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -87,13 +87,13 @@ export default function RootLayout({
             <CategoryProvider>
               <ModalProvider>
                 <PriceProvider>
-                  <Navbar />
-                  <LavaLampBackground />
-                  <AchievementNotification />
-                  <WalletSuccessModal />
-                  <main className="pt-20 flex-grow">
-                    {children}
-                  </main>
+                  <LayoutWrapper>
+                    <AchievementNotification />
+                    <WalletSuccessModal />
+                    <main className="pt-20 flex-grow">
+                      {children}
+                    </main>
+                  </LayoutWrapper>
                   <Footer />
                 </PriceProvider>
               </ModalProvider>
