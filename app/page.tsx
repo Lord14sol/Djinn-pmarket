@@ -173,11 +173,11 @@ export default function GenesisPage() {
                                         Connect Wallet to Claim Spot
                                     </button>
                                 </motion.div>
-                            ) : status.isAdmin ? (
+                            ) : (status.isAdmin || status.isRegistered) ? (
                                 <motion.div key="access" className="flex flex-col items-center gap-8">
                                     <div className="border border-white/20 bg-white/5 px-8 py-4">
-                                        <div className="text-[10px] font-bold tracking-[0.3em] text-white uppercase">
-                                            WELCOME BACK, ARCHITECT
+                                        <div className="text-[10px] font-bold tracking-[0.3em] text-white uppercase text-center">
+                                            {status.isAdmin ? "WELCOME BACK, ARCHITECT" : "GENESIS SPOT SECURED"}
                                         </div>
                                     </div>
                                     <button

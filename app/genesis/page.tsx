@@ -213,9 +213,16 @@ export default function GenesisPage() {
                                     </button>
                                 </motion.div>
                             ) : status.isRegistered ? (
-                                <motion.div key="registered" className="py-6">
+                                <motion.div key="registered" className="space-y-4">
                                     <div className="mb-2 text-2xl font-bold text-purple-400">MANIFESTED</div>
-                                    <p className="text-sm text-gray-400">Tu medalla te espera en el lanzamiento.</p>
+                                    <p className="text-sm text-gray-400 mb-6">Tu medalla te espera en el lanzamiento.</p>
+                                    <button
+                                        onClick={() => window.location.href = '/markets'}
+                                        className="group flex w-full items-center justify-center gap-2 rounded-full border border-white/20 bg-white/10 px-8 py-4 font-bold transition-all hover:bg-white hover:text-black"
+                                    >
+                                        Enter Project Djinn
+                                        <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
+                                    </button>
                                 </motion.div>
                             ) : status.isFull ? (
                                 <motion.div key="full" className="py-6">
