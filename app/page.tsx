@@ -137,7 +137,7 @@ export default function GenesisPage() {
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: 0.3, duration: 0.6 }}
-                    className="relative w-full max-w-md overflow-hidden md:ml-8 mt-12 md:mt-20"
+                    className="relative w-full max-w-md overflow-hidden md:ml-8 mt-24 md:mt-40"
                 >
                     <div className="flex flex-col gap-8">
                         {/* Interaction Logic */}

@@ -150,7 +150,7 @@ export default function GenesisPage() {
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: 0.3, duration: 0.6 }}
-                    className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-8 backdrop-blur-2xl mt-12"
+                    className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-8 backdrop-blur-2xl mt-24"
                 >
                     {/* Progress Bar (Visual Only) */}
                     <div className="absolute top-0 left-0 h-1 bg-gradient-to-r from-purple-600 to-pink-600 shadow-[0_0_15px_rgba(147,51,234,0.5)] transition-all duration-1000"
