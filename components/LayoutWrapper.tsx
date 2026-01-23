@@ -14,17 +14,24 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
     const isGenesis = pathname === '/';
 
     useEffect(() => {
-        // Only enforce on internal pages
-        if (!isGenesis) {
-            // If connected but not admin, bounce
-            if (connected && publicKey) {
-                const address = publicKey.toBase58();
-                if (!ADMIN_WALLETS.includes(address)) {
-                    router.push('/');
+        const checkAccess = async () => {
+            // Only enforce on internal pages
+            if (pathname !== '/' && connected && publicKey) {
+                try {
+                    const { getWhitelistStatus } = await import('@/lib/whitelist');
+                    const status = await getWhitelistStatus(publicKey.toBase58());
+
+                    if (!status.isAdmin && !status.isRegistered) {
+                        router.push('/');
+                    }
+                } catch (err) {
+                    console.error("[LayoutWrapper] Access check failed:", err);
                 }
             }
-        }
-    }, [isGenesis, connected, publicKey, router]);
+        };
+
+        checkAccess();
+    }, [pathname, connected, publicKey, router]);
 
     return (
         <>
