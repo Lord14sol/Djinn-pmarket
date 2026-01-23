@@ -424,130 +424,160 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                             </div>
 
                             <div className="space-y-6">
-                                <div className="flex justify-center">
-                                    <div className="w-full max-w-sm">
-                                        <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest block mb-2 text-center">Upload Image</label>
-                                        <div className="w-full aspect-square rounded-2xl border-2 border-dashed border-white/10 bg-white/5 flex items-center justify-center cursor-pointer overflow-hidden hover:border-[#F492B7] transition-all"
-                                            onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.onchange = (e: any) => handleImageUpload(e.target.files[0]); input.click(); }}>
-                                            {mainImage ? (
-                                                <img src={mainImage} className="w-full h-full object-cover" />
-                                            ) : (
-                                                <div className="text-center">
-                                                    <div className="text-4xl mb-2">🖼️</div>
-                                                    <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Click to Upload</span>
-                                                    <p className="text-[10px] text-gray-600 mt-1">JPG, PNG, WEBP</p>
-                                                </div>
-                                            )}
+                                <div className="w-full aspect-video rounded-2xl border-2 border-dashed border-white/5 bg-white/[0.02] flex items-center justify-center cursor-pointer overflow-hidden hover:border-[#F492B7]/50 hover:bg-[#F492B7]/5 transition-all group/img"
+                                    onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.onchange = (e: any) => handleImageUpload(e.target.files[0]); input.click(); }}>
+                                    {mainImage ? (
+                                        <div className="relative w-full h-full">
+                                            <img src={mainImage} className="w-full h-full object-cover" />
+                                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity">
+                                                <span className="text-xs font-bold uppercase tracking-widest bg-white text-black px-4 py-2 rounded-full">Change Image</span>
+                                            </div>
                                         </div>
-                                    </div>
-                                </div>
-
-                                <input type="text" placeholder="Enter question..." className="w-full bg-black/40 border border-white/10 rounded-xl p-5 text-lg font-bold outline-none focus:border-[#F492B7]" value={poolName} onChange={(e) => setPoolName(e.target.value)} />
-
-                                { /* LIQUIDITY DEPTH REMOVED - Protocol Virtual Liquidity Handles This */}
-
-                                {/* NEW: RESOLUTION TIME */}
-                                <div>
-                                    <div className="flex justify-between items-center mb-2">
-                                        <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
-                                            Resolution Time
-                                        </label>
-                                    </div>
-
-                                    {/* Grid of Options */}
-                                    <div className="grid grid-cols-4 gap-2 mb-3">
-                                        {[
-                                            { label: '15 min', val: 15 * 60 },
-                                            { label: '1 hour', val: 60 * 60 },
-                                            { label: '4 hours', val: 4 * 60 * 60 },
-                                            { label: '1 day', val: 24 * 60 * 60 },
-                                            { label: '7 days', val: 7 * 24 * 60 * 60 },
-                                            { label: '30 days', val: 30 * 24 * 60 * 60 },
-                                            { label: '90 days', val: 90 * 24 * 60 * 60 }
-                                        ].map((opt) => (
-                                            <button
-                                                key={opt.label}
-                                                onClick={() => { setResolutionSeconds(opt.val); setShowDatePicker(false); }}
-                                                className={`px-2 py-2 rounded-lg text-xs font-bold transition-all ${!showDatePicker && resolutionSeconds === opt.val
-                                                    ? 'bg-white text-black'
-                                                    : 'bg-white/5 text-gray-400 hover:bg-white/10'
-                                                    }`}
-                                            >
-                                                {opt.label}
-                                            </button>
-                                        ))}
-                                        <button
-                                            onClick={() => setShowDatePicker(true)}
-                                            className={`px-2 py-2 rounded-lg text-xs font-bold transition-all ${showDatePicker
-                                                ? 'bg-[#F492B7] text-black'
-                                                : 'bg-white/5 text-gray-400 hover:bg-white/10'
-                                                }`}
-                                        >
-                                            Pick Date
-                                        </button>
-                                    </div>
-
-                                    {/* Custom Date Picker */}
-                                    {showDatePicker && (
-                                        <input
-                                            type="datetime-local"
-                                            className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-sm font-medium outline-none focus:border-[#F492B7] text-white color-scheme-dark"
-                                            value={customDate}
-                                            onChange={(e) => setCustomDate(e.target.value)}
-                                        />
+                                    ) : (
+                                        <div className="text-center">
+                                            <div className="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4 group-hover/img:bg-[#F492B7]/20 transition-colors">
+                                                <span className="text-2xl">🖼️</span>
+                                            </div>
+                                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Market Banner (Aspect 16:9)</span>
+                                        </div>
                                     )}
                                 </div>
+                            </div>
+                        </div>
 
-                                <div className="space-y-2">
-                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest block">Source of Truth (URL)</label>
+                        {/* SECTION 1: THE VISION */}
+                        <div className="space-y-4 pt-4 border-t border-white/5">
+                            <div className="text-[10px] font-black text-[#F492B7] uppercase tracking-[0.3em] mb-4">I. The Vision</div>
+                            <input
+                                type="text"
+                                placeholder="Enter market question (e.g. Will SOL hit $500?)..."
+                                className="w-full bg-white/5 border border-white/5 rounded-2xl p-6 text-lg font-bold outline-none focus:border-[#F492B7]/50 focus:bg-[#F492B7]/5 transition-all placeholder:text-gray-600"
+                                value={poolName}
+                                onChange={(e) => setPoolName(e.target.value)}
+                            />
+                        </div>
+
+                        {/* SECTION 2: THE VERITAS */}
+                        <div className="space-y-4 pt-4 border-t border-white/5">
+                            <div className="text-[10px] font-black text-[#F492B7] uppercase tracking-[0.3em] mb-4">II. The Veritas</div>
+                            <div className="space-y-4">
+                                <div className="relative group/input">
+                                    <div className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within/input:text-[#F492B7] transition-colors">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.172 13.828a4 4 0 015.656 0l4 4a4 4 0 11-5.656 5.656l-1.102-1.101" /></svg>
+                                    </div>
                                     <input
                                         type="text"
-                                        placeholder="https://official-source.com/news/123"
-                                        className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-sm font-medium outline-none focus:border-[#F492B7] text-gray-300"
+                                        placeholder="Verification URL (e.g. twitter.com, bbc.com)"
+                                        className="w-full bg-white/5 border border-white/5 rounded-2xl py-5 pl-14 pr-6 text-sm font-medium outline-none focus:border-[#F492B7]/50 focus:bg-[#F492B7]/5 transition-all text-gray-300 placeholder:text-gray-600"
                                         value={sourceUrl}
                                         onChange={(e) => setSourceUrl(e.target.value)}
                                     />
-                                    <p className="text-[10px] text-gray-600">Protocol Veritas: If this link fails verification, the market will be invalidated.</p>
                                 </div>
+                                <div className="bg-[#F492B7]/5 border border-[#F492B7]/10 p-4 rounded-2xl flex items-start gap-3">
+                                    <div className="mt-0.5 text-[#F492B7]">⚡</div>
+                                    <p className="text-[10px] text-gray-400 leading-relaxed font-medium">
+                                        <span className="text-[#F492B7] font-bold uppercase tracking-widest mr-1">Djinn Veritas:</span>
+                                        Provision of a valid source URL is mandatory for oracle verification. Markets without verifiable sources may be voided.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
 
-                                <div className="space-y-3">
+                        {/* SECTION 3: THE GENESIS */}
+                        <div className="space-y-4 pt-4 border-t border-white/5">
+                            <div className="text-[10px] font-black text-[#F492B7] uppercase tracking-[0.3em] mb-4">III. The Genesis</div>
 
+                            {/* Resolution Time Selection */}
+                            <div className="space-y-3">
+                                <div className="grid grid-cols-4 gap-2">
+                                    {[
+                                        { label: '4h', val: 4 * 60 * 60 },
+                                        { label: '1d', val: 24 * 60 * 60 },
+                                        { label: '7d', val: 7 * 24 * 60 * 60 },
+                                    ].map((opt) => (
+                                        <button
+                                            key={opt.label}
+                                            onClick={() => { setResolutionSeconds(opt.val); setShowDatePicker(false); }}
+                                            className={`px-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${!showDatePicker && resolutionSeconds === opt.val
+                                                ? 'bg-white text-black shadow-lg shadow-white/10'
+                                                : 'bg-white/5 text-gray-500 hover:bg-white/10'
+                                                }`}
+                                        >
+                                            {opt.label}
+                                        </button>
+                                    ))}
+                                    <button
+                                        onClick={() => setShowDatePicker(true)}
+                                        className={`px-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${showDatePicker
+                                            ? 'bg-[#F492B7] text-white shadow-lg shadow-[#F492B7]/20'
+                                            : 'bg-white/5 text-gray-500 hover:bg-white/10'
+                                            }`}
+                                    >
+                                        Custom
+                                    </button>
+                                </div>
+                                {showDatePicker && (
+                                    <input
+                                        type="datetime-local"
+                                        className="w-full bg-white/5 border border-white/5 rounded-2xl p-4 text-xs font-bold outline-none focus:border-[#F492B7]/50 text-white color-scheme-dark"
+                                        value={customDate}
+                                        onChange={(e) => setCustomDate(e.target.value)}
+                                    />
+                                )}
+                            </div>
 
-                                    <div className="flex justify-between items-center">
-                                        <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest">Outcomes</label>
-                                        {marketType === 'multiple' && (
-                                            <button onClick={addOption} className="text-[#F492B7] text-[10px] font-black uppercase tracking-widest hover:text-[#ff6fb7]">+ Add Outcome</button>
-                                        )}
-                                    </div>
-                                    <div className="max-h-48 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
-                                        {options.map((option, index) => (
-                                            <div key={option.id} className="bg-white/5 p-4 rounded-xl border border-white/10">
-                                                <input type="text" placeholder={marketType === 'binary' ? (index === 0 ? "Yes" : "No") : "Outcome Name..."} className="w-full bg-transparent border-none text-white font-bold outline-none text-sm" value={option.name} onChange={(e) => {
+                            {/* Outcomes Block */}
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Outcomes</span>
+                                    {marketType === 'multiple' && (
+                                        <button onClick={addOption} className="text-[#F492B7] text-[10px] font-black uppercase tracking-widest hover:text-white transition-colors">+ Add</button>
+                                    )}
+                                </div>
+                                <div className="max-h-40 overflow-y-auto pr-2 space-y-2 custom-scrollbar">
+                                    {options.map((option, index) => (
+                                        <div key={option.id} className="relative group/opt">
+                                            <input
+                                                type="text"
+                                                placeholder={marketType === 'binary' ? (index === 0 ? "YES" : "NO") : `Outcome ${index + 1}...`}
+                                                className="w-full bg-white/5 border border-white/5 rounded-2xl px-6 py-4 text-sm font-bold outline-none focus:border-[#F492B7]/30 transition-all text-white placeholder:text-gray-700"
+                                                value={option.name}
+                                                onChange={(e) => {
                                                     const newOpts = [...options];
                                                     newOpts[index].name = e.target.value;
                                                     setOptions(newOpts);
-                                                }} />
-                                            </div>
-                                        ))}
-                                    </div>
+                                                }}
+                                            />
+                                        </div>
+                                    ))}
                                 </div>
-
-
-                                <button
-                                    onClick={handleCreateMarket}
-                                    disabled={isLoading}
-                                    className="w-full bg-[#F492B7] text-black py-5 rounded-xl font-black text-lg uppercase shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                >
-                                    {isLoading ? '⏳ CREATING ON SOLANA...' : 'CREATE MARKET'}
-                                </button>
-
-                                {error && <ErrorMessage error={error} />}
                             </div>
                         </div>
-                    </>
-                )}
+
+                        <div className="pt-6">
+                            <button
+                                onClick={handleCreateMarket}
+                                disabled={isLoading}
+                                className="w-full h-16 bg-[#F492B7] text-white py-5 rounded-2xl font-black text-sm uppercase tracking-[0.3em] shadow-[0_0_30px_rgba(244,146,183,0.3)] hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 relative overflow-hidden group/cta"
+                            >
+                                <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover/cta:translate-x-[100%] transition-transform duration-1000 ease-in-out" />
+                                {isLoading ? (
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        <span>SUMMONING...</span>
+                                    </div>
+                                ) : 'RELEASE TO SOLANA'}
+                            </button>
+                        </div>
+
+                        {error && <ErrorMessage error={error} />}
+                    </div>
             </div>
-        </div>
+        </>
+    )
+}
+            </div >
+        </div >
     );
 }
 
