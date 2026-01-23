@@ -156,8 +156,15 @@ export const useDjinnProtocol = () => {
                 }
             });
 
-            // Use .rpc() directly - NEW IDL format
-            const signature = await program.methods
+            // MANUAL TRANSACTION CONSTRUCTION
+            const tx = new web3.Transaction();
+
+            // Add Compute Budget
+            tx.add(web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }));
+            tx.add(web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50000 }));
+
+            // Get Instruction
+            const ix = await program.methods
                 .initializeMarket(
                     title.slice(0, 32),
                     new BN(Math.floor(endDate.getTime() / 1000)),
@@ -171,13 +178,29 @@ export const useDjinnProtocol = () => {
                     protocolTreasury: MASTER_TREASURY,
                     systemProgram: SystemProgram.programId,
                 })
-                .preInstructions([
-                    web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
-                    web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50000 }),
-                ])
-                .rpc({ skipPreflight: true, commitment: 'confirmed' });
+                .instruction();
 
-            console.log("[Djinn] ✅ Transaction confirmed:", signature);
+            tx.add(ix);
+
+            // Fetch latest blockhash and sign
+            const latestBlockhash = await connection.getLatestBlockhash();
+            tx.recentBlockhash = latestBlockhash.blockhash;
+            tx.feePayer = wallet.publicKey;
+
+            console.log("✅ Signing Market Creation Transaction...");
+            // @ts-ignore
+            const signedTx = await wallet.signTransaction(tx);
+
+            console.log("✅ Sending Market Creation Transaction...");
+            const signature = await connection.sendRawTransaction(signedTx.serialize(), {
+                skipPreflight: true,
+            });
+
+            console.log("[Djinn] ✅ Transaction sent:", signature);
+            await connection.confirmTransaction(
+                { signature, ...latestBlockhash },
+                'confirmed'
+            );
 
             return { tx: signature, marketPda, yesMintPda: marketPda, noMintPda: marketPda, numOutcomes };
         } catch (error) {
@@ -202,10 +225,10 @@ export const useDjinnProtocol = () => {
         marketCreator: PublicKey,
         minSharesOut: number = 0
     ) => {
-        if (!program || !wallet) throw new Error("Wallet not connected");
+        if (!program || !wallet || !connection) throw new Error("Wallet not connected");
 
         try {
-            const amountLamports = new BN(amountSol * web3.LAMPORTS_PER_SOL);
+            const amountLamports = new BN(Math.round(amountSol * web3.LAMPORTS_PER_SOL));
 
             // CRITICAL FIX: JS Number limit is 9e15. 2B shares * 1e9 = 2e18.
             // We must use BN multiplication, NOT JS multiplication.
@@ -217,33 +240,32 @@ export const useDjinnProtocol = () => {
             console.log("- amountLamports:", amountLamports.toString());
             console.log("- minSharesBN:", minSharesBN.toString());
 
-            // FIX: Use .rpc() instead of sendAndConfirm to avoid duplicate transaction issues.
             // V2: PDA now includes outcome_index to allow holding both YES and NO positions
             const userPositionPda = PublicKey.findProgramAddressSync(
                 [Buffer.from("user_pos"), marketPda.toBuffer(), wallet.publicKey.toBuffer(), Buffer.from([outcomeIndex])],
                 program.programId
             )[0];
 
+            const marketVaultPda = PublicKey.findProgramAddressSync(
+                [Buffer.from("market_vault"), marketPda.toBuffer()],
+                program.programId
+            )[0];
+
             // CRITICAL CHECK: Verify method exists before calling
             if (!program.methods || !program.methods.buyShares) {
-                console.error('❌ CRITICAL: buyShares method not found!');
-                console.error('Available methods:', Object.keys(program.methods || {}));
                 throw new Error('buyShares method not available in program');
             }
 
-            console.log('✅ buyShares method found, calling with args:', {
-                outcomeIndex,
-                amountLamports: amountLamports.toString(),
-                minSharesBN: minSharesBN.toString()
-            });
+            console.log('✅ buyShares method found, constructing manual transaction...');
 
-            // On-chain IDL expects: outcomeIndex, solIn, minSharesOut
-            const preInstructions = [
-                web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
-                web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50000 }),
-            ];
+            // Construct Transaction manually to avoid 'Unknown action undefined' bug
+            const tx = new web3.Transaction();
 
-            const txHash = await program.methods
+            // Add Compute Units
+            tx.add(web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }));
+            tx.add(web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1_000_000 })); // Turbo Fee (0.001 SOL per tx approx)
+
+            const ix = await program.methods
                 .buyShares(
                     outcomeIndex,
                     amountLamports,
@@ -251,18 +273,38 @@ export const useDjinnProtocol = () => {
                 )
                 .accounts({
                     market: marketPda,
-                    marketVault: PublicKey.findProgramAddressSync([Buffer.from("market_vault"), marketPda.toBuffer()], program.programId)[0],
+                    marketVault: marketVaultPda,
                     userPosition: userPositionPda,
                     user: wallet.publicKey,
                     protocolTreasury: MASTER_TREASURY,
                     marketCreator: marketCreator,
                     systemProgram: SystemProgram.programId,
                 })
-                .preInstructions(preInstructions)
-                .rpc({ skipPreflight: true, commitment: 'confirmed' });
+                .instruction();
 
-            console.log("✅ Buy TX Hash:", txHash);
-            return txHash;
+            tx.add(ix);
+
+            // Fetch latest blockhash and sign
+            const latestBlockhash = await connection.getLatestBlockhash();
+            tx.recentBlockhash = latestBlockhash.blockhash;
+            tx.feePayer = wallet.publicKey;
+
+            console.log("✅ Signing Buy Transaction...");
+            // @ts-ignore
+            const signedTx = await wallet.signTransaction(tx);
+
+            console.log("✅ Sending Buy Transaction...");
+            const signature = await connection.sendRawTransaction(signedTx.serialize(), {
+                skipPreflight: true,
+            });
+
+            console.log("✅ Buy TX Sent Sig:", signature);
+            await connection.confirmTransaction(
+                { signature, ...latestBlockhash },
+                'confirmed'
+            );
+
+            return signature;
 
         } catch (error) {
             console.error("Error buying shares:", error);
@@ -275,13 +317,13 @@ export const useDjinnProtocol = () => {
             }
             throw error;
         }
-    }, [program, wallet]);
+    }, [program, wallet, connection]);
 
     const resolveMarket = useCallback(async (
         marketPda: PublicKey,
         outcome: 'yes' | 'no' | 'void'
     ) => {
-        if (!program || !wallet) throw new Error("Wallet not connected");
+        if (!program || !wallet || !connection) throw new Error("Wallet not connected");
 
         try {
             // Derive market vault PDA
@@ -293,7 +335,8 @@ export const useDjinnProtocol = () => {
             // IDL expects winningOutcome as u8: 0=Yes, 1=No (void is not in IDL)
             const winningOutcome = outcome === 'yes' ? 0 : 1;
 
-            const tx = await program.methods
+            const tx = new web3.Transaction();
+            const ix = await program.methods
                 .resolveMarket(winningOutcome)
                 .accounts({
                     market: marketPda,
@@ -302,14 +345,28 @@ export const useDjinnProtocol = () => {
                     protocolTreasury: MASTER_TREASURY,
                     systemProgram: SystemProgram.programId,
                 })
-                .rpc();
+                .instruction();
 
-            return tx;
+            tx.add(ix);
+            const latestBlockhash = await connection.getLatestBlockhash();
+            tx.recentBlockhash = latestBlockhash.blockhash;
+            tx.feePayer = wallet.publicKey;
+
+            // @ts-ignore
+            const signedTx = await wallet.signTransaction(tx);
+            const signature = await connection.sendRawTransaction(signedTx.serialize());
+
+            await connection.confirmTransaction(
+                { signature, ...latestBlockhash },
+                'confirmed'
+            );
+
+            return signature;
         } catch (error) {
             console.error("Error resolving market:", error);
             throw error;
         }
-    }, [program, wallet]);
+    }, [program, wallet, connection]);
 
     const claimReward = useCallback(async (
         marketPda: PublicKey,
@@ -317,7 +374,7 @@ export const useDjinnProtocol = () => {
         noMint: PublicKey,
         side: 'yes' | 'no' = 'yes'
     ) => {
-        if (!program || !wallet) throw new Error("Wallet not connected");
+        if (!program || !wallet || !connection) throw new Error("Wallet not connected");
 
         try {
             // IDL method is 'claimWinnings', takes outcome (u8) as argument
@@ -334,7 +391,8 @@ export const useDjinnProtocol = () => {
                 program.programId
             )[0];
 
-            const tx = await program.methods
+            const tx = new web3.Transaction();
+            const ix = await program.methods
                 .claimWinnings(outcomeIndex)
                 .accounts({
                     market: marketPda,
@@ -343,15 +401,30 @@ export const useDjinnProtocol = () => {
                     user: wallet.publicKey,
                     systemProgram: SystemProgram.programId,
                 })
-                .rpc({ skipPreflight: true, commitment: 'confirmed' });
+                .instruction();
 
-            console.log("✅ Winnings claimed:", tx);
-            return tx;
+            tx.add(ix);
+            const latestBlockhash = await connection.getLatestBlockhash();
+            tx.recentBlockhash = latestBlockhash.blockhash;
+            tx.feePayer = wallet.publicKey;
+
+            // @ts-ignore
+            const signedTx = await wallet.signTransaction(tx);
+            const signature = await connection.sendRawTransaction(signedTx.serialize(), {
+                skipPreflight: true,
+            });
+
+            console.log("✅ Winnings claimed:", signature);
+            await connection.confirmTransaction(
+                { signature, ...latestBlockhash },
+                'confirmed'
+            );
+            return signature;
         } catch (error) {
             console.error("Error claiming winnings:", error);
             throw error;
         }
-    }, [program, wallet]);
+    }, [program, wallet, connection]);
 
     // Fetch User Position (Shares) directly from PDA - No SPL Tokens involved
     const getUserBalance = useCallback(async (marketPda: PublicKey, outcomeIndex: number) => {

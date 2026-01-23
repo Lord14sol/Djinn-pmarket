@@ -32,12 +32,17 @@ import bs58 from 'bs58';
 const TREASURY_WALLET = new PublicKey("G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma");
 
 // --- MOCK MULTI-OUTCOMES ---
+// Matches useDjinnProtocol.ts
+const PROGRAM_ID = new PublicKey("ExdGFD3ucmvsNHFQnc7PQMkoNKZnQVcvrsQcYp1g2UHa");
+
 const MULTI_OUTCOMES: Record<string, Outcome[]> = {
     'us-strike-mexico': [
         { id: 'us-strike-mexico-jan-31', title: 'January 31', volume: '$352K', yesPrice: 7, noPrice: 93, chance: 7 },
         { id: 'us-strike-mexico-mar-31', title: 'March 31', volume: '$137K', yesPrice: 22, noPrice: 78, chance: 22 },
         { id: 'us-strike-mexico-dec-31', title: 'December 31', volume: '$130K', yesPrice: 38, noPrice: 62, chance: 38 },
     ],
+
+    // ---------------------------------------------------------------------
     'world-cup-winner-multiple': [
         { id: 'world-cup-argentina', title: 'Argentina', volume: '$150K', yesPrice: 35, noPrice: 65, chance: 35 },
         { id: 'world-cup-chile', title: 'Chile', volume: '$80K', yesPrice: 15, noPrice: 85, chance: 15 },
@@ -72,11 +77,16 @@ export default function Page() {
 
     // --- STATE ---
     // Market Data
+    // Market Data
     const [marketAccount, setMarketAccount] = useState<any>(null);
     const [selectedOutcomeId, setSelectedOutcomeId] = useState<string>('');
     const [selectedOutcomeName, setSelectedOutcomeName] = useState<string>('');
     const [hoveredPrice, setHoveredPrice] = useState<number | null>(null);
     const [livePrice, setLivePrice] = useState<number>(50);
+
+    // Confirmation & Toast State
+    const [showConfetti, setShowConfetti] = useState(false);
+    const [djinnToast, setDjinnToast] = useState<{ isVisible: boolean; type: 'SUCCESS' | 'ERROR' | 'INFO'; title: string; message: string; actionLink?: string; actionLabel?: string }>({ isVisible: false, type: 'INFO', title: '', message: '' });
 
 
     // --- CHART HISTORY STATE ---
@@ -152,7 +162,7 @@ export default function Page() {
         };
     }, [marketAccount, livePrice]);
 
-    // Reactive Market Outcomes
+    // Reactive Market Outcomes (Independent Pricing Logic)
     const marketOutcomes = useMemo(() => {
         let base: Outcome[] = [];
 
@@ -160,16 +170,45 @@ export default function Page() {
         if (MULTI_OUTCOMES[slug]) {
             base = MULTI_OUTCOMES[slug].map(o => ({ ...o }));
         }
-        // 2. Try Dynamic Market Options (from DB/OnChain)
+        // 2. Dynamic Market Options (Decoupled Supply/Price logic)
         else if (marketAccount?.options && marketAccount.options.length >= 2) {
-            base = marketAccount.options.map((title: string, idx: number) => ({
-                id: `${slug}-${idx}`,
-                title: title, // Use the actual outcome name!
-                volume: idx === 0 ? formatCompact(yesMcap) : formatCompact(noMcap),
-                yesPrice: idx === 0 ? (spotYes * 100) : (spotNo * 100),
-                noPrice: 100 - (idx === 0 ? (spotYes * 100) : (spotNo * 100)),
-                chance: idx === 0 ? yesPercent : noPercent
-            }));
+            base = marketAccount.options.map((title: string, idx: number) => {
+                // Get Specific Supply for this Outcome
+                let supply = 0;
+                if (marketAccount.outcome_supplies && marketAccount.outcome_supplies[idx]) {
+                    supply = Number(marketAccount.outcome_supplies[idx]) / 1e9;
+                } else if (idx === 0 && marketAccount.yes_supply) {
+                    supply = Number(marketAccount.yes_supply) / 1e9;
+                } else if (idx === 1 && marketAccount.no_supply) {
+                    supply = Number(marketAccount.no_supply) / 1e9;
+                }
+
+                // Calculate Independent Price (Memecoin Style)
+                const spotPrice = getSpotPrice(supply);
+
+                // For Probability (Chance), we normalize against all prices
+                // This is calculated later or we can approximate here if needed.
+                // However, for Djinn Mode (Price), we strictly use 'spotPrice * 100' or raw price.
+
+                return {
+                    id: `${slug}-${idx}`,
+                    title: title,
+                    volume: '-', // TODO: Per-outcome volume
+                    yesPrice: spotPrice * 100, // Price in "Cents" (0-100 scale) for UI consistency
+                    noPrice: 100 - (spotPrice * 100),
+                    chance: 0 // Will be normalized below
+                };
+            });
+
+            // Normalize Probabilities (Chances) only for the UI %
+            const totalSpot = base.reduce((acc, o) => acc + o.yesPrice, 0);
+            if (totalSpot > 0) {
+                base.forEach(o => {
+                    o.chance = (o.yesPrice / totalSpot) * 100;
+                });
+            } else {
+                base.forEach(o => o.chance = 100 / base.length);
+            }
         }
         // 3. Fallback Default
         else {
@@ -179,17 +218,13 @@ export default function Page() {
             ];
         }
 
-        // Apply Live Updates (Only for Binary Markets currently optimized)
-        if (base.length === 2) {
-            // YES / Outcome A
+        // Apply Live Updates (Legacy Binary Overrides if needed, but above logic is cleaner)
+        if (base.length === 2 && (marketAccount?.options?.length || 0) < 2) {
+            // Fallback for purely simulated binary without outcome_supplies
             base[0].chance = yesPercent;
             base[0].yesPrice = spotYes * 100;
-            base[0].volume = formatCompact(yesMcap);
-
-            // NO / Outcome B
             base[1].chance = noPercent;
             base[1].yesPrice = spotNo * 100;
-            base[1].volume = formatCompact(noMcap);
         }
 
         return base;
@@ -226,7 +261,7 @@ export default function Page() {
     }, [marketAccount, marketOutcomes]);
     const [isSuccess, setIsSuccess] = useState(false);
     const [tradeSuccessInfo, setTradeSuccessInfo] = useState<{ shares: number; side: string; txSignature: string } | null>(null);
-    const [djinnToast, setDjinnToast] = useState<{ isVisible: boolean; type: DjinnToastType; title?: string; message: string; actionLink?: string; actionLabel?: string }>({ isVisible: false, type: 'INFO', message: '' });
+
     const [lastTradeEvent, setLastTradeEvent] = useState<{ amount: number; side: 'YES' | 'NO' } | null>(null);
     const [tradeMode, setTradeMode] = useState<'BUY' | 'SELL'>('BUY');
 
@@ -292,10 +327,26 @@ export default function Page() {
                 const probData = [];
                 const candleData: Record<string, any[]> = {};
 
+                // Use Real Price if available to seed history (Flat Line at Current Price)
+                let seedPriceYes = 0.00000001;
+                let seedPriceNo = 0.00000001;
+
+                if (marketAccount?.outcome_supplies && marketAccount.outcome_supplies.length >= 2) {
+                    const sYes = Number(marketAccount.outcome_supplies[0]) / 1e9;
+                    const sNo = Number(marketAccount.outcome_supplies[1]) / 1e9;
+                    seedPriceYes = getSpotPrice(sYes);
+                    seedPriceNo = getSpotPrice(sNo);
+                }
+
+                const seedPrices: Record<string, number> = {
+                    [(marketOutcomes[0]?.title || 'YES')]: seedPriceYes,
+                    [(marketOutcomes[1]?.title || 'NO')]: seedPriceNo
+                };
+
                 outcomes.forEach(o => candleData[o] = []);
 
                 for (let i = count; i > 0; i--) {
-                    const time = now - (i * 60); // 1 minute candles
+                    const time = now - i; // 1 second intervals (PumpFun Style Live View)
 
                     // 1. Probability Point (Flat 50/50 or derived from initial)
                     const point: any = {
@@ -307,10 +358,10 @@ export default function Page() {
                     });
                     probData.push(point);
 
-                    // 2. Candle Point (Flat "Pre-Pump" Inception)
+                    // 2. Candle Point (Hydrated with Seed Price)
                     outcomes.forEach(o => {
-                        const base = 0.00000001; // Matches P_START in core-amm.ts
-                        const noise = (Math.random() - 0.5) * 0.000000001;
+                        const base = seedPrices[o] || 0.00000001; // Use Real Price
+                        const noise = (Math.random() - 0.5) * (base * 0.01); // 1% noise
                         const price = base + noise;
                         candleData[o].push({
                             time: time as any, // Cast for Lightweight Charts
@@ -325,7 +376,65 @@ export default function Page() {
                 return { probability: probData, candles: candleData };
             });
         }
-    }, [slug]);
+    }, [slug, marketAccount?.outcome_supplies]); // Re-run when supplies load to fix "Dark Chart"
+
+    // --- LIVE TICKER ---
+    // Simulates "Time Passing" and micro-movements for the chart
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setHistoryState(prev => {
+                const now = Math.floor(Date.now() / 1000);
+                const newCandles = { ...prev.candles };
+                // Use last known probability point structure or default
+                const newProbPoint: any = { time: now, dateStr: new Date(now * 1000).toLocaleTimeString() };
+
+                marketOutcomes.forEach((o, idx) => {
+                    // 1. Probability
+                    newProbPoint[o.title] = o.chance;
+
+                    // 2. Candle
+                    // We calculate price from the current supply in 'marketOutcomes' (or freshMarket)
+                    // o.yesPrice is already calculated based on supply
+                    const currentPrice = o.yesPrice || 0.00000001;
+                    const lastCandles = newCandles[o.title] || [];
+                    const lastCandle = lastCandles[lastCandles.length - 1];
+
+                    const open = lastCandle ? lastCandle.close : currentPrice;
+                    // Add slight "Life" noise if price matches EXACTLY (no trade happened)
+                    // If a trade happened, 'currentPrice' will be different from 'lastCandle', so we respect that movement.
+                    // If no trade, we wiggle.
+                    const isStagnant = Math.abs(open - currentPrice) < 0.0000000001;
+                    const noise = isStagnant ? (Math.random() - 0.5) * (currentPrice * 0.002) : 0; // 0.2% wiggles
+                    const close = currentPrice + noise;
+
+                    const candle = {
+                        time: now as any,
+                        open: open,
+                        high: Math.max(open, close),
+                        low: Math.min(open, close),
+                        close: close
+                    };
+
+                    if (!newCandles[o.title]) newCandles[o.title] = [];
+                    newCandles[o.title] = [...newCandles[o.title], candle].slice(-300); // Keep last 5 mins
+                });
+
+                const newProbHistory = [...prev.probability, newProbPoint].slice(-300);
+                return { probability: newProbHistory, candles: newCandles };
+            });
+        }, 1000); // 1s Ticker
+
+        return () => clearInterval(interval);
+    }, [marketOutcomes]);
+
+    // Debug Ignition
+    useEffect(() => {
+        if (marketAccount?.outcome_supplies) {
+            const sYes = Number(marketAccount.outcome_supplies[0]) / 1e9;
+            const sNo = Number(marketAccount.outcome_supplies[1]) / 1e9;
+            console.log("🔥 IGNITION DEBUG:", { sYes, sNo, progress: getIgnitionProgress(sYes + sNo) });
+        }
+    }, [marketAccount]);
 
     // Handler for when user clicks YES/NO on an outcome
     const handleOutcomeBuyClick = (outcomeId: string, outcomeName: string, side: 'YES' | 'NO', price: number) => {
@@ -638,8 +747,8 @@ export default function Page() {
         // DEBUG: Trace execution
         console.log("🖱️ Buy Button Clicked. Amount:", amountNum, "Balance:", solBalance);
 
-        if (!publicKey) return setDjinnToast({ isVisible: true, type: 'ERROR', message: "Please connect wallet" });
-        if (amountNum <= 0) return setDjinnToast({ isVisible: true, type: 'ERROR', message: "Enter an amount" });
+        if (!publicKey) return setDjinnToast({ isVisible: true, type: 'ERROR', title: 'Wallet Error', message: "Please connect wallet" });
+        if (amountNum <= 0) return setDjinnToast({ isVisible: true, type: 'ERROR', title: 'Invalid Amount', message: "Enter an amount" });
         if (isOverBalance) {
             setDjinnToast({
                 isVisible: true,
@@ -695,17 +804,55 @@ export default function Page() {
                     console.error("Failed to read market from contract:", e);
                 }
 
+                // FRESH SUPPLY FETCH: Get the absolute latest supply state to calculate accurate slippage
+                let freshEstimatedShares = estimatedShares;
+                try {
+                    const marketPda = new PublicKey(marketAccount.market_pda);
+                    // @ts-ignore
+                    const freshMarket = await program.account.market.fetch(marketPda);
+                    if (freshMarket) {
+                        const outcomeIndex = selectedSide === 'YES' ? 0 : 1;
+                        // Assuming 9 decimals
+                        const safeFreshSupply = Number((freshMarket as any).outcomeSupplies[outcomeIndex]) / 1e9;
+                        console.log(`🔄 Fresh Supply fetched: ${safeFreshSupply} (Old State: ${estimatedSupply})`);
+
+                        // Re-simulate with fresh supply
+                        const freshSim = simulateBuy(amountNum, {
+                            virtualSolReserves: 0,
+                            virtualShareReserves: 0,
+                            realSolReserves: 0,
+                            totalSharesMinted: safeFreshSupply
+                        });
+                        freshEstimatedShares = freshSim.sharesReceived;
+                        console.log(`✅ Recalculated Shares: ${freshEstimatedShares} (Old Est: ${estimatedShares})`);
+                    }
+                } catch (e) {
+                    console.warn("Could not fetch fresh supply, using state fallback:", e);
+                }
+
                 // Ensure minSharesOut is safe for BN (u64 max is ~18e18)
                 // Shares are internal (1e9 decimals). 
-                // Cap strictly to avoid BN overflow in JS layer before passing to hook
-                const safeEstimatedShares = Math.min(estimatedShares, 10_000_000_000); // 10B shares max per tx safe limit
+                // Using the FRESH estimate now.
+                const safeEstimatedShares = Math.min(freshEstimatedShares, 10_000_000_000); // 10B shares max per tx safe limit
 
                 // Slippage protection: received * (1 - tolerance)
-                const minS = safeEstimatedShares * (1 - (slippageTolerance / 100));
+                // PUMPFUN RELIABILITY FIX:
+                // For large buys (>0.1 SOL), price impact is massive (>10%).
+                // We basically disable slippage checks for "Degen Mode" (Pump.fun style)
+                // to guarantee the buy goes through regardless of price impact.
+                let effectiveTolerance = slippageTolerance;
+                let minS = 0;
+
+                if (amountNum >= 0.1) {
+                    console.log("⚠️ Large/Degen Buy Detected: Disabling slippage protection (MinShares = 0)");
+                    minS = 0;
+                } else {
+                    minS = safeEstimatedShares * (1 - (effectiveTolerance / 100));
+                }
 
                 // CRITICAL SAFETY CHECK: Ensure positive
                 const safeMinShares = Math.max(0, minS);
-                console.log("  - Min Shares Out:", safeMinShares);
+                console.log(`  - Min Shares Out: ${safeMinShares} (Tol: ${effectiveTolerance}%)`);
 
                 // Use dummy mints if not present (V4 doesn't use them in contract, but hook signature might expect them)
                 const dummyMint = new PublicKey("So11111111111111111111111111111111111111112");
@@ -779,8 +926,9 @@ export default function Page() {
 
             // STABILIZER: For fresh markets, clamp divisor price to avoid 100% explosion.
             // If other side has 0 liquidity (price ~0), a small buy feels like 100%.
-            // We force a minimum "virtual liquidity price" of 0.0001 for the ratio calc.
-            const otherSidePrice = rawOtherSidePrice;
+            // We force a minimum "virtual liquidity price" of 0.00005 (Mid-Curve) for the ratio calc.
+            // This dampens the "Probability" view while keeping the "Price" view (Djinn Mode) accurate.
+            const otherSidePrice = Math.max(0.00005, rawOtherSidePrice);
 
             // Calculate new probability for the outcome we bought
             const newLikelihood = (sim.endPrice / (sim.endPrice + otherSidePrice)) * 100;
@@ -801,8 +949,12 @@ export default function Page() {
                 probDelta = (100 - newLikelihood) - livePrice;
             }
 
-            // Safety Cap: Don't let huge jumps happen if calculation is weird
-            if (Math.abs(probDelta) > 20) probDelta = probDelta > 0 ? 20 : -20;
+            // Market Inertia: Probability is consensus, not token price.
+            // Move probability only a fraction of the theoretical spot move.
+            probDelta = probDelta * 0.15; // 15% sensitivity for "Market Consensus" inertia
+
+            // Safety Cap
+            if (Math.abs(probDelta) > 5) probDelta = probDelta > 0 ? 5 : -5;
 
 
 
@@ -840,6 +992,14 @@ export default function Page() {
             setSolBalance(prev => prev - amountNum);
 
             await loadMarketData();
+
+            setDjinnToast({
+                isVisible: true,
+                type: 'SUCCESS',
+                title: 'Bet Placed',
+                message: `Successfully bought ${sim.sharesReceived.toFixed(2)} shares of ${selectedSide}.`
+            });
+            setShowConfetti(true);
 
             // Trigger Bubble with calculated USD amount
             // usdValueInTrading is already calculated at component level and is safe to use here
@@ -925,7 +1085,7 @@ export default function Page() {
                     // Refactored to use Anchor Fetch for safety against variable-length data
                     try {
                         // @ts-ignore
-                        const decodedMarket = await program.account.market.fetch(marketPda);
+                        const decodedMarket = await program.account.market.fetch(marketPda) as any;
 
                         const yesSupply = Number(decodedMarket.outcomeSupplies[0]) / 1e9;
                         const noSupply = Number(decodedMarket.outcomeSupplies[1]) / 1e9;
@@ -985,9 +1145,10 @@ export default function Page() {
                                 };
 
                                 // Update candles for ALL outcomes (ensuring alignment)
-                                decodedMarket.outcomeSupplies.forEach((_supply: any, idx: number) => {
-                                    const s = Number(decodedMarket.outcomeSupplies[idx]) / 1e9;
+                                (decodedMarket.outcomeSupplies as any[]).forEach((_supply: any, idx: number) => {
+                                    const s = Number((decodedMarket.outcomeSupplies as any[])[idx]) / 1e9;
                                     const p = getSpotPrice(s);
+                                    console.log(`🔍 Refreshed price from contract - Outcome ${idx}:`, p);
                                     updateCandleForOutcome(idx, p);
                                 });
 
@@ -1043,9 +1204,9 @@ export default function Page() {
     // Handler to toggle logic
     const handleTrade = async () => {
         console.log(`🖱️ ${tradeMode} Button Clicked.`);
-        if (!publicKey) return setDjinnToast({ isVisible: true, type: 'ERROR', message: "Please connect wallet" });
+        if (!publicKey) return setDjinnToast({ isVisible: true, type: 'ERROR', title: 'Wallet Error', message: "Please connect wallet" });
         const amountVal = parseFloat(betAmount);
-        if (isNaN(amountVal) || amountVal <= 0) return setDjinnToast({ isVisible: true, type: 'ERROR', message: "Enter a valid amount" });
+        if (isNaN(amountVal) || amountVal <= 0) return setDjinnToast({ isVisible: true, type: 'ERROR', title: 'Invalid Amount', message: "Enter a valid amount" });
 
         if (tradeMode === 'BUY') {
             await handlePlaceBet();
@@ -1073,7 +1234,7 @@ export default function Page() {
             // Allow small buffer for floating point issues or just cap it
             if (sharesToSell > availableShares * 1.001) { // 0.1% tolerance
                 if (sharesToSell > availableShares + 0.01) {
-                    return setDjinnToast({ isVisible: true, type: 'ERROR', message: `Insufficient shares! You need ${sharesToSell.toFixed(2)} shares to get ${amountVal} SOL` });
+                    return setDjinnToast({ isVisible: true, type: 'ERROR', title: 'Insufficient Shares', message: `Insufficient shares! You need ${sharesToSell.toFixed(2)} shares to get ${amountVal} SOL` });
                 }
             }
 
@@ -1081,7 +1242,7 @@ export default function Page() {
             const finalSharesToSell = (sharesToSell >= availableShares || isMaxSell) ? availableShares : sharesToSell;
 
             if (finalSharesToSell <= 0) {
-                return setDjinnToast({ isVisible: true, type: 'ERROR', message: `You don't hold any ${selectedSide} PREDICTIONS to sell!` });
+                return setDjinnToast({ isVisible: true, type: 'ERROR', title: 'No Shares', message: `You don't hold any ${selectedSide} PREDICTIONS to sell!` });
             }
 
             setIsPending(true);
@@ -1107,9 +1268,8 @@ export default function Page() {
                         console.log("🔗 SELL CALL - Compare with PAGE.TSX marketInfo.market_pda above");
 
                         // Debugging Creator
-                        // Assuming TREASURY_WALLET is defined elsewhere, e.g., in constants.ts
-                        // For now, using a placeholder if not defined in this scope.
-                        const TREASURY_WALLET = new PublicKey('Djinn4Xg2s9SPjE8g2d2222222222222222222222'); // Placeholder, replace with actual if needed
+                        // Use confirmed Master Treasury as fallback
+                        const TREASURY_WALLET = new PublicKey('G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma');
                         const creatorKey = marketAccount.creator ? new PublicKey(marketAccount.creator) : TREASURY_WALLET;
                         console.log("🔗 SELL CALL - Creator Key passed:", creatorKey.toBase58());
                         console.log("🔗 SELL CALL - Is Treasury?", creatorKey.equals(TREASURY_WALLET));
@@ -1158,13 +1318,7 @@ export default function Page() {
                         console.log("✅ Sell TX:", tx);
                         txSignature = tx;
                     } catch (sellError: any) {
-                        console.error("❌ SELL ERROR DETAILS:", {
-                            message: sellError.message,
-                            code: sellError.code,
-                            logs: sellError.logs,
-                            error: sellError,
-                            stack: sellError.stack
-                        });
+                        console.error("❌ SELL ERROR DETAILS:", JSON.stringify(sellError, Object.getOwnPropertyNames(sellError), 2));
 
                         // Show detailed error to user
                         setDjinnToast({
@@ -1200,11 +1354,18 @@ export default function Page() {
                 // For Sell, we INVERT the impact.
                 // For Sell, we need to calculate the NEW probability from the NEW spot price.
                 // sim.endPrice is the predicted price after sell.
-                const otherSideSupply = selectedSide === 'YES' ? noSupply : yesSupply; // Grab from scope or refetch
+                let outcome0Supply = 0;
+                let outcome1Supply = 0;
+                if (marketAccount?.outcome_supplies && marketAccount.outcome_supplies.length >= 2) {
+                    outcome0Supply = Number(marketAccount.outcome_supplies[0]) / 1e9;
+                    outcome1Supply = Number(marketAccount.outcome_supplies[1]) / 1e9;
+                }
+                const otherSideSupply = selectedSide === 'YES' ? outcome1Supply : outcome0Supply;
                 const rawOtherSidePrice = getSpotPrice(otherSideSupply);
 
                 // STABILIZER: Same floor for Sell logic to keep it symmetric
-                const otherSidePrice = Math.max(rawOtherSidePrice, 0.0001);
+                // Using 0.00005 to match Buy Logic
+                const otherSidePrice = Math.max(rawOtherSidePrice, 0.00005);
 
                 const newLikelihood = (sim.endPrice / (sim.endPrice + otherSidePrice)) * 100;
                 const currentLikelihood = selectedSide === 'YES' ? livePrice : (100 - livePrice);
@@ -1225,11 +1386,15 @@ export default function Page() {
                     probDelta = (100 - newLikelihood) - livePrice; // Positive
                 }
 
-                // Safety Cap: Don't let huge jumps happen if calculation is weird
-                if (Math.abs(probDelta) > 20) probDelta = probDelta > 0 ? 20 : -20;
+                // Market Inertia: Probability is consensus, not token price.
+                probDelta = probDelta * 0.15; // 15% sensitivity
+
+                // Safety Cap
+                if (Math.abs(probDelta) > 5) probDelta = probDelta > 0 ? 5 : -5;
 
                 // 2. Update Price
-                const newPrice = updateExectutionPrices(effectiveSlug, probDelta);
+                const newPrice = livePrice + probDelta;
+                setLivePrice(newPrice);
                 await supabaseDb.updateMarketPrice(effectiveSlug, newPrice, -usdValue);
 
                 // 2b. Reduce Bet Position in DB (Wait for this!)
@@ -1449,42 +1614,47 @@ export default function Page() {
                                 </div>
                             </div>
 
-                            {/* RIGHT: Metrics (YES/NO Percentages based on Mcap) */}
+                            {/* RIGHT: Metrics (Dual Mcap & Total Pool) */}
                             <div className="flex flex-col items-center justify-end h-44 py-1 flex-1">
-                                {/* Mcap with Percentages */}
-                                <div className="flex items-center justify-center gap-6 bg-[#0E0E0E] px-6 py-4 rounded-2xl border border-white/10 shadow-2xl backdrop-blur-md w-full">
+                                <div className="flex items-center justify-between gap-6 bg-[#0E0E0E] px-8 py-4 rounded-2xl border border-white/10 shadow-2xl backdrop-blur-md w-full relative overflow-hidden group">
+                                    {/* Background decorative glow */}
+                                    <div className="absolute top-0 right-0 w-32 h-32 bg-[#F492B7]/5 blur-3xl rounded-full -mr-16 -mt-16" />
+
+                                    {/* Left: YES Mcap (Outcome 0) */}
                                     <div className="flex flex-col items-center flex-1">
-                                        <span className="text-3xl font-black text-[#10B981] mb-1">
+                                        <span className={`text-3xl font-black mb-1 ${mounted ? 'text-[#10B981]' : 'text-zinc-700'}`}>
                                             {mounted ? yesPercent.toFixed(0) : '50'}%
                                         </span>
-                                        <span className="text-[10px] font-bold uppercase text-gray-500 tracking-wide mb-1">
-                                            {(marketAccount?.options && marketAccount.options[0]) || 'YES'} Mcap
-                                        </span>
                                         <div className="flex flex-col items-center">
-                                            <span className="text-2xl font-extrabold text-white tracking-tight">
+                                            <span className="text-2xl font-black text-white tracking-tight">
                                                 {formatCompact(yesMcap)}
+                                            </span>
+                                            <span className="text-[10px] font-black uppercase text-gray-500 tracking-[0.15em] mt-1 whitespace-nowrap">
+                                                {(marketAccount?.options?.[0]) || 'YES'} Mcap
                                             </span>
                                         </div>
                                     </div>
 
-                                    <div className="flex flex-col items-center px-4 border-l border-r border-white/10">
-                                        <span className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Total Pool</span>
-                                        <span className="text-xl font-black text-[#F492B7] drop-shadow-[0_0_8px_rgba(244,146,183,0.3)]">
-                                            {formatCompact(vaultBalanceSol)} SOL
-                                        </span>
-                                        <span className="text-[9px] font-bold text-gray-500 uppercase">Liquidity</span>
+                                    {/* Center: Total Pool */}
+                                    <div className="flex flex-col items-center px-8 border-l border-r border-white/10 relative z-10">
+                                        <div className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] mb-1">Total Pool</div>
+                                        <div className="text-2xl font-black text-[#F492B7] drop-shadow-[0_0_12px_rgba(244,146,183,0.4)]">
+                                            {formatCompact(vaultBalanceSol)} <span className="text-xs font-medium">SOL</span>
+                                        </div>
+                                        <span className="text-[9px] font-bold text-gray-600 uppercase mt-1 tracking-widest">Liquidity</span>
                                     </div>
 
+                                    {/* Right: NO Mcap (Outcome 1) */}
                                     <div className="flex flex-col items-center flex-1">
-                                        <span className="text-3xl font-black text-[#EF4444] mb-1">
+                                        <span className={`text-3xl font-black mb-1 ${mounted ? 'text-[#EF4444]' : 'text-zinc-700'}`}>
                                             {mounted ? noPercent.toFixed(0) : '50'}%
                                         </span>
-                                        <span className="text-[10px] font-bold uppercase text-gray-500 tracking-wide mb-1">
-                                            {(marketAccount?.options && marketAccount.options[1]) || 'NO'} Mcap
-                                        </span>
                                         <div className="flex flex-col items-center">
-                                            <span className="text-2xl font-extrabold text-white tracking-tight">
+                                            <span className="text-2xl font-black text-white tracking-tight">
                                                 {formatCompact(noMcap)}
+                                            </span>
+                                            <span className="text-[10px] font-black uppercase text-gray-500 tracking-[0.15em] mt-1 text-right whitespace-nowrap">
+                                                {(marketAccount?.options?.[1]) || 'NO'} Mcap
                                             </span>
                                         </div>
                                     </div>

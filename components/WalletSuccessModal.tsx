@@ -12,6 +12,10 @@ export default function WalletSuccessModal() {
     // Watch for connection changes
     useEffect(() => {
         if (connected) {
+            // Check if we already notified this session to avoid refresh-spam
+            const hasNotifiedThisSession = sessionStorage.getItem('djinn_notified_connection');
+            if (hasNotifiedThisSession) return;
+
             const hasConnectedBefore = localStorage.getItem('djinn_has_connected_before');
             if (!hasConnectedBefore) {
                 setIsFirstTime(true);
@@ -21,16 +25,19 @@ export default function WalletSuccessModal() {
             }
 
             setIsOpen(true);
-            setIsClosing(false); // Reset closing state
+            setIsClosing(false);
+            sessionStorage.setItem('djinn_notified_connection', 'true');
 
-            // Auto-hide after 5 seconds
+            // Auto-hide after 3 seconds (faster for better UX)
             const timer = setTimeout(() => {
                 handleClose();
-            }, 5000);
+            }, 3000);
 
             return () => clearTimeout(timer);
         } else {
             setIsOpen(false);
+            // Clear notified status when disconnected so it shows again on NEXT connection
+            sessionStorage.removeItem('djinn_notified_connection');
         }
     }, [connected]);
 
