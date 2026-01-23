@@ -18,6 +18,7 @@ export default function GenesisPage() {
     const [loading, setLoading] = useState(true);
     const [registering, setRegistering] = useState(false);
     const [message, setMessage] = useState<string | null>(null);
+    const [isVideoPlaying, setIsVideoPlaying] = useState(false);
     const videoRef = useRef<HTMLVideoElement>(null);
 
     // Initial Status Check
@@ -58,9 +59,16 @@ export default function GenesisPage() {
     useEffect(() => {
         if (videoRef.current) {
             videoRef.current.muted = true;
-            videoRef.current.play().catch(err => {
-                console.warn('[Genesis] Autoplay blocked or failed:', err);
-            });
+            const playPromise = videoRef.current.play();
+
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    setIsVideoPlaying(true);
+                }).catch(err => {
+                    console.warn('[Genesis] Autoplay blocked or failed:', err);
+                    setIsVideoPlaying(false);
+                });
+            }
         }
     }, []);
 
@@ -77,12 +85,19 @@ export default function GenesisPage() {
                     preload="auto"
                     disablePictureInPicture
                     poster="/genesis/poster.png"
-                    className="h-full w-full object-cover opacity-40 mix-blend-screen"
+                    className={`h-full w-full object-cover mix-blend-screen pointer-events-none transition-opacity duration-1000 ${isVideoPlaying ? 'opacity-40' : 'opacity-0'}`}
                 >
                     <source src="/genesis/g-genesis.mp4" type="video/mp4" />
                     {/* Fallback pattern if video missing */}
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(88,28,135,0.15)_0%,transparent_70%)]" />
                 </video>
+                {/* Fallback Poster */}
+                {!isVideoPlaying && (
+                    <div
+                        className="absolute inset-0 bg-cover bg-center opacity-20 transition-opacity duration-1000"
+                        style={{ backgroundImage: 'url(/genesis/poster.png)' }}
+                    />
+                )}
                 {/* Dark Overlay for Luxury Feel */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-transparent" />
             </div>
@@ -233,6 +248,12 @@ export default function GenesisPage() {
             <style jsx global>{`
                 @keyframes shimmer {
                     100% { transform: translateX(100%); }
+                }
+                video::-webkit-media-controls {
+                    display:none !important;
+                }
+                video::-webkit-media-controls-start-playback-button {
+                    display:none !important;
                 }
             `}</style>
         </div>

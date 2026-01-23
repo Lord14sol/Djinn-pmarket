@@ -17,6 +17,7 @@ export default function GenesisPage() {
         isAdmin: false,
     });
     const [loading, setLoading] = useState(true);
+    const [isVideoPlaying, setIsVideoPlaying] = useState(false);
     const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
     const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -43,9 +44,16 @@ export default function GenesisPage() {
     useEffect(() => {
         if (videoRef.current) {
             videoRef.current.muted = true;
-            videoRef.current.play().catch(err => {
-                console.warn('[Genesis] Autoplay blocked or failed:', err);
-            });
+            const playPromise = videoRef.current.play();
+
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    setIsVideoPlaying(true);
+                }).catch(err => {
+                    console.warn('[Genesis] Autoplay blocked or failed:', err);
+                    setIsVideoPlaying(false);
+                });
+            }
         }
     }, []);
 
@@ -66,10 +74,17 @@ export default function GenesisPage() {
                         preload="auto"
                         disablePictureInPicture
                         poster="/genesis/poster.png"
-                        className="h-full w-full object-contain mix-blend-screen"
+                        className={`h-full w-full object-contain mix-blend-screen pointer-events-none transition-opacity duration-1000 ${isVideoPlaying ? 'opacity-100' : 'opacity-0'}`}
                     >
                         <source src="/genesis/g-genesis.mp4" type="video/mp4" />
                     </video>
+                    {/* Fallback Poster (Always visible behind video) */}
+                    {!isVideoPlaying && (
+                        <div
+                            className="absolute inset-0 bg-contain bg-center bg-no-repeat opacity-50 transition-opacity duration-1000"
+                            style={{ backgroundImage: 'url(/genesis/poster.png)' }}
+                        />
+                    )}
                     {/* Radial Fade Mask - Makes edges disappear into black */}
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_20%,black_70%)] md:bg-[radial-gradient(circle_at_center,transparent_30%,black_80%)]" />
                 </div>
@@ -188,6 +203,13 @@ export default function GenesisPage() {
                     background: linear-gradient(90deg, transparent, rgba(244,146,183,0.1), transparent);
                     background-size: 200% 100%;
                     animation: shimmer 3s infinite;
+                }
+                /* Hide any native media controls that might appear on mobile if autoplay fails */
+                video::-webkit-media-controls {
+                    display:none !important;
+                }
+                video::-webkit-media-controls-start-playback-button {
+                    display:none !important;
                 }
             `}</style>
         </div>
