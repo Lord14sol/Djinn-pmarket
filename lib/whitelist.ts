@@ -5,8 +5,8 @@ export const ADMIN_WALLETS = [
     "G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma"
 ];
 
-// Set to 0 to restrict access exclusively to admin wallets for launch preparation
-export const GENESIS_LIMIT = 0;
+// Set to 2 to allow for testing/limited access
+export const GENESIS_LIMIT = 2;
 
 export interface WhitelistStatus {
     count: number;
@@ -67,7 +67,7 @@ export async function registerForWhitelist(walletAddress: string): Promise<{ suc
     }
 
     if (status.isFull) {
-        return { success: false, message: "SPOTS FULL. THANK YOU FOR YOUR INTEREST" };
+        return { success: false, message: "SPOTS FULL. THANK YOU STAY TUNED FOR UPDATES" };
     }
 
     const { error } = await supabase

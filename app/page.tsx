@@ -137,7 +137,7 @@ export default function GenesisPage() {
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: 0.3, duration: 0.6 }}
-                    className="relative w-full max-w-md overflow-hidden md:ml-8"
+                    className="relative w-full max-w-md overflow-hidden md:ml-8 mt-12 md:mt-20"
                 >
                     <div className="flex flex-col gap-8">
                         {/* Interaction Logic */}
@@ -185,7 +185,7 @@ export default function GenesisPage() {
                                 <motion.div key="full" className="flex flex-col items-center gap-4">
                                     <div className="border border-white/5 bg-white/[0.02] px-8 py-6">
                                         <div className="text-[10px] font-bold tracking-[0.3em] text-white/40 uppercase text-center leading-relaxed">
-                                            SPOTS FULL. <br /> THANK YOU FOR YOUR INTEREST.
+                                            SPOTS FULL. <br /> THANK YOU STAY TUNED FOR UPDATES.
                                         </div>
                                     </div>
                                 </motion.div>
