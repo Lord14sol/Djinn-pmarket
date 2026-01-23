@@ -36,8 +36,6 @@ export default function WalletSuccessModal() {
             return () => clearTimeout(timer);
         } else {
             setIsOpen(false);
-            // Clear notified status when disconnected so it shows again on NEXT connection
-            sessionStorage.removeItem('djinn_notified_connection');
         }
     }, [connected]);
 
