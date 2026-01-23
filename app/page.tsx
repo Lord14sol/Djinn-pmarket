@@ -42,19 +42,37 @@ export default function GenesisPage() {
 
     // Force autoplay on mobile
     useEffect(() => {
-        if (videoRef.current) {
-            videoRef.current.muted = true;
-            const playPromise = videoRef.current.play();
+        const forcePlay = () => {
+            if (videoRef.current) {
+                videoRef.current.muted = true;
+                const playPromise = videoRef.current.play();
 
-            if (playPromise !== undefined) {
-                playPromise.then(() => {
-                    setIsVideoPlaying(true);
-                }).catch(err => {
-                    console.warn('[Genesis] Autoplay blocked or failed:', err);
-                    setIsVideoPlaying(false);
-                });
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        setIsVideoPlaying(true);
+                    }).catch(err => {
+                        console.warn('[Genesis] Autoplay blocked or failed:', err);
+                    });
+                }
             }
-        }
+        };
+
+        // Initial attempt
+        forcePlay();
+
+        // Interaction listeners to bypass strict iOS/Android blocks
+        const events = ['touchstart', 'pointerdown', 'mousedown', 'keydown'];
+        const handleInteraction = () => {
+            forcePlay();
+            // Remove listeners once we've successfully attempted playback
+            events.forEach(event => window.removeEventListener(event, handleInteraction));
+        };
+
+        events.forEach(event => window.addEventListener(event, handleInteraction, { passive: true }));
+
+        return () => {
+            events.forEach(event => window.removeEventListener(event, handleInteraction));
+        };
     }, []);
 
     return (
