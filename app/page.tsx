@@ -108,7 +108,8 @@ export default function GenesisPage() {
                 </div>
 
                 {/* Secondary Deep Overlay - Extra Layer of Blend */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black" />
+                <div className="absolute inset-0 bg-[linear-gradient(to_bottom,black_0%,transparent_40%,transparent_60%,black_100%)]" />
+                <div className="absolute inset-0 bg-gradient-to-b from-black to-transparent h-96 z-10" /> {/* Extra aggressive top fade */}
                 <div className="absolute inset-0 bg-gradient-to-r from-black via-transparent to-black opacity-60" />
             </div>
 

@@ -118,7 +118,8 @@ export default function GenesisPage() {
                 )}
                 {/* Aggressive Edge Masking */}
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,black_85%)]" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black" />
+                <div className="absolute inset-0 bg-[linear-gradient(to_bottom,black_0%,transparent_40%,transparent_60%,black_100%)]" />
+                <div className="absolute inset-0 bg-gradient-to-b from-black to-transparent h-96 z-10" /> {/* Extra aggressive top fade */}
                 <div className="absolute inset-0 bg-gradient-to-r from-black via-transparent to-black opacity-50" />
             </div>
 
