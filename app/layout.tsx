@@ -90,7 +90,7 @@ export default function RootLayout({
                   <LayoutWrapper>
                     <AchievementNotification />
                     <WalletSuccessModal />
-                    <main className="pt-20 flex-grow">
+                    <main className="flex-grow">
                       {children}
                     </main>
                   </LayoutWrapper>

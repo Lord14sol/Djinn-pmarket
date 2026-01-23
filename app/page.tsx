@@ -76,7 +76,7 @@ export default function GenesisPage() {
     }, []);
 
     return (
-        <div className="relative min-h-[calc(100vh-80px)] w-full overflow-hidden bg-black text-white selection:bg-white/10 font-mono">
+        <div className="relative min-h-screen w-full overflow-hidden bg-black text-white selection:bg-white/10 font-mono">
             {/* --- GRAIN/NOISE OVERLAY (Premium Skill) --- */}
             <div className="pointer-events-none absolute inset-0 z-50 opacity-[0.03] mix-blend-overlay bg-[url('https://grain-y-gradients.vercel.app/noise.svg')]"></div>
 

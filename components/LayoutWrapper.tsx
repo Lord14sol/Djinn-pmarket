@@ -30,7 +30,9 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
         <>
             {!isGenesis && <Navbar />}
             {!isGenesis && <LavaLampBackground />}
-            {children}
+            <div className={!isGenesis ? "pt-20" : ""}>
+                {children}
+            </div>
         </>
     );
 }

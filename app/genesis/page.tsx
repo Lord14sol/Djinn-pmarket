@@ -91,7 +91,7 @@ export default function GenesisPage() {
     }, []);
 
     return (
-        <div className="relative min-h-[calc(100vh-80px)] w-full overflow-hidden bg-black text-white selection:bg-purple-500/30">
+        <div className="relative min-h-screen w-full overflow-hidden bg-black text-white selection:bg-purple-500/30">
             {/* --- BACKGROUND VIDEO / AMBIENCE --- */}
             <div className="absolute inset-0 z-0">
                 <video
