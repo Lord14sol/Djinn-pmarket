@@ -116,8 +116,10 @@ export default function GenesisPage() {
                         style={{ backgroundImage: 'url(/genesis/poster.png)' }}
                     />
                 )}
-                {/* Dark Overlay for Luxury Feel */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-transparent" />
+                {/* Aggressive Edge Masking */}
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,black_85%)]" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black" />
+                <div className="absolute inset-0 bg-gradient-to-r from-black via-transparent to-black opacity-50" />
             </div>
 
             {/* --- MAIN CONTENT --- */}
