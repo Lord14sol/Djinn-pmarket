@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -18,6 +18,7 @@ export default function GenesisPage() {
     const [loading, setLoading] = useState(true);
     const [registering, setRegistering] = useState(false);
     const [message, setMessage] = useState<string | null>(null);
+    const videoRef = useRef<HTMLVideoElement>(null);
 
     // Initial Status Check
     const refreshStatus = useCallback(async () => {
@@ -53,11 +54,22 @@ export default function GenesisPage() {
         }
     };
 
+    // Force autoplay on mobile
+    useEffect(() => {
+        if (videoRef.current) {
+            videoRef.current.muted = true;
+            videoRef.current.play().catch(err => {
+                console.warn('[Genesis] Autoplay blocked or failed:', err);
+            });
+        }
+    }, []);
+
     return (
         <div className="relative min-h-[calc(100vh-80px)] w-full overflow-hidden bg-black text-white selection:bg-purple-500/30">
             {/* --- BACKGROUND VIDEO / AMBIENCE --- */}
             <div className="absolute inset-0 z-0">
                 <video
+                    ref={videoRef}
                     autoPlay
                     loop
                     muted

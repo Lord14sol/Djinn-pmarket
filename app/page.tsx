@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Image from 'next/image';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -18,6 +18,7 @@ export default function GenesisPage() {
     });
     const [loading, setLoading] = useState(true);
     const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
+    const videoRef = useRef<HTMLVideoElement>(null);
 
     // Initial Status Check
     const refreshStatus = useCallback(async () => {
@@ -38,6 +39,16 @@ export default function GenesisPage() {
         return () => clearInterval(interval);
     }, [refreshStatus]);
 
+    // Force autoplay on mobile
+    useEffect(() => {
+        if (videoRef.current) {
+            videoRef.current.muted = true;
+            videoRef.current.play().catch(err => {
+                console.warn('[Genesis] Autoplay blocked or failed:', err);
+            });
+        }
+    }, []);
+
     return (
         <div className="relative min-h-[calc(100vh-80px)] w-full overflow-hidden bg-black text-white selection:bg-white/10 font-mono">
             {/* --- GRAIN/NOISE OVERLAY (Premium Skill) --- */}
@@ -47,6 +58,7 @@ export default function GenesisPage() {
             <div className="absolute inset-0 z-0 overflow-hidden bg-black">
                 <div className="absolute top-1/2 -right-1/4 md:right-32 -translate-y-1/2 w-full md:w-[60%] h-full md:h-[120%] opacity-[0.45] animate-pulse-slow">
                     <video
+                        ref={videoRef}
                         autoPlay
                         loop
                         muted
