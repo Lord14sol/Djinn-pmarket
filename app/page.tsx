@@ -51,6 +51,9 @@ export default function GenesisPage() {
                         loop
                         muted
                         playsInline
+                        preload="auto"
+                        disablePictureInPicture
+                        poster="/genesis/poster.png"
                         className="h-full w-full object-contain mix-blend-screen"
                     >
                         <source src="/genesis/g-genesis.mp4" type="video/mp4" />
@@ -160,8 +163,8 @@ export default function GenesisPage() {
                     50% { opacity: 0.8; transform: scale(0.98); filter: drop-shadow(0 0 25px rgba(255,255,255,0.3)); }
                 }
                 @keyframes pulse-slow {
-                    0%, 100% { opacity: 0; }
-                    50% { opacity: 0.45; }
+                    0%, 100% { opacity: 0.25; }
+                    50% { opacity: 0.6; }
                 }
                 @keyframes shimmer {
                     0% { background-position: -200% 0; }

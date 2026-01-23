@@ -62,9 +62,12 @@ export default function GenesisPage() {
                     loop
                     muted
                     playsInline
+                    preload="auto"
+                    disablePictureInPicture
+                    poster="/genesis/poster.png"
                     className="h-full w-full object-cover opacity-40 mix-blend-screen"
                 >
-                    <source src="/genesis/bg-sniper.mp4" type="video/mp4" />
+                    <source src="/genesis/g-genesis.mp4" type="video/mp4" />
                     {/* Fallback pattern if video missing */}
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(88,28,135,0.15)_0%,transparent_70%)]" />
                 </video>
