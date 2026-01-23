@@ -18,10 +18,10 @@ export const PHASE3_START = 200_000_000;
 
 // PRICE CONSTANTS (in SOL, matches Lamports conversion in lib.rs)
 // UPDATED FOR "BALANCED PUMP" (Stability + Low Mcap)
-const P_START = 0.00000001;    // 10 lamports -> Starts at ~$60 Mcap despite 30M depth
-const P_50 = 0.000005;         // 5000 lamports (Target at 100M) - kept low for gains
+const P_START = 0.000001;    // 1000 lamports (Synced with lib.rs)
+const P_50 = 0.000005;         // 5000 lamports
 const P_90 = 0.000025;         // 25000 lamports
-const P_MAX = 0.95;            // 950M nanoSOL (0.95 SOL cap)
+const P_MAX = 0.95;            // 0.95 SOL
 
 
 // SIGMOID CALIBRATION - ORIGINAL "GRADUAL GROWTH" DESIGN
@@ -103,7 +103,9 @@ export function getSpotPrice(sharesSupply: number): number {
     } else {
         // PHASE 3: SIGMOID
         const x_rel = effectiveSupply - PHASE3_START;
-        const kz = K_SIGMOID * x_rel;
+        // K_SIGMOID: Need norm_sig to reach 1e9 when x_rel is 800M
+        // 1.25 * 800M = 1B. (Matched with contract K_SIGMOID_SCALED = 1.25e9 / 1e18)
+        const kz = 1.25 * x_rel;
         const norm_sig = Math.min(1_000_000_000, Math.max(0, kz));
         const price_delta = (P_MAX - P_90) * norm_sig / 1_000_000_000;
         return P_90 + price_delta;

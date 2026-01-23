@@ -4,8 +4,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShieldCheck, Lock, ArrowRight, Loader2 } from 'lucide-react';
-import { getWhitelistStatus, registerForWhitelist, GENESIS_LIMIT } from '@/lib/whitelist';
+import { Loader2 } from 'lucide-react';
+import { getWhitelistStatus } from '@/lib/whitelist';
 import CustomWalletModal from '@/components/CustomWalletModal';
 
 export default function GenesisPage() {
@@ -17,8 +17,6 @@ export default function GenesisPage() {
         isAdmin: false,
     });
     const [loading, setLoading] = useState(true);
-    const [registering, setRegistering] = useState(false);
-    const [message, setMessage] = useState<string | null>(null);
     const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
 
     // Initial Status Check
@@ -39,21 +37,6 @@ export default function GenesisPage() {
         const interval = setInterval(refreshStatus, 30000);
         return () => clearInterval(interval);
     }, [refreshStatus]);
-
-    const handleJoin = async () => {
-        if (!publicKey) return;
-        setRegistering(true);
-        setMessage(null);
-        try {
-            const result = await registerForWhitelist(publicKey.toBase58());
-            setMessage(result.message);
-            await refreshStatus();
-        } catch (err) {
-            setMessage("Connection error. Please try again.");
-        } finally {
-            setRegistering(false);
-        }
-    };
 
     return (
         <div className="relative min-h-[calc(100vh-80px)] w-full overflow-hidden bg-black text-white selection:bg-white/10 font-mono">
@@ -134,44 +117,28 @@ export default function GenesisPage() {
                                         Connect Wallet to Claim Spot
                                     </button>
                                 </motion.div>
-                            ) : status.isAdmin || status.isRegistered ? (
+                            ) : status.isAdmin ? (
                                 <motion.div key="access" className="flex flex-col items-center gap-8">
                                     <div className="border border-white/20 bg-white/5 px-8 py-4">
                                         <div className="text-[10px] font-bold tracking-[0.3em] text-white uppercase">
-                                            {status.isAdmin ? "WELCOME BACK, ARCHITECT" : "WELCOME BACK, GENESIS USER"}
+                                            WELCOME BACK, ARCHITECT
                                         </div>
                                     </div>
                                     <button
                                         onClick={() => window.location.href = '/markets'}
-                                        className="w-72 border border-white/20 bg-black py-5 text-[10px] font-bold tracking-[0.3em] uppercase text-white transition-all hover:border-[#F492B7] hover:bg-[#F492B7] hover:text-black active:scale-95"
+                                        className="w-72 border border-white/20 bg-black py-5 text-[10px] font-bold tracking-[0.3em] uppercase text-white transition-all hover:border-[#F492B7] hover:bg-[#F492B7] hover:text-black active:scale-95 relative overflow-hidden"
                                     >
+                                        <div className="absolute inset-0 shimmer-effect pointer-events-none" />
                                         Enter Djinn
                                     </button>
                                 </motion.div>
-                            ) : status.isFull ? (
+                            ) : (
                                 <motion.div key="full" className="flex flex-col items-center gap-4">
                                     <div className="border border-white/5 bg-white/[0.02] px-8 py-6">
                                         <div className="text-[10px] font-bold tracking-[0.3em] text-white/40 uppercase text-center leading-relaxed">
                                             SPOTS FULL. <br /> THANK YOU FOR YOUR INTEREST.
                                         </div>
                                     </div>
-                                </motion.div>
-                            ) : (
-                                <motion.div key="join" className="flex flex-col items-center gap-8">
-                                    <button
-                                        disabled={registering}
-                                        onClick={handleJoin}
-                                        className="w-72 border border-white/20 bg-black py-5 text-[10px] font-bold tracking-[0.3em] uppercase text-white transition-all hover:border-[#F492B7] hover:bg-[#F492B7] hover:text-black active:scale-95 disabled:opacity-50 relative overflow-hidden"
-                                    >
-                                        <div className="absolute inset-0 shimmer-effect pointer-events-none" />
-                                        {registering ? "Processing..." : "Claim Genesis Spot"}
-                                    </button>
-
-                                    {message && (
-                                        <div className={`text-[10px] tracking-widest uppercase mt-4 ${message.includes('SECURED') ? 'text-[#F492B7] drop-shadow-[0_0_8px_rgba(244,146,183,0.5)]' : 'text-white/40'}`}>
-                                            {message}
-                                        </div>
-                                    )}
                                 </motion.div>
                             )}
                         </AnimatePresence>

@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::hash;
 
-declare_id!("ExdGFD3ucmvsNHFQnc7PQMkoNKZnQVcvrsQcYp1g2UHa");
+declare_id!("Fdbhx4cN5mPWzXneDm9XjaRgjYVjyXtpsJLGeQLPr7hg");
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // DJINN CURVE V4 AGGRESSIVE: "EARLY BIRD REWARDS"
@@ -31,9 +32,8 @@ pub const VIRTUAL_ANCHOR: u128 = 30_000_000_000_000_000;
 // SIGMOID K (Scaled: k * 1e18 for fixed-point)
 // ⚠️ LINEAR APPROXIMATION: norm_sig = k * x (not exp-based sigmoid!)
 // Philosophy: GRADUAL GROWTH for democratization
-// k = 4.7e-10 → k_scaled = 470 (original design)
 // This gives ~19x at 120M shares, allowing longer accumulation phase
-pub const K_SIGMOID_SCALED: u128 = 470;
+pub const K_SIGMOID_SCALED: u128 = 1_250_000_000;
 pub const K_SCALE_FACTOR: u128 = 1_000_000_000_000_000_000; // 1e18
 
 // FEE CONSTANTS
@@ -217,7 +217,7 @@ pub mod djinn_market {
         market.status = MarketStatus::Active;
         market.resolution_time = resolution_time;
         market.winning_outcome = None;
-        market.bump = *ctx.bumps.get("market").unwrap();
+        market.bump = ctx.bumps.market;
         
         // Calculate vault bump
         let (_, vault_bump) = Pubkey::find_program_address(
@@ -591,7 +591,7 @@ pub struct InitializeMarket<'info> {
         // 8 (discriminator) + 32 (creator) + (4 + 64) (title) + 8 (nonce) + 1 (num_outcomes)
         // + (6 * 16) (outcome_supplies array) + 16 (vault_balance) + 8 (total_pot) + 1 (status)
         // + 8 (resolution_time) + 2 (winning_outcome) + 1 (bump) + 1 (vault_bump)
-        seeds = [b"market", creator.key().as_ref(), title.as_bytes(), &nonce.to_le_bytes()],
+        seeds = [b"market", creator.key().as_ref(), &hash::hash(title.as_bytes()).to_bytes(), &nonce.to_le_bytes()],
         bump
     )]
     pub market: Box<Account<'info, Market>>,
@@ -608,7 +608,7 @@ pub struct InitializeMarket<'info> {
     pub creator: Signer<'info>,
     
     /// CHECK: Protocol treasury
-    #[account(mut)]
+    #[account(mut, address = G1_TREASURY)]
     pub protocol_treasury: AccountInfo<'info>,
     
     pub system_program: Program<'info, System>,
@@ -637,7 +637,7 @@ pub struct BuyShares<'info> {
     pub user: Signer<'info>,
     
     /// CHECK: Treasury
-    #[account(mut)]
+    #[account(mut, address = G1_TREASURY)]
     pub protocol_treasury: AccountInfo<'info>,
     
     /// CHECK: Market Creator (for fee split)
@@ -671,7 +671,7 @@ pub struct SellShares<'info> {
     pub user: Signer<'info>,
     
     /// CHECK: Treasury
-    #[account(mut)]
+    #[account(mut, address = G1_TREASURY)]
     pub protocol_treasury: AccountInfo<'info>,
 
     /// CHECK: Market Creator for fee split
@@ -698,7 +698,7 @@ pub struct ResolveMarket<'info> {
     pub authority: Signer<'info>,
     
     /// CHECK: Treasury
-    #[account(mut)]
+    #[account(mut, address = G1_TREASURY)]
     pub protocol_treasury: AccountInfo<'info>,
     
     pub system_program: Program<'info, System>,

@@ -11,6 +11,7 @@ import { Clock, DollarSign, Wallet, Activity, Users, CheckCircle2, AlertCircle, 
 import Link from 'next/link';
 import { useDjinnProtocol } from '@/hooks/useDjinnProtocol';
 import { simulateBuy, estimatePayoutInternal, CURVE_CONSTANT, VIRTUAL_OFFSET, getSpotPrice, getSupplyFromPrice, calculateImpliedProbability, getIgnitionStatus, getIgnitionProgress } from '@/lib/core-amm';
+import { useMarketData } from '@/hooks/useMarketData';
 
 // Components
 import PrettyChart from '@/components/market/PrettyChart';
@@ -27,13 +28,14 @@ import { PrizePoolCounter } from '@/components/PrizePoolCounter';
 
 import IgnitionBar from '@/components/market/IgnitionBar';
 import bs58 from 'bs58';
+import { ADMIN_WALLETS } from '@/lib/whitelist';
 
 // Utils
 const TREASURY_WALLET = new PublicKey("G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma");
 
 // --- MOCK MULTI-OUTCOMES ---
 // Matches useDjinnProtocol.ts
-const PROGRAM_ID = new PublicKey("ExdGFD3ucmvsNHFQnc7PQMkoNKZnQVcvrsQcYp1g2UHa");
+const PROGRAM_ID = new PublicKey("Fdbhx4cN5mPWzXneDm9XjaRgjYVjyXtpsJLGeQLPr7hg");
 
 const MULTI_OUTCOMES: Record<string, Outcome[]> = {
     'us-strike-mexico': [
@@ -77,12 +79,37 @@ export default function Page() {
 
     // --- STATE ---
     // Market Data
+    // --- STATE ---
     // Market Data
-    const [marketAccount, setMarketAccount] = useState<any>(null);
+    const { marketData, marketInfo, activityList, holders, isLoading: isMarketLoading, refreshAll, mutateActivity, mutateHolders, mutateMarketData } = useMarketData(slug);
+    const [onChainData, setOnChainData] = useState<any>(null); // Stores on-chain specific data (supplies, vault)
+
+    // Unified Market Account (Merges SWR Static Info + On-Chain Live Info)
+    const marketAccount = useMemo(() => {
+        // If we found it on-chain but not in DB (rare fallback), onChainData will carry most info
+        // Typically marketInfo provides metadata, onChainData provides live supplies
+        const base = (marketInfo || {}) as any;
+        return {
+            ...base,
+            ...onChainData,
+            // Ensure critical fields are accessible at top level if onChainData provides them
+            outcome_supplies: onChainData?.outcome_supplies || base.outcome_supplies || base.outcomeSupplies,
+            yes_supply: onChainData?.yes_supply || base.yes_supply,
+            no_supply: onChainData?.no_supply || base.no_supply
+        };
+    }, [marketInfo, onChainData]);
+
     const [selectedOutcomeId, setSelectedOutcomeId] = useState<string>('');
     const [selectedOutcomeName, setSelectedOutcomeName] = useState<string>('');
     const [hoveredPrice, setHoveredPrice] = useState<number | null>(null);
     const [livePrice, setLivePrice] = useState<number>(50);
+
+    // Sync Live Price from SWR to Local State (for optimistic UI support)
+    useEffect(() => {
+        if (marketData?.live_price) {
+            setLivePrice(marketData.live_price);
+        }
+    }, [marketData]);
 
     // Confirmation & Toast State
     const [showConfetti, setShowConfetti] = useState(false);
@@ -235,8 +262,7 @@ export default function Page() {
     const [solBalance, setSolBalance] = useState<number>(0);
     const [vaultBalanceSol, setVaultBalanceSol] = useState<number>(0); // On-chain vault balance for Prize Pool
     const [myShares, setMyShares] = useState<Record<number, number>>({});
-    const [holders, setHolders] = useState<any[]>([]);
-    const [activityList, setActivityList] = useState<any[]>([]);
+    // holders and activityList are now from SWR
     const [userProfile, setUserProfile] = useState({ username: '', avatarUrl: '' });
 
     // UI State
@@ -451,10 +477,12 @@ export default function Page() {
     // Manual Refresh for User (in case of indexer lag)
     // Manual Refresh for User (in case of indexer lag)
     // Manual Refresh triggers a reload of all on-chain data
+    // Manual Refresh for User
     const refreshBalances = async () => {
         setIsLoading(true);
         try {
-            await loadMarketData();
+            refreshAll(); // SWR Revalidation
+            await loadOnChainData(); // On-Chain Refresh
         } catch (e) {
             console.error("Manual Refresh Failed:", e);
         } finally {
@@ -493,186 +521,99 @@ export default function Page() {
         up();
     }, [connection, publicKey]);
 
-    // LOAD MARKET DATA (When effectiveSlug changes)
-    const loadMarketData = useCallback(async () => {
-        if (!connection) return;
-        // Priority: Supabase -> Static Outcome Defaults -> 50
-        const dbData = await supabaseDb.getMarketData(effectiveSlug);
-        let marketInfo = await supabaseDb.getMarket(effectiveSlug);
+    // LOAD ON-CHAIN DATA (When effectiveSlug or program changes)
+    const loadOnChainData = useCallback(async () => {
+        if (!connection || !program) return;
 
-        // RESILIENCY FALLBACK: If Supabase fails, search On-Chain by Title
-        if (!marketInfo && connection && program) {
+        let targetMarketPda = '';
+        if (marketInfo?.market_pda) targetMarketPda = marketInfo.market_pda;
+        else if (onChainData?.market_pda) targetMarketPda = onChainData.market_pda;
+
+        if (!targetMarketPda) {
             try {
-                console.log("⚠️ Market not in DB, searching On-Chain...");
-                // Guess title from slug: "quien-gana-el-mundial" -> "quien gana el mundial"
+                console.log("⚠️ Market PDA unknown, searching On-Chain...");
                 const titleGuess = effectiveSlug.replace(/-/g, ' ');
                 const titleBytes = new TextEncoder().encode(titleGuess);
-
-                // Discriminator (8) + Creator (32) + Title Length (4)
-                // We blindly search for the bytes starting at offset 44
                 const accounts = await connection.getProgramAccounts(program.programId, {
-                    filters: [
-                        { memcmp: { offset: 44, bytes: bs58.encode(titleBytes) } }
-                    ]
+                    filters: [{ memcmp: { offset: 44, bytes: bs58.encode(titleBytes) } }]
                 });
-
                 if (accounts.length > 0) {
-                    console.log("✅ Found Market On-Chain:", accounts[0].pubkey.toBase58());
-                    const acc = accounts[0];
-                    const decoded = program.coder.accounts.decode('Market', acc.account.data);
-
-                    marketInfo = {
+                    targetMarketPda = accounts[0].pubkey.toBase58();
+                    const decoded = program.coder.accounts.decode('Market', accounts[0].account.data);
+                    setOnChainData({
                         ...decoded,
-                        market_pda: acc.pubkey.toBase58(),
+                        market_pda: targetMarketPda,
                         creator_wallet: decoded.creator.toBase58(),
                         outcome_supplies: decoded.outcomeSupplies,
-                        yes_token_mint: "So11111111111111111111111111111111111111112", // Mock/Native
-                        no_token_mint: "So11111111111111111111111111111111111111112",
                         title: decoded.title,
-                        description: 'Recovered from On-Chain Data',
-                        // Map other fields as best effort
                         options: ['YES', 'NO'],
                         end_date: new Date(decoded.resolutionTime.toNumber() * 1000).toISOString(),
-                        resolution_source: 'Pyth/Oracle',
-                        banner_url: '/placeholder-market.jpg' // Default
+                    });
+                }
+            } catch (e) { console.warn("On-Chain Search failed:", e); }
+        }
+
+        if (targetMarketPda) {
+            try {
+                const marketPda = new PublicKey(targetMarketPda);
+                if (publicKey) {
+                    const decodePosition = (accInfo: any) => {
+                        if (!accInfo?.data) return 0;
+                        try {
+                            const decoded = program.coder.accounts.decode('UserPosition', accInfo.data);
+                            return Number(decoded.shares) / 1e9;
+                        } catch (e) { return 0; }
                     };
 
-                    // Also try to upsert this back to Supabase so we don't scan every time?
-                    // supabaseDb.createMarket(marketInfo)... (Optional, maybe risky if user is just viewer)
-                }
-            } catch (err) {
-                console.warn("On-Chain Search failed:", err);
-            }
-        }
-
-        console.log("MARKET INFO DEBUG:", marketInfo); // Debug Real Market detection
-        if (marketInfo) {
-            // Fetch Creator Profile to display avatar
-            if (marketInfo.creator_wallet) {
-                try {
-                    const creatorProfile = await supabaseDb.getProfile(marketInfo.creator_wallet);
-                    if (creatorProfile) {
-                        // @ts-ignore
-                        marketInfo.creator_username = creatorProfile.username;
-                        // @ts-ignore
-                        marketInfo.creator_avatar = creatorProfile.avatar_url;
-                    }
-                } catch (err) { console.warn("Failed to load creator profile", err); }
-            }
-            setMarketAccount(marketInfo);
-        }
-
-        if (dbData) {
-            setLivePrice(dbData.live_price);
-        } else {
-            // Try initial default from outcomes list if available
-            const initialOutcome = marketOutcomes.find(o => o.id === effectiveSlug);
-            const initialPrice = initialOutcome ? initialOutcome.yesPrice : 50;
-            setLivePrice(initialPrice);
-        }
-
-        // Load Activity - Optimised DB Filter
-        const outcomeIds = marketOutcomes.map(o => o.id);
-        const targetSlugs = Array.from(new Set([slug, effectiveSlug, ...outcomeIds])); // Deduplicate
-        const relevantActivity = await supabaseDb.getActivity(0, 50, targetSlugs);
-        setActivityList(relevantActivity);
-
-        // Load Holders
-        const topHolders = await supabaseDb.getTopHolders(effectiveSlug);
-        setHolders(topHolders);
-
-        // On-Chain Fallback
-        if (marketInfo?.market_pda && publicKey && program) {
-            try {
-                const marketPda = new PublicKey(marketInfo.market_pda);
-                // PROGRAM_ID is already imported from @/lib/program-config at the top of file (if not, we should import it)
-                // However, checking imports... it IS imported as PROGRAM_ID.
-                // But wait, line 20 of current file (based on view) has: import { PROGRAM_ID } from '@/lib/program-config';
-
-                // So we can just use it.
-
-                const decodePosition = (accInfo: any) => {
-                    if (!accInfo?.data) return 0;
-                    try {
-                        const decoded = program.coder.accounts.decode('UserPosition', accInfo.data);
-                        return Number(decoded.shares) / 1e9;
-                    } catch (e) {
-                        return 0;
-                    }
-                };
-
-                const numOutcomes = (marketInfo as any).num_outcomes || 2;
-                const pdas = [];
-                for (let n = 0; n < numOutcomes; n++) {
-                    const [pda] = PublicKey.findProgramAddressSync(
-                        [Buffer.from("user_pos"), marketPda.toBuffer(), publicKey.toBuffer(), Buffer.from([n])],
-                        PROGRAM_ID
-                    );
-                    pdas.push(pda);
-                }
-
-                const [marketAccInfo, ...pdaInfos] = await connection.getMultipleAccountsInfo([marketPda, ...pdas]);
-                const newShares: Record<number, number> = {};
-                pdaInfos.forEach((info, idx) => {
-                    newShares[idx] = decodePosition(info);
-                });
-                setMyShares(newShares);
-
-                if (marketAccInfo) {
-                    // Use coder.decode for safety with variable length data
-                    const decodedMarket = program.coder.accounts.decode('Market', marketAccInfo.data);
-                    const sYes = Number(decodedMarket.outcomeSupplies[0]) / 1e9;
-                    const sNo = Number(decodedMarket.outcomeSupplies[1]) / 1e9;
-                    if (sYes + sNo >= 0) {
-                        const newPrice = calculateImpliedProbability(sYes, sNo);
-                        setLivePrice(newPrice);
-
+                    const numOutcomes = (marketInfo as any)?.num_outcomes || 2;
+                    const pdas = [];
+                    for (let n = 0; n < numOutcomes; n++) {
+                        const [pda] = PublicKey.findProgramAddressSync(
+                            [Buffer.from("user_pos"), marketPda.toBuffer(), publicKey.toBuffer(), Buffer.from([n])],
+                            program.programId
+                        );
+                        pdas.push(pda);
                     }
 
-                    const vSol = Number(decodedMarket.vaultBalance) / LAMPORTS_PER_SOL;
-                    setVaultBalanceSol(vSol);
-                    setMarketAccount((prev: any) => ({
-                        ...prev,
-                        ...decodedMarket,
-                        outcome_supplies: decodedMarket.outcomeSupplies,
-                        creator: decodedMarket.creator.toBase58(),
-                        vault_balance: vSol
-                    }));
+                    const [marketAccInfo, ...pdaInfos] = await connection.getMultipleAccountsInfo([marketPda, ...pdas]);
+                    const newShares: Record<number, number> = {};
+                    pdaInfos.forEach((info, idx) => {
+                        newShares[idx] = decodePosition(info);
+                    });
+                    setMyShares(newShares);
+
+                    if (marketAccInfo) {
+                        const decodedMarket = program.coder.accounts.decode('Market', marketAccInfo.data);
+                        const sYes = Number(decodedMarket.outcomeSupplies[0]) / 1e9;
+                        const sNo = Number(decodedMarket.outcomeSupplies[1]) / 1e9;
+
+                        if (sYes + sNo >= 0) {
+                            const newPrice = calculateImpliedProbability(sYes, sNo);
+                            // Optimistically update live price from on-chain truth
+                            setLivePrice(newPrice);
+                        }
+
+                        const vSol = Number(decodedMarket.vaultBalance) / LAMPORTS_PER_SOL;
+                        setVaultBalanceSol(vSol);
+                        setOnChainData((prev: any) => ({
+                            ...prev,
+                            ...decodedMarket,
+                            outcome_supplies: decodedMarket.outcomeSupplies,
+                            vault_balance: vSol
+                        }));
+                    }
                 }
             } catch (e) {
-                console.warn("On-chain UserPosition check failed:", e);
+                console.warn("On-chain data sync failed:", e);
             }
         }
-    }, [connection, effectiveSlug, publicKey, program, marketOutcomes, slug]);
+    }, [connection, effectiveSlug, publicKey, program, marketInfo, slug, onChainData]);
 
     useEffect(() => {
-        loadMarketData();
+        loadOnChainData();
+    }, [loadOnChainData]);
 
 
-
-
-
-        loadMarketData();
-
-        const marketSub = supabaseDb.subscribeToMarketData(effectiveSlug, (payload) => {
-            if (payload.new?.live_price) {
-                const newPrice = payload.new.live_price;
-                setLivePrice(newPrice);
-
-            }
-        });
-
-        const activitySub = supabaseDb.subscribeToActivity(effectiveSlug, (payload) => {
-            setActivityList(prev => [payload.new, ...prev]);
-            // Refresh holders on new activity
-            supabaseDb.getTopHolders(effectiveSlug).then(setHolders);
-        });
-
-        return () => {
-            marketSub.unsubscribe();
-            activitySub.unsubscribe();
-        };
-    }, [effectiveSlug, publicKey]);
 
     // CALCULATIONS (Real-Time CPMM Simulation)
     const amountNum = parseFloat(betAmount) || 0;
@@ -975,7 +916,7 @@ export default function Page() {
             };
             // @ts-ignore
             await supabaseDb.createActivity(activity);
-            setActivityList(prev => [activity, ...prev]);
+            mutateActivity((current: any[] | undefined) => [activity, ...(current || [])], false);
 
             // 4. Create/Update Bet
             await supabaseDb.createBet({
@@ -991,7 +932,8 @@ export default function Page() {
             // 5. Update UI State
             setSolBalance(prev => prev - amountNum);
 
-            await loadMarketData();
+            refreshAll();
+            await loadOnChainData();
 
             setDjinnToast({
                 isVisible: true,
@@ -1407,7 +1349,7 @@ export default function Page() {
 
                 // SYNC FIX: Immediately refresh holders after DB update
                 const updatedHolders = await supabaseDb.getTopHolders(effectiveSlug);
-                setHolders(updatedHolders);
+                mutateHolders(updatedHolders, false);
 
                 // 3. Log Activity
                 const profile = await supabaseDb.getProfile(publicKey.toBase58());
@@ -1426,7 +1368,7 @@ export default function Page() {
                 };
                 // @ts-ignore
                 await supabaseDb.createActivity(sellActivity);
-                setActivityList(prev => [sellActivity, ...prev]);
+                mutateActivity((current: any[] | undefined) => [sellActivity, ...(current || [])], false);
 
                 // 4. Update UI Local State
                 setSolBalance(prev => prev + netSolReturn);
@@ -1469,7 +1411,8 @@ export default function Page() {
                         const marketPda = new PublicKey(marketAccount.market_pda);
                         const PROGRAM_ID = new PublicKey('HkjMQFag41pUutseBpXSXUuEwSKuc2CByRJjyiwAvGjL');
 
-                        await loadMarketData();
+                        refreshAll();
+                        await loadOnChainData();
                     } catch (e) {
                         console.warn("Failed to refresh after sell:", e);
                     }
@@ -1478,7 +1421,7 @@ export default function Page() {
                 // Trigger Refreshes
                 window.dispatchEvent(new Event('bet-updated'));
                 setTimeout(() => {
-                    supabaseDb.getTopHolders(effectiveSlug).then(setHolders);
+                    supabaseDb.getTopHolders(effectiveSlug).then((d) => mutateHolders(d, false));
                 }, 1000);
 
             } catch (error: any) {
@@ -2119,11 +2062,6 @@ export default function Page() {
                                                             ? (myShares[marketOutcomes.findIndex(o => o.id === selectedOutcomeId)] || 0)
                                                             : (selectedSide === 'YES' ? (myShares[0] || 0) : (myShares[1] || 0));
                                                         const price = currentPriceForSide / 100;
-
-                                                        console.log("🐞 SELL DISPLAY DEBUG:");
-                                                        console.log("- betAmount:", betAmount);
-                                                        console.log("- price (0-1):", price);
-                                                        console.log("- sharesOwned:", sharesOwned);
 
                                                         if (isMaxSell) return formatCompact(sharesOwned);
                                                         if (!betAmount || price <= 0) return '0';

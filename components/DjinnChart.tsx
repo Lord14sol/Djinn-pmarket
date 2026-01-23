@@ -1,11 +1,21 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { createChart, ColorType, CrosshairMode, CandlestickSeries, HistogramSeries, CandlestickData, HistogramData, Time } from "lightweight-charts";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { cn, formatCompact } from "@/lib/utils";
 import { TrendingUp, Activity, MousePointer2, Move, Type, Hash, Plus, Minus } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
+
+// Dynamic Imports for Heavy Chart Components (Rule 2.4)
+const ProbabilityChart = dynamic(() => import("./ProbabilityChart"), {
+    loading: () => <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs">Loading Chart...</div>,
+    ssr: false
+});
+
+const CandleChart = dynamic(() => import("./CandleChart"), {
+    loading: () => <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs">Loading Candles...</div>,
+    ssr: false
+});
 
 // --- TYPES & CONSTANTS ---
 type MarketMode = "PROBABILITY" | "DJINN";
@@ -86,7 +96,6 @@ const PumpHeader = ({ data, outcome, supply, firstCandle, outcomes, selectedOutc
         return Math.min(Math.max(pct, 0), 100);
     }, [mcapSol, ath]);
 
-    const color = getColor(outcome);
     const safeInceptionOpen = firstCandle?.open || safeClose;
 
     // ROI from Floor (Inception)
@@ -96,7 +105,7 @@ const PumpHeader = ({ data, outcome, supply, firstCandle, outcomes, selectedOutc
     return (
         <div className="flex flex-col gap-4 font-mono w-full">
             {/* TOP ROW: Outcome Tabs (Visible in both modes for selection) */}
-            {mode === "DJINN" && (
+            {mode === "DJINN" ? (
                 <div className="flex flex-wrap gap-2 mb-4 p-1 bg-zinc-900/50 rounded-lg border border-zinc-800/50 w-fit">
                     {outcomes.map((o) => {
                         const title = typeof o === 'string' ? o : o.title;
@@ -119,7 +128,7 @@ const PumpHeader = ({ data, outcome, supply, firstCandle, outcomes, selectedOutc
                         );
                     })}
                 </div>
-            )}
+            ) : null}
 
 
             {/* METADATA ROW: Title & Mode Switcher */}
@@ -139,7 +148,7 @@ const PumpHeader = ({ data, outcome, supply, firstCandle, outcomes, selectedOutc
                                 {isPositive ? '+' : ''}{roi.toFixed(2)}%
                             </span>
                         </div>
-                        {mode === "DJINN" && (
+                        {mode === "DJINN" ? (
                             <div className="flex items-center gap-3 text-xs text-zinc-500 mt-0.5">
                                 <span className="flex items-center gap-1">
                                     MCap: <span className="text-zinc-300 font-bold">{formatCompact(mcapSol)} SOL</span>
@@ -149,14 +158,14 @@ const PumpHeader = ({ data, outcome, supply, firstCandle, outcomes, selectedOutc
                                     Price: <span className="text-zinc-300 font-bold">{safeClose.toFixed(9)}</span>
                                 </span>
                             </div>
-                        )}
-                        {mode === "PROBABILITY" && (
+                        ) : null}
+                        {mode === "PROBABILITY" ? (
                             <div className="flex items-center gap-3 text-xs text-zinc-500 mt-0.5">
                                 <span className="flex items-center gap-1">
                                     Current Probability
                                 </span>
                             </div>
-                        )}
+                        ) : null}
                     </div>
                 </div>
 
@@ -178,7 +187,7 @@ const PumpHeader = ({ data, outcome, supply, firstCandle, outcomes, selectedOutc
             </div>
 
             {/* ATH PROGRESS BAR (King of the Hill Style) */}
-            {mode === "DJINN" && (
+            {mode === "DJINN" ? (
                 <div className="relative w-full h-8 bg-zinc-900 rounded stroke-zinc-800 border border-zinc-800 overflow-hidden group">
                     {/* The Fill Bar */}
                     <div
@@ -199,42 +208,16 @@ const PumpHeader = ({ data, outcome, supply, firstCandle, outcomes, selectedOutc
                         </div>
                     </div>
                 </div>
-            )}
+            ) : null}
         </div>
     );
 };
-
-// 3. Glow Point (The Visual Oracle style - Visix)
-const GlowPoint = (props: any) => {
-    const { cx, cy, stroke, payload, dataKey } = props;
-    if (cx === undefined || cy === undefined) return null;
-
-    // Use a safer ID for gradients to avoid collisions
-    const gradId = `glow-point-${String(dataKey).replace(/\s+/g, '-')}`;
-
-    return (
-        <g className="filter drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]">
-            <defs>
-                <radialGradient id={gradId}>
-                    <stop offset="0%" stopColor={stroke} stopOpacity="1" />
-                    <stop offset="100%" stopColor={stroke} stopOpacity="0" />
-                </radialGradient>
-            </defs>
-            <circle cx={cx} cy={cy} r="6" fill={stroke} strokeWidth={2} stroke="#fff" />
-            <circle cx={cx} cy={cy} r="12" fill={`url(#${gradId})`} opacity="0.4">
-                <animate attributeName="r" from="8" to="16" dur="2s" repeatCount="indefinite" />
-                <animate attributeName="opacity" from="0.4" to="0" dur="2s" repeatCount="indefinite" />
-            </circle>
-        </g>
-    );
-};
-
 
 // --- MAIN COMPONENT ---
 
 interface TheDjinnChartProps {
     outcomes?: (string | OutcomeObject)[];
-    candleData?: Record<string, CandlestickData[]>;
+    candleData?: Record<string, any[]>;
     probabilityData?: any[];
     tradeEvent?: TradeEvent | null;
     selectedOutcome?: string;
@@ -242,7 +225,7 @@ interface TheDjinnChartProps {
     outcomeSupplies?: Record<string, number>;
 }
 
-export default function TheDjinnChart({
+function TheDjinnChart({
     outcomes = ["YES", "NO"],
     candleData = {},
     probabilityData = [],
@@ -294,11 +277,6 @@ export default function TheDjinnChart({
         });
     }, [candleData, selectedOutcome, outcomeSupplies]);
 
-    const chartContainerRef = useRef<HTMLDivElement>(null);
-    const chartInstanceRef = useRef<any>(null);
-    const seriesRef = useRef<any>(null);
-    const volumeSeriesRef = useRef<any>(null);
-
     // Derived Data
     const safeProbData = useMemo(() => {
         let baseData = probabilityData.length > 0 ? [...probabilityData] : [];
@@ -330,82 +308,6 @@ export default function TheDjinnChart({
     const safeInceptionOpen = firstCandle?.open || safeClose;
     const roi = safeInceptionOpen > 0 ? ((safeClose - safeInceptionOpen) / safeInceptionOpen) * 100 : 0;
     const isPositive = roi >= 0;
-
-    // --- CHART EFFECT ---
-    useEffect(() => {
-        if (mode !== "DJINN" || !chartContainerRef.current) return;
-
-        if (chartInstanceRef.current) chartInstanceRef.current.remove();
-
-        const chart = createChart(chartContainerRef.current, {
-            layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#71717a' },
-            grid: { vertLines: { color: '#27272a' }, horzLines: { color: '#27272a' } },
-            width: chartContainerRef.current.clientWidth,
-            height: 400,
-            crosshair: { mode: CrosshairMode.Normal },
-            timeScale: { borderColor: '#27272a', shiftVisibleRangeOnNewBar: true, timeVisible: true, secondsVisible: true },
-            rightPriceScale: { borderColor: '#27272a' },
-        });
-
-        // 1. Candlestick Series
-        const series = chart.addSeries(CandlestickSeries, {
-            upColor: '#10B981', downColor: '#EF4444', borderVisible: false, wickUpColor: '#10B981', wickDownColor: '#EF4444',
-        });
-
-        // 2. Volume Series (Histogram)
-        const volumeSeries = chart.addSeries(HistogramSeries, {
-            color: '#26a69a',
-            priceFormat: { type: 'volume' },
-            priceScaleId: '', // Overlay mode
-        });
-
-        // Configure Volume Scale
-        chart.priceScale('').applyOptions({
-            scaleMargins: { top: 0.8, bottom: 0 },
-        });
-
-        // Hydrate Data
-        const data = currentCandles;
-        if (data.length > 0) {
-            series.setData(data as any);
-
-            // Mock Volume Data derived from candles
-            const volumeData = data.map((c: any) => ({
-                time: c.time,
-                value: (c.high - c.low) * 1000000 + (Math.random() * 100), // Synthetic volume
-                color: c.close >= c.open ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'
-            }));
-            volumeSeries.setData(volumeData as any);
-        }
-
-        chart.timeScale().fitContent();
-
-        chartInstanceRef.current = chart;
-        seriesRef.current = series;
-        volumeSeriesRef.current = volumeSeries;
-
-        const handleResize = () => chart.applyOptions({ width: chartContainerRef.current?.clientWidth || 0 });
-        window.addEventListener('resize', handleResize);
-        return () => {
-            window.removeEventListener('resize', handleResize);
-            chart.remove();
-            chartInstanceRef.current = null;
-        };
-    }, [mode, selectedOutcome]); // Hard Re-Mount on outcome change for safety
-
-    // Live Update Effect
-    useEffect(() => {
-        if (mode === "DJINN" && seriesRef.current && chartInstanceRef.current) {
-            seriesRef.current.setData(currentCandles as any);
-
-            const volumeData = currentCandles.map((c: any) => ({
-                time: c.time,
-                value: (c.high - c.low) * 1000000 + 50,
-                color: c.close >= c.open ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'
-            }));
-            if (volumeSeriesRef.current) volumeSeriesRef.current.setData(volumeData as any);
-        }
-    }, [currentCandles, mode]);
 
 
     return (
@@ -463,123 +365,30 @@ export default function TheDjinnChart({
             {/* MAIN CHART BODY using Grid for Sidebar */}
             <div className="flex h-[450px] bg-[#09090b]">
                 {/* LEFT TOOLBAR */}
-                {mode === "DJINN" && <TradingToolbar />}
+                {mode === "DJINN" ? <TradingToolbar /> : null}
 
                 {/* CHART AREA */}
                 <div className="flex-1 relative w-full h-full">
                     {mode === "PROBABILITY" ? (
-                        <div className="w-full h-full p-4 flex flex-col relative">
-                            {/* BUBBLES LAYER */}
-                            <div className="absolute inset-0 pointer-events-none z-20 overflow-hidden">
-                                <AnimatePresence>
-                                    {bubbles.map(b => (
-                                        <motion.div
-                                            key={b.id}
-                                            initial={{ opacity: 0, x: -20, scale: 0.8 }}
-                                            animate={{ opacity: 1, x: 20, y: -50, scale: 1 }}
-                                            exit={{ opacity: 0, y: -100 }}
-                                            transition={{ duration: 3, ease: "easeOut" }}
-                                            style={{ top: `${b.y}%`, left: '0%' }}
-                                            className="absolute flex items-center gap-2"
-                                        >
-                                            <div className="px-3 py-1 rounded-full bg-zinc-900/90 border border-zinc-700 text-xs font-bold shadow-xl backdrop-blur-md whitespace-nowrap" style={{ color: b.color }}>
-                                                {b.text}
-                                            </div>
-                                        </motion.div>
-                                    ))}
-                                </AnimatePresence>
-                            </div>
-
-                            {/* CHART */}
-                            <div className="flex-1 w-full min-h-0">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={safeProbData}>
-                                        <defs>
-                                            {outcomes.map((o) => {
-                                                const title = typeof o === 'string' ? o : o.title;
-                                                const c = getColor(title);
-                                                const gradId = `colorProb-${title.replace(/\s+/g, '-')}`;
-                                                return (
-                                                    <linearGradient key={gradId} id={gradId} x1="0" y1="0" x2="0" y2="1">
-                                                        <stop offset="5%" stopColor={c} stopOpacity={0.2} />
-                                                        <stop offset="95%" stopColor={c} stopOpacity={0} />
-                                                    </linearGradient>
-                                                );
-                                            })}
-                                        </defs>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#18181b" strokeOpacity={0.4} />
-                                        <XAxis
-                                            dataKey="time"
-                                            axisLine={false}
-                                            tickLine={false}
-                                            tick={{ fill: '#52525b', fontSize: 10 }}
-                                            tickFormatter={(val) => new Date(val * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                            minTickGap={50}
-                                        />
-                                        <YAxis domain={[0, 100]} hide />
-                                        <Tooltip
-                                            content={({ active, payload, label }) => {
-                                                if (active && payload && payload.length) {
-                                                    return (
-                                                        <div className="bg-zinc-950/90 backdrop-blur border border-zinc-800 p-3 rounded-lg shadow-xl text-xs z-50">
-                                                            <div className="text-zinc-500 mb-2">{new Date(Number(label) * 1000).toLocaleString()}</div>
-                                                            {payload.map((p: any) => (
-                                                                <div key={p.name} className="flex items-center gap-2 mb-1 last:mb-0">
-                                                                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: p.stroke }} />
-                                                                    <span className="text-zinc-300 font-bold">{p.name}</span>
-                                                                    <span className="text-zinc-400 font-mono ml-auto">{(Number(p.value)).toFixed(1)}%</span>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    );
-                                                }
-                                                return null;
-                                            }}
-                                        />
-                                        {outcomes.map((o) => {
-                                            const title = typeof o === 'string' ? o : o.title;
-                                            const gradId = `colorProb-${title.replace(/\s+/g, '-')}`;
-                                            return (
-                                                <Area
-                                                    key={title}
-                                                    type="stepAfter"
-                                                    dataKey={title}
-                                                    stroke={getColor(title)}
-                                                    strokeWidth={2}
-                                                    fillOpacity={1}
-                                                    fill={`url(#${gradId})`}
-                                                    activeDot={{ r: 4, strokeWidth: 0, fill: getColor(title) }}
-                                                />
-                                            );
-                                        })}
-                                    </AreaChart>
-                                </ResponsiveContainer>
-                            </div>
-
-                            {/* BOTTOM CONTROLS (Timeframe) */}
-                            <div className="flex justify-end pt-2 border-t border-zinc-800/50 mt-2">
-                                <div className="flex bg-zinc-900/50 p-1 rounded-lg border border-zinc-800/50 backdrop-blur-sm">
-                                    {['1H', '1D', 'ALL'].map((tf) => (
-                                        <button
-                                            key={tf}
-                                            onClick={() => setTimeframe(tf as any)}
-                                            className={cn(
-                                                "px-3 py-1 rounded-md text-[10px] font-bold transition-all",
-                                                timeframe === tf ? "bg-zinc-800 text-white shadow-sm" : "text-zinc-500 hover:text-zinc-300"
-                                            )}
-                                        >
-                                            {tf}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
+                        <ProbabilityChart
+                            data={safeProbData}
+                            outcomes={outcomes}
+                            bubbles={bubbles}
+                            timeframe={timeframe}
+                            setTimeframe={setTimeframe}
+                        />
                     ) : (
-                        // DJINN MODE: Lightweight Chart Container
-                        <div ref={chartContainerRef} className="w-full h-full" />
+                        <CandleChart
+                            data={currentCandles}
+                            selectedOutcome={selectedOutcome}
+                        />
                     )}
                 </div>
             </div>
         </div>
     );
 }
+
+// 4. Memoization (Rule 5.4)
+export default React.memo(TheDjinnChart);
+

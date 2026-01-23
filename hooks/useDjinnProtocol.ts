@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useEffect } from 'react';
 import { useAnchorWallet, useConnection } from '@solana/wallet-adapter-react';
-import { Program, AnchorProvider, Idl, BN, web3 } from '@coral-xyz/anchor';
+import { Program, AnchorProvider, Idl, BN, web3, utils } from '@coral-xyz/anchor';
 import { PublicKey, SystemProgram } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddress, createAssociatedTokenAccountIdempotentInstruction } from '@solana/spl-token';
 
@@ -10,13 +10,15 @@ import idlJson from '../lib/idl/djinn_market.json';
 const MASTER_TREASURY = new PublicKey("G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma");
 
 // Get program ID (HARDCODED as it might be missing from IDL in some builds)
-const PROGRAM_ID = "ExdGFD3ucmvsNHFQnc7PQMkoNKZnQVcvrsQcYp1g2UHa";
+const PROGRAM_ID = "Fdbhx4cN5mPWzXneDm9XjaRgjYVjyXtpsJLGeQLPr7hg";
 const PROGRAM_PUBKEY = new PublicKey(PROGRAM_ID);
 
 export const useDjinnProtocol = () => {
     const { connection } = useConnection();
     const wallet = useAnchorWallet();
 
+    // 1. Stable Provider (Rule 5.4/5.5)
+    // Only recreate if connection or wallet *identity* changes, not on every render.
     const provider = useMemo(() => {
         if (!wallet) return null;
         return new AnchorProvider(connection, wallet, {
@@ -24,30 +26,13 @@ export const useDjinnProtocol = () => {
         });
     }, [connection, wallet]);
 
+    // 2. Stable Program Instance
+    // This is the critical fix. Previously checking 'provider' in dependency could loop if provider wasn't stable.
     const program = useMemo(() => {
         if (!provider) return null;
         try {
-            console.log('[Djinn] Initializing Program with IDL:', {
-                name: (idlJson as any).name,
-                address: PROGRAM_ID,
-                instructionCount: (idlJson as any).instructions?.length
-            });
-
             // Cast to Idl type - Anchor 0.28 expects address at root level
-            const p = new Program(idlJson as Idl, PROGRAM_PUBKEY, provider);
-
-            console.log('[Djinn] Program initialized successfully');
-            console.log('[Djinn] Available methods:', Object.keys(p.methods));
-            console.log('[Djinn] buyShares method exists?', typeof p.methods.buyShares);
-            console.log('[Djinn] Program ID:', p.programId.toString());
-
-            // CRITICAL CHECK: Verify buyShares exists
-            if (!p.methods.buyShares) {
-                console.error('❌ buyShares method not found in program!');
-                console.error('Available methods:', Object.keys(p.methods));
-            }
-
-            return p;
+            return new Program(idlJson as Idl, PROGRAM_PUBKEY, provider);
         } catch (e) {
             console.error('[Djinn] Failed to initialize program:', e);
             return null;
@@ -58,25 +43,7 @@ export const useDjinnProtocol = () => {
         return !!(program && provider && wallet && wallet.publicKey);
     }, [program, provider, wallet]);
 
-    useEffect(() => {
-        console.log('[Djinn Protocol] Contract Status:', {
-            program: !!program,
-            provider: !!provider,
-            wallet: !!wallet,
-            isReady: isContractReady,
-            programId: PROGRAM_ID
-        });
-
-        if (program) {
-            console.log("🔍 IDL NAME:", (program.idl as any).name);
-            console.log("🔍 IDL INSTRUCTIONS:", (program.idl as any).instructions?.map((i: any) => i.name));
-            const idlInstruction = (program.idl as any).instructions?.find((i: any) => i.name === 'initializeMarket');
-            console.log("🔍 initializeMarket instruction found?:", !!idlInstruction);
-            console.log("🔍 initializeMarket ARGS:", idlInstruction?.args);
-            console.log("🔍 program.methods:", Object.keys(program.methods));
-            console.log("🔍 program.methods.initializeMarket:", typeof (program.methods as any).initializeMarket);
-        }
-    }, [isContractReady, program, provider, wallet]);
+    // Cleanup: Removed noisy useEffect logging loop
 
     const createMarket = useCallback(async (
         title: string,
@@ -98,7 +65,6 @@ export const useDjinnProtocol = () => {
 
             // Pre-flight checks
             const balance = await provider.connection.getBalance(wallet.publicKey);
-            console.log('[Djinn] Wallet balance:', balance / 1e9, 'SOL');
 
             if (balance < 0.05 * 1e9) {
                 throw new Error('Insufficient SOL balance (need ~0.05 SOL for market creation fee + gas)');
@@ -106,7 +72,6 @@ export const useDjinnProtocol = () => {
 
             // Generate unique nonce for duplicate title support
             const nonce = Date.now() * 1000 + Math.floor(Math.random() * 1000);
-            console.log("[Djinn] 🎲 Unique nonce generated:", nonce);
 
             // Convert nonce to little-endian i64 bytes
             const nonceBuffer = new Uint8Array(8);
@@ -121,7 +86,7 @@ export const useDjinnProtocol = () => {
                 [
                     Buffer.from("market"),
                     wallet.publicKey.toBuffer(),
-                    Buffer.from(title.slice(0, 32)), // Truncate title for seed safety
+                    Buffer.from(utils.sha256.hash(title), "hex"),
                     Buffer.from(nonceBuffer)
                 ],
                 program.programId
@@ -129,8 +94,6 @@ export const useDjinnProtocol = () => {
 
             // CHECK: Does this market PDA already exist on-chain?
             const existingAccount = await provider.connection.getAccountInfo(marketPda);
-            console.log("[Djinn] 🔎 Market PDA:", marketPda.toBase58());
-            console.log("[Djinn] 🔎 PDA exists on-chain?:", existingAccount !== null);
 
             if (existingAccount !== null) {
                 console.warn("[Djinn] ⚠️ Market already exists! Returning existing PDA.");
@@ -142,20 +105,6 @@ export const useDjinnProtocol = () => {
                 program.programId
             );
 
-            // ON-CHAIN IDL expects: title, resolutionTime, nonce, numOutcomes
-            console.log("DEBUG: Sending InitializeMarket Params:", {
-                title: title.slice(0, 32),
-                resolutionTime: Math.floor(endDate.getTime() / 1000),
-                nonce,
-                numOutcomes,
-                accounts: {
-                    market: marketPda.toBase58(),
-                    marketVault: marketVaultPda.toBase58(),
-                    creator: wallet.publicKey.toBase58(),
-                    protocolTreasury: MASTER_TREASURY.toBase58()
-                }
-            });
-
             // MANUAL TRANSACTION CONSTRUCTION
             const tx = new web3.Transaction();
 
@@ -166,7 +115,7 @@ export const useDjinnProtocol = () => {
             // Get Instruction
             const ix = await program.methods
                 .initializeMarket(
-                    title.slice(0, 32),
+                    title,
                     new BN(Math.floor(endDate.getTime() / 1000)),
                     new BN(nonce),
                     numOutcomes
@@ -187,11 +136,9 @@ export const useDjinnProtocol = () => {
             tx.recentBlockhash = latestBlockhash.blockhash;
             tx.feePayer = wallet.publicKey;
 
-            console.log("✅ Signing Market Creation Transaction...");
             // @ts-ignore
             const signedTx = await wallet.signTransaction(tx);
 
-            console.log("✅ Sending Market Creation Transaction...");
             const signature = await connection.sendRawTransaction(signedTx.serialize(), {
                 skipPreflight: true,
             });
@@ -205,16 +152,9 @@ export const useDjinnProtocol = () => {
             return { tx: signature, marketPda, yesMintPda: marketPda, noMintPda: marketPda, numOutcomes };
         } catch (error) {
             console.error("Error creating market:", error);
-            if (typeof error === 'object' && error !== null) {
-                console.error("Error details:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
-                if ((error as any).logs) {
-                    console.error("📜 Program Logs:");
-                    (error as any).logs.forEach((log: string) => console.log(log));
-                }
-            }
             throw error;
         }
-    }, [program, wallet]);
+    }, [program, wallet, isContractReady, provider, connection]);
 
     const buyShares = useCallback(async (
         marketPda: PublicKey,
@@ -229,18 +169,9 @@ export const useDjinnProtocol = () => {
 
         try {
             const amountLamports = new BN(Math.round(amountSol * web3.LAMPORTS_PER_SOL));
-
-            // CRITICAL FIX: JS Number limit is 9e15. 2B shares * 1e9 = 2e18.
-            // We must use BN multiplication, NOT JS multiplication.
             const minSharesBN = new BN(Math.floor(minSharesOut)).mul(new BN(1_000_000_000));
 
-            // CRITICAL DEBUG: Log arguments before calling contract
-            console.log("🛠️ BUY ARGS DEBUG:");
-            console.log("- outcomeIndex:", outcomeIndex);
-            console.log("- amountLamports:", amountLamports.toString());
-            console.log("- minSharesBN:", minSharesBN.toString());
-
-            // V2: PDA now includes outcome_index to allow holding both YES and NO positions
+            // V2: PDA now includes outcome_index
             const userPositionPda = PublicKey.findProgramAddressSync(
                 [Buffer.from("user_pos"), marketPda.toBuffer(), wallet.publicKey.toBuffer(), Buffer.from([outcomeIndex])],
                 program.programId
@@ -251,14 +182,10 @@ export const useDjinnProtocol = () => {
                 program.programId
             )[0];
 
-            // CRITICAL CHECK: Verify method exists before calling
             if (!program.methods || !program.methods.buyShares) {
                 throw new Error('buyShares method not available in program');
             }
 
-            console.log('✅ buyShares method found, constructing manual transaction...');
-
-            // Construct Transaction manually to avoid 'Unknown action undefined' bug
             const tx = new web3.Transaction();
 
             // Add Compute Units
@@ -284,16 +211,12 @@ export const useDjinnProtocol = () => {
 
             tx.add(ix);
 
-            // Fetch latest blockhash and sign
             const latestBlockhash = await connection.getLatestBlockhash();
             tx.recentBlockhash = latestBlockhash.blockhash;
             tx.feePayer = wallet.publicKey;
 
-            console.log("✅ Signing Buy Transaction...");
             // @ts-ignore
             const signedTx = await wallet.signTransaction(tx);
-
-            console.log("✅ Sending Buy Transaction...");
             const signature = await connection.sendRawTransaction(signedTx.serialize(), {
                 skipPreflight: true,
             });
@@ -308,13 +231,6 @@ export const useDjinnProtocol = () => {
 
         } catch (error) {
             console.error("Error buying shares:", error);
-            if (typeof error === 'object' && error !== null) {
-                console.error("Error details:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
-                if ((error as any).logs) {
-                    console.error("📜 Program Logs:");
-                    (error as any).logs.forEach((log: string) => console.log(log));
-                }
-            }
             throw error;
         }
     }, [program, wallet, connection]);
@@ -326,13 +242,11 @@ export const useDjinnProtocol = () => {
         if (!program || !wallet || !connection) throw new Error("Wallet not connected");
 
         try {
-            // Derive market vault PDA
             const [marketVaultPda] = await PublicKey.findProgramAddress(
                 [Buffer.from("market_vault"), marketPda.toBuffer()],
                 program.programId
             );
 
-            // IDL expects winningOutcome as u8: 0=Yes, 1=No (void is not in IDL)
             const winningOutcome = outcome === 'yes' ? 0 : 1;
 
             const tx = new web3.Transaction();
@@ -377,10 +291,8 @@ export const useDjinnProtocol = () => {
         if (!program || !wallet || !connection) throw new Error("Wallet not connected");
 
         try {
-            // IDL method is 'claimWinnings', takes outcome (u8) as argument
             const outcomeIndex = side.toLowerCase() === 'yes' ? 0 : 1;
 
-            // Derive required PDAs
             const [marketVaultPda] = await PublicKey.findProgramAddress(
                 [Buffer.from("market_vault"), marketPda.toBuffer()],
                 program.programId
@@ -414,7 +326,6 @@ export const useDjinnProtocol = () => {
                 skipPreflight: true,
             });
 
-            console.log("✅ Winnings claimed:", signature);
             await connection.confirmTransaction(
                 { signature, ...latestBlockhash },
                 'confirmed'
@@ -426,7 +337,6 @@ export const useDjinnProtocol = () => {
         }
     }, [program, wallet, connection]);
 
-    // Fetch User Position (Shares) directly from PDA - No SPL Tokens involved
     const getUserBalance = useCallback(async (marketPda: PublicKey, outcomeIndex: number) => {
         if (!program || !wallet) return 0;
         try {
@@ -434,12 +344,10 @@ export const useDjinnProtocol = () => {
                 [Buffer.from("user_pos"), marketPda.toBuffer(), wallet.publicKey.toBuffer(), Buffer.from([outcomeIndex])],
                 program.programId
             );
-            // Use Anchor to fetch and deserialize
             // @ts-ignore
             const posAccount = await program.account.userPosition.fetch(userPositionPda);
             return posAccount ? Number(posAccount.shares) / 1e9 : 0;
         } catch (e) {
-            // Account likely doesn't exist yet (0 shares)
             return 0;
         }
     }, [program, wallet]);
@@ -465,13 +373,11 @@ export const useDjinnProtocol = () => {
 
             let onChainSharesRaw = BigInt(0);
             try {
-                // Use Anchor's built-in fetch to handle padding/alignment automatically
                 // @ts-ignore
                 const posAccount = await program.account.userPosition.fetch(userPositionPda);
                 if (posAccount) {
                     // @ts-ignore
                     onChainSharesRaw = BigInt(posAccount.shares.toString());
-                    console.log("🔍 On-Chain Shares (fetched via Anchor):", onChainSharesRaw.toString());
                 }
             } catch (e) {
                 console.error("Failed to get on-chain position:", e);
@@ -489,25 +395,6 @@ export const useDjinnProtocol = () => {
                 throw new Error("No shares to sell.");
             }
 
-            console.log("🛠️ SELL SHARES ARGS:", {
-                marketPda: marketPda.toBase58(),
-                outcomeIndex,
-                sharesAmount,
-                sharesToBurn: sharesToBurnBN.toString(),
-                marketCreator: marketCreator.toBase58(),
-                minSolOut,
-                sellMax
-            });
-
-            // LOG IDL METHODS TO VERIFY ARGS
-            // @ts-ignore
-            const sellInstruction = program.idl.instructions.find(i => i.name === 'sellShares');
-            const argCount = sellInstruction?.args?.length || 0;
-            console.log("🔍 sellShares IDL Args Count:", argCount);
-            if (sellInstruction?.args) {
-                console.log("🔍 sellShares Arg Names:", sellInstruction.args.map((a: any) => a.name));
-            }
-
             // MANUAL TRANSACTION CONSTRUCTION TO BYPASS ANCHOR RPC BUG
             const tx = new web3.Transaction();
 
@@ -515,7 +402,10 @@ export const useDjinnProtocol = () => {
             tx.add(web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }));
             tx.add(web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50000 }));
 
-            // Construct Instruction manually depending on IDL
+            // @ts-ignore
+            const sellInstruction = program.idl.instructions.find(i => i.name === 'sellShares');
+            const argCount = sellInstruction?.args?.length || 0;
+
             let ix;
             if (argCount >= 3) {
                 const minSolBN = new BN(minSolOut);
@@ -546,25 +436,16 @@ export const useDjinnProtocol = () => {
                     .instruction();
             }
 
-            if (!ix) throw new Error("Failed to construct instruction");
-
             tx.add(ix);
 
-            // Fetch latest blockhash and sign
             const latestBlockhash = await connection.getLatestBlockhash();
             tx.recentBlockhash = latestBlockhash.blockhash;
             tx.feePayer = wallet.publicKey;
 
-            console.log("✅ Transaction constructed manually. Signing with wallet...");
-
-            // LOWEST LEVEL SIGNING TO BYPASS FRAMEWORK BUGS
             // @ts-ignore
             const signedTx = await wallet.signTransaction(tx);
-
-            console.log("✅ Signed. Sending raw transaction...");
             const signature = await connection.sendRawTransaction(signedTx.serialize());
 
-            console.log("✅ Sent raw. Sig:", signature);
             await connection.confirmTransaction(
                 { signature, ...latestBlockhash },
                 'confirmed'
@@ -572,23 +453,6 @@ export const useDjinnProtocol = () => {
             return signature;
         } catch (error: any) {
             console.error("❌ Error selling shares:", error);
-
-            // Try to extract logs
-            if (error.logs) {
-                console.error("📜 Logs:");
-                error.logs.forEach((l: string) => console.log(l));
-            }
-
-            // Extract generic message
-            console.error("❌ Error Message:", error.message);
-
-            // Attempt to stringify entire error for hidden props (like InstructionError)
-            try {
-                const errString = JSON.stringify(error, Object.getOwnPropertyNames(error), 2);
-                console.log("❌ Full Error Object:", errString);
-            } catch (e) {
-                console.log("Could not stringify error");
-            }
             throw error;
         }
     }, [program, wallet, connection]);
