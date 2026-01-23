@@ -20,7 +20,7 @@ export default function Footer() {
         // CAMBIOS CLAVE:
         // 1. Eliminado 'mt-32'. ¡Adiós a la franja gigante!
         // 2. Agregado 'border-t border-white/5'. Una línea divisoria muy sutil y elegante.
-        <footer className="pt-20 pb-10 px-6 md:px-12 relative overflow-hidden bg-black border-t border-white/5">
+        <footer className="pt-20 pb-10 px-6 md:px-12 relative overflow-hidden bg-black">
 
             {/* Luz ambiental sutil */}
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[200px] bg-[#F492B7] opacity-[0.03] blur-[100px] pointer-events-none"></div>
@@ -37,8 +37,7 @@ export default function Footer() {
 
                     <div className={`flex items-center -mt-2 ${isLanding ? 'justify-between w-full max-w-[340px]' : 'gap-6'}`}>
                         <p
-                            className={`pl-1 relative z-20 transition-all duration-500 hover:text-white ${isLanding ? 'text-white text-xs tracking-[0.2em] uppercase' : 'text-gray-500 text-sm'}`}
-                            style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}
+                            className={`pl-1 relative z-20 transition-all duration-500 hover:text-white ${isLanding ? 'text-white text-base' : 'text-gray-500 text-sm'}`}
                         >
                             {isLanding ? "The Future Is Yours" : "The future is priced in."}
                         </p>
@@ -82,7 +81,7 @@ export default function Footer() {
             </div>
 
             {/* Barra inferior */}
-            <div className="max-w-[1600px] mx-auto flex flex-col md:flex-row justify-between items-center border-t border-white/10 pt-8 gap-4 relative z-10">
+            <div className="max-w-[1600px] mx-auto flex flex-col md:flex-row justify-between items-center pt-8 gap-4 relative z-10">
                 <div className="flex items-center gap-6">
                     <span className="text-gray-500 text-xs font-medium">© 2026 Djinn. All rights reserved.</span>
                     {!isLanding && (
