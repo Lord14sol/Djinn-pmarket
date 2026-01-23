@@ -5,8 +5,8 @@ export const ADMIN_WALLETS = [
     "G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma"
 ];
 
-// USER REQUEST: Limit to 2 for local testing, 100 for production.
-export const GENESIS_LIMIT = process.env.NODE_ENV === 'development' ? 2 : 100;
+// Set to 0 to restrict access exclusively to admin wallets for launch preparation
+export const GENESIS_LIMIT = 0;
 
 export interface WhitelistStatus {
     count: number;
