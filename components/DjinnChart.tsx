@@ -243,7 +243,7 @@ function TheDjinnChart({
 
     // Session ATH Tracking
     const [athMap, setAthMap] = useState<Record<string, number>>({});
-    const [timeframe, setTimeframe] = useState<'1H' | '1D' | 'ALL'>('ALL');
+    const [timeframe, setTimeframe] = useState<'1H' | '6H' | '12H' | '1D' | '1W' | '1M' | 'ALL'>('1D');
 
     // Bubble State
     const [bubbles, setBubbles] = useState<Bubble[]>([]);
@@ -291,7 +291,15 @@ function TheDjinnChart({
         // Filter by Timeframe
         if (timeframe !== 'ALL') {
             const now = Math.floor(Date.now() / 1000);
-            const cutoff = timeframe === '1H' ? (now - 3600) : (now - 86400);
+            let cutoff = now;
+            switch (timeframe) {
+                case '1H': cutoff = now - 3600; break;
+                case '6H': cutoff = now - (6 * 3600); break;
+                case '12H': cutoff = now - (12 * 3600); break;
+                case '1D': cutoff = now - 86400; break;
+                case '1W': cutoff = now - (7 * 86400); break;
+                case '1M': cutoff = now - (30 * 86400); break;
+            }
             baseData = baseData.filter(d => d.time >= cutoff);
         }
 
@@ -335,7 +343,7 @@ function TheDjinnChart({
                     <div className="flex justify-between items-center w-full min-h-[60px]">
                         {/* Simple Label / Stats */}
                         <div className="flex flex-col gap-1">
-                            <span className="text-zinc-500 text-xs font-mono uppercase tracking-widest">Global Probability</span>
+                            {/* Label Removed */}
                             <div className="flex items-center gap-2">
                                 <span className={cn("text-2xl font-black tracking-tight", isPositive ? "text-emerald-400" : "text-rose-400")}>
                                     {selectedOutcome} {formatCompact(activeCandle.close * 100)}%

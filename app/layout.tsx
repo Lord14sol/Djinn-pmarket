@@ -60,10 +60,9 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: '/star.png', sizes: '64x64', type: 'image/png' },
-      { url: '/star.png', sizes: '128x128', type: 'image/png' },
+      { url: '/djinn-logo.png?v=4', sizes: 'any', type: 'image/png' },
     ],
-    apple: '/star.png',
+    apple: '/djinn-logo.png?v=4',
   },
   manifest: "/manifest.json",
 };
@@ -71,6 +70,8 @@ export const metadata: Metadata = {
 export const viewport = {
   themeColor: "#000000",
 };
+
+import StarBackground from "@/components/ui/StarBackground";
 
 export default function RootLayout({
   children,
@@ -80,8 +81,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${adrianeStyle.variable} antialiased bg-black text-white flex flex-col min-h-screen`}
+        className={`${geistSans.variable} ${geistMono.variable} ${adrianeStyle.variable} antialiased text-white flex flex-col min-h-screen`}
       >
+        <StarBackground />
         <SolanaProvider>
           <React.Suspense fallback={null}>
             <CategoryProvider>
@@ -90,7 +92,7 @@ export default function RootLayout({
                   <LayoutWrapper>
                     <AchievementNotification />
                     <WalletSuccessModal />
-                    <main className="flex-grow">
+                    <main className="flex-grow relative z-10">
                       {children}
                     </main>
                   </LayoutWrapper>

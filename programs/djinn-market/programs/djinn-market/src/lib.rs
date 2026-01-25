@@ -25,8 +25,8 @@ pub const P_50: u128 = 5_000;          // Progressive gains
 pub const P_90: u128 = 25_000;         // Acceleration
 pub const P_MAX: u128 = 950_000_000;   // 0.95 SOL Max
 
-// 🔥 MODIFICACIÓN DEGEN MODE: 30M Shares (~30 SOL Depth) - Igual que Pump.fun
-pub const VIRTUAL_ANCHOR: u128 = 30_000_000_000_000_000; 
+// 🔥 MODIFICACIÓN DEGEN MODE: 50M Shares (Synced with Client)
+pub const VIRTUAL_ANCHOR: u128 = 50_000_000_000_000_000; 
 
 
 // SIGMOID K (Scaled: k * 1e18 for fixed-point)

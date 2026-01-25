@@ -106,18 +106,15 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
                         </div>
 
                         {/* LOGO SECTION - RESTYLED */}
-                        <div className="flex flex-col items-center justify-center py-8 flex-shrink-0 gap-4">
+                        <div className="flex flex-col items-center justify-center py-6 flex-shrink-0 gap-4">
                             <div className="relative">
-                                {/* Glow behind */}
-                                <div className="absolute inset-0 bg-[#FF0096]/20 blur-3xl rounded-full scale-150" />
-
-                                <div className="relative z-10 flex justify-center">
-                                    <span className="text-6xl md:text-7xl text-white tracking-tighter" style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}>
-                                        Djinn
-                                    </span>
+                                <div className="relative z-10 flex flex-col items-center justify-center">
+                                    <div className="relative w-48 h-48 mb-1">
+                                        <img src="/djinn-logo.png?v=3" alt="Djinn" className="w-full h-full object-contain drop-shadow-[0_0_35px_rgba(244,146,183,0.5)]" />
+                                    </div>
                                 </div>
                             </div>
-                            <p className="text-gray-400 text-sm font-medium">Choose your wallet to continue</p>
+                            <p className="text-[#F492B7] text-sm font-bold tracking-wide">Choose your wallet to continue</p>
                         </div>
 
                         {/* WALLET LIST */}
@@ -162,10 +159,7 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
 
                         {/* FOOTER */}
                         <div className="bg-[#151515] p-4 flex items-center justify-center gap-2 text-[#FF0096]/60 border-t border-white/5 flex-shrink-0 rounded-b-[2rem]">
-                            <ShieldCheck size={14} />
-                            <span className="text-[10px] uppercase font-bold tracking-widest">
-                                Secure Connection
-                            </span>
+                            <ShieldCheck size={18} />
                         </div>
                     </>
                 )}

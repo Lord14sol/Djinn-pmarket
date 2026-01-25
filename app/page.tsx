@@ -107,16 +107,8 @@ export default function GenesisPage() {
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,black_60%)] md:bg-[radial-gradient(circle_at_center,transparent_0%,black_70%)]" />
                 </div>
 
-                {/* --- MEGA VIGNETTE SYSTEM --- */}
-                {/* Top/Bottom Fade */}
-                <div className="absolute inset-0 bg-[linear-gradient(to_bottom,black_0%,transparent_30%,transparent_70%,black_100%)] z-10" />
-                {/* Left/Right Fade */}
-                <div className="absolute inset-0 bg-[linear-gradient(to_right,black_0%,transparent_30%,transparent_70%,black_100%)] z-10" />
-                {/* Radial Vignette */}
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_20%,black_90%)] z-10 opacity-80" />
-
-                {/* Extra aggressive top protection */}
-                <div className="absolute inset-0 bg-gradient-to-b from-black via-black/40 to-transparent h-96 z-20" />
+                {/* --- MEGA VIGNETTE SYSTEM REMOVED FOR PURE BLACK --- */}
+                {/* Only keeping a very subtle bottom fade for text readability if needed, otherwise clean */}
             </div>
 
             {/* --- MAIN CONTENT --- */}
@@ -129,11 +121,11 @@ export default function GenesisPage() {
                     transition={{ duration: 1.2, ease: "easeOut" }}
                     className="mb-24 md:mb-48 flex flex-col items-center"
                 >
-                    <div className="flex items-center justify-center group gap-0 mb-4 px-2">
-                        <div className="relative w-32 h-32 md:w-40 md:h-40 transition-transform duration-500 hover:scale-105 animate-star-slow filter drop-shadow-[0_0_20px_rgba(255,255,255,0.2)]">
-                            <Image src="/star.png" alt="Djinn Logo" fill className="object-contain" priority />
+                    <div className="flex items-center justify-center group gap-6 mb-4 px-2">
+                        <div className="relative w-28 h-28 md:w-36 md:h-36 transition-transform duration-500 hover:scale-105 animate-star-slow filter drop-shadow-[0_0_20px_rgba(255,255,255,0.2)]">
+                            <Image src="/djinn-logo.png?v=3" alt="Djinn Logo" fill className="object-contain" priority unoptimized />
                         </div>
-                        <span className="text-6xl md:text-8xl text-white -ml-8 md:-ml-10 mt-6 md:mt-8 drop-shadow-[0_0_15px_rgba(255,255,255,0.1)]" style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}>
+                        <span className="text-6xl md:text-7xl text-white mt-1 drop-shadow-[0_0_15px_rgba(255,255,255,0.1)]" style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}>
                             Djinn
                         </span>
                     </div>

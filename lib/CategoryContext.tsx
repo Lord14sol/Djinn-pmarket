@@ -26,27 +26,17 @@ export function CategoryProvider({ children }: { children: ReactNode }) {
     const setActiveCategory = (category: string) => {
         setActiveCategoryState(category);
 
-        // Construct new URL
+        // Update URL params without redirecting to '/'
         const newUrl = new URL(window.location.href);
-        const currentPath = newUrl.pathname;
 
-        // If we are NOT on home page, go to home page with category param
-        if (currentPath !== '/') {
-            const destUrl = new URL(window.location.origin);
-            destUrl.pathname = '/';
-            if (category !== "Trending") {
-                destUrl.searchParams.set('category', category);
-            }
-            router.push(destUrl.toString());
+        if (category === "Trending") {
+            newUrl.searchParams.delete('category');
         } else {
-            // We are already on home, just update params
-            if (category === "Trending") {
-                newUrl.searchParams.delete('category');
-            } else {
-                newUrl.searchParams.set('category', category);
-            }
-            router.push(newUrl.pathname + newUrl.search, { scroll: false });
+            newUrl.searchParams.set('category', category);
         }
+
+        // Push the new URL state (same path, new params)
+        router.push(newUrl.pathname + newUrl.search, { scroll: false });
     };
 
     // Sync if back button is pressed (optional but good)

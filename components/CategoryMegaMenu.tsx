@@ -160,7 +160,7 @@ export default function CategoryMegaMenu() {
             onMouseLeave={handleMouseLeave}
         >
             {/* Trigger Bar - Compact Category Pills */}
-            <div className="flex items-center justify-center flex-wrap gap-4 md:gap-6 py-4 px-6 md:px-12 lg:px-20 border-t border-white/5 bg-black/40">
+            <div className="flex items-center justify-center flex-wrap gap-4 md:gap-6 py-4 px-6 md:px-12 lg:px-20 border-t border-white/5 bg-transparent">
                 {CATEGORIES.map((cat) => (
                     <button
                         key={cat.id}

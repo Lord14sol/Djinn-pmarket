@@ -31,7 +31,7 @@ export default function Footer() {
                 <div className="col-span-1 flex flex-col">
                     <div className="flex items-start opacity-90">
                         <div className="relative w-32 h-32 transition-transform hover:scale-105 duration-500 cursor-pointer -ml-2">
-                            <Image src="/star.png" alt="Djinn Logo" fill className="object-contain drop-shadow-[0_0_20px_rgba(244,146,183,0.15)]" />
+                            <Image src="/djinn-logo.png?v=3" alt="Djinn Logo" fill className="object-contain drop-shadow-[0_0_20px_rgba(244,146,183,0.15)]" unoptimized />
                         </div>
                     </div>
 

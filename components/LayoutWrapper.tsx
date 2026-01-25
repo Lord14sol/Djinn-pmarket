@@ -36,7 +36,7 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
     return (
         <>
             {!isGenesis && <Navbar />}
-            {!isGenesis && <LavaLampBackground />}
+            {/* LavaLampBackground Removed for Pure Black Space Theme */}
             <div className={!isGenesis ? "pt-20" : ""}>
                 {children}
             </div>

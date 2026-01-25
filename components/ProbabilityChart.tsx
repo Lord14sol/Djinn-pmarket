@@ -11,10 +11,10 @@ const COLORS: Record<string, string> = {
     Brazil: "#FCD116",
     Argentina: "#75AADB",
     France: "#002395",
-    Yes: "#F492B7",
-    No: "#10B981",
-    YES: "#F492B7",
-    NO: "#10B981",
+    Yes: "#10B981",
+    No: "#F492B7",
+    YES: "#10B981",
+    NO: "#F492B7",
 };
 
 const getColor = (title: string) => {
@@ -59,6 +59,13 @@ export default function ProbabilityChart({ data, outcomes, bubbles, timeframe, s
                         </motion.div>
                     ))}
                 </AnimatePresence>
+            </div>
+
+            {/* WATERMARK LAYER (Behind Chart) */}
+            <div className="absolute inset-0 pointer-events-none flex items-start justify-end pr-8 pt-1 opacity-[0.20] z-0">
+                <div className="relative w-32 h-32 grayscale">
+                    <img src="/djinn-logo.png?v=3" alt="Djinn Seal" className="w-full h-full object-contain" />
+                </div>
             </div>
 
             {/* CHART */}
@@ -129,13 +136,13 @@ export default function ProbabilityChart({ data, outcomes, bubbles, timeframe, s
 
             {/* BOTTOM CONTROLS (Timeframe) */}
             <div className="flex justify-end pt-2 border-t border-zinc-800/50 mt-2">
-                <div className="flex bg-zinc-900/50 p-1 rounded-lg border border-zinc-800/50 backdrop-blur-sm">
-                    {['1H', '1D', 'ALL'].map((tf) => (
+                <div className="flex bg-zinc-900/50 p-1 rounded-lg border border-zinc-800/50 backdrop-blur-sm overflow-x-auto">
+                    {['1H', '6H', '12H', '1D', '3D', '1W', '1M', 'ALL'].map((tf) => (
                         <button
                             key={tf}
                             onClick={() => setTimeframe(tf as any)}
                             className={cn(
-                                "px-3 py-1 rounded-md text-[10px] font-bold transition-all",
+                                "px-2 py-1 rounded-md text-[10px] font-bold transition-all whitespace-nowrap",
                                 timeframe === tf ? "bg-zinc-800 text-white shadow-sm" : "text-zinc-500 hover:text-zinc-300"
                             )}
                         >

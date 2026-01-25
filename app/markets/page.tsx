@@ -14,10 +14,10 @@ import PumpEffect from '@/components/PumpEffect';
 import { ADMIN_WALLETS } from '@/lib/whitelist';
 import TheGreatPyramid from '@/components/TheGreatPyramid';
 
-// Fresh start timestamp - hide markets created before this
+// Fresh start timestamp - hide markets created before this (filtering for clean view)
 const FRESH_START_TIMESTAMP = process.env.NEXT_PUBLIC_FRESH_START_TIMESTAMP
   ? parseInt(process.env.NEXT_PUBLIC_FRESH_START_TIMESTAMP)
-  : 0;
+  : 1769193287079;
 
 
 export default function Home() {
@@ -26,175 +26,8 @@ export default function Home() {
   const router = useRouter();
 
   // 1. Mercados iniciales con categorías
-  const initialStaticMarkets = [
-    {
-      id: 1,
-      title: "Will Argentina be finalist on the FIFA World Cup 2026?",
-      icon: "🇦🇷",
-      chance: 45,
-      volume: "$12.5M",
-      type: 'binary',
-      category: 'Sports',
-      endDate: new Date('2026-07-15'),
-      slug: "argentina-world-cup-2026",
-      createdAt: Date.now() - 86400000 * 5 // 5 días atrás
-    },
-    {
-      id: 2,
-      title: "Will Bitcoin reach ATH on 2026?",
-      icon: "₿",
-      chance: 82,
-      volume: "$45.2M",
-      type: 'binary',
-      category: 'Crypto',
-      endDate: new Date('2026-12-31'),
-      slug: "btc-hit-150k",
-      createdAt: Date.now() - 86400000 * 3
-    },
-    {
-      id: 3,
-      title: "Will PumpFun do a airdrop on 2026?",
-      icon: "💊",
-      chance: 91,
-      volume: "$8.1M",
-      type: 'binary',
-      category: 'Crypto',
-      endDate: new Date('2026-06-01'),
-      slug: "pumpfun-airdrop-2026",
-      createdAt: Date.now() - 86400000 * 1
-    },
-    {
-      id: 9,
-      title: "Who will win the World Cup?",
-      icon: "🏆",
-      type: 'multiple',
-      category: 'Sports',
-      options: [
-        { id: 1, name: "Argentina" },
-        { id: 2, name: "Chile" },
-        { id: 3, name: "Brasil" },
-        { id: 4, name: "Bolivia" }
-      ],
-      volume: "$450K",
-      endDate: new Date('2026-07-15'),
-      slug: "world-cup-winner-multiple",
-      createdAt: Date.now() - 86400000 * 7
-    },
-    {
-      id: 4,
-      title: "Nothing ever happens?",
-      icon: "🥱",
-      chance: 99,
-      volume: "$2.4M",
-      type: 'binary',
-      category: 'Culture',
-      endDate: new Date(Date.now() + 1000000000),
-      slug: "nothing-ever-happens",
-      createdAt: Date.now() - 86400000 * 10
-    },
-    {
-      id: 5,
-      title: "Will Rockstar Games delay GTA 6 on 2026?",
-      icon: "🎮",
-      chance: 55,
-      volume: "$15.3M",
-      type: 'binary',
-      category: 'Gaming',
-      endDate: new Date('2026-01-10'),
-      slug: "gta-6-delay",
-      createdAt: Date.now() - 3600000 // 1 hora - NUEVO
-    },
-    {
-      id: 6,
-      title: "Will China invade Taiwan?",
-      icon: "🇨🇳",
-      chance: 12,
-      volume: "$33.1M",
-      type: 'binary',
-      category: 'Politics',
-      region: 'Asia',
-      endDate: new Date('2026-12-31'),
-      slug: "china-taiwan-invasion",
-      createdAt: Date.now() - 86400000 * 2
-    },
-    {
-      id: 7,
-      title: "Will GPT-5 be released in 2026?",
-      icon: "🤖",
-      chance: 75,
-      volume: "$500K",
-      type: 'binary',
-      category: 'AI',
-      endDate: new Date('2026-12-31'),
-      slug: "gpt-5-release",
-      createdAt: Date.now() - 7200000
-    },
-    {
-      id: 8,
-      title: "Will Trump tweet about Djinn?",
-      icon: "🇺🇸",
-      chance: 5,
-      volume: "$1.2M",
-      type: 'binary',
-      category: 'Politics',
-      region: 'North America',
-      endDate: new Date('2026-11-05'),
-      slug: "trump-djinn-tweet",
-      createdAt: Date.now() - 86400000 * 4
-    },
-    {
-      id: 10,
-      title: "Will Brazil's economy grow 5% in 2026?",
-      icon: "🇧🇷",
-      chance: 35,
-      volume: "$2.1M",
-      type: 'binary',
-      category: 'Earth',
-      region: 'South America',
-      endDate: new Date('2026-12-31'),
-      slug: "brazil-economy-growth",
-      createdAt: Date.now() - 86400000 * 3
-    },
-    {
-      id: 11,
-      title: "Will the EU ban TikTok?",
-      icon: "🇪🇺",
-      chance: 22,
-      volume: "$5.8M",
-      type: 'binary',
-      category: 'Earth',
-      region: 'Europe',
-      endDate: new Date('2026-06-01'),
-      slug: "eu-tiktok-ban",
-      createdAt: Date.now() - 86400000 * 1
-    },
-    {
-      id: 12,
-      title: "Will Japan host the Olympics again by 2030?",
-      icon: "🇯🇵",
-      chance: 15,
-      volume: "$800K",
-      type: 'binary',
-      category: 'Earth',
-      region: 'Asia',
-      endDate: new Date('2026-12-31'),
-      slug: "japan-olympics-2030",
-      createdAt: Date.now() - 86400000 * 6
-    },
-    {
-      id: 13,
-      title: "Will Australia become carbon neutral by 2030?",
-      icon: "🇦🇺",
-      chance: 28,
-      volume: "$1.5M",
-      type: 'binary',
-      category: 'Earth',
-      region: 'Oceania',
-      endDate: new Date('2026-12-31'),
-      slug: "australia-carbon-neutral",
-      createdAt: Date.now() - 86400000 * 8
-    }
-  ];
+  // 1. Mercados iniciales LIMPIOS (Solo se verán los creados por el usuario)
+  const initialStaticMarkets: any[] = [];
 
   const [markets, setMarkets] = useState<any[]>(initialStaticMarkets);
   const [isLoading, setIsLoading] = useState(true);
@@ -404,23 +237,33 @@ export default function Home() {
   });
 
   // Sorting Logic
+  const parseVolume = (volStr: string) => {
+    if (!volStr) return 0;
+    const clean = volStr.replace(/[$,]/g, '');
+    const val = parseFloat(clean);
+    if (clean.endsWith('K') || clean.endsWith('k')) return val * 1000;
+    if (clean.endsWith('M') || clean.endsWith('m')) return val * 1000000;
+    if (clean.endsWith('B') || clean.endsWith('b')) return val * 1000000000;
+    return val;
+  };
+
   const sortedMarkets = [...filteredMarkets].sort((a, b) => {
     // NEW: Strictly by Time (Newest First)
     if (activeCategory === 'New') {
       return (b.createdAt || 0) - (a.createdAt || 0);
     }
 
-    // HOT: Volume * Velocity Metric (Mocked by Volume mainly)
-    if (activeCategory === 'Hot') {
-      const volA = parseFloat(a.volume?.replace(/[$,M,K]/g, '') || '0');
-      const volB = parseFloat(b.volume?.replace(/[$,M,K]/g, '') || '0');
-      return volB - volA;
+    // HOT & TRENDING: Volume * Velocity (Pyramid Algorithm)
+    // Primary Sort: Total Volume (Descending)
+    const volA = parseVolume(a.volume);
+    const volB = parseVolume(b.volume);
+
+    if (volB !== volA) {
+      return volB - volA; // Higher volume first
     }
 
-    // Standard: Volume
-    const volA = parseFloat(a.volume?.replace(/[$,M,K]/g, '') || '0');
-    const volB = parseFloat(b.volume?.replace(/[$,M,K]/g, '') || '0');
-    return volB - volA;
+    // Secondary Sort: Newest First
+    return (b.createdAt || 0) - (a.createdAt || 0);
   });
 
   // Título dinámico según categoría (sin emojis)
@@ -481,7 +324,7 @@ export default function Home() {
 
 
   return (
-    <div className="text-white font-sans selection:bg-[#F492B7] selection:text-black">
+    <div className="min-h-screen w-full bg-transparent text-white font-sans selection:bg-[#F492B7] selection:text-black">
 
       {/* Hero Section con Callback para crear mercados */}
       <Hero onMarketCreated={handleCreateMarket} />
@@ -538,7 +381,7 @@ export default function Home() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.3 }}
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-0 border-t border-l border-white/10"
             >
               {sortedMarkets.map((market, index) => {
                 const isPumping = (market as any).justArrived;
@@ -553,6 +396,7 @@ export default function Home() {
                       duration: 0.2,
                       delay: index * 0.03 // Stagger animation
                     }}
+                    className="h-full"
                   >
                     <PumpEffect isActive={isPumping}>
                       <MarketCard

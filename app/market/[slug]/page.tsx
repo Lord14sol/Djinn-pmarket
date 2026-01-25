@@ -1153,21 +1153,15 @@ export default function Page() {
         if (tradeMode === 'BUY') {
             await handlePlaceBet();
         } else {
-            // --- SELL LOGIC (SOL Input -> Shares) ---
-            // const currentPrice = selectedSide === 'YES' ? livePrice : (100 - livePrice);
-            // const priceRatio = currentPrice / 100;
-            // FIX: Use actual AMM spot price for value estimation, NOT probability.
-            // Probability (livePrice) is high (e.g. 50%), but Curve Price is low (e.g. 0.000005).
+            // --- SELL LOGIC (Shares Input) ---
+            // Input 'betAmount' is now explicit SHARE count from user.
+
+            // Validate Price
             const spotPrice = getSpotPrice(estimatedSupply);
             const safePrice = spotPrice > 0 ? spotPrice : 0.0000001;
 
-            console.log("💰 SELL LOGIC DEBUG:");
-            console.log("- estimatedSupply (Normalized):", estimatedSupply);
-            console.log("- Spot Price:", spotPrice);
-            console.log("- Safe Price:", safePrice);
-
-            const sharesToSell = amountVal / safePrice; // Convert SOL input to Shares using REAL price
-            console.log("- Shares to Sell:", sharesToSell);
+            const sharesToSell = amountVal; // Direct Input
+            console.log("- Shares Limit to Sell:", sharesToSell);
 
             const availableShares = isMultiOutcome
                 ? (myShares[marketOutcomes.findIndex(o => o.id === selectedOutcomeId)] || 0)
@@ -1441,10 +1435,13 @@ export default function Page() {
 
 
     return (
-        <div className="min-h-screen bg-[#020202] text-white font-sans pb-32">
-            {/* ... Navbar & Header ... */}
+        <div className="min-h-screen bg-black text-white font-sans selection:bg-[#F492B7] selection:text-black overflow-x-hidden">
+
+            {/* Navbar */}
             <Navbar />
-            <div className="max-w-7xl mx-auto pt-32 px-4 md:px-6 relative z-10">
+
+            {/* Content Container */}
+            <div className="container mx-auto px-4 pt-24 pb-12 max-w-7xl relative z-10">
 
                 {/* HEADER (Restored to Top) */}
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
@@ -1460,7 +1457,7 @@ export default function Page() {
                         <div className="flex flex-col md:flex-row justify-between items-end gap-6 mb-2">
                             {/* LEFT: Image + Title */}
                             <div className="flex items-end gap-5 flex-1">
-                                <div className="w-44 h-44 bg-[#1A1A1A] rounded-3xl border border-white/10 flex items-center justify-center text-6xl shadow-2xl overflow-hidden shrink-0">
+                                <div className="w-48 h-48 bg-[#1A1A1A] rounded-3xl border border-white/10 flex items-center justify-center text-6xl shadow-2xl overflow-hidden shrink-0">
                                     {(marketAccount?.banner_url || (typeof staticMarketInfo.icon === 'string' && (staticMarketInfo.icon.startsWith('http') || staticMarketInfo.icon.startsWith('data:')))) ?
                                         <img
                                             src={marketAccount?.banner_url || staticMarketInfo.icon}
@@ -1491,17 +1488,14 @@ export default function Page() {
                                             <span>Share</span>
                                         </button>
 
-                                        {/* STAR/SAVE Button */}
+                                        {/* STAR/SAVE Button - Below Picture */}
                                         <button
                                             onClick={() => {
                                                 const newStarred = !isStarred;
                                                 setIsStarred(newStarred);
-                                                // Save to localStorage
                                                 const saved = JSON.parse(localStorage.getItem('djinn_saved_markets') || '[]');
                                                 if (newStarred) {
-                                                    if (!saved.includes(effectiveSlug)) {
-                                                        saved.push(effectiveSlug);
-                                                    }
+                                                    if (!saved.includes(effectiveSlug)) saved.push(effectiveSlug);
                                                 } else {
                                                     const idx = saved.indexOf(effectiveSlug);
                                                     if (idx > -1) saved.splice(idx, 1);
@@ -1523,10 +1517,10 @@ export default function Page() {
                                                 size={12}
                                                 className={`transition-all ${isStarred ? 'fill-[#F492B7] text-[#F492B7]' : 'group-hover:text-[#F492B7]'}`}
                                             />
-                                            <span>{isStarred ? 'Saved!' : 'Save'}</span>
+                                            <span>{isStarred ? 'Saved' : 'Save'}</span>
                                         </button>
 
-                                        {/* SOURCE Link (Moved here) */}
+                                        {/* SOURCE Link */}
                                         {marketAccount?.resolution_source && (
                                             <a href={marketAccount.resolution_source} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-xs font-bold uppercase tracking-widest text-gray-500 hover:text-white group">
                                                 <span>Source</span> <ExternalLink size={12} />
@@ -1680,7 +1674,7 @@ export default function Page() {
                         <div>
                             <div className="flex items-center gap-6 mb-6 border-b border-white/5 pb-0">
                                 <TabButton label="Activity" icon={<Activity size={14} />} active={bottomTab === 'ACTIVITY'} onClick={() => setBottomTab('ACTIVITY')} />
-                                <TabButton label="Opinions" icon={<MessageCircle size={14} />} active={bottomTab === 'COMMENTS'} onClick={() => setBottomTab('COMMENTS')} />
+                                <TabButton label="Comments" icon={<MessageCircle size={14} />} active={bottomTab === 'COMMENTS'} onClick={() => setBottomTab('COMMENTS')} />
                                 <TabButton label="Top Holders" icon={<Users size={14} />} active={bottomTab === 'HOLDERS'} onClick={() => setBottomTab('HOLDERS')} />
                             </div>
                         </div>
@@ -1891,7 +1885,7 @@ export default function Page() {
                             {/* INPUT Section */}
                             <div className="bg-[#0A0A0A] rounded-xl border border-white/5 p-4 mb-4">
                                 <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-2 block">
-                                    {tradeMode === 'BUY' ? 'You Pay' : 'You Receive (Est)'}
+                                    {tradeMode === 'BUY' ? 'You Pay' : 'Shares to Sell'}
                                 </label>
                                 <div className="flex items-center gap-3">
                                     <input
@@ -1930,18 +1924,13 @@ export default function Page() {
                                                         setIsMaxSell(false);
                                                     }
 
-                                                    // content: Use Start Spot Price for estimation
-                                                    // This matches the 'Sell Logic' inside handleTrade
-                                                    const spotPrice = getSpotPrice(estimatedSupply);
-                                                    const safePrice = Math.max(spotPrice, 0.0000001);
-
+                                                    // Share Input Logic: 100% means 100% of SHARES.
                                                     const sharesToSell = sharesOwned * (pct / 100);
-                                                    let estimatedValue = sharesToSell * safePrice;
 
                                                     // Removed maxPayout clamp to prevent UI blocking if vault data is stale.
                                                     // The contract will enforce balance limits.
 
-                                                    setBetAmount(estimatedValue.toFixed(6)); // More decimals for small curve prices
+                                                    setBetAmount(sharesToSell.toString());
                                                 }}
                                                 className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${(pct === 100 && isMaxSell)
                                                     ? 'bg-white/20 text-white border-white/20'

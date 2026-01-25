@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import QuickBetModal from './QuickBetModal';
 import { useWallet } from '@solana/wallet-adapter-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Star } from 'lucide-react';
 
 interface MarketCardProps {
@@ -92,124 +93,128 @@ const MarketCard: React.FC<MarketCardProps> = ({
         setTimeLeft(calculateTimeLeft());
     }, [endDate]);
 
-    <div className="bg-[#0A0A0A]/80 backdrop-blur-2xl rounded-[2rem] border border-white/5 shadow-2xl flex flex-row overflow-hidden h-[160px] group transition-all duration-500 relative hover:border-[#F492B7]/50 hover:shadow-[0_0_30px_rgba(244,146,183,0.15)]">
+    // Saved Animation State
+    const [showSavedAnim, setShowSavedAnim] = useState(false);
 
-        {/* --- PREMIUM GLOW OVERLAY --- */}
-        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(244,146,183,0.1),transparent_40%)]" />
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,rgba(59,130,246,0.05),transparent_40%)]" />
-        </div>
+    const handleStarClick = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsStarred(!isStarred);
+        if (!isStarred) {
+            setShowSavedAnim(true);
+            setTimeout(() => setShowSavedAnim(false), 1000);
+        }
+    };
 
-        {/* 1. LEFT: Image / Icon */}
-        <Link href={`/market/${slug}`} className="h-full aspect-square p-3 flex-shrink-0 relative z-10">
-            <div className="w-full h-full relative rounded-2xl overflow-hidden border border-white/10 bg-[#000] shadow-2xl group-hover:border-[#F492B7]/30 transition-colors">
+    return (
+        <div className="bg-black border-r border-b border-white/10 p-4 flex flex-col gap-4 relative hover:bg-white/[0.02] hover:-translate-y-2 transition-all duration-300 h-full min-h-[380px] group/card shadow-lg hover:shadow-xl">
+
+            {/* Clickable Overlay for whole card */}
+            <Link href={`/market/${slug}`} className="absolute inset-0 z-0" />
+
+            {/* 1. Header Image (Top) - Aspect Ratio Box */}
+            <div className="w-full aspect-square rounded-xl overflow-hidden bg-[#1C212E]/50 relative z-10 border border-white/5 shadow-2xl">
                 {typeof icon === 'string' && (icon.startsWith('http') || icon.startsWith('/') || icon.startsWith('data:image')) ? (
-                    <img src={icon} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out" />
-                ) : (
-                    <div className="w-full h-full flex items-center justify-center text-5xl opacity-30">{icon || '🔮'}</div>
-                )}
-                {/* Inner image shadow */}
-                <div className="absolute inset-0 shadow-[inset_0_0_20px_rgba(0,0,0,0.6)]" />
-            </div>
-        </Link>
-
-        {/* 2. RIGHT: Content */}
-        <div className="flex-1 py-4 pr-5 pl-1 flex flex-col min-w-0 relative">
-
-            {/* Header: Title */}
-            <div className="flex justify-between items-start gap-2 mb-1">
-                <Link href={`/market/${slug}`} className="text-base font-bold text-white leading-snug hover:text-[#F492B7] transition-colors line-clamp-2">
-                    {title}
-                </Link>
-            </div>
-
-            {/* Middle: Actions + Saved Button */}
-            <div className="flex-1 flex flex-col justify-center my-1 gap-3">
-                {resolved ? (
-                    <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-1.5 rounded-lg self-start">
-                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Winner</span>
-                        <span className={`text-sm font-black ${winningOutcome === 'YES' ? 'text-emerald-400' : 'text-red-400'}`}>{winningOutcome}</span>
-                    </div>
-                ) : isMultiple && options ? (
-                    <div className="flex flex-wrap gap-2">
-                        {options.slice(0, 2).map((opt: any) => (
-                            <span key={opt.id} className="bg-white/5 border border-white/10 rounded px-2 py-1 text-[10px] text-gray-400 truncate max-w-[80px]">{opt.name}</span>
-                        ))}
-                        <span className="text-[9px] text-gray-500 self-center">+ more</span>
-                    </div>
-                ) : (
-                    <div className="flex gap-3 w-full max-w-[240px]">
-                        {/* YES Button */}
-                        <button
-                            onClick={(e) => handleBetClick(e, 'yes')}
-                            className="flex-1 bg-emerald-500/5 border border-emerald-500/10 hover:bg-emerald-500 hover:border-emerald-400 hover:text-white rounded-xl py-2.5 flex flex-col items-center justify-center transition-all group/btn shadow-lg hover:shadow-emerald-500/20 active:scale-95"
-                        >
-                            <span className="text-[9px] font-black uppercase text-emerald-500/60 group-hover:text-white/80 leading-none mb-1 tracking-tighter">Predicts Yes</span>
-                            <span className="text-sm font-black text-emerald-400 group-hover:text-white leading-none">{chance || 50}%</span>
-                        </button>
-
-                        {/* NO Button */}
-                        <button
-                            onClick={(e) => handleBetClick(e, 'no')}
-                            className="flex-1 bg-red-500/5 border border-red-500/10 hover:bg-red-500 hover:border-red-400 hover:text-white rounded-xl py-2.5 flex flex-col items-center justify-center transition-all group/btn shadow-lg hover:shadow-red-500/20 active:scale-95"
-                        >
-                            <span className="text-[9px] font-black uppercase text-red-500/60 group-hover:text-white/80 leading-none mb-1 tracking-tighter">Predicts No</span>
-                            <span className="text-sm font-black text-red-400 group-hover:text-white leading-none">{100 - (chance || 50)}%</span>
-                        </button>
-                    </div>
-                )}
-
-                {/* Saved Star Button (Below Actions) */}
-                <div
-                    className={`flex items-center gap-1.5 cursor-pointer group/star w-fit px-2 py-1 rounded-lg transition-colors ${isStarred ? 'bg-[#F492B7]/10' : 'hover:bg-white/5'}`}
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsStarred(!isStarred); }}
-                >
-                    <Star
-                        className={`w-4 h-4 transition-colors duration-300 ${isStarred ? 'fill-[#F492B7] text-[#F492B7]' : 'text-gray-500 group-hover/star:text-gray-300'}`}
-                        strokeWidth={isStarred ? 0 : 2}
+                    <img
+                        src={icon}
+                        alt=""
+                        className="w-full h-full object-cover group-hover/card:scale-105 transition-all duration-500"
                     />
-                    <span className={`text-[10px] font-bold uppercase tracking-wider ${isStarred ? 'text-[#F492B7]' : 'text-gray-500 group-hover/star:text-gray-300'}`}>
-                        {isStarred ? 'Saved!' : 'Save'}
-                    </span>
-                </div>
-            </div>
-
-            {/* Footer: Volume + Source Link */}
-            <div className="mt-auto flex items-center justify-between">
-                <div className="flex items-center gap-2 text-gray-500">
-                    <span className="text-[10px] font-bold uppercase tracking-widest">Vol:</span>
-                    <span className="text-xs font-bold text-gray-300">{volume}</span>
-                </div>
-                {resolutionSource && resolutionSource !== 'DERIVED' && resolutionSource.startsWith('http') && (
-                    <a
-                        href={resolutionSource}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[10px] font-bold text-[#F492B7] hover:text-white transition-colors flex items-center gap-1"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        📎 Source
-                    </a>
+                ) : (
+                    <div className="w-full h-full flex items-center justify-center text-6xl opacity-50">{icon || '🔮'}</div>
                 )}
             </div>
-        </div>
 
-        <QuickBetModal
-            isOpen={showBetModal}
-            onClose={() => setShowBetModal(false)}
-            market={{
-                title: selectedOption ? `${title} — ${selectedOption}` : title,
-                icon,
-                chance: selectedOptionChance,
-                volume,
-                marketPDA,
-                yesTokenMint,
-                noTokenMint,
-                slug
-            }}
-            outcome={selectedOutcome}
-        />
-    </div>
+            {/* 2. Body Content (Bottom) */}
+            <div className="flex-1 flex flex-col gap-4 relative z-10 pointer-events-none">
+
+                {/* Title */}
+                <h3 className="text-lg font-bold text-gray-100 group-hover/card:text-[#F492B7] transition-colors leading-tight pointer-events-auto cursor-pointer line-clamp-2 mt-2">
+                    <Link href={`/market/${slug}`}>{title}</Link>
+                </h3>
+
+                {/* Outcomes Information */}
+                <div className="mt-auto pointer-events-auto w-full">
+                    {resolved ? (
+                        <div className="flex items-center justify-center gap-2 bg-white/5 border border-white/5 p-3 rounded-lg">
+                            <span className="text-[10px] uppercase font-black text-gray-500 tracking-[0.2em]">Winner</span>
+                            <span className={`text-base font-black ${winningOutcome === 'YES' ? 'text-emerald-400' : 'text-rose-400'}`}>{winningOutcome}</span>
+                        </div>
+                    ) : isMultiple && options ? (
+                        <div className="flex flex-col gap-2 max-h-[120px] overflow-y-auto pr-1 customize-scrollbar">
+                            {options.map((opt: any) => (
+                                <div key={opt.id} className="flex items-center justify-between text-[11px] py-2 px-3 bg-[#111] border border-white/10 hover:bg-white/10 rounded-lg cursor-pointer transition-all duration-200 shrink-0">
+                                    <span className="text-gray-300 truncate font-medium max-w-[70%]">{opt.name}</span>
+                                    <span className="text-gray-500 font-bold">--%</span>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-2 gap-3">
+                            <button
+                                onClick={(e) => handleBetClick(e, 'yes')}
+                                className="flex flex-col items-center justify-center py-2 bg-[#0E2825] border border-emerald-500/20 hover:bg-emerald-500 hover:border-emerald-400 rounded-lg group/yes transition-all duration-200 active:scale-95"
+                            >
+                                <span className="text-[10px] font-bold text-emerald-400 group-hover/yes:text-white uppercase tracking-wider mb-0.5">Yes</span>
+                                <span className="text-lg font-black text-emerald-400 group-hover/yes:text-white">{chance || 50}%</span>
+                            </button>
+                            <button
+                                onClick={(e) => handleBetClick(e, 'no')}
+                                className="flex flex-col items-center justify-center py-2 bg-[#2B1616] border border-rose-500/20 hover:bg-rose-500 hover:border-rose-400 rounded-lg group/no transition-all duration-200 active:scale-95"
+                            >
+                                <span className="text-[10px] font-bold text-rose-400 group-hover/no:text-white uppercase tracking-wider mb-0.5">No</span>
+                                <span className="text-lg font-black text-rose-400 group-hover/no:text-white">{100 - (chance || 50)}%</span>
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer: Volume, Time & STAR */}
+                <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 uppercase tracking-wider border-t border-white/5 pt-3 mt-1 pointer-events-auto">
+                    <div className="flex items-center gap-3">
+                        <span className="text-gray-400">${volume} Vol</span>
+                        {timeLeft && <span className="text-gray-600">{timeLeft}</span>}
+                    </div>
+
+                    {/* Star Moved to Bottom - Pink on Active */}
+                    <button
+                        className="text-gray-600 hover:text-white transition-colors p-1 rounded-full relative group/star"
+                        onClick={handleStarClick}
+                    >
+                        <Star className={`w-5 h-5 transition-all duration-300 ${isStarred ? 'fill-[#F492B7] text-[#F492B7] scale-110' : 'text-gray-600 group-hover/star:text-white'}`} style={{ strokeWidth: isStarred ? 0 : 2 }} />
+                        <AnimatePresence>
+                            {showSavedAnim && (
+                                <motion.span
+                                    initial={{ opacity: 0, y: 10, x: -20 }}
+                                    animate={{ opacity: 1, y: -25, x: -20 }}
+                                    exit={{ opacity: 0 }}
+                                    transition={{ duration: 0.8 }}
+                                    className="absolute top-0 right-0 text-[#F492B7] font-black text-[10px] uppercase tracking-wide whitespace-nowrap pointer-events-none"
+                                >
+                                    Saved!
+                                </motion.span>
+                            )}
+                        </AnimatePresence>
+                    </button>
+                </div>
+            </div>
+
+            <QuickBetModal
+                isOpen={showBetModal}
+                onClose={() => setShowBetModal(false)}
+                market={{
+                    title: selectedOption ? `${title} — ${selectedOption}` : title,
+                    icon,
+                    chance: selectedOptionChance,
+                    volume,
+                    marketPDA,
+                    yesTokenMint,
+                    noTokenMint,
+                    slug
+                }}
+                outcome={selectedOutcome}
+            />
+        </div>
     );
 };
 

@@ -9,7 +9,7 @@ import { PublicKey } from "@solana/web3.js";
 
 // --- GLOBAL CONSTANTS (MUST MATCH lib.rs) ---
 export const TOTAL_SUPPLY = 1_000_000_000; // 1B Shares
-export const VIRTUAL_OFFSET = 30_000_000;    // 30M Shares (Pump.fun Depth for Stability)
+export const VIRTUAL_OFFSET = 50_000_000;    // 50M Shares (Increased for Stability)
 
 // PHASE BOUNDARIES (Shares)
 export const PHASE1_END = 100_000_000;    // 100M

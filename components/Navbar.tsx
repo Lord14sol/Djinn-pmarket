@@ -189,7 +189,7 @@ function NavbarContent() {
     }, [connected, publicKey, connection]);
 
     return (
-        <nav className="fixed top-0 left-0 w-full z-50 bg-black/90 backdrop-blur-xl border-b border-white/5">
+        <nav className="fixed top-0 left-0 w-full z-50 bg-black border-b border-white/5">
             <style jsx global>{`
                 @keyframes breathe {
                     0%, 100% { opacity: 1; transform: scale(1); }
@@ -206,11 +206,11 @@ function NavbarContent() {
             `}</style>
 
             <div className="w-full px-6 md:px-12 h-24 flex items-center justify-between relative">
-                <Link href="/" className="flex items-center group gap-0">
-                    <div className="relative w-20 h-20 md:w-24 md:h-24 transition-transform duration-500 group-hover:scale-105">
-                        <Image src="/star.png" alt="Djinn Logo" fill className="object-contain" priority />
+                <Link href="/markets" className="flex items-center group gap-0">
+                    <div className="relative w-16 h-16 md:w-24 md:h-24 transition-transform duration-500 group-hover:scale-110 -mr-3">
+                        <Image src="/djinn-logo.png?v=3" alt="Djinn Logo" fill className="object-contain" priority unoptimized />
                     </div>
-                    <span className="text-4xl md:text-5xl text-white -ml-4 mt-2" style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}>
+                    <span className="text-3xl md:text-5xl text-white mt-1 relative z-10" style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}>
                         Djinn
                     </span>
                 </Link>
@@ -220,7 +220,7 @@ function NavbarContent() {
                         {/* Botón Create Market estilo principal */}
                         <button
                             onClick={openCreateMarket}
-                            className="bg-[#F492B7] text-black text-sm font-black py-3 px-6 rounded-xl shadow-[0_0_20px_rgba(244,146,183,0.3)] hover:scale-105 active:scale-95 transition-all uppercase tracking-wide"
+                            className="bg-[#F492B7] text-black text-sm font-black py-3 px-6 rounded-xl shadow-[0_0_10px_rgba(244,146,183,0.1)] hover:scale-105 active:scale-95 transition-all uppercase tracking-wide"
                         >
                             Create a Market
                         </button>
@@ -240,29 +240,40 @@ function NavbarContent() {
                                 Connect Wallet
                             </button>
                         ) : (
-                            /* Conectado: Rediseño estilo usuario */
-                            <div className="flex items-center bg-[#1A1A1A] rounded-lg p-1 pr-4 gap-3 border border-white/5 hover:border-white/20 transition-all cursor-pointer group" onClick={() => setIsOpen(!isOpen)}>
+                            /* Conectado: Rediseño estilo usuario - Clean Transparent */
+                            <div className="flex items-center gap-3 cursor-pointer group hover:opacity-80 transition-opacity" onClick={() => setIsOpen(!isOpen)}>
                                 {/* Avatar - No white border */}
-                                <div className="relative w-8 h-8 rounded-full overflow-hidden">
+                                <div className="relative w-8 h-8 rounded-full overflow-hidden bg-white/5">
                                     {userPfp ? (
-                                        <img src={userPfp} alt="Profile" className="w-full h-full object-cover" />
+                                        <img
+                                            src={userPfp}
+                                            alt="Profile"
+                                            className="w-full h-full object-cover"
+                                            onError={(e) => {
+                                                e.currentTarget.style.display = 'none';
+                                                e.currentTarget.parentElement?.classList.add('fallback-avatar');
+                                            }}
+                                        />
                                     ) : (
-                                        <div className="w-full h-full bg-blue-500 flex items-center justify-center">
-                                            <span className="text-xs">🐸</span>
+                                        <div className="w-full h-full bg-gradient-to-br from-[#F492B7] to-purple-600 flex items-center justify-center text-xs text-white font-bold">
+                                            {username && username !== 'User' ? username.charAt(0).toUpperCase() : '👤'}
                                         </div>
                                     )}
                                 </div>
 
                                 <div className="flex flex-col items-start leading-none">
                                     <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">
-                                        {publicKey?.toString().slice(0, 4)}...{publicKey?.toString().slice(-4)}
+                                        {username && username !== 'User' && !username.startsWith(publicKey?.toString().slice(0, 4) || 'xxxx')
+                                            ? username
+                                            : `${publicKey?.toString().slice(0, 4)}...${publicKey?.toString().slice(-4)}`
+                                        }
                                     </span>
                                     <span className="text-xs font-bold text-white tracking-tight" style={{ fontFamily: 'var(--font-adriane), serif' }}>
                                         {balance.toFixed(2)} SOL
                                     </span>
                                 </div>
 
-                                <span className="text-gray-500 text-xs">▼</span>
+                                <span className="text-gray-500 text-xs group-hover:text-white transition-colors">▼</span>
                             </div>
                         )}
                     </div>

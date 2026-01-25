@@ -236,20 +236,29 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
     };
 
     return (
-        <div className="bg-[#0E0E0E] border border-white/5 rounded-3xl p-6 md:p-8">
+        <div className="bg-[#0E0E0E] rounded-3xl p-6 md:p-8">
             <h3 className="text-xl font-black uppercase mb-8 flex items-center gap-3">
                 <MessageSquare className="w-5 h-5 text-[#F492B7]" />
-                Thoughts? <span className="text-xs bg-white/10 text-gray-400 px-2 py-1 rounded-full">{comments.length}</span>
+                Comments
             </h3>
 
             {/* INPUT AREA */}
             <div className="flex gap-4 mb-10">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#F492B7] to-purple-600 shrink-0 shadow-lg" />
+                <div className="shrink-0">
+                    {userProfile.avatarUrl ? (
+                        <img src={userProfile.avatarUrl} className="w-10 h-10 rounded-full object-cover" alt={userProfile.username} />
+                    ) : (
+                        <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-lg">👤</div>
+                    )}
+                </div>
                 <div className="flex-1">
-                    <div className="bg-white/5 border border-white/10 rounded-2xl p-4 focus-within:border-[#F492B7]/50 focus-within:bg-black transition-all">
+                    <div className="flex items-center gap-2 mb-2">
+                        <span className="text-sm font-bold text-[#F492B7]">{userProfile.username || 'You'}</span>
+                    </div>
+                    <div className="bg-white/5 rounded-2xl p-4 focus-within:bg-black transition-all">
                         <textarea
                             className="w-full bg-transparent p-2 text-sm focus:outline-none resize-none h-20 placeholder:text-gray-600 font-medium"
-                            placeholder="What are your thoughts on this market?"
+                            placeholder="Add a comment..."
                             value={newCommentText}
                             onChange={(e) => setNewCommentText(e.target.value)}
                         />
@@ -281,7 +290,7 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
                 {isLoading ? (
                     <div className="flex justify-center py-10"><Loader2 className="animate-spin text-gray-500" /></div>
                 ) : comments.length === 0 ? (
-                    <div className="text-center py-10 text-gray-600 italic">No thoughts yet. Be the first to manifest.</div>
+                    null
                 ) : (
                     comments.map((comment) => (
                         <div key={comment.id} className="group">

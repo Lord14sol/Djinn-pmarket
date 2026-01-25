@@ -74,14 +74,14 @@ const HeroContent = ({ onMarketCreated }: { onMarketCreated: (m: any) => void })
                     <div className="flex justify-center mt-1">
                         <button
                             onClick={openCreateMarket}
-                            className="bg-[#F492B7] text-black text-xl font-black py-4 px-12 rounded-xl shadow-[0_0_30px_rgba(244,146,183,0.3)] hover:scale-105 active:scale-95 transition-all uppercase"
+                            className="bg-[#F492B7] text-black text-xl font-black py-4 px-12 rounded-xl shadow-[0_0_10px_rgba(244,146,183,0.1)] hover:scale-105 active:scale-95 transition-all uppercase"
                         >
                             Create a Market
                         </button>
                     </div>
 
                     {/* BOTÓN HOW IT WORKS */}
-                    <button onClick={() => setIsHowItWorksOpen(true)} className="px-6 py-2 rounded-full bg-[#F492B7]/10 border border-[#F492B7]/20 text-[#F492B7] text-sm font-bold hover:bg-[#F492B7]/20 transition-all">
+                    <button onClick={() => setIsHowItWorksOpen(true)} className="px-6 py-2 rounded-full border border-[#F492B7]/20 text-[#F492B7] text-sm font-bold hover:bg-[#F492B7]/10 transition-all">
                         How it works?
                     </button>
                 </div>
