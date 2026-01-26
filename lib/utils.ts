@@ -95,3 +95,33 @@ export const parseCompactNumber = (str: string | number): number => {
 
     return numPart * (multipliers[lastChar] || 1);
 };
+
+/**
+ * Normaliza nombres de outcomes para evitar errores case-sensitive
+ */
+export function normalizeOutcomeName(name: string): string {
+    return name.toUpperCase().trim();
+}
+
+/**
+ * Busca un valor en un map con case-insensitive key matching
+ */
+export function getOutcomeValue<T>(
+    map: Record<string, T>,
+    key: string,
+    defaultValue: T
+): T {
+    const normalized = normalizeOutcomeName(key);
+
+    // Intentar búsqueda exacta primero
+    if (map[key] !== undefined) return map[key];
+
+    // Búsqueda case-insensitive
+    for (const k in map) {
+        if (normalizeOutcomeName(k) === normalized) {
+            return map[k];
+        }
+    }
+
+    return defaultValue;
+}
