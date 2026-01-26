@@ -198,6 +198,54 @@ export function simulateBuy(
     };
 }
 
+export function simulateSell(
+    sharesToSell: number,
+    marketState: MarketState
+): TradeSimulation {
+    const currentShareSupply = marketState.totalSharesMinted;
+
+    // Guard: Cannot sell more than supply
+    if (sharesToSell > currentShareSupply) {
+        sharesToSell = currentShareSupply;
+    }
+
+    const startPrice = getSpotPrice(currentShareSupply);
+    const endPrice = getSpotPrice(currentShareSupply - sharesToSell);
+
+    // Calculate EXACT SOL returned using the integral (trapezoidal)
+    // We are moving FROM currentSupply TO (currentSupply - sharesToSell)
+    const grossSolReturned = getCostInContract(currentShareSupply - sharesToSell, currentShareSupply);
+
+    // Fees (1% total) - Deducted from the SOL returned to user
+    const feeRateTotal = 0.01;
+    const feeTotal = grossSolReturned * feeRateTotal;
+    const netSolOut = grossSolReturned - feeTotal;
+
+    const averageEntryPrice = sharesToSell > 0 ? grossSolReturned / sharesToSell : 0;
+    const priceImpact = startPrice > 0 ? ((startPrice - endPrice) / startPrice) * 100 : 0;
+
+    const finalSupply = currentShareSupply - sharesToSell;
+    const currentMcap = endPrice * finalSupply;
+
+    return {
+        inputAmount: sharesToSell, // In this context, input is Shares
+        sharesReceived: netSolOut, // In this context, output is SOL
+        priceImpact,
+        feeTotal,
+        feeProtocol: feeTotal * 0.5,
+        feeCreator: feeTotal * 0.5,
+        netInvested: grossSolReturned, // The gross value extracted
+        averageEntryPrice,
+        startPrice,
+        endPrice,
+        isEndgame: finalSupply > (TOTAL_SUPPLY * 0.95),
+        warningSlippage: priceImpact > 15.0,
+        currentMcap,
+        ignitionProgress: getIgnitionProgress(finalSupply),
+        isViralMode: finalSupply >= PHASE3_START
+    };
+}
+
 // --- UTILITY FUNCTIONS ---
 
 export function calculateImpliedProbability(yesSupply: number, noSupply: number): number {

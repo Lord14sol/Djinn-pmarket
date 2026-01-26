@@ -3,60 +3,62 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 
-interface Bubble {
-    id: string;
+// Simplified Single Bubble
+interface BubbleData {
+    id: number;
     text: string;
-    // Styling/Positioning logic handled by flex stack now
+    side: 'YES' | 'NO';
 }
 
 export default function TradeBubbles({ trigger }: { trigger: { amount: number; side: 'YES' | 'NO' } | null }) {
-    const [bubbles, setBubbles] = useState<Bubble[]>([]);
-
-    const addBubble = useCallback((amount: number, side: 'YES' | 'NO') => {
-        const id = Math.random().toString(36).substr(2, 9);
-
-        const newBubble: Bubble = {
-            id,
-            // Format as USD currency
-            text: `+ $${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-        };
-
-        setBubbles(prev => [newBubble, ...prev].slice(0, 5)); // Keep max 5, add to TOP
-        setTimeout(() => {
-            setBubbles(prev => prev.filter(b => b.id !== id));
-        }, 4000); // 4s Fade Out
-    }, []);
+    const [bubble, setBubble] = useState<BubbleData | null>(null);
 
     useEffect(() => {
         if (trigger && trigger.amount > 0) {
-            addBubble(trigger.amount, trigger.side);
+            // New trigger replaces old one immediately
+            setBubble({
+                id: Date.now(),
+                text: `$${trigger.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                side: trigger.side
+            });
+
+            // Auto-hide after 3s
+            const timer = setTimeout(() => {
+                setBubble(null);
+            }, 3000);
+            return () => clearTimeout(timer);
         }
-    }, [trigger, addBubble]);
+    }, [trigger]);
 
     return (
-        <div className="absolute top-4 left-6 z-20 flex flex-col gap-2 pointer-events-none">
-            <AnimatePresence mode='popLayout'>
-                {bubbles.map(bubble => (
+        <div className="absolute top-4 left-6 z-20 pointer-events-none">
+            <AnimatePresence>
+                {bubble && (
                     <motion.div
                         key={bubble.id}
-                        initial={{ opacity: 0, y: 20, scale: 0.8, filter: 'blur(10px)' }}
-                        animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+                        initial={{ opacity: 0, x: -20, scale: 0.9 }}
+                        animate={{ opacity: 1, x: 0, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }}
-                        transition={{ duration: 0.4, ease: "backOut" }}
-                        className="
+                        transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                        className={`
                             px-4 py-2 
-                            bg-[rgba(255,50,150,0.25)] 
-                            border border-[#FF007A]/40
+                            border
                             text-white text-sm font-bold
-                            rounded-lg shadow-[0_0_15px_rgba(255,0,122,0.2)]
+                            rounded-xl shadow-2xl
                             backdrop-blur-md
-                            flex items-center gap-2
-                        "
+                            flex items-center gap-3
+                            ${bubble.side === 'YES'
+                                ? 'bg-[#10B981]/20 border-[#10B981]/40 shadow-[#10B981]/20'
+                                : 'bg-[#EF4444]/20 border-[#EF4444]/40 shadow-[#EF4444]/20'}
+                        `}
                     >
-                        <span className="text-[#FF007A] drop-shadow-sm">Buy</span>
-                        <span>{bubble.text}</span>
+                        <div className={`w-2 h-2 rounded-full ${bubble.side === 'YES' ? 'bg-[#10B981]' : 'bg-[#EF4444]'}`} />
+                        <span className="opacity-80 font-medium">Bought {bubble.side}</span>
+                        <span className={`font-black ${bubble.side === 'YES' ? 'text-[#10B981]' : 'text-[#EF4444]'}`}>
+                            {bubble.text}
+                        </span>
                     </motion.div>
-                ))}
+                )}
             </AnimatePresence>
         </div>
     );

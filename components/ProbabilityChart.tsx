@@ -242,7 +242,17 @@ export default function ProbabilityChart({
             ];
         }
 
-        return filtered;
+        // Deduplicate by time to prevent Recharts key errors
+        const uniqueFiltered = filtered.reduce((acc: any[], current: any) => {
+            const x = acc.find(item => item.time === current.time);
+            if (!x) {
+                return acc.concat([current]);
+            } else {
+                return acc;
+            }
+        }, []);
+
+        return uniqueFiltered;
     }, [syncedData, timeframe]);
 
     // Ticks para pills - FILTRADO ESTRICTO (No fantasmas)

@@ -60,9 +60,9 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: '/icon.png?v=5', sizes: 'any', type: 'image/png' },
+      { url: '/djinn-logo.png?v=2', sizes: 'any', type: 'image/png' },
     ],
-    apple: '/icon.png?v=5',
+    apple: '/djinn-logo.png?v=2',
   },
   manifest: "/manifest.json",
 };
