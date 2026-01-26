@@ -139,8 +139,22 @@ export default function Page() {
                     // Only use if data is recent (within last 24 hours)
                     const lastTime = parsed.probability?.[parsed.probability.length - 1]?.time;
                     if (lastTime && (Date.now() / 1000 - lastTime) < 86400) {
-                        console.log('📊 Restored chart data from localStorage');
-                        return parsed;
+                        // VALIDATION: Check if candle data has valid prices (not corrupted)
+                        // Valid SOL prices should be < 1 (bonding curve max is 0.95 SOL)
+                        const hasValidCandles = Object.values(parsed.candles || {}).every((candles: any) =>
+                            !candles.length || candles.every((c: any) =>
+                                c.close < 10 && c.high < 10 && c.open < 10 && c.low < 10
+                            )
+                        );
+
+                        if (hasValidCandles) {
+                            console.log('📊 Restored chart data from localStorage');
+                            return parsed;
+                        } else {
+                            // Corrupted data (old probability-as-price values), clear it
+                            console.warn('⚠️ Clearing corrupted chart data from localStorage');
+                            localStorage.removeItem(`djinn_chart_${slug}`);
+                        }
                     }
                 }
             } catch (e) {

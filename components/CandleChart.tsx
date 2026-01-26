@@ -8,11 +8,38 @@ interface CandleChartProps {
     selectedOutcome?: string;
 }
 
+// Max valid price for lightweight-charts (prevents overflow errors)
+const MAX_VALID_PRICE = 90071992547409;
+
+// Validate and sanitize candle data
+function sanitizeCandles(candles: any[]): any[] {
+    return candles.filter(c => {
+        // Filter out candles with invalid/extreme values
+        const values = [c.open, c.high, c.low, c.close];
+        return values.every(v =>
+            typeof v === 'number' &&
+            !isNaN(v) &&
+            isFinite(v) &&
+            Math.abs(v) < MAX_VALID_PRICE
+        );
+    }).map(c => ({
+        ...c,
+        // Clamp values to safe range
+        open: Math.max(0, Math.min(c.open, MAX_VALID_PRICE)),
+        high: Math.max(0, Math.min(c.high, MAX_VALID_PRICE)),
+        low: Math.max(0, Math.min(c.low, MAX_VALID_PRICE)),
+        close: Math.max(0, Math.min(c.close, MAX_VALID_PRICE)),
+    }));
+}
+
 export default function CandleChart({ data, selectedOutcome }: CandleChartProps) {
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const chartInstanceRef = useRef<any>(null);
     const seriesRef = useRef<any>(null);
     const volumeSeriesRef = useRef<any>(null);
+
+    // Sanitize incoming data to prevent chart crashes
+    const safeData = sanitizeCandles(data);
 
     // --- CHART EFFECT ---
     useEffect(() => {
@@ -47,14 +74,14 @@ export default function CandleChart({ data, selectedOutcome }: CandleChartProps)
             scaleMargins: { top: 0.8, bottom: 0 },
         });
 
-        // Hydrate Data
-        if (data.length > 0) {
-            series.setData(data as any);
+        // Hydrate Data (using sanitized data)
+        if (safeData.length > 0) {
+            series.setData(safeData as any);
 
             // Mock Volume Data derived from candles
-            const volumeData = data.map((c: any) => ({
+            const volumeData = safeData.map((c: any) => ({
                 time: c.time,
-                value: (c.high - c.low) * 1000000 + (Math.random() * 100), // Synthetic volume
+                value: Math.min((c.high - c.low) * 1000000, 1000000) + (Math.random() * 100), // Synthetic volume, capped
                 color: c.close >= c.open ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'
             }));
             volumeSeries.setData(volumeData as any);
@@ -75,19 +102,19 @@ export default function CandleChart({ data, selectedOutcome }: CandleChartProps)
         };
     }, [selectedOutcome]); // Hard Re-Mount on outcome change for safety
 
-    // Live Update Effect
+    // Live Update Effect (using sanitized data)
     useEffect(() => {
-        if (seriesRef.current && chartInstanceRef.current) {
-            seriesRef.current.setData(data as any);
+        if (seriesRef.current && chartInstanceRef.current && safeData.length > 0) {
+            seriesRef.current.setData(safeData as any);
 
-            const volumeData = data.map((c: any) => ({
+            const volumeData = safeData.map((c: any) => ({
                 time: c.time,
-                value: (c.high - c.low) * 1000000 + 50,
+                value: Math.min((c.high - c.low) * 1000000, 1000000) + 50, // Capped volume
                 color: c.close >= c.open ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'
             }));
             if (volumeSeriesRef.current) volumeSeriesRef.current.setData(volumeData as any);
         }
-    }, [data]);
+    }, [safeData]);
 
     return <div ref={chartContainerRef} className="w-full h-full" />;
 }
