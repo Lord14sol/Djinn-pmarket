@@ -3,9 +3,11 @@
 import React, { useMemo } from 'react';
 
 const StarBackground = () => {
-    // Generate Abundant Sparkles (high count to ensure constant activity)
-    const stars = useMemo(() => {
-        return Array.from({ length: 150 }).map((_, i) => ({
+    const [stars, setStars] = React.useState<any[]>([]);
+    const [pinkStars, setPinkStars] = React.useState<any[]>([]);
+
+    React.useEffect(() => {
+        setStars(Array.from({ length: 150 }).map((_, i) => ({
             id: i,
             left: `${Math.random() * 100}%`,
             top: `${Math.random() * 100}%`,
@@ -17,11 +19,9 @@ const StarBackground = () => {
             // Random drift direction (Slower drift)
             moveX: (Math.random() - 0.5) * 30,
             moveY: (Math.random() - 0.5) * 30,
-        }));
-    }, []);
+        })));
 
-    const pinkStars = useMemo(() => {
-        return Array.from({ length: 16 }).map((_, i) => ({ // Increased count slightly
+        setPinkStars(Array.from({ length: 16 }).map((_, i) => ({ // Increased count slightly
             id: `pink-${i}`,
             left: `${Math.random() * 100}%`,
             top: `${Math.random() * 100}%`,
@@ -30,7 +30,7 @@ const StarBackground = () => {
             duration: `${Math.random() * 8 + 6}s`, // Even slower for pink ones
             moveX: (Math.random() - 0.5) * 40,
             moveY: (Math.random() - 0.5) * 40,
-        }));
+        })));
     }, []);
 
     return (

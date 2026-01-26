@@ -40,8 +40,8 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
     const [mainImage, setMainImage] = useState<string | null>(null);
     const [sourceUrl, setSourceUrl] = useState('');
     const [options, setOptions] = useState([
-        { id: 1, name: '' },
-        { id: 2, name: '' }
+        { id: 1, name: 'Yes' },
+        { id: 2, name: 'No' }
     ]);
     const [initialBuyAmount, setInitialBuyAmount] = useState('0'); // Default 0 - Protocol Virtual Liquidity Handles Depth
     const [initialBuySide, setInitialBuySide] = useState<'yes' | 'no'>('yes');
@@ -67,7 +67,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                 setPoolName('');
                 setMainImage(null);
                 setMarketType('binary');
-                setOptions([{ id: 1, name: '' }, { id: 2, name: '' }]);
+                setOptions([{ id: 1, name: 'Yes' }, { id: 2, name: 'No' }]);
                 setInitialBuyAmount('0');
                 setInitialBuySide('yes');
                 setSuccessData(null);
@@ -520,27 +520,30 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                                         )}
                                     </div>
 
-                                    {marketType === 'binary' ? (
-                                        <div className="bg-white/5 p-4 rounded-xl border border-white/10 flex items-center justify-between">
-                                            <span className="text-white font-bold text-sm">2 Outcomes</span>
-                                            <div className="flex gap-2">
-                                                <span className="bg-[#10B981]/20 text-[#10B981] px-2 py-1 rounded text-xs font-black">YES</span>
-                                                <span className="bg-red-500/20 text-red-500 px-2 py-1 rounded text-xs font-black">NO</span>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <div className="max-h-48 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
-                                            {options.map((option, index) => (
-                                                <div key={option.id} className="bg-white/5 p-4 rounded-xl border border-white/10">
-                                                    <input type="text" placeholder="Outcome Name..." className="w-full bg-transparent border-none text-white font-bold outline-none text-sm" value={option.name} onChange={(e) => {
+                                    {/* ALWAYS SHOW INPUTS (User wants to see/edit them) */}
+                                    <div className="max-h-48 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
+                                        {options.map((option, index) => (
+                                            <div key={option.id} className="bg-white/5 p-4 rounded-xl border border-white/10 flex items-center gap-3">
+                                                {/* Number or Color dot */}
+                                                <div className={`w-2 h-2 rounded-full shrink-0 ${index === 0 ? 'bg-[#10B981]' :
+                                                    index === 1 ? 'bg-[#F492B7]' :
+                                                        'bg-gray-500'
+                                                    }`} />
+
+                                                <input
+                                                    type="text"
+                                                    placeholder={`Outcome ${index + 1}...`}
+                                                    className="w-full bg-transparent border-none text-white font-bold outline-none text-sm"
+                                                    value={option.name}
+                                                    onChange={(e) => {
                                                         const newOpts = [...options];
                                                         newOpts[index].name = e.target.value;
                                                         setOptions(newOpts);
-                                                    }} />
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
+                                                    }}
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
 
 

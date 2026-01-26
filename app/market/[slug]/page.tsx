@@ -4,13 +4,14 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import { useRouter } from 'next/navigation';
-import { formatCompact } from '@/lib/utils';
+import { formatCompact, parseCompactNumber } from '@/lib/utils';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
-import { Clock, DollarSign, Wallet, Activity, Users, CheckCircle2, AlertCircle, Loader2, Edit2, ExternalLink, Share2, Scale, MessageCircle, Star } from 'lucide-react';
+import { Clock, DollarSign, Wallet, Activity, Users, CheckCircle2, AlertCircle, Loader2, Edit2, ExternalLink, Share2, Scale, MessageCircle, Star, X } from 'lucide-react';
 import Link from 'next/link';
 import { useDjinnProtocol } from '@/hooks/useDjinnProtocol';
 import { simulateBuy, estimatePayoutInternal, CURVE_CONSTANT, VIRTUAL_OFFSET, getSpotPrice, getSupplyFromPrice, calculateImpliedProbability, getIgnitionStatus, getIgnitionProgress } from '@/lib/core-amm';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useMarketData } from '@/hooks/useMarketData';
 
 // Components
@@ -25,6 +26,8 @@ import DjinnToast, { DjinnToastType } from '@/components/ui/DjinnToast';
 import { usePrice } from '@/lib/PriceContext';
 import * as supabaseDb from '@/lib/supabase-db';
 import { PrizePoolCounter } from '@/components/PrizePoolCounter';
+import HoldingsPanel from '@/components/HoldingsPanel';
+import { getOutcomeColor } from '@/lib/market-colors';
 
 import IgnitionBar from '@/components/market/IgnitionBar';
 import bs58 from 'bs58';
@@ -105,8 +108,12 @@ export default function Page() {
     const [livePrice, setLivePrice] = useState<number>(50);
 
     // Sync Live Price from SWR to Local State (for optimistic UI support)
+    // Sync Live Price from SWR to Local State (for optimistic UI support)
+    // FIX: Lockout ref to prevent stale server data from overwriting optimistic updates
+    const priceLockoutRef = React.useRef(false);
+
     useEffect(() => {
-        if (marketData?.live_price) {
+        if (marketData?.live_price && !priceLockoutRef.current) {
             setLivePrice(marketData.live_price);
         }
     }, [marketData]);
@@ -118,14 +125,47 @@ export default function Page() {
 
     // --- CHART HISTORY STATE ---
     // Stores the full history for the session (since page load)
+    // Load persisted chart data from localStorage
     const [historyState, setHistoryState] = useState<{
         probability: any[]; // Array of { time, [outcome]: val }
         candles: Record<string, any[]>; // Map of OutcomeName -> CandlestickData[]
-    }>({ probability: [], candles: {} });
+    }>(() => {
+        // Initialize from localStorage if available
+        if (typeof window !== 'undefined') {
+            try {
+                const stored = localStorage.getItem(`djinn_chart_${slug}`);
+                if (stored) {
+                    const parsed = JSON.parse(stored);
+                    // Only use if data is recent (within last 24 hours)
+                    const lastTime = parsed.probability?.[parsed.probability.length - 1]?.time;
+                    if (lastTime && (Date.now() / 1000 - lastTime) < 86400) {
+                        console.log('📊 Restored chart data from localStorage');
+                        return parsed;
+                    }
+                }
+            } catch (e) {
+                console.warn('Failed to load chart data from localStorage:', e);
+            }
+        }
+        return { probability: [], candles: {} };
+    });
     const [isLoading, setIsLoading] = useState(false);
+    const [showHoldingsPanel, setShowHoldingsPanel] = useState(false); // Toggle for float panel
+    const [timeLeft, setTimeLeft] = useState<string>('');
     const { solPrice } = usePrice();
     const [mounted, setMounted] = useState(false);
     useEffect(() => setMounted(true), []);
+
+    // Persist chart data to localStorage when it changes
+    useEffect(() => {
+        if (historyState.probability.length > 0 || Object.keys(historyState.candles).length > 0) {
+            try {
+                localStorage.setItem(`djinn_chart_${slug}`, JSON.stringify(historyState));
+            } catch (e) {
+                console.warn('Failed to save chart data to localStorage:', e);
+            }
+        }
+    }, [historyState, slug]);
 
     // --- DJINN V3 METRICS ---
     const {
@@ -138,12 +178,14 @@ export default function Page() {
         spotYes,
         spotNo
     } = useMemo(() => {
+        console.log("📊 Recalculating MCAP Metrics. MarketAccount:", marketAccount ? "Present" : "Null", "LivePrice:", livePrice);
         let sYes = 0; let sNo = 0;
 
         // Use outcome_supplies from marketAccount if available (populated by on-chain fetch)
         if (marketAccount?.outcome_supplies && marketAccount.outcome_supplies.length >= 2) {
             sYes = Number(marketAccount.outcome_supplies[0]) / 1e9;
             sNo = Number(marketAccount.outcome_supplies[1]) / 1e9;
+            console.log("📈 Using on-chain supplies - YES:", sYes, "NO:", sNo);
         } else if (marketAccount?.yes_supply !== undefined) {
             sYes = Number(marketAccount.yes_supply) / 1e9;
             sNo = Number(marketAccount.no_supply) / 1e9;
@@ -177,6 +219,8 @@ export default function Page() {
 
         const yP = calculateImpliedProbability(sYes, sNo);
 
+        console.log(`📊 MCAP Update - YES: ${mYes.toFixed(4)} SOL (${yP.toFixed(1)}%), NO: ${mNo.toFixed(4)} SOL (${(100 - yP).toFixed(1)}%)`);
+
         return {
             yesMcap: mYes,
             noMcap: mNo,
@@ -187,7 +231,7 @@ export default function Page() {
             spotYes: currentSpotYes,
             spotNo: currentSpotNo
         };
-    }, [marketAccount, livePrice]);
+    }, [marketAccount, livePrice, onChainData]);
 
     // Reactive Market Outcomes (Independent Pricing Logic)
     const marketOutcomes = useMemo(() => {
@@ -227,35 +271,68 @@ export default function Page() {
                 };
             });
 
-            // Normalize Probabilities (Chances) only for the UI %
-            const totalSpot = base.reduce((acc, o) => acc + o.yesPrice, 0);
-            if (totalSpot > 0) {
-                base.forEach(o => {
-                    o.chance = (o.yesPrice / totalSpot) * 100;
+            // Normalize Probabilities (Chances)
+            // FIX: Use Supply Ratio logic (with 1M buffer) to match DjinnChart/Header exactly
+            // Do NOT use Spot Price normalization for chance, as curve shape != probability shape
+            const VIRTUAL_FLOOR = 1_000_000;
+            let totalAdjustedSupply = 0;
+            const adjustedSupplies: number[] = [];
+
+            base.forEach((o, idx) => {
+                // supplies are already fetched dynamically inside the map above, but distinct scope
+                // Re-fetch supply for consistency
+                let supply = 0;
+                if (marketAccount.outcome_supplies && marketAccount.outcome_supplies[idx]) {
+                    supply = Number(marketAccount.outcome_supplies[idx]) / 1e9;
+                } else if (idx === 0 && marketAccount.yes_supply) {
+                    supply = Number(marketAccount.yes_supply) / 1e9;
+                } else if (idx === 1 && marketAccount.no_supply) {
+                    supply = Number(marketAccount.no_supply) / 1e9;
+                }
+                const adj = supply + VIRTUAL_FLOOR;
+                adjustedSupplies[idx] = adj;
+                totalAdjustedSupply += adj;
+            });
+
+            if (totalAdjustedSupply > 0) {
+                base.forEach((o, idx) => {
+                    o.chance = (adjustedSupplies[idx] / totalAdjustedSupply) * 100;
                 });
             } else {
                 base.forEach(o => o.chance = 100 / base.length);
             }
         }
-        // 3. Fallback Default
+        // 3. Fallback Default (ONLY if no market account data at all)
         else {
-            base = [
-                { id: 'yes', title: 'YES', volume: '0', yesPrice: 50, noPrice: 50, chance: 50 },
-                { id: 'no', title: 'NO', volume: '0', yesPrice: 50, noPrice: 50, chance: 50 },
-            ];
+            // If we have a livePrice but no market options (e.g. loading), assume YES/NO but correct price
+            if (livePrice !== 50) {
+                base = [
+                    { id: 'yes', title: 'YES', volume: '0', yesPrice: livePrice, noPrice: 100 - livePrice, chance: livePrice },
+                    { id: 'no', title: 'NO', volume: '0', yesPrice: 100 - livePrice, noPrice: livePrice, chance: 100 - livePrice },
+                ];
+            } else {
+                base = [
+                    { id: 'yes', title: 'YES', volume: '0', yesPrice: 50, noPrice: 50, chance: 50 },
+                    { id: 'no', title: 'NO', volume: '0', yesPrice: 50, noPrice: 50, chance: 50 },
+                ];
+            }
         }
 
-        // Apply Live Updates (Legacy Binary Overrides if needed, but above logic is cleaner)
+        // Apply Live Updates (Legacy Binary Overrides)
+        // Ensure that if we have a live price signal, we enforce it on the outcome probability
         if (base.length === 2 && (marketAccount?.options?.length || 0) < 2) {
-            // Fallback for purely simulated binary without outcome_supplies
-            base[0].chance = yesPercent;
-            base[0].yesPrice = spotYes * 100;
-            base[1].chance = noPercent;
-            base[1].yesPrice = spotNo * 100;
+            // Check if livePrice differs significantly from base chance, if so, override
+            // This prevents "Reversion to 50%" if the base logic above fell back to default
+            if (base[0].chance !== livePrice) {
+                base[0].chance = livePrice;
+                base[0].yesPrice = livePrice;
+                base[1].chance = 100 - livePrice;
+                base[1].yesPrice = 100 - livePrice;
+            }
         }
 
         return base;
-    }, [slug, yesPercent, noPercent, yesMcap, noMcap, spotYes, spotNo, marketAccount]);
+    }, [slug, livePrice, marketAccount]);
 
 
     // User Data
@@ -288,7 +365,7 @@ export default function Page() {
     const [isSuccess, setIsSuccess] = useState(false);
     const [tradeSuccessInfo, setTradeSuccessInfo] = useState<{ shares: number; side: string; txSignature: string } | null>(null);
 
-    const [lastTradeEvent, setLastTradeEvent] = useState<{ amount: number; side: 'YES' | 'NO' } | null>(null);
+    const [lastTradeEvent, setLastTradeEvent] = useState<{ id: string; amount: number; side: 'YES' | 'NO' } | null>(null);
     const [tradeMode, setTradeMode] = useState<'BUY' | 'SELL'>('BUY');
 
     const [isMaxSell, setIsMaxSell] = useState(false);
@@ -319,6 +396,15 @@ export default function Page() {
     const isMultiOutcome = (MULTI_OUTCOMES[slug] || []).length > 0;
     const staticMarketInfo = marketDisplayData[slug] || { title: 'Unknown Market', icon: '❓', description: 'Market not found' };
     const effectiveSlug = slug;
+
+    // Holdings formatted for the floating panel
+    const myHoldingsFormatted = useMemo(() => {
+        return marketOutcomes.map((outcome, idx) => ({
+            outcomeName: outcome.title,
+            shares: myShares[idx] || 0,
+            color: getOutcomeColor(outcome.title)
+        }));
+    }, [marketOutcomes, myShares]);
 
     // Load starred state from localStorage on mount
     useEffect(() => {
@@ -417,11 +503,15 @@ export default function Page() {
                 marketOutcomes.forEach((o, idx) => {
                     // 1. Probability
                     newProbPoint[o.title] = o.chance;
+                    // Log only occasionally or if change detected to avoid spam, but for now we trust logic
+                    // If o.chance differs from last point, it will show up.
 
                     // 2. Candle
-                    // We calculate price from the current supply in 'marketOutcomes' (or freshMarket)
-                    // o.yesPrice is already calculated based on supply
-                    const currentPrice = o.yesPrice || 0.00000001;
+                    // FORCE SYNC: Use livePrice for YES to ensure chart matches header
+                    let currentPrice = o.yesPrice || 0.00000001;
+                    if (o.title === 'YES' && livePrice) currentPrice = livePrice;
+                    if (o.title === 'NO' && livePrice) currentPrice = 100 - livePrice;
+
                     const lastCandles = newCandles[o.title] || [];
                     const lastCandle = lastCandles[lastCandles.length - 1];
 
@@ -446,21 +536,14 @@ export default function Page() {
                 });
 
                 const newProbHistory = [...prev.probability, newProbPoint].slice(-300);
-                return { probability: newProbHistory, candles: newCandles };
+                return { ...prev, probability: newProbHistory, candles: newCandles };
             });
-        }, 1000); // 1s Ticker
+        }, 1000);
 
         return () => clearInterval(interval);
-    }, [marketOutcomes]);
+    }, [marketOutcomes]); // FIX: Re-run effect when prices/outcomes change so the ticker uses FRESH 66% data, not stale 50%.marketOutcomes]);
 
-    // Debug Ignition
-    useEffect(() => {
-        if (marketAccount?.outcome_supplies) {
-            const sYes = Number(marketAccount.outcome_supplies[0]) / 1e9;
-            const sNo = Number(marketAccount.outcome_supplies[1]) / 1e9;
-            console.log("🔥 IGNITION DEBUG:", { sYes, sNo, progress: getIgnitionProgress(sYes + sNo) });
-        }
-    }, [marketAccount]);
+
 
     // Handler for when user clicks YES/NO on an outcome
     const handleOutcomeBuyClick = (outcomeId: string, outcomeName: string, side: 'YES' | 'NO', price: number) => {
@@ -575,7 +658,7 @@ export default function Page() {
                         pdas.push(pda);
                     }
 
-                    const [marketAccInfo, ...pdaInfos] = await connection.getMultipleAccountsInfo([marketPda, ...pdas]);
+                    const [marketAccInfo, ...pdaInfos] = await connection.getMultipleAccountsInfo([marketPda, ...pdas], 'confirmed');
                     const newShares: Record<number, number> = {};
                     pdaInfos.forEach((info, idx) => {
                         newShares[idx] = decodePosition(info);
@@ -587,27 +670,59 @@ export default function Page() {
                         const sYes = Number(decodedMarket.outcomeSupplies[0]) / 1e9;
                         const sNo = Number(decodedMarket.outcomeSupplies[1]) / 1e9;
 
-                        if (sYes + sNo >= 0) {
-                            const newPrice = calculateImpliedProbability(sYes, sNo);
-                            // Optimistically update live price from on-chain truth
-                            setLivePrice(newPrice);
-                        }
+                        // GUARD: Prevent stale data from overwriting optimistic updates
+                        if (!priceLockoutRef.current) {
+                            if (sYes + sNo >= 0) {
+                                const newPrice = calculateImpliedProbability(sYes, sNo);
+                                // Optimistically update live price from on-chain truth
+                                setLivePrice(newPrice);
 
-                        const vSol = Number(decodedMarket.vaultBalance) / LAMPORTS_PER_SOL;
-                        setVaultBalanceSol(vSol);
-                        setOnChainData((prev: any) => ({
-                            ...prev,
-                            ...decodedMarket,
-                            outcome_supplies: decodedMarket.outcomeSupplies,
-                            vault_balance: vSol
-                        }));
+                                // Update History State (Charts) - ONLY if not locked
+                                setHistoryState(prev => {
+                                    const now = Math.floor(Date.now() / 1000);
+                                    const lastProbTime = prev.probability.length > 0 ? prev.probability[prev.probability.length - 1].time : (now - 60);
+                                    const currentTime = Math.max(now, (lastProbTime || 0) + 1);
+
+                                    // Create new probability point
+                                    const newProbPoint: any = {
+                                        time: currentTime,
+                                        dateStr: new Date(currentTime * 1000).toLocaleTimeString()
+                                    };
+
+                                    // Map probabilities to outcome titles
+                                    const outcome0 = marketOutcomes[0]?.title || 'YES';
+                                    const outcome1 = marketOutcomes[1]?.title || 'NO';
+
+                                    newProbPoint[outcome0] = newPrice;
+                                    newProbPoint[outcome1] = 100 - newPrice;
+
+                                    return {
+                                        ...prev,
+                                        probability: [...prev.probability, newProbPoint]
+                                    };
+                                });
+                            }
+
+                            const vSol = Number(decodedMarket.vaultBalance) / LAMPORTS_PER_SOL;
+                            setVaultBalanceSol(vSol);
+                            console.log("✅ OnChain Fetch Complete. New Vault:", vSol, "New Supplies:", decodedMarket.outcomeSupplies.map((s: any) => s.toString()));
+
+                            setOnChainData((prev: any) => ({
+                                ...prev,
+                                ...decodedMarket,
+                                outcome_supplies: decodedMarket.outcomeSupplies,
+                                vault_balance: vSol
+                            }));
+                        } else {
+                            console.log("🔒 Skipping stale on-chain update (Optimistic Lock Active)");
+                        }
                     }
                 }
             } catch (e) {
                 console.warn("On-chain data sync failed:", e);
             }
         }
-    }, [connection, effectiveSlug, publicKey, program, marketInfo, slug, onChainData]);
+    }, [connection, effectiveSlug, publicKey, program, marketInfo, slug]);
 
     useEffect(() => {
         loadOnChainData();
@@ -616,7 +731,7 @@ export default function Page() {
 
 
     // CALCULATIONS (Real-Time CPMM Simulation)
-    const amountNum = parseFloat(betAmount) || 0;
+    const amountNum = parseCompactNumber(betAmount) || 0;
     const isOverBalance = amountNum > solBalance;
     const currentPriceForSide = selectedSide === 'YES' ? livePrice : (100 - livePrice);
 
@@ -933,6 +1048,8 @@ export default function Page() {
             setSolBalance(prev => prev - amountNum);
 
             refreshAll();
+            // Delay to allow RPC to propagate changes
+            await new Promise(resolve => setTimeout(resolve, 1500));
             await loadOnChainData();
 
             setDjinnToast({
@@ -944,12 +1061,108 @@ export default function Page() {
             setShowConfetti(true);
 
             // Trigger Bubble with calculated USD amount
-            // usdValueInTrading is already calculated at component level and is safe to use here
+            // 4. Update Last Trade Event (for Chart Bubbles)
             setLastTradeEvent({
-                amount: usdValueInTrading,
+                id: Date.now().toString(),
+                amount: amountNum, // Use amountNum for SOL value
                 side: selectedSide
             });
 
+            // 5. Optimistic SWR Update to prevent "Reversion" to 50%
+            // Calculate newPrice based on the simulation or a more accurate method if available
+            // For now, using the newLikelihood as a proxy for the new live_price
+            const newPrice = selectedSide === 'YES' ? newLikelihood : (100 - newLikelihood);
+
+            // LOCKOUT: Ignore server updates for 15s to allow indexing to catch up
+            priceLockoutRef.current = true;
+            setTimeout(() => { priceLockoutRef.current = false; }, 15000);
+
+            if (marketData) {
+                mutateMarketData({
+                    ...marketData,
+                    live_price: newPrice,
+                }, false);
+            }
+
+            // OPTIMISTIC UPDATE: Update Supplies Immediately
+            // 🔒 LOCKOUT: Prevent stale background fetches from reverting this state
+            priceLockoutRef.current = true;
+            setTimeout(() => { priceLockoutRef.current = false; console.log("🔓 Optimistic Lock Released"); }, 15000);
+
+            setOnChainData((prev: any) => {
+                const currentSupplies = prev?.outcome_supplies || marketAccount?.outcome_supplies || ['0', '0'];
+                const newSupplies = [...currentSupplies]; // Copy array
+                const outcomeIndex = selectedSide === 'YES' ? 0 : 1;
+
+                // Add bought shares (in atomic units if strings, or numbers if numbers)
+                // Assuming strings from contract, but let's handle number conversion safely
+                const currentVal = Number(newSupplies[outcomeIndex]);
+                const newVal = currentVal + (sim.sharesReceived * 1e9); // Convert back to atomic for consistency or store as number
+
+                // Note: The UI formatting handles conversion / 1e9.
+                // But onChainData usually stores raw BN strings or numbers?
+                // Let's check usage. Line 1118: Number(decoded.outcomeSupplies[0]) / 1e9
+                // So onChainData stores RAW ATOMIC VALUES.
+
+                newSupplies[outcomeIndex] = newVal.toString();
+
+                console.log("🚀 Optimistic Supply Update (BUY):", newSupplies);
+
+                // ✅ FIX: Calculate and update probability immediately
+                const yesSupply = Number(newSupplies[0]) / 1e9;
+                const noSupply = Number(newSupplies[1]) / 1e9;
+                const newProbability = calculateImpliedProbability(yesSupply, noSupply);
+
+                // Update live price immediately
+                setLivePrice(newProbability);
+
+                // Update history state immediately for chart
+                setHistoryState(prevHistory => {
+                    const now = Math.floor(Date.now() / 1000);
+                    const newPoint = {
+                        time: now,
+                        YES: isMultiOutcome ? 0 : newProbability,
+                        NO: isMultiOutcome ? 0 : (100 - newProbability),
+                        dateStr: new Date(now * 1000).toLocaleString()
+                    };
+
+                    // For multi-outcome, calculate all probabilities
+                    if (isMultiOutcome) {
+                        const totalSupply = newSupplies.reduce((sum: number, s: string) => sum + Number(s), 0);
+                        marketOutcomes.forEach((outcome: any, idx: number) => {
+                            const supply = Number(newSupplies[idx] || 0) / 1e9;
+                            newPoint[outcome.title] = totalSupply > 0 ? (supply / (totalSupply / 1e9)) * 100 : 0;
+                        });
+                    }
+
+                    console.log("📈 Chart Update (BUY):", newPoint);
+                    return {
+                        ...prevHistory,
+                        probability: [...prevHistory.probability, newPoint]
+                    };
+                });
+
+                return {
+                    ...prev,
+                    outcome_supplies: newSupplies,
+                    // Also update discrete fields if used
+                    yes_supply: outcomeIndex === 0 ? newVal.toString() : prev?.yes_supply,
+                    no_supply: outcomeIndex === 1 ? newVal.toString() : prev?.no_supply
+                };
+            });
+
+            // ✅ OPTIMISTIC UPDATE: Update User Shares Immediately
+            const outcomeIdx = isMultiOutcome
+                ? marketOutcomes.findIndex(o => o.id === selectedOutcomeId)
+                : (selectedSide === 'YES' ? 0 : 1);
+
+            if (outcomeIdx !== -1) {
+                updateMyShares(outcomeIdx, (myShares[outcomeIdx] || 0) + sim.sharesReceived);
+                console.log(`🚀 Optimistic MyShares Update (BUY): +${sim.sharesReceived} shares for index ${outcomeIdx}`);
+            }
+
+            setIsSuccess(true);
+            setBetAmount('');
             setTimeout(() => setLastTradeEvent(null), 3000);
             setLastBetDetails({
                 outcomeName: selectedOutcomeName || staticMarketInfo.title,
@@ -1120,7 +1333,20 @@ export default function Page() {
 
         } catch (error: any) {
             console.error("Error placing bet:", error);
-            setDjinnToast({ isVisible: true, type: 'ERROR', title: 'Bet Failed', message: error.message || 'Unknown error' });
+
+            // Check for specific error types
+            let errorTitle = 'Bet Failed';
+            let errorMessage = error.message || 'Unknown error';
+
+            // Market Expired Error (0x177b = 6011)
+            if (error.message?.includes('MarketExpired') ||
+                error.message?.includes('0x177b') ||
+                error.message?.includes('Market has expired')) {
+                errorTitle = 'Market Closed';
+                errorMessage = 'This market has expired and is no longer accepting trades.';
+            }
+
+            setDjinnToast({ isVisible: true, type: 'ERROR', title: errorTitle, message: errorMessage });
         } finally {
             setIsPending(false);
             setTimeout(() => {
@@ -1144,10 +1370,11 @@ export default function Page() {
     const inputSubtext = tradeMode === 'BUY' ? 'Amount to Spend' : 'Value to Extract';
 
     // Handler to toggle logic
-    const handleTrade = async () => {
+    const handleTrade = async (e?: any) => {
+        if (e && e.preventDefault) e.preventDefault();
         console.log(`🖱️ ${tradeMode} Button Clicked.`);
         if (!publicKey) return setDjinnToast({ isVisible: true, type: 'ERROR', title: 'Wallet Error', message: "Please connect wallet" });
-        const amountVal = parseFloat(betAmount);
+        const amountVal = parseCompactNumber(betAmount); // ✅ FIX: Parse "10M" → 10,000,000
         if (isNaN(amountVal) || amountVal <= 0) return setDjinnToast({ isVisible: true, type: 'ERROR', title: 'Invalid Amount', message: "Enter a valid amount" });
 
         if (tradeMode === 'BUY') {
@@ -1253,15 +1480,94 @@ export default function Page() {
                         );
                         console.log("✅ Sell TX:", tx);
                         txSignature = tx;
+
+                        // OPTIMISTIC UPDATE: Burning Shares (Supply Down)
+                        setOnChainData((prev: any) => {
+                            const currentSupplies = prev?.outcome_supplies || marketAccount?.outcome_supplies || ['0', '0'];
+                            const newSupplies = [...currentSupplies];
+                            const outcomeIdx = isMultiOutcome
+                                ? marketOutcomes.findIndex(o => o.id === selectedOutcomeId)
+                                : (selectedSide === 'YES' ? 0 : 1);
+
+                            if (outcomeIdx !== -1) {
+                                const currentVal = Number(newSupplies[outcomeIdx]);
+                                // For sell, we SUBTRACT shares. finalSharesToSell is in normal units (e.g. 10).
+                                // Convert to atomic: * 1e9
+                                const burnAmountAtomic = finalSharesToSell * 1e9;
+                                const newVal = Math.max(0, currentVal - burnAmountAtomic);
+
+                                newSupplies[outcomeIdx] = newVal.toString();
+                                console.log("🔥 Optimistic Supply Update (SELL):", newSupplies);
+
+                                // ✅ FIX: Calculate and update probability immediately
+                                const yesSupply = Number(newSupplies[0]) / 1e9;
+                                const noSupply = Number(newSupplies[1]) / 1e9;
+                                const newProbability = calculateImpliedProbability(yesSupply, noSupply);
+
+                                // Update live price immediately
+                                setLivePrice(newProbability);
+
+                                // Update history state immediately for chart
+                                setHistoryState(prevHistory => {
+                                    const now = Math.floor(Date.now() / 1000);
+                                    const newPoint = {
+                                        time: now,
+                                        YES: isMultiOutcome ? 0 : newProbability,
+                                        NO: isMultiOutcome ? 0 : (100 - newProbability),
+                                        dateStr: new Date(now * 1000).toLocaleString()
+                                    };
+
+                                    // For multi-outcome, calculate all probabilities
+                                    if (isMultiOutcome) {
+                                        const totalSupply = newSupplies.reduce((sum: number, s: string) => sum + Number(s), 0);
+                                        marketOutcomes.forEach((outcome: any, idx: number) => {
+                                            const supply = Number(newSupplies[idx] || 0) / 1e9;
+                                            newPoint[outcome.title] = totalSupply > 0 ? (supply / (totalSupply / 1e9)) * 100 : 0;
+                                        });
+                                    }
+
+                                    console.log("📉 Chart Update (SELL):", newPoint);
+                                    return {
+                                        ...prevHistory,
+                                        probability: [...prevHistory.probability, newPoint]
+                                    };
+                                });
+
+                                return {
+                                    ...prev,
+                                    outcome_supplies: newSupplies,
+                                    yes_supply: outcomeIdx === 0 ? newVal.toString() : prev?.yes_supply,
+                                    no_supply: outcomeIdx === 1 ? newVal.toString() : prev?.no_supply
+                                };
+                            }
+                            return prev;
+                        });
                     } catch (sellError: any) {
                         console.error("❌ SELL ERROR DETAILS:", JSON.stringify(sellError, Object.getOwnPropertyNames(sellError), 2));
+
+                        // Check for specific error types
+                        let errorTitle = 'Sell Failed';
+                        let errorMessage = sellError.message;
+
+                        // Market Expired Error (0x177b = 6011)
+                        if (sellError.message?.includes('MarketExpired') ||
+                            sellError.message?.includes('0x177b') ||
+                            sellError.message?.includes('Market has expired')) {
+                            errorTitle = 'Market Closed';
+                            errorMessage = 'This market has expired and is no longer accepting trades. You can claim your winnings if your prediction was correct.';
+                        }
+                        // Insufficient shares
+                        else if (sellError.message?.includes('InsufficientShares')) {
+                            errorTitle = 'Insufficient Shares';
+                            errorMessage = 'You don\'t have enough shares to complete this sale.';
+                        }
 
                         // Show detailed error to user
                         setDjinnToast({
                             isVisible: true,
                             type: 'ERROR',
-                            title: 'Sell Failed',
-                            message: `Error: ${sellError.message}. Check console for details.`
+                            title: errorTitle,
+                            message: errorMessage
                         });
 
                         setIsPending(false);
@@ -1360,6 +1666,28 @@ export default function Page() {
                     market_slug: effectiveSlug,
                     created_at: new Date().toISOString()
                 };
+                // 4. Update Last Trade Event (for Chart Bubbles)
+                // FIX: Generate ID here ONCE to prevent infinite re-render loop in Chart
+                setLastTradeEvent({
+                    id: Date.now().toString(),
+                    amount: estimatedSolReturn,
+                    side: selectedSide
+                });
+
+                // 5. Optimistic SWR Update to prevent "Reversion" to 50%
+                // We tell SWR: "This is the new data, trust me"
+
+                // LOCKOUT: Ignore server updates for 15s
+                priceLockoutRef.current = true;
+                setTimeout(() => { priceLockoutRef.current = false; }, 15000);
+
+                if (marketData) {
+                    mutateMarketData({
+                        ...marketData,
+                        live_price: newPrice,
+                        // We could also update volume/holders here if we tracked them locally
+                    }, false); // false = don't revalidate immediately
+                }
                 // @ts-ignore
                 await supabaseDb.createActivity(sellActivity);
                 mutateActivity((current: any[] | undefined) => [sellActivity, ...(current || [])], false);
@@ -1370,7 +1698,7 @@ export default function Page() {
                 // Update specific share count
                 const outcomeIndex = isMultiOutcome
                     ? marketOutcomes.findIndex(o => o.id === selectedOutcomeId)
-                    : (selectedSide === 'YES' ? 0 : 1);
+                    : (selectedSide === 'YES' ? (myShares[0] || 0) : (myShares[1] || 0));
                 if (outcomeIndex !== -1) {
                     updateMyShares(outcomeIndex, Math.max(0, (myShares[outcomeIndex] || 0) - finalSharesToSell));
                 }
@@ -1406,6 +1734,8 @@ export default function Page() {
                         const PROGRAM_ID = new PublicKey('HkjMQFag41pUutseBpXSXUuEwSKuc2CByRJjyiwAvGjL');
 
                         refreshAll();
+                        // Delay to allow RPC to propagate changes
+                        await new Promise(resolve => setTimeout(resolve, 1500));
                         await loadOnChainData();
                     } catch (e) {
                         console.warn("Failed to refresh after sell:", e);
@@ -1435,7 +1765,7 @@ export default function Page() {
 
 
     return (
-        <div className="min-h-screen bg-black text-white font-sans selection:bg-[#F492B7] selection:text-black overflow-x-hidden">
+        <div className="min-h-screen text-white font-sans selection:bg-[#F492B7] selection:text-black overflow-x-hidden">
 
             {/* Navbar */}
             <Navbar />
@@ -1564,10 +1894,10 @@ export default function Page() {
                                         </span>
                                         <div className="flex flex-col items-center">
                                             <span className="text-2xl font-black text-white tracking-tight">
-                                                {formatCompact(yesMcap)}
+                                                {formatCompact(yesMcap * solPrice)}
                                             </span>
                                             <span className="text-[10px] font-black uppercase text-gray-500 tracking-[0.15em] mt-1 whitespace-nowrap">
-                                                {(marketAccount?.options?.[0]) || 'YES'} Mcap
+                                                {(marketAccount?.options?.[0]) || 'YES'} Mcap ($)
                                             </span>
                                         </div>
                                     </div>
@@ -1588,7 +1918,7 @@ export default function Page() {
                                         </span>
                                         <div className="flex flex-col items-center">
                                             <span className="text-2xl font-black text-white tracking-tight">
-                                                {formatCompact(noMcap)}
+                                                {formatCompact(noMcap * solPrice)}
                                             </span>
                                             <span className="text-[10px] font-black uppercase text-gray-500 tracking-[0.15em] mt-1 text-right whitespace-nowrap">
                                                 {(marketAccount?.options?.[1]) || 'NO'} Mcap
@@ -1609,8 +1939,9 @@ export default function Page() {
                                 outcomes={marketOutcomes.map(o => o.title)}
                                 probabilityData={historyState.probability}
                                 candleData={historyState.candles}
+                                outcomeSupplies={outcomeSuppliesMap}
                                 tradeEvent={lastTradeEvent ? {
-                                    id: Date.now().toString(),
+                                    id: lastTradeEvent.id, // Use STABLE ID from state
                                     outcome: lastTradeEvent.side === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO'),
                                     amount: lastTradeEvent.amount,
                                     color: lastTradeEvent.side === 'YES' ? '#10B981' : '#EF4444' // Provide fallback colors if needed
@@ -1628,7 +1959,6 @@ export default function Page() {
                                         }
                                     }
                                 }}
-                                outcomeSupplies={outcomeSuppliesMap}
                             />
 
                             {/* Multi-outcome Selector (if applicable) */}
@@ -1864,6 +2194,9 @@ export default function Page() {
                                 <PrizePoolCounter totalSol={vaultBalanceSol || (marketAccount?.global_vault ? (Number(marketAccount.global_vault) / LAMPORTS_PER_SOL) : 0)} />
                             </div>
 
+                            {/* HOLDINGS PANEL (Removed Inline - Now Floating) */}
+
+
                             {/* BUY / SELL TOGGLE */}
                             <div className="mb-5 p-1 bg-white/5 rounded-xl flex">
                                 <button
@@ -1930,7 +2263,12 @@ export default function Page() {
                                                     // Removed maxPayout clamp to prevent UI blocking if vault data is stale.
                                                     // The contract will enforce balance limits.
 
-                                                    setBetAmount(sharesToSell.toString());
+                                                    // Format large numbers (e.g., 10000000 → "10M")
+                                                    const formattedShares = sharesToSell >= 1_000_000
+                                                        ? formatCompact(sharesToSell)
+                                                        : sharesToSell.toFixed(2);
+
+                                                    setBetAmount(formattedShares);
                                                 }}
                                                 className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${(pct === 100 && isMaxSell)
                                                     ? 'bg-white/20 text-white border-white/20'
@@ -1980,7 +2318,7 @@ export default function Page() {
                                             >
                                                 <span className="text-xs font-black uppercase tracking-widest mb-0.5">{marketOutcomes[0]?.title || 'YES'}</span>
                                                 <span className={`text-2xl font-bold ${selectedSide === 'YES' ? 'text-white' : 'text-[#10B981]'}`}>
-                                                    {(livePrice ?? 50).toFixed(0)}%
+                                                    {yesPercent.toFixed(0)}%
                                                 </span>
                                             </button>
                                             <button
@@ -1991,7 +2329,7 @@ export default function Page() {
                                             >
                                                 <span className="text-xs font-black uppercase tracking-widest mb-0.5">{marketOutcomes[1]?.title || 'NO'}</span>
                                                 <span className={`text-2xl font-bold ${selectedSide === 'NO' ? 'text-white' : 'text-[#EF4444]'}`}>
-                                                    {(100 - (livePrice ?? 50)).toFixed(0)}%
+                                                    {noPercent.toFixed(0)}%
                                                 </span>
                                             </button>
                                         </>
@@ -2055,7 +2393,7 @@ export default function Page() {
                                                         if (isMaxSell) return formatCompact(sharesOwned);
                                                         if (!betAmount || price <= 0) return '0';
 
-                                                        const shares = parseFloat(betAmount) / price;
+                                                        const shares = parseCompactNumber(betAmount) / price;
                                                         const capped = Math.min(shares, sharesOwned);
                                                         return formatCompact(capped);
                                                     })()}
@@ -2201,6 +2539,45 @@ export default function Page() {
                 actionLink={djinnToast.actionLink}
                 actionLabel={djinnToast.actionLabel}
             />
+            {/* FLOATING HOLDINGS BUTTON (Bottom Right) */}
+            <AnimatePresence>
+                {/* Calculate Total Shares to decide if we show button */}
+                {(Object.values(myShares).reduce((a, b) => a + b, 0) > 0.001) && (
+                    <>
+                        <motion.button
+                            initial={{ scale: 0, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0, opacity: 0 }}
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => setShowHoldingsPanel(!showHoldingsPanel)}
+                            className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-full shadow-2xl transition-all border
+                            ${showHoldingsPanel
+                                    ? 'bg-[#F492B7] text-black border-[#F492B7]'
+                                    : 'bg-[#0E0E0E] text-[#F492B7] border-[#F492B7]/30 hover:border-[#F492B7]'}`}
+                        >
+                            <span className="font-bold text-xs uppercase tracking-wider">
+                                {showHoldingsPanel ? 'Close' : 'My Bets'}
+                            </span>
+                            <div className="w-5 h-5 rounded-full bg-black/20 flex items-center justify-center">
+                                {showHoldingsPanel ? <X size={12} /> : <Wallet size={12} />}
+                            </div>
+                        </motion.button>
+
+                        {/* FLOATING PANEL POPOVER */}
+                        {showHoldingsPanel && (
+                            <motion.div
+                                initial={{ y: 20, opacity: 0, scale: 0.9 }}
+                                animate={{ y: 0, opacity: 1, scale: 1 }}
+                                exit={{ y: 20, opacity: 0, scale: 0.9 }}
+                                className="fixed bottom-20 right-6 z-50 w-80 shadow-2xl"
+                            >
+                                <HoldingsPanel holdings={myHoldingsFormatted} />
+                            </motion.div>
+                        )}
+                    </>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

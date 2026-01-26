@@ -9,7 +9,7 @@ import { PublicKey } from "@solana/web3.js";
 
 // --- GLOBAL CONSTANTS (MUST MATCH lib.rs) ---
 export const TOTAL_SUPPLY = 1_000_000_000; // 1B Shares
-export const VIRTUAL_OFFSET = 50_000_000;    // 50M Shares (Increased for Stability)
+export const VIRTUAL_OFFSET = 12_000_000;   // 12M → Mcap $3.5K, 1 SOL → 66% prob
 
 // PHASE BOUNDARIES (Shares)
 export const PHASE1_END = 100_000_000;    // 100M
@@ -201,14 +201,20 @@ export function simulateBuy(
 // --- UTILITY FUNCTIONS ---
 
 export function calculateImpliedProbability(yesSupply: number, noSupply: number): number {
-    // STABILIZER: Use Spot Price ratio instead of Share counts
-    // This allows for 'Virtual Liquidity' where a 0-supply side still has a base price
-    // derived from the bonding curve's starting point.
-    const priceYes = getSpotPrice(yesSupply);
-    const priceNo = getSpotPrice(noSupply);
+    // VIRTUAL_FLOOR prevents probability explosion to 100% on low liquidity
+    // Tuned with VIRTUAL_OFFSET for optimal behavior
 
-    const total = priceYes + priceNo;
-    return (priceYes / total) * 100;
+    const VIRTUAL_FLOOR = 650_000; // 0.65M shares buffer
+
+    const adjustedYes = yesSupply + VIRTUAL_FLOOR;
+    const adjustedNo = noSupply + VIRTUAL_FLOOR;
+    const totalSupply = adjustedYes + adjustedNo;
+
+    const probability = (adjustedYes / totalSupply) * 100;
+
+    console.log(`🎲 Probability (Buffered): YES ${yesSupply.toFixed(0)} shares (${probability.toFixed(2)}%) | NO ${noSupply.toFixed(0)} shares`);
+
+    return probability;
 }
 
 /**

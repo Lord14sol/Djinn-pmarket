@@ -64,3 +64,34 @@ export const formatCompact = (num: number): string => {
         maximumFractionDigits: 2
     }).format(num);
 };
+
+// Parse compact number strings back to full numbers
+// "10M" → 10,000,000 | "4.5M" → 4,500,000 | "100K" → 100,000
+export const parseCompactNumber = (str: string | number): number => {
+    // If already a number, return it
+    if (typeof str === 'number') return str;
+    if (!str) return 0;
+
+    const strClean = str.toString().trim().toUpperCase();
+
+    // Check if it has a compact suffix
+    const lastChar = strClean[strClean.length - 1];
+    if (!['K', 'M', 'B', 'T'].includes(lastChar)) {
+        // No suffix, parse as regular number
+        return parseFloat(strClean) || 0;
+    }
+
+    // Parse the numeric part
+    const numPart = parseFloat(strClean.slice(0, -1));
+    if (isNaN(numPart)) return 0;
+
+    // Multipliers
+    const multipliers: Record<string, number> = {
+        'K': 1_000,
+        'M': 1_000_000,
+        'B': 1_000_000_000,
+        'T': 1_000_000_000_000
+    };
+
+    return numPart * (multipliers[lastChar] || 1);
+};

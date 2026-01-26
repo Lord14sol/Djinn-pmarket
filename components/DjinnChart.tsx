@@ -144,8 +144,8 @@ const PumpHeader = ({ data, outcome, supply, firstCandle, outcomes, selectedOutc
                             <h2 className="text-white text-xl font-bold tracking-tight">
                                 {outcome} <span className="text-zinc-600 text-base">/ {mode === 'DJINN' ? 'SOL' : '%'}</span>
                             </h2>
-                            <span className={cn("text-xs font-bold px-1.5 py-0.5 rounded", isPositive ? "text-emerald-400 bg-emerald-400/10" : "text-rose-400 bg-rose-400/10")}>
-                                {isPositive ? '+' : ''}{roi.toFixed(2)}%
+                            <span className={cn("text-xs font-bold px-1.5 py-0.5 rounded flex items-center gap-1", isPositive ? "text-emerald-400 bg-emerald-400/10" : "text-rose-400 bg-rose-400/10")}>
+                                {isPositive && '🚀'} {isPositive ? '+' : ''}{roi.toFixed(2)}%
                             </span>
                         </div>
                         {mode === "DJINN" ? (
@@ -243,7 +243,7 @@ function TheDjinnChart({
 
     // Session ATH Tracking
     const [athMap, setAthMap] = useState<Record<string, number>>({});
-    const [timeframe, setTimeframe] = useState<'1H' | '6H' | '12H' | '1D' | '1W' | '1M' | 'ALL'>('1D');
+    const [timeframe, setTimeframe] = useState<'5M' | '15M' | '30M' | '1H' | '6H' | '12H' | '1D' | '3D' | '1W' | '1M' | 'ALL'>('1D');
 
     // Bubble State
     const [bubbles, setBubbles] = useState<Bubble[]>([]);
@@ -252,7 +252,7 @@ function TheDjinnChart({
         if (tradeEvent) {
             const newBubble: Bubble = {
                 id: Date.now().toString() + Math.random(),
-                text: `+${formatCompact(tradeEvent.amount)}`,
+                text: `${tradeEvent.outcome} +${formatCompact(tradeEvent.amount)}`,
                 color: tradeEvent.color,
                 y: Math.random() * 60 + 20 // 20% to 80% height
             };
@@ -293,10 +293,14 @@ function TheDjinnChart({
             const now = Math.floor(Date.now() / 1000);
             let cutoff = now;
             switch (timeframe) {
+                case '5M': cutoff = now - (5 * 60); break;
+                case '15M': cutoff = now - (15 * 60); break;
+                case '30M': cutoff = now - (30 * 60); break;
                 case '1H': cutoff = now - 3600; break;
                 case '6H': cutoff = now - (6 * 3600); break;
                 case '12H': cutoff = now - (12 * 3600); break;
                 case '1D': cutoff = now - 86400; break;
+                case '3D': cutoff = now - (3 * 86400); break;
                 case '1W': cutoff = now - (7 * 86400); break;
                 case '1M': cutoff = now - (30 * 86400); break;
             }
@@ -316,6 +320,57 @@ function TheDjinnChart({
     const safeInceptionOpen = firstCandle?.open || safeClose;
     const roi = safeInceptionOpen > 0 ? ((safeClose - safeInceptionOpen) / safeInceptionOpen) * 100 : 0;
     const isPositive = roi >= 0;
+
+
+    const currentProbabilities = useMemo(() => {
+        const probs: Record<string, number> = {};
+        const VIRTUAL_FLOOR = 1_000_000; // Match core-amm.ts (Stability Buffer)
+
+        // Helper to set defaults
+        const setDefaults = () => {
+            outcomes.forEach(o => {
+                const title = typeof o === 'string' ? o : o.title;
+                probs[title] = 100 / outcomes.length;
+            });
+            return probs;
+        };
+
+        // Verificar que tenemos datos del pool
+        if (!outcomeSupplies || Object.keys(outcomeSupplies).length === 0) {
+            console.warn("⚠️ No supplies, using defaults");
+            return setDefaults();
+        }
+
+        // Calcular total real
+        const totalRawShares = Object.values(outcomeSupplies).reduce((sum, val) => sum + Number(val || 0), 0);
+
+        // If pool is practically empty, defaults
+        if (totalRawShares < 1000) {
+            return setDefaults();
+        }
+
+        // Calcular total Ajustado (con Buffer)
+        // Esto evita que 1 SOL mueva el precio a 100%
+        let totalAdjusted = 0;
+        const adjustedSupplies: Record<string, number> = {};
+
+        outcomes.forEach(o => {
+            const title = typeof o === 'string' ? o : o.title;
+            const raw = Number(outcomeSupplies[title] || 0);
+            const adj = raw + VIRTUAL_FLOOR;
+            adjustedSupplies[title] = adj;
+            totalAdjusted += adj;
+        });
+
+        // Calcular probabilidad Bufferizada
+        outcomes.forEach(o => {
+            const title = typeof o === 'string' ? o : o.title;
+            const probability = (adjustedSupplies[title] / totalAdjusted) * 100;
+            probs[title] = probability;
+        });
+
+        return probs;
+    }, [outcomeSupplies, outcomes]);
 
 
     return (
@@ -340,17 +395,7 @@ function TheDjinnChart({
                         ath={athMap[selectedOutcome] || 0}
                     />
                 ) : (
-                    <div className="flex justify-between items-center w-full min-h-[60px]">
-                        {/* Simple Label / Stats */}
-                        <div className="flex flex-col gap-1">
-                            {/* Label Removed */}
-                            <div className="flex items-center gap-2">
-                                <span className={cn("text-2xl font-black tracking-tight", isPositive ? "text-emerald-400" : "text-rose-400")}>
-                                    {selectedOutcome} {formatCompact(activeCandle.close * 100)}%
-                                </span>
-                            </div>
-                        </div>
-
+                    <div className="flex justify-end items-center w-full min-h-[60px]">
                         {/* Mode Switcher */}
                         <div className="bg-zinc-900 p-0.5 rounded-lg flex border border-zinc-800">
                             <button
@@ -384,6 +429,7 @@ function TheDjinnChart({
                             bubbles={bubbles}
                             timeframe={timeframe}
                             setTimeframe={setTimeframe}
+                            currentProbabilities={currentProbabilities}
                         />
                     ) : (
                         <CandleChart
@@ -393,10 +439,28 @@ function TheDjinnChart({
                     )}
                 </div>
             </div>
+
+            {/* DEBUG: Intervalo para simular o guardar historia localmente (si se requiere) */}
+            {/* 
+            useEffect(() => {
+                const interval = setInterval(() => {
+                    if (currentProbabilities && Object.keys(currentProbabilities).length > 0) {
+                        const now = Math.floor(Date.now() / 1000);
+                        console.log('📍 [Interval] Would save data point:', {
+                            time: now,
+                            ...currentProbabilities
+                        });
+                    }
+                }, 30000);
+                return () => clearInterval(interval);
+            }, [currentProbabilities]);
+            */}
         </div>
     );
 }
 
+// Helper para guardar puntos si se implementa estado local en el futuro
+// const savePoint = (probs: any) => { ... }
+
 // 4. Memoization (Rule 5.4)
 export default React.memo(TheDjinnChart);
-
