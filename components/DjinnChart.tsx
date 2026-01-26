@@ -144,18 +144,21 @@ const PumpHeader = ({ data, outcome, supply, firstCandle, outcomes, selectedOutc
                             <h2 className="text-white text-xl font-bold tracking-tight">
                                 {outcome} <span className="text-zinc-600 text-base">/ {mode === 'DJINN' ? 'SOL' : '%'}</span>
                             </h2>
-                            <span className={cn("text-xs font-bold px-1.5 py-0.5 rounded flex items-center gap-1", isPositive ? "text-emerald-400 bg-emerald-400/10" : "text-rose-400 bg-rose-400/10")}>
+                            <span
+                                suppressHydrationWarning
+                                className={cn("text-xs font-bold px-1.5 py-0.5 rounded flex items-center gap-1", isPositive ? "text-emerald-400 bg-emerald-400/10" : "text-rose-400 bg-rose-400/10")}
+                            >
                                 {isPositive && '🚀'} {isPositive ? '+' : ''}{roi.toFixed(2)}%
                             </span>
                         </div>
                         {mode === "DJINN" ? (
-                            <div className="flex items-center gap-3 text-xs text-zinc-500 mt-0.5">
+                            <div className="flex items-center gap-3 text-xs text-zinc-500 mt-0.5" suppressHydrationWarning>
                                 <span className="flex items-center gap-1">
-                                    MCap: <span className="text-zinc-300 font-bold">{formatCompact(mcapSol)} SOL</span>
+                                    MCap: <span className="text-zinc-300 font-bold" suppressHydrationWarning>{formatCompact(mcapSol)} SOL</span>
                                 </span>
                                 <span className="w-1 h-1 rounded-full bg-zinc-700" />
                                 <span className="flex items-center gap-1">
-                                    Price: <span className="text-zinc-300 font-bold">{safeClose.toFixed(9)}</span>
+                                    Price: <span className="text-zinc-300 font-bold" suppressHydrationWarning>{safeClose.toFixed(9)}</span>
                                 </span>
                             </div>
                         ) : null}
