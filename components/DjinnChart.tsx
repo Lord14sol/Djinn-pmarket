@@ -264,16 +264,19 @@ function TheDjinnChart({
     }, [tradeEvent]);
 
     useEffect(() => {
-        const currentCandles = candleData[selectedOutcome] || [];
+        // FIX: Use normalized (uppercase) key for consistent lookup
+        const normalizedOutcome = selectedOutcome.toUpperCase();
+        const currentCandles = candleData[normalizedOutcome] || candleData[selectedOutcome] || [];
         if (currentCandles.length === 0) return;
 
         const lastCandle = currentCandles[currentCandles.length - 1];
-        const supply = outcomeSupplies[selectedOutcome] || 0;
+        // FIX: Case-insensitive supply lookup
+        const supply = outcomeSupplies[normalizedOutcome] || outcomeSupplies[selectedOutcome] || 0;
         const currentMcap = (supply) * lastCandle.close;
 
         setAthMap(prev => {
-            const oldAth = prev[selectedOutcome] || 0;
-            return currentMcap > oldAth ? { ...prev, [selectedOutcome]: currentMcap } : prev;
+            const oldAth = prev[normalizedOutcome] || 0;
+            return currentMcap > oldAth ? { ...prev, [normalizedOutcome]: currentMcap } : prev;
         });
     }, [candleData, selectedOutcome, outcomeSupplies]);
 
@@ -310,9 +313,11 @@ function TheDjinnChart({
         return baseData;
     }, [probabilityData, timeframe]);
 
-    const currentCandles = candleData[selectedOutcome] || [];
+    // FIX: Use normalized (uppercase) key for consistent lookup across components
+    const normalizedSelectedOutcome = selectedOutcome.toUpperCase();
+    const currentCandles = candleData[normalizedSelectedOutcome] || candleData[selectedOutcome] || [];
     const activeCandle = currentCandles.length > 0 ? currentCandles[currentCandles.length - 1] : { open: 0, high: 0, low: 0, close: 0 };
-    const supply = outcomeSupplies[selectedOutcome];
+    const supply = outcomeSupplies[normalizedSelectedOutcome] || outcomeSupplies[selectedOutcome];
 
     // ROI Calc
     const firstCandle = currentCandles[0];
@@ -330,7 +335,8 @@ function TheDjinnChart({
         const setDefaults = () => {
             outcomes.forEach(o => {
                 const title = typeof o === 'string' ? o : o.title;
-                probs[title] = 100 / outcomes.length;
+                // FIX: Store with normalized key
+                probs[title.toUpperCase()] = 100 / outcomes.length;
             });
             return probs;
         };
@@ -356,17 +362,20 @@ function TheDjinnChart({
 
         outcomes.forEach(o => {
             const title = typeof o === 'string' ? o : o.title;
-            const raw = Number(outcomeSupplies[title] || 0);
+            // FIX: Use normalized key for lookup (outcomeSupplies uses uppercase keys)
+            const normalizedTitle = title.toUpperCase();
+            const raw = Number(outcomeSupplies[normalizedTitle] || outcomeSupplies[title] || 0);
             const adj = raw + VIRTUAL_FLOOR;
-            adjustedSupplies[title] = adj;
+            adjustedSupplies[normalizedTitle] = adj;
             totalAdjusted += adj;
         });
 
         // Calcular probabilidad Bufferizada
         outcomes.forEach(o => {
             const title = typeof o === 'string' ? o : o.title;
-            const probability = (adjustedSupplies[title] / totalAdjusted) * 100;
-            probs[title] = probability;
+            const normalizedTitle = title.toUpperCase();
+            const probability = (adjustedSupplies[normalizedTitle] / totalAdjusted) * 100;
+            probs[normalizedTitle] = probability;
         });
 
         return probs;

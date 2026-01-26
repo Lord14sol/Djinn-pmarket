@@ -348,17 +348,19 @@ export default function Page() {
     const [isPending, setIsPending] = useState(false);
 
     // Derive on-chain supplies map for the chart header
+    // FIX: Normalize all keys to UPPERCASE for consistent lookup
     const outcomeSuppliesMap = useMemo(() => {
         const map: Record<string, number> = {};
         if (marketAccount?.outcome_supplies && marketOutcomes.length >= marketAccount.outcome_supplies.length) {
             marketAccount.outcome_supplies.forEach((supply: any, idx: number) => {
-                const title = marketOutcomes[idx]?.title || `Outcome ${idx}`;
+                // NORMALIZE: Always use uppercase keys for consistent cross-component matching
+                const title = (marketOutcomes[idx]?.title || `Outcome ${idx}`).toUpperCase();
                 map[title] = Number(supply) / 1e9;
             });
         } else if (marketOutcomes.length === 2 && marketAccount?.outcome_supplies) {
-            // Binary fallback
-            map[marketOutcomes[0].title] = Number(marketAccount.outcome_supplies[0]) / 1e9;
-            map[marketOutcomes[1].title] = Number(marketAccount.outcome_supplies[1]) / 1e9;
+            // Binary fallback - also normalized
+            map[marketOutcomes[0].title.toUpperCase()] = Number(marketAccount.outcome_supplies[0]) / 1e9;
+            map[marketOutcomes[1].title.toUpperCase()] = Number(marketAccount.outcome_supplies[1]) / 1e9;
         }
         return map;
     }, [marketAccount, marketOutcomes]);
@@ -430,10 +432,12 @@ export default function Page() {
 
             // Generate Initial "Inception" History if empty
             // This mocks a "Launch Day" history: Flat candles at 0.000001 SOL, 50/50 probability
+            // FIX: Use normalized (uppercase) keys for consistency with ticker loop
             setHistoryState(prev => {
                 if (prev.probability.length > 0) return prev;
 
-                const outcomes = initialOutcomes.map(o => o.title);
+                // NORMALIZE: Use uppercase keys throughout
+                const outcomes = initialOutcomes.map(o => o.title.toUpperCase());
                 const count = 100;
                 const now = Math.floor(Date.now() / 1000);
                 const probData = [];
@@ -450,9 +454,10 @@ export default function Page() {
                     seedPriceNo = getSpotPrice(sNo);
                 }
 
+                // FIX: Use normalized uppercase keys
                 const seedPrices: Record<string, number> = {
-                    [(marketOutcomes[0]?.title || 'YES')]: seedPriceYes,
-                    [(marketOutcomes[1]?.title || 'NO')]: seedPriceNo
+                    'YES': seedPriceYes,
+                    'NO': seedPriceNo
                 };
 
                 outcomes.forEach(o => candleData[o] = []);
@@ -492,6 +497,7 @@ export default function Page() {
 
     // --- LIVE TICKER ---
     // Simulates "Time Passing" and micro-movements for the chart
+    // FIX: Uses SPOT PRICE (SOL) for candles, not probability (0-100)
     useEffect(() => {
         const interval = setInterval(() => {
             setHistoryState(prev => {
@@ -501,18 +507,29 @@ export default function Page() {
                 const newProbPoint: any = { time: now, dateStr: new Date(now * 1000).toLocaleTimeString() };
 
                 marketOutcomes.forEach((o, idx) => {
-                    // 1. Probability
-                    newProbPoint[o.title] = o.chance;
-                    // Log only occasionally or if change detected to avoid spam, but for now we trust logic
-                    // If o.chance differs from last point, it will show up.
+                    // NORMALIZE: Use uppercase for consistent key matching
+                    const normalizedTitle = o.title.toUpperCase();
+                    const isYes = normalizedTitle === 'YES';
+                    const isNo = normalizedTitle === 'NO';
 
-                    // 2. Candle
-                    // FORCE SYNC: Use livePrice for YES to ensure chart matches header
-                    let currentPrice = o.yesPrice || 0.00000001;
-                    if (o.title === 'YES' && livePrice) currentPrice = livePrice;
-                    if (o.title === 'NO' && livePrice) currentPrice = 100 - livePrice;
+                    // 1. Probability Point (0-100 scale for line chart)
+                    newProbPoint[normalizedTitle] = o.chance;
 
-                    const lastCandles = newCandles[o.title] || [];
+                    // 2. Candle Data - Use SPOT PRICE (SOL), NOT probability
+                    // FIX: Get real supply for this outcome and calculate spot price
+                    let supply = 0;
+                    if (marketAccount?.outcome_supplies && marketAccount.outcome_supplies[idx]) {
+                        supply = Number(marketAccount.outcome_supplies[idx]) / 1e9;
+                    }
+
+                    // Calculate the actual SOL price from supply using bonding curve
+                    let currentPrice = getSpotPrice(supply);
+
+                    // Safety floor: ensure price is never 0 (causes chart issues)
+                    if (currentPrice < 0.00000001) currentPrice = 0.00000001;
+
+                    // Use normalized key for candle storage
+                    const lastCandles = newCandles[normalizedTitle] || [];
                     const lastCandle = lastCandles[lastCandles.length - 1];
 
                     const open = lastCandle ? lastCandle.close : currentPrice;
@@ -531,8 +548,8 @@ export default function Page() {
                         close: close
                     };
 
-                    if (!newCandles[o.title]) newCandles[o.title] = [];
-                    newCandles[o.title] = [...newCandles[o.title], candle].slice(-300); // Keep last 5 mins
+                    if (!newCandles[normalizedTitle]) newCandles[normalizedTitle] = [];
+                    newCandles[normalizedTitle] = [...newCandles[normalizedTitle], candle].slice(-300); // Keep last 5 mins
                 });
 
                 const newProbHistory = [...prev.probability, newProbPoint].slice(-300);
@@ -541,7 +558,7 @@ export default function Page() {
         }, 1000);
 
         return () => clearInterval(interval);
-    }, [marketOutcomes]); // FIX: Re-run effect when prices/outcomes change so the ticker uses FRESH 66% data, not stale 50%.marketOutcomes]);
+    }, [marketOutcomes, marketAccount?.outcome_supplies]); // FIX: Re-run when supplies change for accurate price
 
 
 
@@ -1117,21 +1134,24 @@ export default function Page() {
                 setLivePrice(newProbability);
 
                 // Update history state immediately for chart
+                // FIX: Use normalized uppercase keys for consistency
                 setHistoryState(prevHistory => {
                     const now = Math.floor(Date.now() / 1000);
-                    const newPoint = {
+                    const newPoint: any = {
                         time: now,
                         YES: isMultiOutcome ? 0 : newProbability,
                         NO: isMultiOutcome ? 0 : (100 - newProbability),
                         dateStr: new Date(now * 1000).toLocaleString()
                     };
 
-                    // For multi-outcome, calculate all probabilities
+                    // For multi-outcome, calculate all probabilities with normalized keys
                     if (isMultiOutcome) {
                         const totalSupply = newSupplies.reduce((sum: number, s: string) => sum + Number(s), 0);
                         marketOutcomes.forEach((outcome: any, idx: number) => {
                             const supply = Number(newSupplies[idx] || 0) / 1e9;
-                            newPoint[outcome.title] = totalSupply > 0 ? (supply / (totalSupply / 1e9)) * 100 : 0;
+                            // FIX: Use uppercase key
+                            const normalizedTitle = outcome.title.toUpperCase();
+                            newPoint[normalizedTitle] = totalSupply > 0 ? (supply / (totalSupply / 1e9)) * 100 : 0;
                         });
                     }
 
