@@ -18,40 +18,44 @@ type ScaleMode = 'MCAP';
 function resampleCandles(raw: any[], timeframe: Timeframe, solPrice: number, mode: ScaleMode): any[] {
     if (!raw || raw.length === 0) return [];
 
-    // ✅ SIMPLIFICAR: Los datos ya vienen en precio SOL, solo convertir a USD Mcap
+    // CONSTANTS from Core AMM (Phase 1)
+    const VIRTUAL_OFFSET = 12_000_000;
     const P_START = 0.000001;
     const P_50 = 0.000005;
     const PHASE1_END = 100_000_000;
     const SLOPE = (P_50 - P_START) / PHASE1_END;
 
-    const transformed = raw.map(c => {
-        // c.open, c.high, c.low, c.close ya son precios SOL
-        // Calcular supply aproximado desde precio para obtener Mcap
-        const getSupplyFromPriceLocal = (priceSol: number): number => {
-            if (priceSol <= P_START) return 0;
-            if (priceSol <= P_50) {
-                return (priceSol - P_START) / SLOPE;
-            }
-            // Para simplificar, usar aproximación lineal
-            return (priceSol - P_START) / SLOPE;
-        };
+    // Helper: Prob -> Supply -> SpotPrice -> Mcap
+    const getMcapFromProb = (prob: number) => {
+        // Prob (0-100). If we get small fractions (e.g. 0.5 for 50%), handle it.
+        let pVal = prob;
+        if (pVal <= 1) pVal = pVal * 100; // Auto-normalize
 
-        // Calcular supply y mcap para cada precio individualmente
-        const supplyOpen = getSupplyFromPriceLocal(c.open);
-        const supplyHigh = getSupplyFromPriceLocal(c.high);
-        const supplyLow = getSupplyFromPriceLocal(c.low);
-        const supplyClose = getSupplyFromPriceLocal(c.close);
+        // Clamp 1%-99%
+        const p = Math.max(0.01, Math.min(0.99, pVal / 100));
 
-        // Mcap en SOL (no USD) para evitar números enormes
-        // Lightweight-charts tiene límite de ~90 trillones
-        return {
-            time: c.time,
-            open: supplyOpen * c.open,      // Mcap en SOL
-            high: supplyHigh * c.high,       // Mcap en SOL
-            low: supplyLow * c.low,          // Mcap en SOL
-            close: supplyClose * c.close     // Mcap en SOL
-        };
-    });
+        // 1. Estimate Supply from Probability
+        const supply = (VIRTUAL_OFFSET * p) / (1 - p);
+
+        // 2. Linear Price Curve (Phase 1)
+        const spotPriceSol = P_START + (SLOPE * supply);
+
+        // 3. Mcap = Supply * SpotPrice * SolPrice
+        const val = supply * spotPriceSol * solPrice;
+
+        // CRASH GUARD: Cap at 1 Trillion
+        if (!Number.isFinite(val) || val > 1_000_000_000_000) return 1_000_000_000_000;
+        return val;
+    };
+
+    // 1. Transform Raw Data (Probability) to Target Unit (Mcap)
+    const transformed = raw.map(c => ({
+        time: c.time,
+        open: getMcapFromProb(c.open),
+        high: getMcapFromProb(c.high),
+        low: getMcapFromProb(c.low),
+        close: getMcapFromProb(c.close),
+    }));
 
     if (timeframe === '1s') return transformed;
 
