@@ -27,7 +27,9 @@ import { usePrice } from '@/lib/PriceContext';
 import * as supabaseDb from '@/lib/supabase-db';
 import { PrizePoolCounter } from '@/components/PrizePoolCounter';
 import HoldingsPanel from '@/components/HoldingsPanel';
+import HoldingsSection from '@/components/market/HoldingsSection';
 import { getOutcomeColor } from '@/lib/market-colors';
+import { Bet, getUserMarketBets } from '@/lib/supabase-db';
 
 import IgnitionBar from '@/components/market/IgnitionBar';
 import bs58 from 'bs58';
@@ -121,6 +123,7 @@ export default function Page() {
     // Confirmation & Toast State
     const [showConfetti, setShowConfetti] = useState(false);
     const [djinnToast, setDjinnToast] = useState<{ isVisible: boolean; type: 'SUCCESS' | 'ERROR' | 'INFO'; title: string; message: string; actionLink?: string; actionLabel?: string }>({ isVisible: false, type: 'INFO', title: '', message: '' });
+
 
 
     // --- CHART HISTORY STATE ---
@@ -398,6 +401,18 @@ export default function Page() {
     const isMultiOutcome = (MULTI_OUTCOMES[slug] || []).length > 0;
     const staticMarketInfo = marketDisplayData[slug] || { title: 'Unknown Market', icon: '❓', description: 'Market not found' };
     const effectiveSlug = slug;
+
+    // User Bets State (for Holdings) - Moved here to access effectiveSlug
+    const [userBets, setUserBets] = useState<Bet[]>([]);
+
+    useEffect(() => {
+        if (publicKey && effectiveSlug) {
+            getUserMarketBets(publicKey.toBase58(), effectiveSlug).then(setUserBets);
+            const handleBetUpdate = () => getUserMarketBets(publicKey.toBase58(), effectiveSlug).then(setUserBets);
+            window.addEventListener('bet-updated', handleBetUpdate);
+            return () => window.removeEventListener('bet-updated', handleBetUpdate);
+        }
+    }, [publicKey, effectiveSlug]);
 
     // Holdings formatted for the floating panel
     const myHoldingsFormatted = useMemo(() => {
@@ -2071,6 +2086,17 @@ export default function Page() {
 
 
                         {/* TABS & CONTENT (Limitless Style) */}
+
+                        {/* HOLDINGS SECTION (New) */}
+                        <HoldingsSection
+                            bets={userBets}
+                            currentYesPrice={livePrice}
+                            currentNoPrice={100 - livePrice}
+                            yesSupply={marketAccount?.outcome_supplies?.[0] ? Number(marketAccount.outcome_supplies[0]) / 1e9 : 0}
+                            noSupply={marketAccount?.outcome_supplies?.[1] ? Number(marketAccount.outcome_supplies[1]) / 1e9 : 0}
+                            marketOutcomes={marketOutcomes}
+                        />
+
                         {/* RESOLUTION CRITERIA (Permanent Block) */}
                         <div className="bg-[#0E0E0E] rounded-[2rem] border border-white/5 p-8">
                             <h3 className="text-lg font-bold text-white mb-4">Resolution Criteria</h3>

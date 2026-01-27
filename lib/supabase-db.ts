@@ -718,6 +718,20 @@ export async function getUserBets(walletAddress: string): Promise<Bet[]> {
     return data || [];
 }
 
+export async function getUserMarketBets(walletAddress: string, marketSlug: string): Promise<Bet[]> {
+    const { data, error } = await supabase
+        .from('bets')
+        .select('*')
+        .eq('wallet_address', walletAddress)
+        .eq('market_slug', marketSlug)
+        .eq('claimed', false);
+
+    if (error) {
+        console.error('Error fetching user market bets:', error);
+    }
+    return data || [];
+}
+
 export async function getUnclaimedPayouts(walletAddress: string): Promise<Bet[]> {
     const { data, error } = await supabase
         .from('bets')
