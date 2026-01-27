@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { useMemo, useState } from "react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { getOutcomeColor } from "@/lib/market-colors";
@@ -22,100 +22,42 @@ interface ProbabilityChartProps {
     currentProbabilities: Record<string, number>;
 }
 
-// Custom Y-Axis Tick con Pills
-const CustomYAxisTick = ({ x, y, payload, outcomes, currentProbabilities, getOutcomeColor }: any) => {
-    if (!currentProbabilities || Object.keys(currentProbabilities).length === 0) return null;
-
-    let closestOutcome = null;
-    let minDiff = Infinity;
-
-    for (const [title, value] of Object.entries(currentProbabilities)) {
-        const diff = Math.abs((value as number) - payload.value);
-        if (diff < minDiff && diff < 3) {
-            minDiff = diff;
-            closestOutcome = { title, value: value as number };
-        }
-    }
-
-    if (!closestOutcome) return null;
-
-    const color = getOutcomeColor(closestOutcome.title);
-
-    return (
-        <g transform={`translate(${x},${y})`}>
-            <rect
-                x={8}
-                y={-10}
-                width={52}
-                height={20}
-                rx={8}
-                fill={color}
-                className="drop-shadow-lg"
-            />
-            <text
-                x={34}
-                y={4}
-                textAnchor="middle"
-                fill="white"
-                fontSize={11}
-                fontWeight={700}
-                fontFamily="system-ui, -apple-system, sans-serif"
-            >
-                {closestOutcome.value.toFixed(0)}%
-            </text>
-        </g>
-    );
-};
-
+// Custom Tooltip
 const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload || !payload.length) return null;
 
     return (
-        <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-zinc-950/95 backdrop-blur-xl border border-zinc-800/80 rounded-xl shadow-2xl overflow-hidden"
-        >
-            <div className="px-3 py-2 border-b border-zinc-800/50 bg-zinc-900/50">
-                <div className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
-                    {new Date(Number(label) * 1000).toLocaleString([], {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                    })}
-                </div>
+        <div className="bg-zinc-950/90 backdrop-blur-md border border-zinc-800 rounded-lg shadow-xl p-3">
+            <div className="text-[10px] text-zinc-400 mb-2 font-mono">
+                {new Date(Number(label) * 1000).toLocaleString([], {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                })}
             </div>
-            <div className="px-3 py-2 space-y-1.5">
+            <div className="space-y-1">
                 {payload
                     .sort((a: any, b: any) => b.value - a.value)
                     .map((p: any) => (
-                        <div
-                            key={p.name}
-                            className="flex items-center justify-between gap-4"
-                        >
-                            <div className="flex items-center gap-2">
+                        <div key={p.name} className="flex items-center gap-3">
+                            <div className="flex items-center gap-2 w-20">
                                 <div
-                                    className="w-2.5 h-2.5 rounded-full shadow-sm"
+                                    className="w-2 h-2 rounded-full"
                                     style={{ backgroundColor: p.stroke }}
                                 />
-                                <span className="text-xs font-semibold text-zinc-200">
-                                    {p.name}
-                                </span>
+                                <span className="text-xs font-bold text-zinc-200 uppercase">{p.name}</span>
                             </div>
-                            <div className="flex items-baseline gap-1">
-                                <span
-                                    className="text-sm font-bold tabular-nums"
-                                    style={{ color: p.stroke }}
-                                >
-                                    {Number(p.value).toFixed(1)}
-                                </span>
-                                <span className="text-[10px] text-zinc-500 font-medium">%</span>
-                            </div>
+                            <span
+                                className="text-sm font-bold font-mono"
+                                style={{ color: p.stroke }}
+                            >
+                                {Number(p.value).toFixed(1)}%
+                            </span>
                         </div>
                     ))}
             </div>
-        </motion.div>
+        </div>
     );
 };
 
@@ -127,85 +69,43 @@ export default function ProbabilityChart({
     setTimeframe,
     currentProbabilities
 }: ProbabilityChartProps) {
+    const [hoverData, setHoverData] = useState<any>(null);
 
-    // PASO 1: Construir dataset con punto actual sincronizado
+    // PASO 1: Construir dataset
     const syncedData = useMemo(() => {
         const now = Math.floor(Date.now() / 1000);
 
-        // Si no hay datos históricos o probabilidad actual
-        if (!data || data.length === 0 || !currentProbabilities || Object.keys(currentProbabilities).length === 0) {
-            // Si no hay datos de probabilidad tampoco, NO RETORNAR VACÍO si es posible evitarlo
-            if (!currentProbabilities || Object.keys(currentProbabilities).length === 0) {
-                // Fallback final: 50/50
-                const fallbackProbs: any = {};
-                outcomes.forEach(o => {
-                    const title = typeof o === 'string' ? o : o.title;
-                    fallbackProbs[title] = 100 / outcomes.length;
-                });
-                // Use fallbacks
-                const initialPoint: any = { time: now - 300, ...fallbackProbs };
-                const currentPoint: any = { time: now, ...fallbackProbs };
-                return [initialPoint, currentPoint];
-            }
-
-            // Crear historia artificial para probar la línea (flat line)
-            const initialPoint: any = { time: now - 300 };
-            const currentPoint: any = { time: now };
-
+        if (!data || data.length === 0) {
+            // Fallback for empty data
+            const fallbackProbs: any = {};
             outcomes.forEach(o => {
                 const title = typeof o === 'string' ? o : o.title;
-                const prob = currentProbabilities[title] || 0;
-                initialPoint[title] = prob;
-                currentPoint[title] = prob;
+                fallbackProbs[title] = 100 / outcomes.length;
             });
-
-            return [initialPoint, currentPoint];
+            return [{ time: now - 3600, ...fallbackProbs }, { time: now, ...fallbackProbs }];
         }
 
-        let workingData = [...data];
-        const lastPoint = workingData[workingData.length - 1];
+        // Clone and sort
+        const sorted = [...data].sort((a: any, b: any) => a.time - b.time);
 
-        // Punto actual con probabilidades EXACTAS del pool
-        const livePoint: any = {
-            time: now,
-            dateStr: new Date(now * 1000).toLocaleString()
-        };
+        // Ensure last point reflects current state strictly
+        const last = sorted[sorted.length - 1];
+        if (currentProbabilities && Object.keys(currentProbabilities).length > 0) {
+            const livePoint: any = {
+                time: now,
+                ...currentProbabilities
+            };
 
-
-        outcomes.forEach(o => {
-            const title = typeof o === 'string' ? o : o.title;
-            // Usar SIEMPRE las probabilidades actuales del pool
-            livePoint[title] = currentProbabilities[title] || 0;
-        });
-
-        // Lógica de "Trail":
-        let shouldAppend = false;
-        if (lastPoint) {
-            if ((now - lastPoint.time) > 5) shouldAppend = true;
-
-            // Detectar PUMP/DUMP
-            for (const o of outcomes) {
-                const title = typeof o === 'string' ? o : o.title;
-                if (Math.abs((livePoint[title] || 0) - (lastPoint[title] || 0)) > 0.5) {
-                    shouldAppend = true;
-                    break;
-                }
+            // Append live point if significant time passed or value changed
+            if (last && (now - last.time > 5)) {
+                sorted.push(livePoint);
+            } else if (last) {
+                // Update last point if very recent (Immutable update)
+                sorted[sorted.length - 1] = { ...last, ...currentProbabilities };
             }
-            // Fix time collision
-            if (shouldAppend && livePoint.time <= lastPoint.time) {
-                livePoint.time = lastPoint.time + 1;
-            }
-        } else {
-            shouldAppend = true;
         }
 
-        if (shouldAppend) {
-            workingData.push(livePoint);
-        } else {
-            workingData[workingData.length - 1] = livePoint;
-        }
-
-        return workingData;
+        return sorted;
     }, [data, outcomes, currentProbabilities]);
 
     // PASO 2: Filtrar por timeframe
@@ -214,66 +114,51 @@ export default function ProbabilityChart({
         let cutoffSeconds = 0;
 
         switch (timeframe) {
-            case '5M': cutoffSeconds = 5 * 60; break;
-            case '15M': cutoffSeconds = 15 * 60; break;
-            case '30M': cutoffSeconds = 30 * 60; break;
-            case '1H': cutoffSeconds = 60 * 60; break;
-            case '6H': cutoffSeconds = 6 * 60 * 60; break;
-            case '12H': cutoffSeconds = 12 * 60 * 60; break;
-            case '1D': cutoffSeconds = 24 * 60 * 60; break;
-            case '3D': cutoffSeconds = 3 * 24 * 60 * 60; break;
-            case '1W': cutoffSeconds = 7 * 24 * 60 * 60; break;
-            case '1M': cutoffSeconds = 30 * 24 * 60 * 60; break;
+            case '5M': cutoffSeconds = 300; break;
+            case '15M': cutoffSeconds = 900; break;
+            case '30M': cutoffSeconds = 1800; break;
+            case '1H': cutoffSeconds = 3600; break;
+            case '6H': cutoffSeconds = 21600; break;
+            case '12H': cutoffSeconds = 43200; break;
+            case '1D': cutoffSeconds = 86400; break;
+            case '3D': cutoffSeconds = 259200; break;
+            case '1W': cutoffSeconds = 604800; break;
+            case '1M': cutoffSeconds = 2592000; break;
             case 'ALL': return syncedData;
         }
 
         const cutoffTime = now - cutoffSeconds;
-        const filtered = syncedData.filter(d => d.time >= cutoffTime);
-
-        if (filtered.length === 0 && syncedData.length > 0) {
-            return [syncedData[syncedData.length - 1]];
-        }
-
-        if (filtered.length === 1) {
-            const point = filtered[0];
-            return [
-                { ...point, time: point.time - 60 },
-                point
-            ];
-        }
-
-        // Deduplicate by time to prevent Recharts key errors
-        const uniqueFiltered = filtered.reduce((acc: any[], current: any) => {
-            const x = acc.find(item => item.time === current.time);
-            if (!x) {
-                return acc.concat([current]);
-            } else {
-                return acc;
-            }
-        }, []);
-
-        return uniqueFiltered;
+        return syncedData.filter(d => d.time >= cutoffTime);
     }, [syncedData, timeframe]);
 
-    // Ticks para pills - FILTRADO ESTRICTO (No fantasmas)
-    const yTicks = useMemo(() => {
-        const allowed = new Set(outcomes.map(o => typeof o === 'string' ? o : o.title));
-        const values: number[] = [];
-
-        if (currentProbabilities) {
-            for (const [title, val] of Object.entries(currentProbabilities)) {
-                if (allowed.has(title) && val > 0) {
-                    values.push(val);
-                }
-            }
-        }
-        return [...new Set(values)];
-    }, [currentProbabilities, outcomes]);
+    // Display Data (Hover vs Current)
+    const displayProbs = hoverData || currentProbabilities;
 
     return (
-        <div className="w-full h-full p-4 flex flex-col relative">
+        <div className="w-full h-full flex flex-col relative group">
+            {/* PRO LEGEND HEADER (Kalshi Style) */}
+            <div className="absolute top-4 left-4 right-4 z-20 flex flex-wrap items-center gap-6 pointer-events-none">
+                {outcomes.map((o) => {
+                    const title = typeof o === 'string' ? o : o.title;
+                    const color = getOutcomeColor(title);
+                    const val = displayProbs[title] ?? 0;
+
+                    return (
+                        <div key={title} className="flex items-center gap-3 bg-zinc-950/40 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-zinc-800/30">
+                            <div className="flex items-center gap-2">
+                                <div className="w-2.5 h-2.5 rounded-full ring-2 ring-opacity-50" style={{ backgroundColor: color, ringColor: color }} />
+                                <span className="text-sm font-bold text-zinc-400 uppercase tracking-wide">{title}</span>
+                            </div>
+                            <span className="text-2xl font-black tabular-nums tracking-tight" style={{ color: color }}>
+                                {val.toFixed(0)}<span className="text-sm align-top opacity-70">%</span>
+                            </span>
+                        </div>
+                    );
+                })}
+            </div>
+
             {/* BUBBLES */}
-            <div className="absolute inset-0 pointer-events-none z-20 overflow-hidden">
+            <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden">
                 <AnimatePresence>
                     {bubbles.map(b => (
                         <motion.div
@@ -296,124 +181,44 @@ export default function ProbabilityChart({
                 </AnimatePresence>
             </div>
 
-            {/* WATERMARK */}
-            <div className="absolute inset-0 pointer-events-none flex items-start justify-end pr-8 pt-1 opacity-[0.12] z-0">
-                <div className="relative w-32 h-32 grayscale">
-                    <img src="/djinn-logo.png?v=3" alt="" className="w-full h-full object-contain" />
-                </div>
-            </div>
-
             {/* CHART */}
-            <div className="flex-1 w-full min-h-0 relative z-10">
+            <div className="flex-1 w-full min-h-0 relative">
                 <ResponsiveContainer width="100%" height="100%">
                     <LineChart
                         data={filteredData}
-                        margin={{ top: 10, right: 90, left: 50, bottom: 5 }}
+                        margin={{ top: 80, right: 10, left: 0, bottom: 0 }}
+                        onMouseMove={(e) => {
+                            if (e.activePayload && e.activePayload.length > 0) {
+                                const payload = e.activePayload[0].payload;
+                                setHoverData(payload);
+                            }
+                        }}
+                        onMouseLeave={() => setHoverData(null)}
                     >
-                        {/* Grid lines finas */}
                         <CartesianGrid
                             vertical={false}
-                            horizontal={true}
-                            stroke="#ffffff"
-                            strokeOpacity={0.08}
-                            strokeWidth={0.5}
-                            strokeDasharray="0"
+                            stroke="#333"
+                            strokeOpacity={0.4}
+                            strokeWidth={1}
+                            strokeDasharray="4 4"
                         />
-
                         <XAxis
                             dataKey="time"
-                            domain={[
-                                () => {
-                                    const now = Math.floor(Date.now() / 1000);
-                                    let seconds = 300;
-                                    switch (timeframe) {
-                                        case '5M': seconds = 300; break;
-                                        case '15M': seconds = 900; break;
-                                        case '30M': seconds = 1800; break;
-                                        case '1H': seconds = 3600; break;
-                                        case '6H': seconds = 21600; break;
-                                        case '12H': seconds = 43200; break;
-                                        case '1D': seconds = 86400; break;
-                                        case '3D': seconds = 259200; break;
-                                        case '1W': seconds = 604800; break;
-                                        case '1M': seconds = 2592000; break;
-                                        case 'ALL': return 'dataMin';
-                                    }
-                                    const min = now - seconds;
-                                    return isNaN(min) ? 'dataMin' : min;
-                                },
-                                'auto'
-                            ]}
                             type="number"
                             scale="time"
-                            axisLine={false}
-                            tickLine={false}
-                            interval="preserveStartEnd"
-                            tick={{
-                                fill: '#ffffff',
-                                fontSize: 10,
-                                fontWeight: 600,
-                                fontFamily: 'system-ui, -apple-system, sans-serif'
-                            }}
-                            tickFormatter={(val) => {
-                                const date = new Date(val * 1000);
-                                if (['5M', '15M', '30M', '1H', '6H', '12H', '1D'].includes(timeframe)) {
-                                    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-                                }
-                                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                            }}
-                            minTickGap={40}
-                            dy={10}
+                            domain={['dataMin', 'dataMax']}
+                            hide
                         />
-
-                        {/* Eje Y Izquierdo: Escala % VISIBLE */}
                         <YAxis
-                            yAxisId="left"
-                            orientation="left"
-                            domain={['auto', 'auto']}
-                            axisLine={false}
-                            tickLine={false}
-                            tickCount={6}
-                            width={40}
-                            tick={{
-                                fill: '#ffffff',
-                                fontSize: 12,
-                                fontWeight: 700,
-                                fontFamily: 'system-ui, -apple-system, sans-serif'
-                            }}
-                            tickFormatter={(val) => `${val.toFixed(0)}%`}
-                        />
-
-                        {/* Eje Y Pills: Outcome labels */}
-                        <YAxis
-                            yAxisId="right"
                             orientation="right"
-                            domain={['auto', 'auto']}
+                            domain={[0, 100]}
                             axisLine={false}
                             tickLine={false}
-                            ticks={yTicks}
-                            width={70}
-                            tick={(props) => (
-                                <CustomYAxisTick
-                                    {...props}
-                                    outcomes={outcomes}
-                                    currentProbabilities={currentProbabilities}
-                                    getOutcomeColor={getOutcomeColor}
-                                />
-                            )}
-                            allowDuplicatedCategory={false}
+                            tick={{ fill: '#71717a', fontSize: 11, fontWeight: 600 }}
+                            tickFormatter={(val) => `${val}%`}
+                            width={40}
                         />
-
-                        <Tooltip
-                            content={CustomTooltip}
-                            cursor={{
-                                stroke: '#ffffff',
-                                strokeWidth: 1,
-                                strokeOpacity: 0.2,
-                                strokeDasharray: '4 4'
-                            }}
-                            wrapperStyle={{ outline: 'none' }}
-                        />
+                        <Tooltip content={CustomTooltip} cursor={{ stroke: '#52525b', strokeWidth: 1, strokeDasharray: '5 5' }} />
 
                         {outcomes.map((o) => {
                             const title = typeof o === 'string' ? o : o.title;
@@ -421,22 +226,13 @@ export default function ProbabilityChart({
                             return (
                                 <Line
                                     key={title}
-                                    yAxisId="left"
-                                    type="monotone"
+                                    type="monotone" // Smoother curves
                                     dataKey={title}
                                     stroke={color}
-                                    strokeWidth={2.5}
+                                    strokeWidth={3} // Thicker pro lines
                                     dot={false}
-                                    activeDot={{
-                                        r: 5,
-                                        strokeWidth: 2,
-                                        stroke: color,
-                                        fill: color,
-                                        style: {
-                                            filter: `drop-shadow(0 0 6px ${color})`,
-                                        }
-                                    }}
-                                    isAnimationActive={false}
+                                    activeDot={{ r: 6, strokeWidth: 0, fill: color }} // Clean active dot
+                                    animationDuration={0} // Instant update
                                     connectNulls
                                 />
                             );
@@ -446,23 +242,21 @@ export default function ProbabilityChart({
             </div>
 
             {/* TIMEFRAME CONTROLS */}
-            <div className="flex justify-end pt-3 border-t border-zinc-800/50 mt-2">
-                <div className="flex bg-zinc-900/50 p-1 rounded-lg border border-zinc-800/50 backdrop-blur-sm gap-0.5">
-                    {['5M', '15M', '30M', '1H', '6H', '12H', '1D', '3D', '1W', '1M', 'ALL'].map((tf) => (
-                        <button
-                            key={tf}
-                            onClick={() => setTimeframe(tf as any)}
-                            className={cn(
-                                "px-2.5 py-1 rounded-md text-[10px] font-bold transition-all whitespace-nowrap",
-                                timeframe === tf
-                                    ? "bg-zinc-800 text-white shadow-sm"
-                                    : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
-                            )}
-                        >
-                            {tf}
-                        </button>
-                    ))}
-                </div>
+            <div className="absolute bottom-4 left-4 z-20 flex bg-zinc-900/80 p-1 rounded-lg border border-zinc-800 backdrop-blur-sm gap-0.5">
+                {['1H', '1D', '1W', 'ALL'].map((tf) => (
+                    <button
+                        key={tf}
+                        onClick={() => setTimeframe(tf as any)}
+                        className={cn(
+                            "px-3 py-1 rounded-md text-[10px] font-bold transition-all whitespace-nowrap",
+                            timeframe === tf
+                                ? "bg-zinc-800 text-white shadow-sm"
+                                : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
+                        )}
+                    >
+                        {tf}
+                    </button>
+                ))}
             </div>
         </div>
     );
