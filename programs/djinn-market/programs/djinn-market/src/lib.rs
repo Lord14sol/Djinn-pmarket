@@ -21,12 +21,13 @@ pub const PHASE3_START: u128 = 200_000_000_000_000_000;
 
 // PRICE CONSTANTS (in Lamports, 1 SOL = 1e9 Lamports)
 pub const P_START: u128 = 1_000;       // 1000 lamports (0.000001 SOL) - Higher base for depth
-pub const P_50: u128 = 5_000;          // Progressive gains
-pub const P_90: u128 = 25_000;         // Acceleration
+pub const P_50: u128 = 25_000;         // 25k - Steep slope for fast gains
+pub const P_90: u128 = 250_000;        // 250k - Quadratic acceleration
 pub const P_MAX: u128 = 950_000_000;   // 0.95 SOL Max
 
-// 🔥 OPTIMAL ANCHOR: 12M Shares (Mcap $3.5K, 1 SOL → 66% prob)
-pub const VIRTUAL_ANCHOR: u128 = 12_000_000_000_000_000; // 12M * 1e9 
+// 🔥 OPTIMAL ANCHOR: 1M Shares (Aggressive Pump Mode)
+// 1 SOL Buy => ~2x Price
+pub const VIRTUAL_ANCHOR: u128 = 1_000_000_000_000_000; // 1M * 1e9 
 
 
 // SIGMOID K (Scaled: k * 1e18 for fixed-point)

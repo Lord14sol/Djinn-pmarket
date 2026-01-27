@@ -17,8 +17,8 @@ interface ProbabilityChartProps {
     data: any[];
     outcomes: (string | { id: string; title: string })[];
     bubbles: Bubble[];
-    timeframe: '5M' | '15M' | '30M' | '1H' | '6H' | '12H' | '1D' | '3D' | '1W' | '1M' | 'ALL';
-    setTimeframe: (tf: '5M' | '15M' | '30M' | '1H' | '6H' | '12H' | '1D' | '3D' | '1W' | '1M' | 'ALL') => void;
+    timeframe: '1m' | '5m' | '15m' | '1H' | '6H' | '1D' | '1W' | '1M' | 'ALL';
+    setTimeframe: (tf: '1m' | '5m' | '15m' | '1H' | '6H' | '1D' | '1W' | '1M' | 'ALL') => void;
     currentProbabilities: Record<string, number>;
 }
 
@@ -108,27 +108,35 @@ export default function ProbabilityChart({
         return sorted;
     }, [data, outcomes, currentProbabilities]);
 
-    // PASO 2: Filtrar por timeframe
-    const filteredData = useMemo(() => {
+    // PASO 2: Determine Cutoff and Domain
+    const { filteredData, domainMin } = useMemo(() => {
         const now = Math.floor(Date.now() / 1000);
         let cutoffSeconds = 0;
 
         switch (timeframe) {
-            case '5M': cutoffSeconds = 300; break;
-            case '15M': cutoffSeconds = 900; break;
-            case '30M': cutoffSeconds = 1800; break;
+            case '1m': cutoffSeconds = 60; break;
+            case '5m': cutoffSeconds = 300; break;
+            case '15m': cutoffSeconds = 900; break;
             case '1H': cutoffSeconds = 3600; break;
             case '6H': cutoffSeconds = 21600; break;
-            case '12H': cutoffSeconds = 43200; break;
             case '1D': cutoffSeconds = 86400; break;
-            case '3D': cutoffSeconds = 259200; break;
             case '1W': cutoffSeconds = 604800; break;
-            case '1M': cutoffSeconds = 2592000; break;
-            case 'ALL': return syncedData;
+            case '1M': cutoffSeconds = 2592000; break; // 30 Days
+            case 'ALL': cutoffSeconds = 0; break;
         }
 
-        const cutoffTime = now - cutoffSeconds;
-        return syncedData.filter(d => d.time >= cutoffTime);
+        // Filter Data
+        let filtered = syncedData;
+        if (timeframe !== 'ALL') {
+            const cutoffTime = now - cutoffSeconds;
+            filtered = syncedData.filter(d => d.time >= cutoffTime);
+        }
+
+        // Determine Domain Min
+        // If 'ALL', adjust to data min. If timeframe, force the window start.
+        const dMin = timeframe === 'ALL' ? 'dataMin' : (now - cutoffSeconds);
+
+        return { filteredData: filtered, domainMin: dMin };
     }, [syncedData, timeframe]);
 
     // Display Data (Hover vs Current)
@@ -206,7 +214,7 @@ export default function ProbabilityChart({
                             dataKey="time"
                             type="number"
                             scale="time"
-                            domain={['dataMin', 'dataMax']}
+                            domain={[domainMin, 'auto']}
                             hide
                         />
                         <YAxis
@@ -243,12 +251,12 @@ export default function ProbabilityChart({
 
             {/* TIMEFRAME CONTROLS */}
             <div className="absolute bottom-4 left-4 z-20 flex bg-zinc-900/80 p-1 rounded-lg border border-zinc-800 backdrop-blur-sm gap-0.5">
-                {['1H', '1D', '1W', 'ALL'].map((tf) => (
+                {['1m', '5m', '15m', '1H', '6H', '1D', '1W', '1M', 'ALL'].map((tf) => (
                     <button
                         key={tf}
                         onClick={() => setTimeframe(tf as any)}
                         className={cn(
-                            "px-3 py-1 rounded-md text-[10px] font-bold transition-all whitespace-nowrap",
+                            "px-2 py-1 rounded-md text-[10px] font-bold transition-all whitespace-nowrap",
                             timeframe === tf
                                 ? "bg-zinc-800 text-white shadow-sm"
                                 : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { formatCompact } from "@/lib/utils";
-import { AnimatePresence, motion } from "framer-motion";
+import { calculateImpliedProbability } from "@/lib/core-amm";
 
 // Dynamic Import for Probability Chart
 const ProbabilityChart = dynamic(() => import("./ProbabilityChart"), {
@@ -42,26 +42,30 @@ function TheDjinnChart({
     tradeEvent,
     outcomeSupplies = {},
 }: TheDjinnChartProps) {
-    const [timeframe, setTimeframe] = useState<'5M' | '15M' | '30M' | '1H' | '6H' | '12H' | '1D' | '3D' | '1W' | '1M' | 'ALL'>('1D');
+    const [timeframe, setTimeframe] = useState<'1m' | '5m' | '15m' | '1H' | '6H' | '1D' | '1W' | '1M' | 'ALL'>('1H');
 
     // Bubble State
     const [bubbles, setBubbles] = useState<Bubble[]>([]);
+    const [lastProcessedEventId, setLastProcessedEventId] = useState<string | null>(null);
 
-    // 1. Trade Event Effect (Bubbles)
+    // 1. Trade Event Effect (Bubbles) - Only 1 bubble per unique trade
     useEffect(() => {
-        if (tradeEvent) {
+        if (tradeEvent && tradeEvent.id !== lastProcessedEventId) {
+            // Mark this event as processed to prevent duplicates
+            setLastProcessedEventId(tradeEvent.id);
+
             const newBubble: Bubble = {
-                id: Date.now().toString() + Math.random(),
+                id: tradeEvent.id, // Use the trade event ID directly
                 text: `${tradeEvent.outcome} +${formatCompact(tradeEvent.amount)}`,
                 color: tradeEvent.color,
                 y: Math.random() * 60 + 20 // 20% to 80% height
             };
-            setBubbles(prev => [...prev, newBubble]);
+            setBubbles([newBubble]); // Replace all bubbles with just the new one
             setTimeout(() => {
                 setBubbles(prev => prev.filter(b => b.id !== newBubble.id));
             }, 3500);
         }
-    }, [tradeEvent]);
+    }, [tradeEvent, lastProcessedEventId]);
 
     // 2. Derived Data: Probability Line
     const safeProbData = useMemo(() => {
@@ -76,10 +80,9 @@ function TheDjinnChart({
         return baseData;
     }, [probabilityData]);
 
-    // 3. Derived Data: Current Probabilities
+    // 3. Derived Data: Current Probabilities - Use core-amm function for consistency
     const currentProbabilities = useMemo(() => {
         const probs: Record<string, number> = {};
-        const VIRTUAL_FLOOR = 1_000_000;
 
         if (!outcomeSupplies || Object.keys(outcomeSupplies).length === 0) {
             outcomes.forEach(o => {
@@ -95,24 +98,38 @@ function TheDjinnChart({
             suppliesMapNormalized[k.toLowerCase()] = outcomeSupplies[k];
         });
 
-        const totalRawShares = Object.values(outcomeSupplies).reduce((sum, val) => sum + Number(val || 0), 0);
+        // For binary (YES/NO), use the core-amm function directly
+        const outcomeKeys = outcomes.map(o => typeof o === 'string' ? o : o.title);
+        if (outcomeKeys.length === 2) {
+            const yesKey = outcomeKeys.find(k => k.toUpperCase() === 'YES') || outcomeKeys[0];
+            const noKey = outcomeKeys.find(k => k.toUpperCase() === 'NO') || outcomeKeys[1];
 
-        let totalAdjusted = 0;
-        const adjustedSupplies: Record<string, number> = {};
+            const yesSupply = Number(outcomeSupplies[yesKey] || suppliesMapNormalized[yesKey.toLowerCase()] || 0);
+            const noSupply = Number(outcomeSupplies[noKey] || suppliesMapNormalized[noKey.toLowerCase()] || 0);
 
-        outcomes.forEach(o => {
-            const title = typeof o === 'string' ? o : o.title;
-            const raw = Number(outcomeSupplies[title] || suppliesMapNormalized[title.toLowerCase()] || 0);
-            const adj = raw + VIRTUAL_FLOOR;
-            adjustedSupplies[title] = adj;
-            totalAdjusted += adj;
-        });
+            const yesProb = calculateImpliedProbability(yesSupply, noSupply);
+            probs[yesKey] = yesProb;
+            probs[noKey] = 100 - yesProb;
+        } else {
+            // Multi-outcome: use same VIRTUAL_FLOOR as core-amm (15_000_000)
+            const VIRTUAL_FLOOR = 15_000_000;
+            let totalAdjusted = 0;
+            const adjustedSupplies: Record<string, number> = {};
 
-        outcomes.forEach(o => {
-            const title = typeof o === 'string' ? o : o.title;
-            const probability = (adjustedSupplies[title] / totalAdjusted) * 100;
-            probs[title] = probability;
-        });
+            outcomes.forEach(o => {
+                const title = typeof o === 'string' ? o : o.title;
+                const raw = Number(outcomeSupplies[title] || suppliesMapNormalized[title.toLowerCase()] || 0);
+                const adj = raw + VIRTUAL_FLOOR;
+                adjustedSupplies[title] = adj;
+                totalAdjusted += adj;
+            });
+
+            outcomes.forEach(o => {
+                const title = typeof o === 'string' ? o : o.title;
+                const probability = (adjustedSupplies[title] / totalAdjusted) * 100;
+                probs[title] = probability;
+            });
+        }
 
         return probs;
     }, [outcomeSupplies, outcomes]);

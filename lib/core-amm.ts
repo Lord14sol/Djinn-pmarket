@@ -9,7 +9,7 @@ import { PublicKey } from "@solana/web3.js";
 
 // --- GLOBAL CONSTANTS (MUST MATCH lib.rs) ---
 export const TOTAL_SUPPLY = 1_000_000_000; // 1B Shares
-export const VIRTUAL_OFFSET = 12_000_000;   // 12M → Mcap $3.5K, 1 SOL → 66% prob
+export const VIRTUAL_OFFSET = 1_000_000;   // 1M → Aggressive Pump Mode (2x price @ ~10 SOL)
 
 // PHASE BOUNDARIES (Shares)
 export const PHASE1_END = 100_000_000;    // 100M
@@ -17,12 +17,11 @@ export const PHASE2_END = 200_000_000;    // 200M
 export const PHASE3_START = 200_000_000;
 
 // PRICE CONSTANTS (in SOL, matches Lamports conversion in lib.rs)
-// UPDATED FOR "BALANCED PUMP" (Stability + Low Mcap)
+// UPDATED FOR "AGGRESSIVE PUMP"
 const P_START = 0.000001;    // 1000 lamports (Synced with lib.rs)
-const P_50 = 0.000005;         // 5000 lamports
-const P_90 = 0.000025;         // 25000 lamports
+export const P_50 = 0.000025;         // 25000 lamports - High Slope
+export const P_90 = 0.00025;          // 250000 lamports - Quadratic steepness
 const P_MAX = 0.95;            // 0.95 SOL
-
 
 // SIGMOID CALIBRATION - ORIGINAL "GRADUAL GROWTH" DESIGN
 // ⚠️ LINEAR APPROXIMATION: norm_sig = k * x (not full sigmoid!)
@@ -33,6 +32,9 @@ export const TOTAL_SUPPLY_CHAINHEAD = TOTAL_SUPPLY;
 export const FEE_RESOLUTION_PCT = 0.02;
 export const CURVE_CONSTANT = 375_000_000_000_000;
 
+// PROBABILITY STABILITY CONSTANT
+// Decouples price action (volatile) from chart probability (stable)
+export const PROBABILITY_BUFFER = 15_000_000;
 
 // --- TYPES ---
 export interface MarketState {
@@ -252,7 +254,7 @@ export function calculateImpliedProbability(yesSupply: number, noSupply: number)
     // VIRTUAL_FLOOR prevents probability explosion to 100% on low liquidity
     // Tuned with VIRTUAL_OFFSET for optimal behavior
 
-    const VIRTUAL_FLOOR = 650_000; // 0.65M shares buffer
+    const VIRTUAL_FLOOR = PROBABILITY_BUFFER;
 
     const adjustedYes = yesSupply + VIRTUAL_FLOOR;
     const adjustedNo = noSupply + VIRTUAL_FLOOR;

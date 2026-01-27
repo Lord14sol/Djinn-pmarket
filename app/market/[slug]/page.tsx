@@ -167,6 +167,8 @@ export default function Page() {
         }
     }, [historyState, slug]);
 
+
+
     // --- DJINN V3 METRICS ---
     const {
         yesMcap,
@@ -272,9 +274,9 @@ export default function Page() {
             });
 
             // Normalize Probabilities (Chances)
-            // FIX: Use Supply Ratio logic (with 1M buffer) to match DjinnChart/Header exactly
+            // FIX: Use Supply Ratio logic to match core-amm.ts calculateImpliedProbability exactly
             // Do NOT use Spot Price normalization for chance, as curve shape != probability shape
-            const VIRTUAL_FLOOR = 1_000_000;
+            const VIRTUAL_FLOOR = 15_000_000; // Must match core-amm.ts
             let totalAdjustedSupply = 0;
             const adjustedSupplies: number[] = [];
 
@@ -509,7 +511,7 @@ export default function Page() {
                 // ✅ HELPER: Calcular probabilidad normalizada
                 const getLiveProb = (title: string, defaultProb: number) => {
                     if (outcomeSuppliesMap && Object.keys(outcomeSuppliesMap).length > 0) {
-                        const VIRTUAL_FLOOR = 1_000_000;
+                        const VIRTUAL_FLOOR = 15_000_000; // Must match core-amm.ts
                         let totalAdjusted = 0;
                         const adjustedSupplies: Record<string, number> = {};
 
@@ -758,9 +760,29 @@ export default function Page() {
         }
     }, [connection, effectiveSlug, publicKey, program, marketInfo, slug]);
 
+    // --- AUTO-REFRESH & SYNC (Fixes Stale Data / Profit Calculation) ---
     useEffect(() => {
+        // Initial Load
         loadOnChainData();
-    }, [loadOnChainData]);
+
+        // 1. Refresh on Window Focus (User comes back from another tab/wallet)
+        const handleFocus = () => {
+            console.log("🔄 Focus Detected: Refreshing Market Data...");
+            loadOnChainData();
+            refreshAll();
+        };
+        window.addEventListener('focus', handleFocus);
+
+        // 2. Poll every 3 seconds to catch external trades (Wallet B buys, Wallet A sees it)
+        const interval = setInterval(() => {
+            loadOnChainData();
+        }, 3000);
+
+        return () => {
+            window.removeEventListener('focus', handleFocus);
+            clearInterval(interval);
+        };
+    }, [loadOnChainData, refreshAll]);
 
 
 
@@ -793,8 +815,19 @@ export default function Page() {
     // This prevents estimating a high entry price (~0.47 SOL) for empty markets.
     let estimatedSupply = 0;
 
-    if (marketAccount && (marketAccount.yes_supply || marketAccount.no_supply)) {
-        // Use Real On-Chain Supply if available (Assuming 9 decimals per lib.rs)
+    // FIX: Prioritize Real On-Chain outcome_supplies if available (Fresh)
+    // SWR fields (yes_supply) might be stale or missing in onChainData merges.
+
+
+    if (marketAccount?.outcome_supplies && marketAccount.outcome_supplies.length >= 2) {
+        const outcomeIdx = selectedSide === 'YES' ? 0 : 1;
+        const rawSupply = marketAccount.outcome_supplies[outcomeIdx];
+        const supplyNum = Number(rawSupply);
+        estimatedSupply = isNaN(supplyNum) ? 0 : supplyNum / 1_000_000_000;
+        console.log(`📊 Usings on-chain outcome_supplies[${outcomeIdx}] for Simulation:`, estimatedSupply);
+
+    } else if (marketAccount && (marketAccount.yes_supply || marketAccount.no_supply)) {
+        // Fallback to SWR/Legacy fields
         const rawYes = marketAccount.yes_supply ?? marketAccount.yesSupply;
         const rawNo = marketAccount.no_supply ?? marketAccount.noSupply;
 
@@ -803,11 +836,10 @@ export default function Page() {
         // Safety check: Number(null) is 0.
         const supplyNum = rawSupply ? Number(rawSupply) : 0;
         estimatedSupply = isNaN(supplyNum) ? 0 : supplyNum / 1_000_000_000;
+        console.log("⚠️ Using legacy yes/no_supply for Simulation:", estimatedSupply);
 
     } else {
         // Fallback: If no explicit market data, assume NEW MARKET (0 Supply).
-        // Do NOT infer high supply from 50% price, as that triggers Phase 3 logic.
-        // We want new markets to start at P_START (Linear Phase).
         estimatedSupply = 0;
     }
 
@@ -964,6 +996,14 @@ export default function Page() {
                         safeMinShares
                     );
                     console.log("✅ Buy TX:", txSignature);
+
+                    // LOCK CHART: Determine to use optimistic price for 10s
+                    // This prevents background polling from overwriting the new price with old on-chain data
+                    priceLockoutRef.current = true;
+                    setTimeout(() => {
+                        priceLockoutRef.current = false;
+                        console.log("🔓 Price Lockout Released");
+                    }, 10000);
                 } catch (buyErr: any) {
                     console.error("❌ Buy Shares Failed:", buyErr);
                     throw new Error(`Transaction Failed: ${buyErr.message || buyErr}`);
@@ -1519,6 +1559,13 @@ export default function Page() {
                         );
                         console.log("✅ Sell TX:", tx);
                         txSignature = tx;
+
+                        // LOCK CHART: Determine to use optimistic price for 10s
+                        priceLockoutRef.current = true;
+                        setTimeout(() => {
+                            priceLockoutRef.current = false;
+                            console.log("🔓 Price Lockout Released (Sell)");
+                        }, 10000);
 
                         // OPTIMISTIC UPDATE: Burning Shares (Supply Down)
                         setOnChainData((prev: any) => {
@@ -2224,9 +2271,9 @@ export default function Page() {
 
 
 
-                    {/* RIGHT COLUMN: TRADING (Sticky Sidebar) */}
+                    {/* RIGHT COLUMN: TRADING (Sticky Sidebar) - COMPACT MODE (40% Smaller Feel) */}
                     <div className="md:col-span-4 sticky top-24 h-fit z-20">
-                        <div className="bg-[#020202] border border-white/5 rounded-2xl p-5 shadow-xl">
+                        <div className="bg-[#020202] border border-white/5 rounded-2xl p-4 shadow-xl">
                             <div className="flex justify-end mb-6 items-center">
                                 <div className="flex items-center gap-3">
                                     <div className="flex items-center gap-2 text-[11px] font-semibold text-[#F492B7] bg-[#F492B7]/10 px-4 py-1.5 rounded-full border border-[#F492B7]/20">
