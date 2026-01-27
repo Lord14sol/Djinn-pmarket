@@ -1799,6 +1799,9 @@ export default function Page() {
                 await supabaseDb.createActivity(sellActivity);
                 mutateActivity((current: any[] | undefined) => [sellActivity, ...(current || [])], false);
 
+                // REFRESH USER HOLDINGS
+                window.dispatchEvent(new Event('bet-updated'));
+
                 // 4. Update UI Local State
                 setSolBalance(prev => prev + netSolReturn);
 
@@ -2055,7 +2058,7 @@ export default function Page() {
                                     color: lastTradeEvent.side === 'YES' ? '#10B981' : '#EF4444' // Provide fallback colors if needed
                                 } : null}
                                 selectedOutcome={selectedOutcomeName || (selectedSide === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO'))}
-                                onOutcomeChange={(name) => {
+                                onOutcomeChange={(name: string) => {
                                     setSelectedOutcomeName(name);
                                     // Also find the ID and Side to keep everything in sync
                                     const outcome = marketOutcomes.find(o => o.title === name);
