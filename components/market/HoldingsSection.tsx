@@ -113,12 +113,9 @@ export default function HoldingsSection({ bets, yesSupply, noSupply, marketOutco
                                             <div>
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-base font-bold text-white uppercase tracking-wider">{outcomeName}</span>
-                                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-gray-400 font-mono">LONG</span>
                                                 </div>
                                                 <div className="text-xs text-gray-500 mt-1 font-mono flex items-center gap-2">
                                                     <span>{formatCompact(h.shares)} Shares</span>
-                                                    <span className="w-1 h-1 rounded-full bg-gray-700" />
-                                                    <span>Avg: {h.entryPrice.toFixed(5)} SOL</span>
                                                 </div>
                                             </div>
                                         </div>

@@ -25,7 +25,7 @@ import {
 
 // Helper para formatear números
 const fmt = (n: number, decimals = 2) => n.toLocaleString('en-US', { maximumFractionDigits: decimals });
-const fmtSOL = (n: number) => `${fmt(n, 6)} SOL`;
+const fmtSOL = (n: number) => `${fmt(n, 4)} SOL`;
 const fmtShares = (n: number) => `${fmt(n / 1_000_000, 2)}M shares`;
 
 interface Trader {
@@ -40,8 +40,8 @@ interface Trader {
 interface MarketState {
     yesSupply: number;
     noSupply: number;
-    yesVault: number;  // SOL in YES pool
-    noVault: number;   // SOL in NO pool
+    yesVault: number;
+    noVault: number;
 }
 
 // Simular compra en un lado del mercado
@@ -87,7 +87,7 @@ function sellOnSide(
     const sim = simulateSell(sharesToSell, state);
 
     return {
-        solOut: sim.sharesReceived, // En simulateSell, sharesReceived es el SOL out
+        solOut: sim.sharesReceived,
         newSupply: currentSupply - sharesToSell
     };
 }
@@ -100,6 +100,17 @@ function calculateResolutionPayout(
 ): number {
     const potAfterFee = totalPot * (1 - FEE_RESOLUTION_PCT);
     return (winningShares / totalWinningSupply) * potAfterFee;
+}
+
+// Calcular costo para llevar supply a un target usando integral
+function getCostToReachSupply(currentSupply: number, targetSupply: number): number {
+    if (targetSupply <= currentSupply) return 0;
+    const pOld = getSpotPrice(currentSupply);
+    const pNew = getSpotPrice(targetSupply);
+    const delta = targetSupply - currentSupply;
+    // Fee del 1%
+    const grossCost = (pOld + pNew) / 2 * delta;
+    return grossCost * 1.01; // Include entry fee
 }
 
 console.log('\n' + '═'.repeat(80));
@@ -190,45 +201,39 @@ console.log('─'.repeat(80));
 console.log('\n📊 Estado del mercado después de Early Birds:');
 console.log(`   YES Supply: ${fmtShares(market.yesSupply)} | Vault: ${fmtSOL(market.yesVault)}`);
 console.log(`   NO Supply: ${fmtShares(market.noSupply)} | Vault: ${fmtSOL(market.noVault)}`);
-console.log(`   Probabilidad YES: ${calculateImpliedProbability(market.yesSupply, market.noSupply).toFixed(1)}%`);
+const prob1 = calculateImpliedProbability(market.yesSupply, market.noSupply);
+console.log(`   Probabilidad YES: ${prob1.toFixed(1)}%`);
 
 // ═══════════════════════════════════════════════════════════════════════════
-// FASE 2: EL MERCADO CRECE (Más gente entra)
+// FASE 2: EL MERCADO CRECE (Más gente entra - Simulación rápida)
 // ═══════════════════════════════════════════════════════════════════════════
 console.log('\n' + '─'.repeat(80));
 console.log('📍 FASE 2: CRECIMIENTO - El partido genera hype');
 console.log('─'.repeat(80));
 
-// Simular muchas compras pequeñas para llevar YES a ~300M y NO a ~150M
-const growthBuys = [
-    { side: 'YES' as const, amount: 50 },
-    { side: 'NO' as const, amount: 30 },
-    { side: 'YES' as const, amount: 100 },
-    { side: 'NO' as const, amount: 50 },
-    { side: 'YES' as const, amount: 150 },
-    { side: 'NO' as const, amount: 80 },
-];
+// Calcular cuánto SOL se necesita para llevar YES a 50M y NO a 30M
+const yesTarget1 = 50_000_000;
+const noTarget1 = 30_000_000;
 
-for (const buy of growthBuys) {
-    const result = buyOnSide(buy.side, buy.amount, market);
-    if (buy.side === 'YES') {
-        market.yesSupply = result.newSupply;
-        market.yesVault += result.solToVault;
-    } else {
-        market.noSupply = result.newSupply;
-        market.noVault += result.solToVault;
-    }
-}
+const yesCost1 = getCostToReachSupply(market.yesSupply, yesTarget1);
+const noCost1 = getCostToReachSupply(market.noSupply, noTarget1);
+
+market.yesVault += yesCost1 * 0.99; // 99% goes to vault (1% fee)
+market.noVault += noCost1 * 0.99;
+market.yesSupply = yesTarget1;
+market.noSupply = noTarget1;
 
 console.log(`\n🚀 Múltiples traders entran al mercado...`);
-console.log(`   Total invertido en fase de crecimiento: ~460 SOL adicionales`);
+console.log(`   Inversión en YES: ~${fmtSOL(yesCost1)}`);
+console.log(`   Inversión en NO: ~${fmtSOL(noCost1)}`);
 
 console.log('\n📊 Estado del mercado después del crecimiento:');
 console.log(`   YES Supply: ${fmtShares(market.yesSupply)} | Vault: ${fmtSOL(market.yesVault)}`);
 console.log(`   NO Supply: ${fmtShares(market.noSupply)} | Vault: ${fmtSOL(market.noVault)}`);
 console.log(`   YES Spot Price: ${fmtSOL(getSpotPrice(market.yesSupply))}`);
 console.log(`   NO Spot Price: ${fmtSOL(getSpotPrice(market.noSupply))}`);
-console.log(`   Probabilidad YES: ${calculateImpliedProbability(market.yesSupply, market.noSupply).toFixed(1)}%`);
+const prob2 = calculateImpliedProbability(market.yesSupply, market.noSupply);
+console.log(`   Probabilidad YES: ${prob2.toFixed(1)}%`);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FASE 3: TRADING ACTIVO (Pierre vende, arbitrajistas entran)
@@ -253,10 +258,10 @@ const pierre = traders.find(t => t.name.includes('Pierre'))!;
     console.log(`   → Precio al vender: ${fmtSOL(priceBeforeSell)}/share`);
     console.log(`   → Recibe: ${fmtSOL(sellResult.solOut)}`);
     console.log(`   → Invirtió: ${fmtSOL(pierre.invested)}`);
-    console.log(`   → PROFIT: ${fmtSOL(profit)} (${roi.toFixed(1)}% ROI)`);
+    console.log(`   → PROFIT: ${fmtSOL(profit)} (${roi.toFixed(0)}% ROI)`);
     console.log(`   ✅ Pierre salió con ganancias SIN esperar resolución`);
 
-    pierre.shares = 0; // Ya no tiene shares
+    pierre.shares = 0;
 }
 
 // Arbitrajista: Carlos compra NO barato después del dump de Pierre
@@ -286,34 +291,28 @@ console.log('\n' + '─'.repeat(80));
 console.log('📍 FASE 4: PICO - ¡Argentina domina! YES vuela');
 console.log('─'.repeat(80));
 
-// Llevar YES a ~500M supply
-const yesToReach = 500_000_000;
-const noToReach = 200_000_000;
+// Llevar YES a ~500M supply, NO a ~200M
+const finalYesSupply = 500_000_000;
+const finalNoSupply = 200_000_000;
 
-// Calcular cuánto SOL se necesita para llegar a esos niveles
-while (market.yesSupply < yesToReach) {
-    const buyAmount = Math.min(500, (yesToReach - market.yesSupply) * 0.0001);
-    const result = buyOnSide('YES', buyAmount, market);
-    market.yesSupply = result.newSupply;
-    market.yesVault += result.solToVault;
-}
+const yesCost2 = getCostToReachSupply(market.yesSupply, finalYesSupply);
+const noCost2 = getCostToReachSupply(market.noSupply, finalNoSupply);
 
-while (market.noSupply < noToReach) {
-    const buyAmount = Math.min(200, (noToReach - market.noSupply) * 0.0001);
-    const result = buyOnSide('NO', buyAmount, market);
-    market.noSupply = result.newSupply;
-    market.noVault += result.solToVault;
-}
+market.yesVault += yesCost2 * 0.99;
+market.noVault += noCost2 * 0.99;
+market.yesSupply = finalYesSupply;
+market.noSupply = finalNoSupply;
 
 console.log(`\n🔥 El mercado alcanza su pico:`);
 console.log(`   YES Supply: ${fmtShares(market.yesSupply)} | Vault: ${fmtSOL(market.yesVault)}`);
 console.log(`   NO Supply: ${fmtShares(market.noSupply)} | Vault: ${fmtSOL(market.noVault)}`);
 console.log(`   YES Spot Price: ${fmtSOL(getSpotPrice(market.yesSupply))}`);
 console.log(`   NO Spot Price: ${fmtSOL(getSpotPrice(market.noSupply))}`);
-console.log(`   Probabilidad YES: ${calculateImpliedProbability(market.yesSupply, market.noSupply).toFixed(1)}%`);
+const prob4 = calculateImpliedProbability(market.yesSupply, market.noSupply);
+console.log(`   Probabilidad YES: ${prob4.toFixed(1)}%`);
 
 // Calcular valor de las posiciones de los early birds
-console.log('\n📈 Valor actual de las posiciones de los EARLY BIRDS:');
+console.log('\n📈 Valor actual de las posiciones de los EARLY BIRDS (si vendieran ahora):');
 for (const trader of traders.filter(t => t.strategy === 'HOLDER' && t.shares > 0)) {
     const currentPrice = getSpotPrice(trader.side === 'YES' ? market.yesSupply : market.noSupply);
     const currentValue = trader.shares * currentPrice;
@@ -323,7 +322,7 @@ for (const trader of traders.filter(t => t.strategy === 'HOLDER' && t.shares > 0
     console.log(`\n   ${trader.name}`);
     console.log(`   → Tiene: ${fmtShares(trader.shares)} ${trader.side}`);
     console.log(`   → Invirtió: ${fmtSOL(trader.invested)}`);
-    console.log(`   → Valor actual: ${fmtSOL(currentValue)}`);
+    console.log(`   → Valor actual (si vendiera): ${fmtSOL(currentValue)}`);
     console.log(`   → Profit no realizado: ${fmtSOL(unrealizedProfit)}`);
     console.log(`   → Multiplicador: ${multiplier.toFixed(1)}x`);
 }
@@ -342,7 +341,7 @@ const totalPot = market.yesVault + market.noVault;
 const potAfterFee = totalPot * (1 - FEE_RESOLUTION_PCT);
 
 console.log(`\n💰 Distribución del pot:`);
-console.log(`   Total pot: ${fmtSOL(totalPot)}`);
+console.log(`   Total pot (YES + NO vaults): ${fmtSOL(totalPot)}`);
 console.log(`   Fee del protocolo (2%): ${fmtSOL(totalPot * FEE_RESOLUTION_PCT)}`);
 console.log(`   Pot para ganadores: ${fmtSOL(potAfterFee)}`);
 console.log(`   Total YES shares: ${fmtShares(market.yesSupply)}`);
@@ -362,7 +361,7 @@ for (const trader of traders.filter(t => t.side === 'YES' && t.shares > 0)) {
     console.log(`   ├─ Invirtió: ${fmtSOL(trader.invested)}`);
     console.log(`   ├─ RECIBE: ${fmtSOL(payout)}`);
     console.log(`   ├─ PROFIT: ${fmtSOL(profit)}`);
-    console.log(`   ├─ ROI: ${roi.toFixed(1)}%`);
+    console.log(`   ├─ ROI: ${roi.toFixed(0)}%`);
     console.log(`   └─ MULTIPLICADOR: ${multiplier.toFixed(1)}x 🚀`);
 }
 
@@ -392,20 +391,19 @@ console.log('├─────────────────────�
 const juan = traders.find(t => t.name.includes('Juan'))!;
 const juanPayout = calculateResolutionPayout(juan.shares, market.yesSupply, totalPot);
 console.log(`│ 🇦🇷 Juan (HOLDER YES)                                                        │`);
-console.log(`│    Invirtió: 0.1 SOL → Recibe: ${juanPayout.toFixed(2)} SOL = ${(juanPayout/0.1).toFixed(0)}x 🚀            │`);
+console.log(`│    Invirtió: 0.1 SOL → Recibe: ${juanPayout.toFixed(2)} SOL = ${(juanPayout/0.1).toFixed(0)}x 🚀              │`);
 
 // María - Early holder YES
 const maria = traders.find(t => t.name.includes('María'))!;
 const mariaPayout = calculateResolutionPayout(maria.shares, market.yesSupply, totalPot);
 console.log(`│ 🇦🇷 María (HOLDER YES)                                                       │`);
-console.log(`│    Invirtió: 1 SOL → Recibe: ${mariaPayout.toFixed(2)} SOL = ${(mariaPayout/1).toFixed(0)}x 🚀              │`);
+console.log(`│    Invirtió: 1 SOL → Recibe: ${mariaPayout.toFixed(2)} SOL = ${(mariaPayout/1).toFixed(0)}x 🚀                │`);
 
 // Pierre - Trader que vendió
 console.log(`│ 🇫🇷 Pierre (TRADER NO - vendió antes)                                        │`);
-console.log(`│    Invirtió: 0.5 SOL → Salió con profit tradeando ✅                        │`);
+console.log(`│    Invirtió: 0.5 SOL → Salió con ~3 SOL = 6x (tradeando) ✅                 │`);
 
 // Carlos - Arbitrajista que perdió
-const carlos = traders.find(t => t.name.includes('Carlos'))!;
 console.log(`│ 🎯 Carlos (ARBITRAJISTA NO)                                                  │`);
 console.log(`│    Invirtió: 20 SOL → Pierde todo ❌                                        │`);
 
@@ -415,7 +413,7 @@ console.log('\n┌────────────────────�
 console.log('│                              CONCLUSIONES                                    │');
 console.log('├─────────────────────────────────────────────────────────────────────────────┤');
 console.log('│ 1. EARLY BIRDS hacen MÚLTIPLES X si aciertan y holdean                      │');
-console.log('│ 2. SE PUEDE TRADEAR sin esperar resolución (Pierre vendió con profit)       │');
+console.log('│ 2. SE PUEDE TRADEAR sin esperar resolución (Pierre vendió con 6x profit)   │');
 console.log('│ 3. El TIMING importa: entrar early = mejor precio = más shares              │');
 console.log('│ 4. Si NO aciertas y holdeas, PIERDES TODO el capital invertido              │');
 console.log('│ 5. Los TRADERS pueden tomar ganancias durante el evento (no bloqueado)      │');
@@ -423,7 +421,8 @@ console.log('└─────────────────────�
 
 // Tabla comparativa de multiplicadores según timing de entrada
 console.log('\n┌─────────────────────────────────────────────────────────────────────────────┐');
-console.log('│                    MULTIPLICADORES SEGÚN TIMING (1 SOL)                      │');
+console.log('│            MULTIPLICADORES SEGÚN TIMING DE ENTRADA (1 SOL en YES)           │');
+console.log('│               Escenario: YES llega a 500M shares, gana resolución           │');
 console.log('├─────────────────────────────────────────────────────────────────────────────┤');
 
 const timingTests = [
@@ -431,7 +430,7 @@ const timingTests = [
     { name: 'Early (10M supply)', supply: 10_000_000 },
     { name: 'Mid (100M supply)', supply: 100_000_000 },
     { name: 'Late (300M supply)', supply: 300_000_000 },
-    { name: 'Very Late (500M supply)', supply: 500_000_000 },
+    { name: 'Very Late (450M supply)', supply: 450_000_000 },
 ];
 
 for (const test of timingTests) {
@@ -444,12 +443,26 @@ for (const test of timingTests) {
     const sim = simulateBuy(1, state);
 
     // Si el mercado llega a 500M YES y 200M NO, y YES gana
-    const finalYesSupply = 500_000_000;
-    const totalPotExample = 50000; // ~50K SOL en el pot
-    const payout = (sim.sharesReceived / finalYesSupply) * totalPotExample * 0.98;
+    const payout = calculateResolutionPayout(sim.sharesReceived, finalYesSupply, totalPot);
     const multiplier = payout / 1;
 
-    console.log(`│ ${test.name.padEnd(25)} → ${multiplier.toFixed(1)}x (si acierta)`.padEnd(76) + '│');
+    console.log(`│ ${test.name.padEnd(30)} → ${multiplier.toFixed(1)}x (si YES gana)`.padEnd(76) + '│');
 }
 
+console.log('└─────────────────────────────────────────────────────────────────────────────┘');
+
+// Comparación HOLD vs TRADE
+console.log('\n┌─────────────────────────────────────────────────────────────────────────────┐');
+console.log('│                           HOLD vs TRADE COMPARISON                           │');
+console.log('├─────────────────────────────────────────────────────────────────────────────┤');
+console.log('│                                                                             │');
+console.log('│  HOLD hasta resolución:                                                     │');
+console.log('│    ✅ Máximo profit si aciertas (participas del pot completo)               │');
+console.log('│    ❌ Pierdes TODO si te equivocas                                          │');
+console.log('│                                                                             │');
+console.log('│  TRADE durante evento:                                                      │');
+console.log('│    ✅ Tomas ganancias sin riesgo de resolución                              │');
+console.log('│    ✅ Puedes arbitrar movimientos de precio                                 │');
+console.log('│    ❌ Menor profit máximo (no participas del pot si vendes antes)           │');
+console.log('│                                                                             │');
 console.log('└─────────────────────────────────────────────────────────────────────────────┘');
