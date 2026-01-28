@@ -2049,9 +2049,15 @@ export default function Page() {
                                         <div className="absolute -bottom-10 -right-10 w-20 h-20 blur-3xl rounded-full opacity-10 pointer-events-none" style={{ backgroundColor: color }} />
 
                                         <span
-                                            className="text-[10px] font-black uppercase tracking-[0.2em] mb-1.5 opacity-60 flex items-center gap-1.5"
+                                            className="text-[10px] font-black uppercase tracking-[0.2em] mb-1.5 flex items-center gap-2 text-white/50"
                                         >
-                                            <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
+                                            <div
+                                                className="w-2 h-2 rounded-full"
+                                                style={{
+                                                    backgroundColor: color,
+                                                    boxShadow: `0 0 10px ${color}`
+                                                }}
+                                            />
                                             {outcome.title} MCAP
                                         </span>
                                         <div className="flex flex-col items-center">
