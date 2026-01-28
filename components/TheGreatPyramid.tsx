@@ -111,7 +111,7 @@ export default function TheGreatPyramid({ topMarkets }: TheGreatPyramidProps) {
                     >
                         {/* Large Rank Number - 3 */}
                         <div className="absolute -right-10 top-0 -translate-y-1/2 z-0">
-                            <span className="text-[10rem] font-black text-white/5 leading-none select-none drop-shadow-md group-hover:text-white/10 transition-colors" style={{ fontFamily: 'var(--font-adriane), serif' }}>3</span>
+                            <span className="text-[10rem] font-black text-white/40 leading-none select-none drop-shadow-md group-hover:text-white/60 transition-colors" style={{ fontFamily: 'var(--font-adriane), serif' }}>3</span>
                         </div>
                         <div className="relative z-10 transform md:scale-95 hover:scale-[0.98] transition-transform duration-300 hover:shadow-[0_20px_40px_rgba(0,0,0,0.4)]">
                             <MarketCard {...third} />
