@@ -322,33 +322,21 @@ export default function Home() {
   };
 
   // Calculate top market for The Great Pyramid
-  const topMarket = useMemo(() => {
+  // Calculate top 3 markets for The Great Pyramid Podium
+  const top3Markets = useMemo(() => {
     if (markets.length === 0) return null;
     const sorted = [...markets].sort((a, b) => {
-      // Trending Boost for New Markets
-      const isNewA = (Date.now() - (a.createdAt || 0)) < 3600000;
-      const isNewB = (Date.now() - (b.createdAt || 0)) < 3600000;
-      if (isNewA && !isNewB) return -1;
-      if (!isNewA && isNewB) return 1;
-
       const volA = parseFloat(a.volume?.replace(/[$,MK]/g, '') || '0');
       const volB = parseFloat(b.volume?.replace(/[$,MK]/g, '') || '0');
       return volB - volA;
     });
-    const top = sorted[0];
-    return {
-      title: top.title,
-      slug: top.slug,
-      icon: top.icon || '🔮',
-      volume: top.volume || '$0',
-      betsCount: Math.floor(Math.random() * 5000) + 500, // Mock for now
-      chance: top.chance || 50,
-      endDate: top.endDate,
-      options: top.options
-    };
+
+    // Reformular para pasar los objetos completos con el formato esperado
+    return sorted.slice(0, 3).map(m => ({
+      ...m,
+      betsCount: m.betsCount || Math.floor(Math.random() * 5000) + 500 // Mock if missing
+    }));
   }, [markets]);
-
-
 
   return (
     <div className="min-h-screen w-full bg-transparent text-white font-sans selection:bg-[#F492B7] selection:text-black">
@@ -356,13 +344,13 @@ export default function Home() {
       {/* Hero Section con Callback para crear mercados */}
       <Hero onMarketCreated={handleCreateMarket} />
 
-      {/* The Great Pyramid - Top Market Showcase */}
-      {activeCategory === 'Trending' && topMarket && (
-        <TheGreatPyramid topMarket={topMarket} />
+      {/* The Great Pyramid - Top 3 Podium */}
+      {activeCategory === 'Trending' && top3Markets && top3Markets.length > 0 && (
+        <TheGreatPyramid topMarkets={top3Markets} />
       )}
 
       <section className="px-6 md:px-12 pb-20 max-w-[1600px] mx-auto mt-10">
-        {!(activeCategory === 'Trending' && topMarket) && (
+        {!(activeCategory === 'Trending' && top3Markets && top3Markets.length > 0) && (
           <h2 className="text-3xl font-bold mb-8 tracking-tight text-white">
             {getCategoryTitle()}
           </h2>
