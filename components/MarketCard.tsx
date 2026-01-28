@@ -107,10 +107,10 @@ const MarketCard: React.FC<MarketCardProps> = ({
     };
 
     return (
-        <div className="bg-black border-r border-b border-white/10 p-4 flex flex-col gap-4 relative hover:bg-white/[0.02] hover:-translate-y-2 transition-all duration-300 h-full min-h-[380px] group/card shadow-lg hover:shadow-xl">
-
-            {/* Clickable Overlay for whole card */}
-            <Link href={`/market/${slug}`} className="absolute inset-0 z-0" />
+        <div
+            onClick={() => window.location.href = `/market/${slug}`}
+            className="bg-black border-r border-b border-white/10 p-4 flex flex-col gap-4 relative hover:bg-white/[0.02] hover:-translate-y-2 transition-all duration-300 h-full min-h-[380px] group/card shadow-lg hover:shadow-xl cursor-pointer"
+        >
 
             {/* 1. Header Image (Top) - Aspect Ratio Box */}
             <div className="w-full aspect-square rounded-xl overflow-hidden bg-[#1C212E]/50 relative z-10 border border-white/5 shadow-2xl">
@@ -129,8 +129,8 @@ const MarketCard: React.FC<MarketCardProps> = ({
             <div className="flex-1 flex flex-col gap-4 relative z-10 pointer-events-none">
 
                 {/* Title */}
-                <h3 className="text-lg font-bold text-gray-100 group-hover/card:text-[#F492B7] transition-colors leading-tight pointer-events-auto cursor-pointer line-clamp-2 mt-2">
-                    <Link href={`/market/${slug}`}>{title}</Link>
+                <h3 className="text-lg font-bold text-gray-100 group-hover/card:text-[#F492B7] transition-colors leading-tight pointer-events-auto line-clamp-2 mt-2">
+                    {title}
                 </h3>
 
                 {/* Outcomes Information */}
@@ -143,7 +143,14 @@ const MarketCard: React.FC<MarketCardProps> = ({
                     ) : isMultiple && options ? (
                         <div className="flex flex-col gap-2 max-h-[120px] overflow-y-auto pr-1 customize-scrollbar">
                             {options.map((opt: any) => (
-                                <div key={opt.id} className="flex items-center justify-between text-[11px] py-2 px-3 bg-[#111] border border-white/10 hover:bg-white/10 rounded-lg cursor-pointer transition-all duration-200 shrink-0">
+                                <div
+                                    key={opt.id}
+                                    className="flex items-center justify-between text-[11px] py-2 px-3 bg-[#111] border border-white/10 hover:bg-white/10 rounded-lg cursor-pointer transition-all duration-200 shrink-0"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        window.location.href = `/market/${slug}`;
+                                    }}
+                                >
                                     <span className="text-gray-300 truncate font-medium max-w-[70%]">{opt.name}</span>
                                     <span className="text-gray-500 font-bold">--%</span>
                                 </div>

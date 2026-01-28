@@ -8,7 +8,7 @@ import Hero from '@/components/Hero';
 import MarketCard from '@/components/MarketCard';
 import { MarketGridSkeleton } from '@/components/ui/Skeletons';
 import { useCategory } from '@/lib/CategoryContext';
-import { getMarkets as getSupabaseMarkets, subscribeToMarkets } from '@/lib/supabase-db';
+import { getMarkets as getSupabaseMarkets, subscribeToMarkets, getAllMarketData, subscribeToAllMarketData } from '@/lib/supabase-db';
 import { formatCompact } from '@/lib/utils';
 import PumpEffect from '@/components/PumpEffect';
 import { ADMIN_WALLETS } from '@/lib/whitelist';
@@ -41,26 +41,39 @@ export default function Home() {
         const supabaseMarkets = await getSupabaseMarkets();
         let finalMarkets: any[] = [];
 
+        // 1b. Fetch Market Data (Live Prices/Volume)
+        const marketDataMap = await getAllMarketData().then(data => {
+          const map: Record<string, any> = {};
+          data.forEach(d => map[d.slug] = d);
+          return map;
+        });
+
         // 2. Format Supabase Markets
         if (supabaseMarkets && supabaseMarkets.length > 0) {
-          finalMarkets = supabaseMarkets.map((m, index) => ({
-            id: m.id || `sb-${index}`,
-            title: m.title,
-            icon: m.banner_url || '🔮', // Use uploaded image as icon
-            chance: Math.round((m.total_yes_pool / (m.total_yes_pool + m.total_no_pool + 1)) * 100) || 50,
-            volume: `$${formatCompact(m.total_yes_pool + m.total_no_pool)}`,
-            type: 'binary',
-            category: (m as any).category || 'Trending',
-            endDate: m.end_date ? new Date(m.end_date) : new Date('2026-12-31'),
-            slug: m.slug,
-            createdAt: m.created_at ? new Date(m.created_at).getTime() : Date.now(),
-            resolved: m.resolved,
-            winningOutcome: m.winning_outcome,
-            marketPDA: m.market_pda,
-            yesTokenMint: m.yes_token_mint,
-            noTokenMint: m.no_token_mint,
-            resolutionSource: m.resolution_source
-          }));
+          finalMarkets = supabaseMarkets.map((m, index) => {
+            const liveData = marketDataMap[m.slug];
+            const liveChance = liveData ? Math.round(liveData.live_price) : null;
+            const liveVolume = liveData ? `$${formatCompact(liveData.volume)}` : null;
+
+            return {
+              id: m.id || `sb-${index}`,
+              title: m.title,
+              icon: m.banner_url || '🔮', // Use uploaded image as icon
+              chance: liveChance ?? (Math.round((m.total_yes_pool / (m.total_yes_pool + m.total_no_pool + 1)) * 100) || 50),
+              volume: liveVolume ?? `$${formatCompact(m.total_yes_pool + m.total_no_pool)}`,
+              type: 'binary',
+              category: (m as any).category || 'Trending',
+              endDate: m.end_date ? new Date(m.end_date) : new Date('2026-12-31'),
+              slug: m.slug,
+              createdAt: m.created_at ? new Date(m.created_at).getTime() : Date.now(),
+              resolved: m.resolved,
+              winningOutcome: m.winning_outcome,
+              marketPDA: m.market_pda,
+              yesTokenMint: m.yes_token_mint,
+              noTokenMint: m.no_token_mint,
+              resolutionSource: m.resolution_source
+            };
+          });
         }
 
         // 3. MERGE LOCAL STORAGE (Always check for pending markets)
@@ -154,6 +167,22 @@ export default function Home() {
       }
     });
 
+    // NEW: Real-time subscription to market_data table (Live Price/Volume)
+    const dataChannel = subscribeToAllMarketData((payload) => {
+      if (payload.new && payload.new.slug) {
+        console.log("⚡ LIVE: Market Data update!", payload.new.slug, payload.new.live_price);
+        setMarkets(prev => prev.map(m =>
+          m.slug === payload.new.slug
+            ? {
+              ...m,
+              chance: Math.round(payload.new.live_price),
+              volume: `$${formatCompact(payload.new.volume)}`
+            }
+            : m
+        ));
+      }
+    });
+
     const handleMarketCreated = (event: any) => {
       if (event.detail) {
         console.log("⚡ Optimistic UI Update: New Market", event.detail);
@@ -169,6 +198,7 @@ export default function Home() {
 
     return () => {
       channel.unsubscribe();
+      dataChannel.unsubscribe();
       window.removeEventListener('storage', loadMarkets);
       window.removeEventListener('market-created', handleMarketCreated);
     };

@@ -32,33 +32,54 @@ interface ProbabilityChartProps {
 const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload || !payload.length) return null;
 
+    // Get timestamp from payload's data point (more reliable than label)
+    const dataPoint = payload[0]?.payload;
+    const timestamp = dataPoint?.time || Number(label);
+
+    // Format date based on timestamp validity
+    let formattedDate = '';
+    if (timestamp && typeof timestamp === 'number' && timestamp > 1000000) {
+        try {
+            const date = new Date(timestamp * 1000);
+            if (!isNaN(date.getTime())) {
+                formattedDate = date.toLocaleString([], {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+            }
+        } catch {
+            formattedDate = '';
+        }
+    }
+
     return (
-        <div className="bg-transparent p-0 pointer-events-none">
+        <div className="bg-zinc-950/95 backdrop-blur-xl rounded-xl p-4 border border-white/20 pointer-events-none shadow-2xl min-w-[140px]">
             {/* Date at the Top */}
-            <div className="text-center">
-                <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest">
-                    {new Date(Number(label) * 1000).toLocaleString([], {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                    })}
-                </span>
-            </div>
+            {formattedDate && (
+                <div className="text-center mb-3 pb-2 border-b border-white/10">
+                    <span className="text-[11px] font-bold text-white uppercase tracking-wider">
+                        {formattedDate}
+                    </span>
+                </div>
+            )}
 
             {/* Large Percentage Data Points */}
-            <div className="mt-2 flex flex-col gap-1 items-start">
+            <div className="flex flex-col gap-2 items-start">
                 {payload
-                    .sort((a: any, b: any) => b.value - a.value)
+                    .filter((p: any) => p.value !== undefined && p.value !== null && typeof p.value === 'number')
+                    .sort((a: any, b: any) => (b.value ?? 0) - (a.value ?? 0))
                     .map((p: any) => (
                         <div key={p.name} className="flex flex-col">
                             {/* Line Name (Small) */}
-                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-[-2px]">
+                            <span className="text-[10px] font-bold uppercase tracking-wider mb-0.5" style={{ color: p.stroke }}>
                                 {p.name}
                             </span>
                             {/* Big Number (Colored) */}
                             <span
-                                className="text-4xl font-black tabular-nums tracking-tighter leading-none"
+                                className="text-3xl font-black tabular-nums tracking-tighter leading-none"
                                 style={{ color: p.stroke }}
                             >
                                 {Number(p.value).toFixed(1)}%
@@ -224,12 +245,16 @@ export default function ProbabilityChart({
 
     return (
         <div className="w-full h-full flex flex-col relative group">
-            {/* BRAND HEADER: TOP RIGHT */}
-            <div className="absolute top-2 right-2 z-20 flex items-center gap-0 pointer-events-none flex-row-reverse">
-                <div className="relative w-12 h-12 -ml-2">
+            {/* GLASSMORPHISM BACKGROUND */}
+            <div className="absolute inset-0 bg-black/30 backdrop-blur-md rounded-2xl border border-white/10 shadow-2xl shadow-black/50" />
+            <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-white/5 rounded-2xl pointer-events-none" />
+
+            {/* BRAND HEADER: TOP RIGHT - Star/Logo First, then Name - Shifted slightly left */}
+            <div className="absolute top-2 right-10 z-20 flex items-center gap-0 pointer-events-none">
+                <div className="relative w-12 h-12 -mr-1.5">
                     <Image src="/djinn-logo.png?v=3" alt="Djinn Logo" fill className="object-contain" priority unoptimized />
                 </div>
-                <span className="text-2xl text-white mt-0.5 relative z-10 mr-2" style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}>
+                <span className="text-2xl text-white mt-0.5 relative z-10" style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}>
                     Djinn
                 </span>
             </div>
@@ -310,12 +335,12 @@ export default function ProbabilityChart({
             </div>
 
             {/* CHART */}
-            <div className="flex-1 w-full min-h-0 relative">
+            <div className="flex-1 w-full min-h-0 relative z-10">
                 <ResponsiveContainer width="100%" height="100%">
                     <LineChart
-                        key="line-chart-static-key"
+                        key={`chart-${timeframe}`}
                         data={filteredData}
-                        margin={{ top: 80, right: 20, left: 10, bottom: 5 }} // Increased right margin for dot
+                        margin={{ top: 80, right: 25, left: 10, bottom: 5 }}
                         onMouseMove={(e) => {
                             if (e.activePayload && e.activePayload.length > 0) {
                                 const payload = e.activePayload[0].payload;
@@ -334,21 +359,35 @@ export default function ProbabilityChart({
                         <XAxis
                             dataKey="time"
                             type="number"
-                            scale="time"
-                            domain={[domainMin, 'auto']} // Restore domain for explicit scaling
-                            allowDataOverflow={true} // Allow overflow to respect domain
+                            scale="linear"
+                            domain={['dataMin', 'dataMax']}
                             axisLine={false}
                             tickLine={false}
-                            tick={{ fill: '#ffffff', fontSize: 11, fontWeight: 700 }} // White & Bolder
+                            tick={{ fill: '#ffffff', fontSize: 10, fontWeight: 600 }}
+                            interval="preserveStartEnd"
                             tickFormatter={(val) => {
-                                if (!val) return '';
+                                if (!val || typeof val !== 'number' || val <= 0) return '';
                                 const date = new Date(val * 1000);
-                                if (timeframe === '1m' || timeframe === '5m' || timeframe === '15m' || timeframe === '1H') {
+                                if (isNaN(date.getTime())) return '';
+
+                                // Format based on timeframe
+                                if (timeframe === '1m') {
+                                    return date.toLocaleTimeString([], { minute: '2-digit', second: '2-digit' });
+                                }
+                                if (timeframe === '5m' || timeframe === '15m') {
                                     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                                 }
+                                if (timeframe === '1H' || timeframe === '6H') {
+                                    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                }
+                                if (timeframe === '1D') {
+                                    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+                                }
+                                // Long timeframes: date only
                                 return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
                             }}
-                            minTickGap={40}
+                            minTickGap={50}
+                            tickCount={6}
                         />
                         <YAxis
                             orientation="right"
@@ -375,8 +414,8 @@ export default function ProbabilityChart({
                                         const { index, cx, ...restProps } = props;
                                         // Only show dot for the LAST data point
                                         if (index === filteredData.length - 1) {
-                                            // Shift back slightly (4px) per user request to ensure connection
-                                            return <PulsingDot {...restProps} cx={cx - 4} key={title} stroke={color} />;
+                                            // Shift back slightly (6px) - dots stay inside chart area
+                                            return <PulsingDot {...restProps} cx={cx - 6} key={title} stroke={color} />;
                                         }
                                         return <></>;
                                     }}

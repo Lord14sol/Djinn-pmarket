@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import { useRouter } from 'next/navigation';
-import { formatCompact, parseCompactNumber, getOutcomeValue } from '@/lib/utils';
+import { formatCompact, parseCompactNumber, getOutcomeValue, cn } from '@/lib/utils';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
 import { Clock, DollarSign, Wallet, Activity, Users, CheckCircle2, AlertCircle, Loader2, Edit2, ExternalLink, Share2, Scale, MessageCircle, Star, X } from 'lucide-react';
@@ -402,7 +402,6 @@ export default function Page() {
     const staticMarketInfo = marketDisplayData[slug] || {
         title: slug ? slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : 'Welcome to Djinn',
         icon: '🧊',
-        icon: '🧊',
         description: 'Market description unavailable.'
     };
     const effectiveSlug = slug;
@@ -500,7 +499,8 @@ export default function Page() {
                     seedPriceYes = getSpotPrice(initialOutcomes[0].yesPrice / 100 * 1000000000); // Rough check
                 }
 
-                // ... (rest of initial history logic is fine, omitting for brevity of replacement, wait, I need to match valid replacement block)
+                // ... (rest of initial history logic)
+                return prev;
             });
         }
     }, [slug, effectiveSlug]); // Removed lengthy dependency array for cleanliness if possible, or keep it strict. 
@@ -1167,6 +1167,7 @@ export default function Page() {
 
             // Calculate new probability for the outcome we bought
             const newLikelihood = (sim.endPrice / (sim.endPrice + otherSidePrice)) * 100;
+            const newPrice = selectedSide === 'YES' ? newLikelihood : (100 - newLikelihood);
 
             // Calculate Delta for the Main Chart (YES Probability)
             let probDelta = 0;
@@ -1223,6 +1224,9 @@ export default function Page() {
                     shares: sim.sharesReceived,
                     entry_price: safePrice * 100
                 });
+
+                // 4b. Update Market Price & Volume in DB for Top Holders/Markets Page Sync
+                await supabaseDb.updateMarketPrice(effectiveSlug, newPrice, usdValueInTrading);
             } catch (dbErr) {
                 console.warn("⚠️ DB Logging failed (non-fatal):", dbErr);
             }
@@ -1252,10 +1256,6 @@ export default function Page() {
             });
 
             // 5. Optimistic SWR Update to prevent "Reversion" to 50%
-            // Calculate newPrice based on the simulation or a more accurate method if available
-            // For now, using the newLikelihood as a proxy for the new live_price
-            const newPrice = selectedSide === 'YES' ? newLikelihood : (100 - newLikelihood);
-
             // LOCKOUT: Ignore server updates for 15s to allow indexing to catch up
             priceLockoutRef.current = true;
             setTimeout(() => { priceLockoutRef.current = false; }, 15000);
@@ -1983,14 +1983,35 @@ export default function Page() {
                 {/* HEADER (Restored to Top) */}
                 <div className="flex flex-col lg:flex-row gap-12 items-start relative">
                     {/* LEFT COLUMN: Header + Chart + Info */}
-                    <div className="flex-1 min-w-0 flex flex-col gap-6 w-full">
+                    {/* Constrained width on desktop to leave space for fixed trade panel */}
+                    <div className="flex-1 min-w-0 flex flex-col gap-6 w-full lg:max-w-[calc(100%-400px)]">
 
 
                         {/* HEADER (Moved Inside Left Column) */}
-                        <div className="flex flex-col md:flex-row justify-between items-end gap-6 mb-2">
+                        <div className="flex items-center gap-6 mb-8 mt-1 relative">
+                            {/* Action Row (Top Right Corner) */}
+                            <div className="absolute top-0 right-0 flex items-center gap-2 z-10">
+                                {/* Save (Star) Button */}
+                                <button
+                                    onClick={() => setIsStarred(!isStarred)}
+                                    className="p-3 rounded-full bg-white/5 border border-white/10 hover:bg-white/15 transition-all group"
+                                >
+                                    <Star
+                                        size={18}
+                                        className={cn("transition-colors", isStarred ? "text-yellow-400 fill-yellow-400" : "text-gray-400 group-hover:text-white")}
+                                    />
+                                </button>
+                                {/* Share Button */}
+                                <button
+                                    onClick={() => setShowShareModal(true)}
+                                    className="p-3 rounded-full bg-white/5 border border-white/10 hover:bg-white/15 transition-all group"
+                                >
+                                    <Share2 size={16} className="text-gray-400 group-hover:text-white" />
+                                </button>
+                            </div>
                             {/* LEFT: Image + Title */}
-                            <div className="flex items-end gap-5 flex-1">
-                                <div className="w-48 h-48 bg-[#1A1A1A] rounded-3xl border border-white/10 flex items-center justify-center text-6xl shadow-2xl overflow-hidden shrink-0">
+                            <div className="flex items-start gap-5 flex-1">
+                                <div className="w-48 h-48 bg-[#1A1A1A] rounded-3xl border border-white/10 flex items-center justify-center text-6xl shadow-2xl overflow-hidden shrink-0 mt-12">
                                     {(marketAccount?.banner_url || (typeof staticMarketInfo.icon === 'string' && (staticMarketInfo.icon.startsWith('http') || staticMarketInfo.icon.startsWith('data:')))) ?
                                         <img
                                             src={marketAccount?.banner_url || staticMarketInfo.icon}
@@ -2006,11 +2027,70 @@ export default function Page() {
                                             {staticMarketInfo.icon}
                                         </div>}
                                 </div>
-                                <div className="pb-2 flex-1 flex flex-col justify-center">
-                                    <h1 className="text-4xl md:text-5xl font-black text-white tracking-tighter mb-2 leading-none">
+                                <div className="flex-1 flex flex-col justify-start overflow-visible pt-20">
+                                    <h1 className="text-4xl md:text-5xl font-black text-white tracking-tighter mb-4 leading-none whitespace-nowrap">
                                         {(marketAccount?.title || staticMarketInfo.title)}
                                     </h1>
+
+
+                                    {/* Creator Metadata - Clean Minimal Style */}
+                                    <div className="flex items-center gap-4 mt-16 mb-2">
+                                        {/* Creator Info (No border/bg) */}
+                                        <div
+                                            className="flex items-center gap-2 cursor-pointer group"
+                                            onClick={() => creatorProfile?.username && (window.location.href = `/profile/${marketAccount?.creator_wallet || creatorProfile.username}`)}
+                                        >
+                                            <div className="w-8 h-8 rounded-full overflow-hidden bg-zinc-800 shrink-0">
+                                                {creatorProfile?.avatar ? (
+                                                    <img src={creatorProfile.avatar} className="w-full h-full object-cover" alt="avatar" />
+                                                ) : (
+                                                    <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-500 font-bold bg-[#1A1A1A]">
+                                                        {creatorProfile?.username ? creatorProfile.username.charAt(0).toUpperCase() : '👤'}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <span className="text-sm font-bold text-gray-400 group-hover:text-gray-200 transition-colors">
+                                                by <span className="text-[#F492B7] font-black">{creatorProfile?.username || 'Djinn Creator'}</span>
+                                            </span>
+                                        </div>
+                                    </div>
                                     {/* CHART CARD */}
+                                </div>
+                            </div>
+                            {/* RIGHT: Stats Panel (Pyramid Layout) */}
+                            <div className="shrink-0 flex flex-col items-center gap-2 mr-24 mt-28">
+                                {/* TOTAL POOL - TOP (Larger) */}
+                                <div className="w-full flex flex-col items-center px-10 py-5 rounded-[2.5rem] bg-zinc-950/80 backdrop-blur-md border border-[#F492B7]/30 shadow-2xl shadow-[#F492B7]/10 ring-1 ring-white/10 relative overflow-hidden group/pool">
+                                    <div className="absolute inset-0 bg-gradient-to-br from-[#F492B7]/10 via-transparent to-transparent opacity-0 group-hover/pool:opacity-100 transition-opacity duration-700" />
+                                    <span className="text-[10px] font-black uppercase tracking-[0.4em] text-[#F492B7]/60 mb-1">
+                                        Total Pool
+                                    </span>
+                                    <span className="text-4xl md:text-5xl font-black text-white drop-shadow-[0_0_15px_rgba(244,146,183,0.4)] tracking-tighter italic -skew-x-6">
+                                        {(vaultBalanceSol || (marketAccount?.global_vault ? (Number(marketAccount.global_vault) / LAMPORTS_PER_SOL) : 0)).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} <span className="text-[#F492B7]">SOL</span>
+                                    </span>
+                                </div>
+
+                                {/* MCAPs - BOTTOM ROW */}
+                                <div className="flex items-center gap-3 w-full">
+                                    {/* YES MCAP */}
+                                    <div className="flex-1 flex flex-col items-center px-5 py-3 rounded-2xl bg-zinc-900/60 backdrop-blur-sm border border-[#10B981]/20 shadow-lg">
+                                        <span className="text-[9px] font-black uppercase tracking-widest text-[#10B981]/70 mb-0.5">
+                                            {marketOutcomes[0]?.title || 'YES'} MCAP
+                                        </span>
+                                        <span className="text-lg font-bold text-white tabular-nums">
+                                            {formatCompact(outcomeSuppliesMap[marketOutcomes[0]?.title || 'YES'] || 0)}
+                                        </span>
+                                    </div>
+
+                                    {/* NO MCAP */}
+                                    <div className="flex-1 flex flex-col items-center px-5 py-3 rounded-2xl bg-zinc-900/60 backdrop-blur-sm border border-[#EF4444]/20 shadow-lg">
+                                        <span className="text-[9px] font-black uppercase tracking-widest text-[#EF4444]/70 mb-0.5">
+                                            {marketOutcomes[1]?.title || 'NO'} MCAP
+                                        </span>
+                                        <span className="text-lg font-bold text-white tabular-nums">
+                                            {formatCompact(outcomeSuppliesMap[marketOutcomes[1]?.title || 'NO'] || 0)}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -2018,7 +2098,7 @@ export default function Page() {
                         <div className="bg-transparent rounded-2xl border border-white/5 overflow-hidden min-h-[500px]">
 
 
-                            {/* Dual-line Chart (Bazaar of Answers Style) */}
+
                             {/* Dual-line Chart (Bazaar of Answers Style) */}
                             <TheDjinnChart
                                 outcomes={marketOutcomes.map(o => o.title)}
@@ -2047,6 +2127,16 @@ export default function Page() {
                                 }}
                             />
 
+                            {/* HOLDINGS SECTION (Relocated Below Chart) */}
+                            <div className="px-6 pb-12 pt-6">
+                                <HoldingsSection
+                                    bets={userBets}
+                                    yesSupply={marketAccount?.outcome_supplies?.[0] ? Number(marketAccount.outcome_supplies[0]) / 1e9 : 0}
+                                    noSupply={marketAccount?.outcome_supplies?.[1] ? Number(marketAccount.outcome_supplies[1]) / 1e9 : 0}
+                                    marketOutcomes={marketOutcomes}
+                                />
+                            </div>
+
                             {/* Multi-outcome Selector (if applicable) */}
                             {isMultiOutcome && (
                                 <div className="mt-6 pt-6 border-t border-white/10">
@@ -2063,15 +2153,6 @@ export default function Page() {
 
 
 
-                        {/* TABS & CONTENT (Limitless Style) */}
-
-                        {/* HOLDINGS SECTION (New) */}
-                        <HoldingsSection
-                            bets={userBets}
-                            yesSupply={marketAccount?.outcome_supplies?.[0] ? Number(marketAccount.outcome_supplies[0]) / 1e9 : 0}
-                            noSupply={marketAccount?.outcome_supplies?.[1] ? Number(marketAccount.outcome_supplies[1]) / 1e9 : 0}
-                            marketOutcomes={marketOutcomes}
-                        />
 
                         {/* RESOLUTION CRITERIA (Permanent Block) */}
                         <div className="bg-[#0E0E0E] rounded-[2rem] border border-white/5 p-8">
@@ -2240,316 +2321,322 @@ export default function Page() {
 
                     </div> {/* End of LEFT COLUMN (col-span-8) */}
 
-                    {/* RIGHT COLUMN: TRADING (Sticky Sidebar) - COMPACT MODE (40% Smaller Feel) */}
-                    {/* Fixed: Removed transform (scale) from sticky container to ensure sticky behavior works */}
-                    <div className="w-full lg:w-[380px] shrink-0 sticky top-24 self-start z-20 max-h-[calc(100vh-7rem)] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-                        {/* Apply scale internally to maintain design without breaking sticky */}
-                        <div className="origin-top lg:scale-[0.85]">
-                            <div className="bg-[#020202] border border-white/5 rounded-2xl p-4 shadow-xl">
-                                <div className="flex justify-end mb-6 items-center">
-                                    <div className="flex items-center gap-3">
-                                        <div className="flex items-center gap-2 text-[11px] font-semibold text-[#F492B7] bg-[#F492B7]/10 px-4 py-1.5 rounded-full border border-[#F492B7]/20">
-                                            <Wallet size={12} /> <span>{solBalance.toFixed(2)} SOL</span>
-                                        </div>
-                                    </div>
-                                </div>
+                    {/* RIGHT COLUMN: TRADING (Fixed Sidebar) - Glass Panel with Elevation */}
+                    <div className="hidden lg:block fixed right-4 xl:right-[calc((100vw-80rem)/2+1rem)] top-48 w-[360px] z-40 max-h-[calc(100vh-14rem)] overflow-visible scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                        <div className="origin-top scale-[0.92]">
+                            {/* GLASS PANEL WITH ELEVATION */}
+                            <div className="relative rounded-[24px] overflow-visible">
+                                {/* Elevation Shadow - Deep floating effect */}
+                                <div className="absolute -inset-1 rounded-[26px] bg-black/40 blur-2xl translate-y-4 pointer-events-none" />
+                                <div className="absolute -inset-2 rounded-[28px] bg-black/30 blur-3xl translate-y-6 pointer-events-none" />
 
-                                {/* SQUID GAME UI: Total Pool Counter */}
-                                <div className="mb-6">
-                                    <PrizePoolCounter totalSol={vaultBalanceSol || (marketAccount?.global_vault ? (Number(marketAccount.global_vault) / LAMPORTS_PER_SOL) : 0)} />
-                                </div>
+                                {/* Subtle border glow */}
+                                <div className="absolute -inset-[0.5px] rounded-[25px] bg-gradient-to-b from-white/25 via-white/10 to-white/5 pointer-events-none" />
 
-                                {/* HOLDINGS PANEL (Removed Inline - Now Floating) */}
-                                <div className="mb-5 p-1 bg-white/5 rounded-xl flex">
-                                    <button
-                                        onClick={() => setTradeMode('BUY')}
-                                        className={`flex-1 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${tradeMode === 'BUY' ? 'bg-[#10B981] text-white' : 'text-gray-500 hover:text-white'}`}
-                                    >
-                                        Buy
-                                    </button>
-                                    <button
-                                        onClick={() => setTradeMode('SELL')}
-                                        className={`flex-1 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${tradeMode === 'SELL' ? 'bg-[#EF4444] text-white' : 'text-gray-500 hover:text-white'}`}
-                                    >
-                                        Sell
-                                    </button>
-                                </div>
+                                {/* Main glass body - Deep Dark Aesthetic */}
+                                <div className="relative bg-[#0B0E14]/40 backdrop-blur-2xl rounded-[24px] border border-white/10 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.05)] overflow-hidden">
 
+                                    {/* Premium inner glow */}
+                                    <div className="absolute inset-0 bg-gradient-to-tr from-[#F492B7]/5 via-transparent to-white/5 pointer-events-none" />
+                                    <div className="absolute -top-24 -right-24 w-48 h-48 bg-[#F492B7]/10 blur-[60px] rounded-full pointer-events-none" />
+                                    <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-emerald-500/10 blur-[60px] rounded-full pointer-events-none" />
 
+                                    {/* TRADE PANEL CONTENT - Scrollable inner area */}
+                                    <div className="p-4 max-h-[calc(100vh-14rem)] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
 
-                                {/* INPUT Section */}
-                                <div className="bg-[#0A0A0A] rounded-xl border border-white/5 p-4 mb-4">
-                                    <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-2 block">
-                                        {tradeMode === 'BUY' ? 'You Pay' : 'Shares to Sell'}
-                                    </label>
-                                    <div className="flex items-center gap-3">
-                                        <input
-                                            type="text"
-                                            inputMode="decimal"
-                                            value={betAmount || ''}
-                                            onChange={(e) => {
-                                                // Allow free typing, parseCompactNumber handles the value extraction logic
-                                                setBetAmount(e.target.value);
-                                                setIsMaxSell(false);
-                                            }}
-                                            className="bg-transparent text-5xl font-extralight text-white w-full outline-none placeholder-white/30 tracking-tighter"
-                                            placeholder="0"
-                                        />
-                                        {/* SOL ICON */}
-                                        <div className="flex items-center gap-2 bg-[#1A1A1A] px-3 py-2 rounded-xl border border-white/10 shrink-0">
-                                            <img
-                                                src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
-                                                className="w-5 h-5"
-                                                alt="SOL"
-                                            />
-                                            <span className="text-sm font-bold text-white">{tradeMode === 'BUY' ? 'SOL' : 'SHARES'}</span>
-                                        </div>
-                                    </div>
-                                    {/* Percentage Buttons (SELL MODE ONLY) */}
-                                    {tradeMode === 'SELL' && (
-                                        <div className="flex gap-2 mt-4 pt-4 border-t border-white/5">
-                                            {[25, 50, 75, 100].map((pct) => (
-                                                <button
-                                                    key={pct}
-                                                    onClick={() => {
-                                                        const sharesOwned = isMultiOutcome
-                                                            ? (myShares[marketOutcomes.findIndex(o => o.id === selectedOutcomeId)] || 0)
-                                                            : (selectedSide === 'YES' ? (myShares[0] || 0) : (myShares[1] || 0));
-                                                        if (sharesOwned <= 0) return;
-
-                                                        if (pct === 100) {
-                                                            setIsMaxSell(true);
-                                                        } else {
-                                                            setIsMaxSell(false);
-                                                        }
-
-                                                        // Share Input Logic: 100% means 100% of SHARES.
-                                                        const sharesToSell = sharesOwned * (pct / 100);
-
-                                                        // Enable COMPACT FORMAT (e.g. 1M) since we switched to text input
-                                                        const formattedShares = sharesToSell >= 100_000
-                                                            ? formatCompact(sharesToSell)
-                                                            : sharesToSell.toFixed(2);
-
-                                                        setBetAmount(formattedShares);
-                                                    }}
-                                                    className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${(pct === 100 && isMaxSell)
-                                                        ? 'bg-white/20 text-white border-white/20'
-                                                        : 'bg-white/5 text-gray-400 border-white/5 hover:bg-white/10 hover:text-white'
-                                                        }`}
-                                                >
-                                                    {pct}%
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* 2. PROBABILITY BAR & OUTCOMES */}
-                                <div className="mb-6 space-y-3">
-                                    <div className="flex items-center justify-between px-2">
-                                        <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Prediction</span>
-                                        {/* Slippage (Pencil Edit) */}
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-[10px] font-bold text-gray-500 bg-white/5 px-2 py-1 rounded border border-white/5">{slippageTolerance}% SLIP</span>
-                                            <button onClick={() => {
-                                                const newSlippage = prompt("Enter new slippage %:", slippageTolerance.toString());
-                                                if (newSlippage && !isNaN(parseFloat(newSlippage))) setSlippageTolerance(parseFloat(newSlippage));
-                                            }} className="p-1.5 rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
-                                                <Edit2 size={12} />
+                                        {/* BUY/SELL TOGGLE - At top now */}
+                                        <div className="mb-4 p-1 bg-white/5 rounded-xl flex">
+                                            <button
+                                                onClick={() => setTradeMode('BUY')}
+                                                className={`flex-1 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${tradeMode === 'BUY' ? 'bg-[#10B981] text-white' : 'text-gray-500 hover:text-white'}`}
+                                            >
+                                                Buy
+                                            </button>
+                                            <button
+                                                onClick={() => setTradeMode('SELL')}
+                                                className={`flex-1 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${tradeMode === 'SELL' ? 'bg-[#EF4444] text-white' : 'text-gray-500 hover:text-white'}`}
+                                            >
+                                                Sell
                                             </button>
                                         </div>
-                                    </div>
 
 
 
-                                    {/* LARGE YES/NO BUTTONS (Limitless Style) */}
-                                    <div className="flex gap-3 h-20">
-                                        {isMultiOutcome ? (
-                                            <div className="flex-1 bg-[#1A1A1A] rounded-2xl border border-white/10 p-4 flex flex-col justify-center items-center hover:border-[#F492B7]/50 transition-colors cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-                                                <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-1">Target Outcome</span>
-                                                <span className="font-bold text-white text-lg truncate max-w-full">{selectedOutcomeName || 'Select First'}</span>
-                                                <span className="text-sm font-mono text-[#10B981] mt-1">{(livePrice ?? 0).toFixed(0)}%</span>
-                                            </div>
-                                        ) : (
-                                            <>
-                                                <button
-                                                    onClick={() => setSelectedSide('YES')}
-                                                    className={`flex-1 rounded-xl flex flex-col items-center justify-center transition-all duration-200 border-2 ${selectedSide === 'YES'
-                                                        ? 'bg-[#10B981] border-[#10B981] text-white shadow-[0_0_20px_rgba(16,185,129,0.4)] scale-[1.02]'
-                                                        : 'bg-[#1A1A1A] border-white/5 text-gray-500 hover:border-[#10B981]/50 hover:bg-[#10B981]/10'}`}
-                                                >
-                                                    <span className="text-xs font-black uppercase tracking-widest mb-0.5">{marketOutcomes[0]?.title || 'YES'}</span>
-                                                    <span className={`text-2xl font-bold ${selectedSide === 'YES' ? 'text-white' : 'text-[#10B981]'}`}>
-                                                        {yesPercent.toFixed(0)}%
-                                                    </span>
-                                                </button>
-                                                <button
-                                                    onClick={() => setSelectedSide('NO')}
-                                                    className={`flex-1 rounded-xl flex flex-col items-center justify-center transition-all duration-200 border-2 ${selectedSide === 'NO'
-                                                        ? 'bg-[#EF4444] border-[#EF4444] text-white shadow-[0_0_20px_rgba(239,68,68,0.4)] scale-[1.02]'
-                                                        : 'bg-[#1A1A1A] border-white/5 text-gray-500 hover:border-[#EF4444]/50 hover:bg-[#EF4444]/10'}`}
-                                                >
-                                                    <span className="text-xs font-black uppercase tracking-widest mb-0.5">{marketOutcomes[1]?.title || 'NO'}</span>
-                                                    <span className={`text-2xl font-bold ${selectedSide === 'NO' ? 'text-white' : 'text-[#EF4444]'}`}>
-                                                        {noPercent.toFixed(0)}%
-                                                    </span>
-                                                </button>
-                                            </>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* 3. TRANSACTION SUMMARY */}
-                                <div className="bg-gradient-to-br from-white/[0.03] to-white/[0.01] rounded-[2rem] border border-white/10 p-6 space-y-5">
-                                    {/* BUY MODE SUMMARY */}
-                                    {tradeMode === 'BUY' && (
-                                        <>
-                                            <div className="flex justify-between items-center text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em]">
-                                                <span>Rate</span>
-                                                <span className="font-mono text-xs lowercase text-gray-300">
-                                                    1 SOL ≈ {amountNum > 0 ? formatCompact(estimatedShares / amountNum) : formatCompact(1 / getSpotPrice(estimatedSupply))} shares
-                                                </span>
-                                            </div>
-                                            <div className="flex justify-between items-center text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em]">
-                                                <span>Impact</span>
-                                                <span className={`font-mono text-xs ${previewSim.priceImpact > 5 ? 'text-amber-400' : 'text-gray-300'}`}>
-                                                    {previewSim.priceImpact.toFixed(2)}%
-                                                </span>
-                                            </div>
-                                            <div className="flex justify-between items-end border-t border-white/10 pt-5">
-                                                <div>
-                                                    <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">Shares to Receive</span>
-                                                    <span className="text-4xl font-extralight text-white leading-none tracking-tight">
-                                                        {formatCompact(estimatedShares)}
-                                                    </span>
-                                                </div>
-                                                <div className="text-right">
-                                                    <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">Cost</span>
-                                                    <span className="text-base font-bold text-[#10B981] font-mono">
-                                                        ${(parseFloat(betAmount || '0') * solPrice).toFixed(2)}
-                                                    </span>
+                                        {/* INPUT Section */}
+                                        <div className="bg-[#0A0A0A] rounded-xl border border-white/5 p-4 mb-4">
+                                            <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-2 block">
+                                                {tradeMode === 'BUY' ? 'You Pay' : 'Shares to Sell'}
+                                            </label>
+                                            <div className="flex items-center gap-3">
+                                                <input
+                                                    type="text"
+                                                    inputMode="decimal"
+                                                    value={betAmount || ''}
+                                                    onChange={(e) => {
+                                                        // Allow free typing, parseCompactNumber handles the value extraction logic
+                                                        setBetAmount(e.target.value);
+                                                        setIsMaxSell(false);
+                                                    }}
+                                                    className="bg-transparent text-5xl font-extralight text-white w-full outline-none placeholder-white/30 tracking-tighter"
+                                                    placeholder="0"
+                                                />
+                                                {/* SOL ICON */}
+                                                <div className="flex items-center gap-2 bg-[#1A1A1A] px-3 py-2 rounded-xl border border-white/10 shrink-0">
+                                                    <img
+                                                        src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
+                                                        className="w-5 h-5"
+                                                        alt="SOL"
+                                                    />
+                                                    <span className="text-sm font-bold text-white">{tradeMode === 'BUY' ? 'SOL' : 'SHARES'}</span>
                                                 </div>
                                             </div>
-                                        </>
-                                    )}
+                                            {/* Percentage Buttons (SELL MODE ONLY) */}
+                                            {tradeMode === 'SELL' && (
+                                                <div className="flex gap-2 mt-4 pt-4 border-t border-white/5">
+                                                    {[25, 50, 75, 100].map((pct) => (
+                                                        <button
+                                                            key={pct}
+                                                            onClick={() => {
+                                                                const sharesOwned = isMultiOutcome
+                                                                    ? (myShares[marketOutcomes.findIndex(o => o.id === selectedOutcomeId)] || 0)
+                                                                    : (selectedSide === 'YES' ? (myShares[0] || 0) : (myShares[1] || 0));
+                                                                if (sharesOwned <= 0) return;
 
-                                    {/* SELL MODE SUMMARY */}
-                                    {tradeMode === 'SELL' && (
-                                        <>
-                                            <div className="flex justify-between items-center text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em]">
-                                                <span>Exit Price</span>
-                                                <span className="font-mono text-xs text-gray-300">
-                                                    {currentPriceForSide.toFixed(1)}%
-                                                </span>
-                                            </div>
-                                            <div className="flex justify-between items-end border-t border-white/10 pt-5 mt-4">
-                                                <div>
-                                                    <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">Shares to Sell</span>
-                                                    <span className="text-4xl font-extralight text-white leading-none tracking-tight">
-                                                        {(() => {
-                                                            const sharesOwned = isMultiOutcome
-                                                                ? (myShares[marketOutcomes.findIndex(o => o.id === selectedOutcomeId)] || 0)
-                                                                : (selectedSide === 'YES' ? (myShares[0] || 0) : (myShares[1] || 0));
-                                                            const price = currentPriceForSide / 100;
+                                                                if (pct === 100) {
+                                                                    setIsMaxSell(true);
+                                                                } else {
+                                                                    setIsMaxSell(false);
+                                                                }
 
-                                                            if (isMaxSell) return formatCompact(sharesOwned);
-                                                            if (!betAmount || price <= 0) return '0';
+                                                                // Share Input Logic: 100% means 100% of SHARES.
+                                                                const sharesToSell = sharesOwned * (pct / 100);
 
-                                                            const shares = parseCompactNumber(betAmount) / price;
-                                                            const capped = Math.min(shares, sharesOwned);
-                                                            return formatCompact(capped);
-                                                        })()}
-                                                    </span>
+                                                                // Enable COMPACT FORMAT (e.g. 1M) since we switched to text input
+                                                                const formattedShares = sharesToSell >= 100_000
+                                                                    ? formatCompact(sharesToSell)
+                                                                    : sharesToSell.toFixed(2);
+
+                                                                setBetAmount(formattedShares);
+                                                            }}
+                                                            className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${(pct === 100 && isMaxSell)
+                                                                ? 'bg-white/20 text-white border-white/20'
+                                                                : 'bg-white/5 text-gray-400 border-white/5 hover:bg-white/10 hover:text-white'
+                                                                }`}
+                                                        >
+                                                            {pct}%
+                                                        </button>
+                                                    ))}
                                                 </div>
-                                                <div className="text-right">
-                                                    <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">You Get</span>
-                                                    <span className="text-xl font-bold text-[#10B981] font-mono">
-                                                        ◎{(() => {
-                                                            // SELL LOGIC DISPLAY
-                                                            // Use same safe logic as handleTrade
-                                                            const spotPrice = getSpotPrice(estimatedSupply);
-                                                            const safePrice = spotPrice > 0 ? spotPrice : 0.0000001;
-                                                            // If Max Sell, use sharesOwned directly
-                                                            // If input amount is SOL, we reverse it? 
-                                                            // Wait, the input is SOL value user wants to extract?
-                                                            // OR is the input always SOL? 
-                                                            // "You Receive (Est)" -> 0.9405 SOL.
-                                                            // So betAmount IS SOL.
-                                                            // So "You Get" should be betAmount - fee?
-
-                                                            return (parseFloat(betAmount || '0') * 0.99).toFixed(4);
-                                                        })()} SOL
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-
-
-
-
-
-
-                                {/* ACTION BUTTON */}
-                                <button
-                                    onClick={handleTrade}
-                                    disabled={isPending || isSuccess}
-                                    className={`w-full py-6 rounded-[2rem] font-bold text-lg uppercase tracking-[0.25em] shadow-2xl transition-all duration-300 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden group mt-6 ${isSuccess ? 'bg-gradient-to-r from-[#10B981] to-[#059669] text-black' :
-                                        tradeMode === 'BUY' ? 'bg-[#10B981] text-white hover:shadow-[#10B981]/50 hover:shadow-2xl hover:scale-[1.02]' : 'bg-gradient-to-r from-[#EF4444] to-[#DC2626] text-white hover:shadow-[#EF4444]/50 hover:shadow-2xl hover:scale-[1.02]'
-                                        }`}
-                                >
-                                    {isPending ? (
-                                        <div className="flex items-center justify-center gap-2">
-                                            <Loader2 className="animate-spin" /> Processing...
-                                        </div>
-                                    ) : isSuccess ? (
-                                        <div className="flex items-center justify-center gap-2">
-                                            <CheckCircle2 /> <span className="text-lg">Success</span>
-                                        </div>
-                                    ) : (
-                                        <span>
-                                            {tradeMode === 'BUY'
-                                                ? `Buy ${selectedSide === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO')}`
-                                                : `Sell ${selectedSide === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO')}`}
-                                        </span>
-                                    )}
-                                </button>
-
-                                {/* SUCCESS BUBBLE - Shows after successful trade */}
-                                {tradeSuccessInfo && (
-                                    <div className="mt-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                        <div className="bg-gradient-to-r from-emerald-500/20 to-emerald-600/10 border-2 border-emerald-500/40 rounded-[1.5rem] p-4 text-center shadow-xl shadow-emerald-500/10">
-                                            <p className="text-emerald-400 font-bold text-sm">
-                                                ✓ Successfully purchased {tradeSuccessInfo.shares.toFixed(2)} {tradeSuccessInfo.side} shares
-                                            </p>
-                                            {tradeSuccessInfo.txSignature && (
-                                                <a
-                                                    href={`https://solscan.io/tx/${tradeSuccessInfo.txSignature}`}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="text-xs text-emerald-500/70 hover:text-emerald-400 underline underline-offset-2 mt-2 inline-block transition-all hover:scale-105"
-                                                >
-                                                    View on Solscan →
-                                                </a>
                                             )}
                                         </div>
-                                    </div>
-                                )}
 
-                                {/* Terms of Use Link */}
-                                <div className="mt-4 text-center">
-                                    <p className="text-[10px] text-gray-500">
-                                        By trading, you agree to the{' '}
-                                        <Link href="/legal" className="text-[#F492B7] hover:underline hover:text-white transition-colors">
-                                            Terms of Use
-                                        </Link>
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                                        {/* 2. PROBABILITY BAR & OUTCOMES */}
+                                        <div className="mb-6 space-y-3">
+                                            <div className="flex items-center justify-between px-2">
+                                                <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Prediction</span>
+                                                {/* Slippage (Pencil Edit) */}
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[10px] font-bold text-gray-500 bg-white/5 px-2 py-1 rounded border border-white/5">{slippageTolerance}% SLIP</span>
+                                                    <button onClick={() => {
+                                                        const newSlippage = prompt("Enter new slippage %:", slippageTolerance.toString());
+                                                        if (newSlippage && !isNaN(parseFloat(newSlippage))) setSlippageTolerance(parseFloat(newSlippage));
+                                                    }} className="p-1.5 rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
+                                                        <Edit2 size={12} />
+                                                    </button>
+                                                </div>
+                                            </div>
+
+
+
+                                            {/* LARGE YES/NO BUTTONS (Limitless Style) */}
+                                            <div className="flex gap-3 h-36">
+                                                {isMultiOutcome ? (
+                                                    <div className="flex-1 bg-[#1A1A1A] rounded-2xl border border-white/10 p-4 flex flex-col justify-center items-center hover:border-[#F492B7]/50 transition-colors cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+                                                        <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-1">Target Outcome</span>
+                                                        <span className="font-bold text-white text-lg truncate max-w-full">{selectedOutcomeName || 'Select First'}</span>
+                                                        <span className="text-sm font-mono text-[#10B981] mt-1">{(livePrice ?? 0).toFixed(0)}%</span>
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <button
+                                                            onClick={() => setSelectedSide('YES')}
+                                                            className={`flex-1 rounded-xl flex flex-col items-center justify-center transition-all duration-200 border-2 ${selectedSide === 'YES'
+                                                                ? 'bg-[#10B981] border-[#10B981] text-white shadow-[0_0_20px_rgba(16,185,129,0.4)] scale-[1.02]'
+                                                                : 'bg-[#1A1A1A] border-white/5 text-gray-500 hover:border-[#10B981]/50 hover:bg-[#10B981]/10'}`}
+                                                        >
+                                                            <span className="text-xs font-black uppercase tracking-widest mb-0.5">{marketOutcomes[0]?.title || 'YES'}</span>
+                                                            <span className={`text-2xl font-bold ${selectedSide === 'YES' ? 'text-white' : 'text-[#10B981]'}`}>
+                                                                {yesPercent.toFixed(0)}%
+                                                            </span>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setSelectedSide('NO')}
+                                                            className={`flex-1 rounded-xl flex flex-col items-center justify-center transition-all duration-200 border-2 ${selectedSide === 'NO'
+                                                                ? 'bg-[#EF4444] border-[#EF4444] text-white shadow-[0_0_20px_rgba(239,68,68,0.4)] scale-[1.02]'
+                                                                : 'bg-[#1A1A1A] border-white/5 text-gray-500 hover:border-[#EF4444]/50 hover:bg-[#EF4444]/10'}`}
+                                                        >
+                                                            <span className="text-xs font-black uppercase tracking-widest mb-0.5">{marketOutcomes[1]?.title || 'NO'}</span>
+                                                            <span className={`text-2xl font-bold ${selectedSide === 'NO' ? 'text-white' : 'text-[#EF4444]'}`}>
+                                                                {noPercent.toFixed(0)}%
+                                                            </span>
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* 3. TRANSACTION SUMMARY */}
+                                        <div className="bg-gradient-to-br from-white/[0.03] to-white/[0.01] rounded-[2rem] border border-white/10 p-6 space-y-5">
+                                            {/* BUY MODE SUMMARY */}
+                                            {tradeMode === 'BUY' && (
+                                                <>
+                                                    <div className="flex justify-between items-center text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em]">
+                                                        <span>Rate</span>
+                                                        <span className="font-mono text-xs lowercase text-gray-300">
+                                                            1 SOL ≈ {amountNum > 0 ? formatCompact(estimatedShares / amountNum) : formatCompact(1 / getSpotPrice(estimatedSupply))} shares
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em]">
+                                                        <span>Impact</span>
+                                                        <span className={`font-mono text-xs ${previewSim.priceImpact > 5 ? 'text-amber-400' : 'text-gray-300'}`}>
+                                                            {previewSim.priceImpact.toFixed(2)}%
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex justify-between items-end border-t border-white/10 pt-5">
+                                                        <div>
+                                                            <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">Shares to Receive</span>
+                                                            <span className="text-4xl font-extralight text-white leading-none tracking-tight">
+                                                                {formatCompact(estimatedShares)}
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">Cost</span>
+                                                            <span className="text-base font-bold text-[#10B981] font-mono">
+                                                                ${(parseFloat(betAmount || '0') * solPrice).toFixed(2)}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            )}
+
+                                            {/* SELL MODE SUMMARY */}
+                                            {tradeMode === 'SELL' && (
+                                                <>
+                                                    <div className="flex justify-between items-center text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em]">
+                                                        <span>Exit Price</span>
+                                                        <span className="font-mono text-xs text-gray-300">
+                                                            {currentPriceForSide.toFixed(1)}%
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex justify-between items-end border-t border-white/10 pt-5 mt-4">
+                                                        <div>
+                                                            <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">Shares to Sell</span>
+                                                            <span className="text-4xl font-extralight text-white leading-none tracking-tight">
+                                                                {(() => {
+                                                                    const sharesOwned = isMultiOutcome
+                                                                        ? (myShares[marketOutcomes.findIndex(o => o.id === selectedOutcomeId)] || 0)
+                                                                        : (selectedSide === 'YES' ? (myShares[0] || 0) : (myShares[1] || 0));
+                                                                    const price = currentPriceForSide / 100;
+
+                                                                    if (isMaxSell) return formatCompact(sharesOwned);
+                                                                    if (!betAmount || price <= 0) return '0';
+
+                                                                    const shares = parseCompactNumber(betAmount) / price;
+                                                                    const capped = Math.min(shares, sharesOwned);
+                                                                    return formatCompact(capped);
+                                                                })()}
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">You Get</span>
+                                                            <span className="text-xl font-bold text-[#10B981] font-mono">
+                                                                ◎{(() => {
+                                                                    // SELL LOGIC DISPLAY
+                                                                    // Use same safe logic as handleTrade
+                                                                    const spotPrice = getSpotPrice(estimatedSupply);
+                                                                    const safePrice = spotPrice > 0 ? spotPrice : 0.0000001;
+                                                                    // If Max Sell, use sharesOwned directly
+                                                                    // If input amount is SOL, we reverse it? 
+                                                                    // Wait, the input is SOL value user wants to extract?
+                                                                    // OR is the input always SOL? 
+                                                                    // "You Receive (Est)" -> 0.9405 SOL.
+                                                                    // So betAmount IS SOL.
+                                                                    // So "You Get" should be betAmount - fee?
+
+                                                                    return (parseFloat(betAmount || '0') * 0.99).toFixed(4);
+                                                                })()} SOL
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+
+
+
+
+
+
+                                        {/* ACTION BUTTON */}
+                                        <button
+                                            onClick={handleTrade}
+                                            disabled={isPending || isSuccess}
+                                            className={`w-full py-6 rounded-[2rem] font-bold text-lg uppercase tracking-[0.25em] shadow-2xl transition-all duration-300 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden group mt-6 ${isSuccess ? 'bg-gradient-to-r from-[#10B981] to-[#059669] text-black' :
+                                                tradeMode === 'BUY' ? 'bg-[#10B981] text-white hover:shadow-[#10B981]/50 hover:shadow-2xl hover:scale-[1.02]' : 'bg-gradient-to-r from-[#EF4444] to-[#DC2626] text-white hover:shadow-[#EF4444]/50 hover:shadow-2xl hover:scale-[1.02]'
+                                                }`}
+                                        >
+                                            {isPending ? (
+                                                <div className="flex items-center justify-center gap-2">
+                                                    <Loader2 className="animate-spin" /> Processing...
+                                                </div>
+                                            ) : isSuccess ? (
+                                                <div className="flex items-center justify-center gap-2">
+                                                    <CheckCircle2 /> <span className="text-lg">Success</span>
+                                                </div>
+                                            ) : (
+                                                <span>
+                                                    {tradeMode === 'BUY'
+                                                        ? `Buy ${selectedSide === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO')}`
+                                                        : `Sell ${selectedSide === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO')}`}
+                                                </span>
+                                            )}
+                                        </button>
+
+                                        {/* SUCCESS BUBBLE - Shows after successful trade */}
+                                        {tradeSuccessInfo && (
+                                            <div className="mt-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                                <div className="bg-gradient-to-r from-emerald-500/20 to-emerald-600/10 border-2 border-emerald-500/40 rounded-[1.5rem] p-4 text-center shadow-xl shadow-emerald-500/10">
+                                                    <p className="text-emerald-400 font-bold text-sm">
+                                                        ✓ Successfully purchased {tradeSuccessInfo.shares.toFixed(2)} {tradeSuccessInfo.side} shares
+                                                    </p>
+                                                    {tradeSuccessInfo.txSignature && (
+                                                        <a
+                                                            href={`https://solscan.io/tx/${tradeSuccessInfo.txSignature}`}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-xs text-emerald-500/70 hover:text-emerald-400 underline underline-offset-2 mt-2 inline-block transition-all hover:scale-105"
+                                                        >
+                                                            View on Solscan →
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Terms of Use Link */}
+                                        <div className="mt-4 text-center">
+                                            <p className="text-[10px] text-gray-500">
+                                                By trading, you agree to the{' '}
+                                                <Link href="/legal" className="text-[#F492B7] hover:underline hover:text-white transition-colors">
+                                                    Terms of Use
+                                                </Link>
+                                            </p>
+                                        </div>
+                                    </div> {/* End of p-4 content wrapper */}
+                                </div> {/* End of inner container */}
+                            </div> {/* End of glass panel */}
+                        </div> {/* End of scale wrapper */}
+                    </div> {/* End of fixed sidebar */}
 
                     {/* PURCHASE BUBBLES - Fixed position notifications */}
                     <div className="fixed top-24 right-6 z-50 flex flex-col gap-2 pointer-events-none">
@@ -2597,61 +2684,24 @@ export default function Page() {
                     }
 
                     {/* Djinn Toast */}
-                </div>
-            </div> {/* End of Scaled Wrapper */}
-        </div> {/* End of RIGHT COLUMN */}
 
-        <DjinnToast
-            isVisible={djinnToast.isVisible}
-            onClose={() => setDjinnToast(prev => ({ ...prev, isVisible: false }))}
-            type={djinnToast.type}
-            title={djinnToast.title}
-            message={djinnToast.message}
-            actionLink={djinnToast.actionLink}
-            actionLabel={djinnToast.actionLabel}
-        />
-    {/* FLOATING HOLDINGS BUTTON (Bottom Right) */}
-    <AnimatePresence>
-        {/* Calculate Total Shares to decide if we show button */}
-        {(mounted && publicKey && myHoldingsFormatted.length > 0) && (
-            <>
-                <motion.button
-                    initial={{ scale: 0, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0, opacity: 0 }}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setShowHoldingsPanel(!showHoldingsPanel)}
-                    className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-full shadow-2xl transition-all border
-                            ${showHoldingsPanel
-                            ? 'bg-[#F492B7] text-black border-[#F492B7]'
-                            : 'bg-[#0E0E0E] text-[#F492B7] border-[#F492B7]/30 hover:border-[#F492B7]'}`}
-                >
-                    <span className="font-bold text-xs uppercase tracking-wider">
-                        {showHoldingsPanel ? 'Close' : 'My Bets'}
-                    </span>
-                    <div className="w-5 h-5 rounded-full bg-black/20 flex items-center justify-center">
-                        {showHoldingsPanel ? <X size={12} /> : <Wallet size={12} />}
-                    </div>
-                </motion.button>
 
-                {/* FLOATING PANEL POPOVER */}
-                {showHoldingsPanel && (
-                    <motion.div
-                        initial={{ y: 20, opacity: 0, scale: 0.9 }}
-                        animate={{ y: 0, opacity: 1, scale: 1 }}
-                        exit={{ y: 20, opacity: 0, scale: 0.9 }}
-                        className="fixed bottom-20 right-6 z-50 w-80 shadow-2xl"
-                    >
-                        <HoldingsPanel holdings={myHoldingsFormatted} />
-                    </motion.div>
-                )}
-            </>
-        )}
-    </AnimatePresence>
+                    <DjinnToast
+                        isVisible={djinnToast.isVisible}
+                        onClose={() => setDjinnToast(prev => ({ ...prev, isVisible: false }))}
+                        type={djinnToast.type}
+                        title={djinnToast.title}
+                        message={djinnToast.message}
+                        actionLink={djinnToast.actionLink}
+                        actionLabel={djinnToast.actionLabel}
+                    />
+                    {/* Floating Holdings Button Removed */}
+
                 </div >
             </div >
-            );
+        </div >
+
+    );
 }
 
 

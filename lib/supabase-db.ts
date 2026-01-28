@@ -192,6 +192,18 @@ export async function getMarketData(slug: string): Promise<MarketData | null> {
     return data;
 }
 
+export async function getAllMarketData(): Promise<MarketData[]> {
+    const { data, error } = await supabase
+        .from('market_data')
+        .select('*');
+
+    if (error) {
+        console.error('Error fetching all market data:', JSON.stringify(error, null, 2));
+        return [];
+    }
+    return data || [];
+}
+
 export async function updateMarketPrice(slug: string, newPrice: number, addVolume: number): Promise<boolean> {
     // Try to update existing
     const { data: existing } = await supabase
@@ -386,6 +398,17 @@ export function subscribeToMarketData(slug: string, callback: (payload: any) => 
             schema: 'public',
             table: 'market_data',
             filter: `slug=eq.${slug}`
+        }, callback)
+        .subscribe();
+}
+
+export function subscribeToAllMarketData(callback: (payload: any) => void) {
+    return supabase
+        .channel('all-market-data')
+        .on('postgres_changes', {
+            event: '*',
+            schema: 'public',
+            table: 'market_data'
         }, callback)
         .subscribe();
 }

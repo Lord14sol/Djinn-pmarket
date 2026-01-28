@@ -8,6 +8,7 @@ import * as supabaseDb from '@/lib/supabase-db';
 interface CommentsSectionProps {
     marketSlug: string;
     publicKey: string | null;
+    userProfile: { username: string; avatarUrl: string };
     marketOutcomes: any[]; // Passed from parent to determine colors
     myHeldPosition: string | null;
     myHeldAmount: string | null;

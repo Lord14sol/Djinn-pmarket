@@ -121,8 +121,8 @@ export default function GenesisPage() {
                     transition={{ duration: 1.2, ease: "easeOut" }}
                     className="mb-24 md:mb-48 flex flex-col items-center"
                 >
-                    <div className="flex items-center justify-center group gap-6 mb-4 px-2">
-                        <div className="relative w-28 h-28 md:w-36 md:h-36 transition-transform duration-500 hover:scale-105 animate-star-slow filter drop-shadow-[0_0_20px_rgba(255,255,255,0.2)]">
+                    <div className="flex items-center justify-center group gap-0 mb-4 px-2">
+                        <div className="relative w-28 h-28 md:w-36 md:h-36 transition-transform duration-500 hover:scale-105 animate-star-slow filter drop-shadow-[0_0_20px_rgba(255,255,255,0.2)] -mr-4">
                             <Image src="/djinn-logo.png?v=3" alt="Djinn Logo" fill className="object-contain" priority unoptimized />
                         </div>
                         <span className="text-6xl md:text-7xl text-white mt-1 drop-shadow-[0_0_15px_rgba(255,255,255,0.1)]" style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}>

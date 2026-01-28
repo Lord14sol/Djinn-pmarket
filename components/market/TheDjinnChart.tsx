@@ -274,9 +274,9 @@ export default function TheDjinnChart({
     const lastPoint = filteredLineData.length ? filteredLineData[filteredLineData.length - 1] : null;
 
     return (
-        <div className="flex flex-col w-full h-full bg-[#020202] rounded-3xl border border-white/5 relative overflow-hidden shadow-2xl">
+        <div className="flex flex-col w-full h-full bg-transparent rounded-3xl border border-white/5 relative overflow-hidden">
             {/* TOP BAR */}
-            <div className="flex flex-col gap-2 p-4 px-6 border-b border-white/5 z-20 bg-[#020202]/80 backdrop-blur-md">
+            <div className="flex flex-col gap-2 p-4 px-6 border-b border-white/5 z-20 bg-transparent backdrop-blur-md">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         {/* MODE */}
@@ -330,7 +330,7 @@ export default function TheDjinnChart({
             </div>
 
             {/* CHART */}
-            <div className="flex-1 w-full bg-[#020202] relative min-h-[350px]">
+            <div className="flex-1 w-full bg-transparent relative min-h-[350px]">
                 {mode === 'MARKET' ? (
                     <div className="w-full h-[350px] relative">
                         <ResponsiveContainer width="100%" height="100%">
@@ -400,7 +400,7 @@ export default function TheDjinnChart({
                                     />
                                 )}
                                 {/* GRID ON TOP FOR VISIBILITY - SOLID LINES */}
-                                <CartesianGrid vertical={false} stroke="#ffffff" strokeOpacity={0.6} />
+                                <CartesianGrid vertical={false} stroke="#ffffff" strokeOpacity={0.15} />
                             </AreaChart>
                         </ResponsiveContainer>
                         <TradeBubblesOverlay bubbles={bubbles} />
@@ -411,7 +411,7 @@ export default function TheDjinnChart({
             </div>
 
             {/* TIMEFRAMES */}
-            <div className="flex items-center gap-1 border-t border-white/5 bg-[#020202]/50 px-2 min-h-[44px]">
+            <div className="flex items-center gap-1 border-t border-white/5 bg-transparent px-2 min-h-[44px]">
                 <button
                     onClick={() => setShowMicros(!showMicros)}
                     className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 border-r border-white/5 mr-1 h-full
@@ -441,8 +441,8 @@ export default function TheDjinnChart({
                 </div>
             </div>
 
-            {/* BG WATERMARK */}
-            <div className="absolute top-[80px] left-8 pointer-events-none opacity-20 z-0">
+            {/* BG WATERMARK - Faded further to not compete with lines */}
+            <div className="absolute top-[80px] left-8 pointer-events-none opacity-5 z-0">
                 <h1 className="text-6xl font-serif font-medium text-white leading-none tracking-tight mix-blend-overlay">Djinn</h1>
             </div>
         </div>
