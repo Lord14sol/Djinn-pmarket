@@ -7,10 +7,12 @@ import { useRouter } from 'next/navigation';
 import { formatCompact, parseCompactNumber, getOutcomeValue, cn } from '@/lib/utils';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
-import { Clock, DollarSign, Wallet, Activity, Users, CheckCircle2, AlertCircle, Loader2, Edit2, ExternalLink, Share2, Scale, MessageCircle, Star, X } from 'lucide-react';
+import { Clock, DollarSign, Wallet, Activity, Users, CheckCircle2, AlertCircle, Loader2, Edit2, ExternalLink, Share2, Scale, MessageCircle, Star, X, Bot, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { useDjinnProtocol } from '@/hooks/useDjinnProtocol';
 import { simulateBuy, simulateSell, estimatePayoutInternal, CURVE_CONSTANT, VIRTUAL_OFFSET, getSpotPrice, getSupplyFromPrice, calculateImpliedProbability, getIgnitionStatus, getIgnitionProgress } from '@/lib/core-amm';
+import { AnimatedNumber } from '@/components/AnimatedNumber';
+
 import { AnimatePresence, motion } from 'framer-motion';
 import { useMarketData } from '@/hooks/useMarketData';
 
@@ -181,7 +183,8 @@ export default function Page() {
         ignitionProgress,
         ignitionStatus,
         spotYes,
-        spotNo
+        spotNo,
+
     } = useMemo(() => {
         console.log("📊 Recalculating MCAP Metrics. MarketAccount:", marketAccount ? "Present" : "Null", "LivePrice:", livePrice);
         let sYes = 0; let sNo = 0;
@@ -195,19 +198,13 @@ export default function Page() {
             sYes = Number(marketAccount.yes_supply) / 1e9;
             sNo = Number(marketAccount.no_supply) / 1e9;
         } else {
-            // Fallback: Infer supply from price ONLY for demo local markets
-            const p = livePrice ?? 50;
-            const impliedProb = p / 100;
-
-            // FIX: Do NOT map probability directly to 0.95 SOL (Phase 3).
-            // This causes "Mcap Explosion" when probability > 50%.
-            // Instead, assume we are in the early/linear phase for simulated markets.
-            // Max fallback price: 0.00005 SOL (Phase 2 start).
-            const approxPrice = 0.000001 + (impliedProb * 0.00005);
-
-            sYes = getSupplyFromPrice(approxPrice);
-            sNo = getSupplyFromPrice(0.000001 + ((1 - impliedProb) * 0.00005));
+            // No supply data found -> 0 Supply = 0 MCAP
+            sYes = 0;
+            sNo = 0;
         }
+
+        // DEBUG: Trace Supply for MCAP
+        // console.log(`🔍 MCAP Calc Debug: sYes=${sYes}, sNo=${sNo}, onChainSupplies=${JSON.stringify(marketAccount?.outcome_supplies)}`);
 
         // MCAP = Supply * Price * SOL_Price (Market Cap)
         // This represents the total value of all shares in circulation if sold at current price
@@ -238,6 +235,8 @@ export default function Page() {
         };
     }, [marketAccount, livePrice, onChainData]);
 
+
+
     // Reactive Market Outcomes (Independent Pricing Logic)
     const marketOutcomes = useMemo(() => {
         let base: Outcome[] = [];
@@ -266,13 +265,21 @@ export default function Page() {
                 // This is calculated later or we can approximate here if needed.
                 // However, for Djinn Mode (Price), we strictly use 'spotPrice * 100' or raw price.
 
+                // Calculate Independent Price (Memecoin Style)
+                const spotPrice = getSpotPrice(supply);
+
+                // Calculate Independent MCAP (Supply * Price)
+                const mcapSOL = supply * spotPrice;
+
                 return {
                     id: `${slug}-${idx}`,
                     title: title,
-                    volume: '-', // TODO: Per-outcome volume
-                    yesPrice: spotPrice * 100, // Price in "Cents" (0-100 scale) for UI consistency
+                    volume: '-',
+                    yesPrice: spotPrice * 100,
                     noPrice: 100 - (spotPrice * 100),
-                    chance: 0 // Will be normalized below
+                    chance: 0,
+                    mcapSOL: mcapSOL, // ✅ Added independent MCAP
+                    supply: supply // ✅ Expose raw supply
                 };
             });
 
@@ -343,6 +350,11 @@ export default function Page() {
     // User Data
     const [solBalance, setSolBalance] = useState<number>(0);
     const [vaultBalanceSol, setVaultBalanceSol] = useState<number>(0); // On-chain vault balance for Prize Pool
+
+    const totalPoolSol = useMemo(() => {
+        return vaultBalanceSol || (marketAccount?.global_vault ? (Number(marketAccount.global_vault) / LAMPORTS_PER_SOL) : 0);
+    }, [vaultBalanceSol, marketAccount?.global_vault]);
+
     const [myShares, setMyShares] = useState<Record<number, number>>({});
     // holders and activityList are now from SWR
     const [userProfile, setUserProfile] = useState({ username: '', avatarUrl: '' });
@@ -398,7 +410,7 @@ export default function Page() {
     };
 
     // Derived
-    const isMultiOutcome = (MULTI_OUTCOMES[slug] || []).length > 0;
+    const isMultiOutcome = (MULTI_OUTCOMES[slug] || []).length > 0 || ((marketAccount?.options?.length || 0) > 2);
     const staticMarketInfo = marketDisplayData[slug] || {
         title: slug ? slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : 'Welcome to Djinn',
         icon: '🧊',
@@ -456,7 +468,7 @@ export default function Page() {
         return marketOutcomes.map((outcome, idx) => ({
             outcomeName: outcome.title,
             shares: myShares[idx] || 0,
-            color: getOutcomeColor(outcome.title)
+            color: getOutcomeColor(outcome.title, idx)
         })).filter(h => h.shares > 0.001);
     }, [marketOutcomes, myShares]);
 
@@ -597,75 +609,7 @@ export default function Page() {
         }
     }, [slug, marketAccount?.outcome_supplies]); // Re-run when supplies load to fix "Dark Chart"
 
-    // --- LIVE TICKER ---
-    // Simulates "Time Passing" and micro-movements for the chart
-    useEffect(() => {
-        const interval = setInterval(() => {
-            setHistoryState(prev => {
-                const now = Math.floor(Date.now() / 1000);
-                const newCandles = { ...prev.candles };
-                const newProbPoint: any = { time: now, dateStr: new Date(now * 1000).toLocaleTimeString() };
-
-                // ✅ HELPER: Obtener Supply en tiempo real (case-insensitive)
-                const getLiveSupply = (title: string): number => {
-                    return getOutcomeValue(outcomeSuppliesMap, title, 0);
-                };
-
-                // ✅ HELPER: Calcular probabilidad normalizada
-                const getLiveProb = (title: string, defaultProb: number) => {
-                    if (outcomeSuppliesMap && Object.keys(outcomeSuppliesMap).length > 0) {
-                        const VIRTUAL_FLOOR = 15_000_000; // Must match core-amm.ts
-                        let totalAdjusted = 0;
-                        const adjustedSupplies: Record<string, number> = {};
-
-                        marketOutcomes.forEach(o => {
-                            const raw = getLiveSupply(o.title);
-                            const adj = raw + VIRTUAL_FLOOR;
-                            adjustedSupplies[o.title] = adj;
-                            totalAdjusted += adj;
-                        });
-
-                        if (totalAdjusted > 0) {
-                            return (adjustedSupplies[title] / totalAdjusted) * 100;
-                        }
-                    }
-                    return defaultProb <= 1 ? defaultProb * 100 : defaultProb;
-                };
-
-                marketOutcomes.forEach((o) => {
-                    const prob = getLiveProb(o.title, o.chance);
-                    newProbPoint[o.title] = prob;
-
-                    // ✅ NUEVA LÓGICA: Convertir Supply → Precio SOL (no usar probabilidad)
-                    const supply = getLiveSupply(o.title);
-                    const currentPriceSOL = getSpotPrice(supply); // ← USAR BONDING CURVE
-
-                    const lastCandles = newCandles[o.title] || [];
-                    const lastCandle = lastCandles[lastCandles.length - 1];
-
-                    // Continuidad: Open = Last Close
-                    const open = lastCandle ? lastCandle.close : currentPriceSOL;
-                    const close = currentPriceSOL;
-
-                    const candle = {
-                        time: now as any,
-                        open: open,
-                        high: Math.max(open, close),
-                        low: Math.min(open, close),
-                        close: close  // ✅ AHORA es precio SOL correcto
-                    };
-
-                    if (!newCandles[o.title]) newCandles[o.title] = [];
-                    newCandles[o.title] = [...newCandles[o.title], candle].slice(-5000);
-                });
-
-                const newProbHistory = [...prev.probability, newProbPoint].slice(-5000);
-                return { ...prev, probability: newProbHistory, candles: newCandles };
-            });
-        }, 1000);
-
-        return () => clearInterval(interval);
-    }, [marketOutcomes, outcomeSuppliesMap]);
+    // --- LIVE TICKER REMOVED (Redundant with ProbabilityChart internal sync) ---
 
 
 
@@ -712,11 +656,11 @@ export default function Page() {
         }
     }, [marketOutcomes, selectedOutcomeId]);
 
-    // Initial Load
     useEffect(() => {
         // SOL price is now managed by PriceProvider global context
         const savedProfile = localStorage.getItem('djinn_user_profile');
         if (savedProfile) setUserProfile(JSON.parse(savedProfile));
+
         if (publicKey) {
             supabaseDb.getProfile(publicKey.toBase58()).then(p => {
                 if (p) {
@@ -726,6 +670,20 @@ export default function Page() {
                     });
                 }
             });
+        }
+    }, [publicKey]);
+
+    // ✅ ACCOUNT INDEPENDENCE: Clear state when wallet switches/disconnects
+    useEffect(() => {
+        if (!publicKey) {
+            setMyShares({});
+            setUserBets([]);
+            setSolBalance(0);
+            setUserProfile({ username: '', avatarUrl: '' });
+        } else {
+            // Force refresh when key changes
+            refreshAll();
+            loadOnChainData();
         }
     }, [publicKey]);
 
@@ -1197,12 +1155,13 @@ export default function Page() {
             // 3. Log Activity (Non-blocking)
             try {
                 const profile = await supabaseDb.getProfile(publicKey.toBase58()).catch(() => null);
+                const activityAction = isMultiOutcome ? (selectedOutcomeName || 'YES') : selectedSide;
                 const activity = {
                     wallet_address: publicKey.toBase58(),
                     username: profile?.username || userProfile.username,
                     avatar_url: profile?.avatar_url || userProfile.avatarUrl,
-                    action: selectedSide,
-                    order_type: 'BUY',
+                    action: activityAction,
+                    order_type: tradeMode,
                     amount: usdValueInTrading,
                     sol_amount: amountNum,
                     shares: sim.sharesReceived,
@@ -1215,10 +1174,11 @@ export default function Page() {
                 mutateActivity((current: any[] | undefined) => [activity, ...(current || [])], false);
 
                 // 4. Create/Update Bet
+                const dbSide = isMultiOutcome ? (selectedOutcomeName || 'YES') : selectedSide;
                 await supabaseDb.createBet({
                     market_slug: effectiveSlug,
                     wallet_address: publicKey.toBase58(),
-                    side: selectedSide,
+                    side: dbSide,
                     amount: usdValueInTrading,
                     sol_amount: amountNum,
                     shares: sim.sharesReceived,
@@ -1251,8 +1211,10 @@ export default function Page() {
             // 4. Update Last Trade Event (for Chart Bubbles)
             setLastTradeEvent({
                 id: Date.now().toString(),
-                amount: amountNum, // Use amountNum for SOL value
-                side: selectedSide
+                amount: amountNum,
+                side: selectedSide,
+                title: isMultiOutcome ? selectedOutcomeName : (selectedSide === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO')),
+                color: getOutcomeColor(selectedOutcomeName || (selectedSide === 'YES' ? 'YES' : 'NO'), outcomeIndex)
             });
 
             // 5. Optimistic SWR Update to prevent "Reversion" to 50%
@@ -1841,10 +1803,11 @@ export default function Page() {
                 await supabaseDb.updateMarketPrice(effectiveSlug, newPrice, -usdValue);
 
                 // 2b. Reduce Bet Position in DB (Wait for this!)
+                const dbSide = isMultiOutcome ? (selectedOutcomeName || 'YES') : selectedSide;
                 await supabaseDb.reduceBetPosition(
                     publicKey.toBase58(),
                     effectiveSlug,
-                    selectedSide,
+                    dbSide,
                     finalSharesToSell
                 );
 
@@ -1853,12 +1816,13 @@ export default function Page() {
                 mutateHolders(updatedHolders, false);
 
                 // 3. Log Activity
-                const profile = await supabaseDb.getProfile(publicKey.toBase58());
+                const profile = await supabaseDb.getProfile(publicKey.toBase58()).catch(() => null);
+                const activityAction = isMultiOutcome ? (selectedOutcomeName || 'YES') : selectedSide;
                 const sellActivity = {
                     wallet_address: publicKey.toBase58(),
                     username: profile?.username || userProfile.username,
                     avatar_url: profile?.avatar_url || userProfile.avatarUrl,
-                    action: selectedSide,
+                    action: activityAction,
                     order_type: 'SELL',
                     amount: usdValue,
                     sol_amount: estimatedSolReturn,
@@ -1988,7 +1952,7 @@ export default function Page() {
 
 
                         {/* HEADER (Moved Inside Left Column) */}
-                        <div className="flex items-center gap-6 mb-8 mt-1 relative">
+                        <div className="flex items-center gap-6 mb-4 mt-1 relative">
                             {/* Action Row (Top Right Corner) */}
                             <div className="absolute top-0 right-0 flex items-center gap-2 z-10">
                                 {/* Save (Star) Button */}
@@ -2027,75 +1991,96 @@ export default function Page() {
                                             {staticMarketInfo.icon}
                                         </div>}
                                 </div>
-                                <div className="flex-1 flex flex-col justify-start overflow-visible pt-20">
-                                    <h1 className="text-4xl md:text-5xl font-black text-white tracking-tighter mb-4 leading-none whitespace-nowrap">
+                                <div className="flex-1 flex flex-col justify-between h-48 py-1 mt-12">
+                                    <h1 className="text-4xl lg:text-[2.5rem] font-black text-white tracking-tighter leading-tight whitespace-normal max-w-[800px]">
                                         {(marketAccount?.title || staticMarketInfo.title)}
                                     </h1>
 
 
                                     {/* Creator Metadata - Clean Minimal Style */}
-                                    <div className="flex items-center gap-4 mt-16 mb-2">
-                                        {/* Creator Info (No border/bg) */}
+                                    <div className="flex items-start gap-12">
+                                        {/* Creator Info (No border/bg) - FIXED: Use marketAccount derived data */}
                                         <div
                                             className="flex items-center gap-2 cursor-pointer group"
-                                            onClick={() => creatorProfile?.username && (window.location.href = `/profile/${marketAccount?.creator_wallet || creatorProfile.username}`)}
+                                            onClick={() => marketAccount?.creator_wallet && (window.location.href = `/profile/${marketAccount.creator_username || marketAccount.creator_wallet}`)}
                                         >
                                             <div className="w-8 h-8 rounded-full overflow-hidden bg-zinc-800 shrink-0">
-                                                {creatorProfile?.avatar ? (
-                                                    <img src={creatorProfile.avatar} className="w-full h-full object-cover" alt="avatar" />
+                                                {marketAccount?.creator_avatar ? (
+                                                    <img
+                                                        src={marketAccount.creator_avatar}
+                                                        className="w-full h-full object-cover"
+                                                        alt="avatar"
+                                                        onError={(e) => {
+                                                            e.currentTarget.style.display = 'none';
+                                                            if (e.currentTarget.parentElement) {
+                                                                e.currentTarget.parentElement.innerText = '👤';
+                                                                e.currentTarget.parentElement.classList.add('flex', 'items-center', 'justify-center', 'text-gray-500');
+                                                            }
+                                                        }}
+                                                    />
                                                 ) : (
                                                     <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-500 font-bold bg-[#1A1A1A]">
-                                                        {creatorProfile?.username ? creatorProfile.username.charAt(0).toUpperCase() : '👤'}
+                                                        {marketAccount?.creator_username ? marketAccount.creator_username.charAt(0).toUpperCase() : '👤'}
                                                     </div>
                                                 )}
                                             </div>
                                             <span className="text-sm font-bold text-gray-400 group-hover:text-gray-200 transition-colors">
-                                                by <span className="text-[#F492B7] font-black">{creatorProfile?.username || 'Djinn Creator'}</span>
+                                                by <span className="text-[#F492B7] font-black">{marketAccount?.creator_username || 'Djinn Creator'}</span>
                                             </span>
                                         </div>
                                     </div>
-                                    {/* CHART CARD */}
-                                </div>
-                            </div>
-                            {/* RIGHT: Stats Panel (Pyramid Layout) */}
-                            <div className="shrink-0 flex flex-col items-center gap-2 mr-24 mt-28">
-                                {/* TOTAL POOL - TOP (Larger) */}
-                                <div className="w-full flex flex-col items-center px-10 py-5 rounded-[2.5rem] bg-zinc-950/80 backdrop-blur-md border border-[#F492B7]/30 shadow-2xl shadow-[#F492B7]/10 ring-1 ring-white/10 relative overflow-hidden group/pool">
-                                    <div className="absolute inset-0 bg-gradient-to-br from-[#F492B7]/10 via-transparent to-transparent opacity-0 group-hover/pool:opacity-100 transition-opacity duration-700" />
-                                    <span className="text-[10px] font-black uppercase tracking-[0.4em] text-[#F492B7]/60 mb-1">
-                                        Total Pool
-                                    </span>
-                                    <span className="text-4xl md:text-5xl font-black text-white drop-shadow-[0_0_15px_rgba(244,146,183,0.4)] tracking-tighter italic -skew-x-6">
-                                        {(vaultBalanceSol || (marketAccount?.global_vault ? (Number(marketAccount.global_vault) / LAMPORTS_PER_SOL) : 0)).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} <span className="text-[#F492B7]">SOL</span>
-                                    </span>
                                 </div>
 
-                                {/* MCAPs - BOTTOM ROW */}
-                                <div className="flex items-center gap-3 w-full">
-                                    {/* YES MCAP */}
-                                    <div className="flex-1 flex flex-col items-center px-5 py-3 rounded-2xl bg-zinc-900/60 backdrop-blur-sm border border-[#10B981]/20 shadow-lg">
-                                        <span className="text-[9px] font-black uppercase tracking-widest text-[#10B981]/70 mb-0.5">
-                                            {marketOutcomes[0]?.title || 'YES'} MCAP
-                                        </span>
-                                        <span className="text-lg font-bold text-white tabular-nums">
-                                            {formatCompact(outcomeSuppliesMap[marketOutcomes[0]?.title || 'YES'] || 0)}
-                                        </span>
-                                    </div>
 
-                                    {/* NO MCAP */}
-                                    <div className="flex-1 flex flex-col items-center px-5 py-3 rounded-2xl bg-zinc-900/60 backdrop-blur-sm border border-[#EF4444]/20 shadow-lg">
-                                        <span className="text-[9px] font-black uppercase tracking-widest text-[#EF4444]/70 mb-0.5">
-                                            {marketOutcomes[1]?.title || 'NO'} MCAP
-                                        </span>
-                                        <span className="text-lg font-bold text-white tabular-nums">
-                                            {formatCompact(outcomeSuppliesMap[marketOutcomes[1]?.title || 'NO'] || 0)}
-                                        </span>
-                                    </div>
-                                </div>
                             </div>
                         </div>
 
-                        <div className="bg-transparent rounded-2xl border border-white/5 overflow-hidden min-h-[500px]">
+                        {/* MCAPS - DYNAMIC GRID (Premium 'Agent Skills' UI) */}
+                        <div className={`grid gap-4 mb-4 ${marketOutcomes.length > 2 ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-2'}`}>
+                            {marketOutcomes.map((outcome, idx) => {
+                                const color = getOutcomeColor(outcome.title, idx);
+                                const mcapUSD = (outcome.mcapSOL || 0) * (solPrice || 0);
+                                return (
+                                    <div
+                                        key={outcome.title || idx}
+                                        className="relative overflow-hidden flex flex-col items-center justify-center px-4 py-4 rounded-2xl bg-[#0B0E14]/60 backdrop-blur-xl border border-white/10 group transition-all hover:bg-[#0B0E14]/80"
+                                        style={{
+                                            boxShadow: `0 0 20px ${color}0D, inset 0 0 10px ${color}05`
+                                        }}
+                                    >
+                                        {/* Relief inner glow/border inspired by 'Agent Skills' */}
+                                        <div className="absolute inset-0 rounded-2xl border border-white/5 pointer-events-none" />
+                                        <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+
+                                        {/* Dynamic outcome aura */}
+                                        <div className="absolute -bottom-10 -right-10 w-20 h-20 blur-3xl rounded-full opacity-10 pointer-events-none" style={{ backgroundColor: color }} />
+
+                                        <span
+                                            className="text-[10px] font-black uppercase tracking-[0.2em] mb-1.5 opacity-60 flex items-center gap-1.5"
+                                        >
+                                            <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
+                                            {outcome.title} MCAP
+                                        </span>
+                                        <div className="flex flex-col items-center">
+                                            <span
+                                                className="text-2xl font-black text-white tabular-nums tracking-tight leading-none mb-1"
+                                                style={{ filter: `drop-shadow(0 0 8px ${color}44)` }}
+                                            >
+                                                ${formatCompact(mcapUSD)}
+                                            </span>
+                                            <span className="text-[10px] font-bold text-gray-500 tabular-nums uppercase tracking-widest">
+                                                {formatCompact(outcome.mcapSOL || 0)} SOL
+                                            </span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+
+
+                        <div className="bg-transparent rounded-2xl border border-white/5 overflow-hidden min-h-[850px] relative">
+
 
 
 
@@ -2107,10 +2092,10 @@ export default function Page() {
                                 volume={marketAccount?.volumeTotal ? formatCompact(Number(marketAccount.volumeTotal) / 1e9) + " SOL" : (marketAccount?.volume_usd || "$0")}
                                 resolutionDate={marketAccount?.market_resolution_date ? new Date(marketAccount.market_resolution_date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : (marketAccount?.end_date || "Unknown")}
                                 tradeEvent={lastTradeEvent ? {
-                                    id: lastTradeEvent.id, // Use STABLE ID from state
-                                    outcome: lastTradeEvent.side === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO'),
+                                    id: lastTradeEvent.id,
+                                    outcome: lastTradeEvent.title || lastTradeEvent.side,
                                     amount: lastTradeEvent.amount,
-                                    color: lastTradeEvent.side === 'YES' ? '#10B981' : '#EF4444' // Provide fallback colors if needed
+                                    color: lastTradeEvent.color || (lastTradeEvent.side === 'YES' ? '#10B981' : '#EF4444')
                                 } : null}
                                 selectedOutcome={selectedOutcomeName || (selectedSide === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO'))}
                                 onOutcomeChange={(name: string) => {
@@ -2127,17 +2112,218 @@ export default function Page() {
                                 }}
                             />
 
-                            {/* HOLDINGS SECTION (Relocated Below Chart) */}
-                            <div className="px-6 pb-12 pt-6">
-                                <HoldingsSection
-                                    bets={userBets}
-                                    yesSupply={marketAccount?.outcome_supplies?.[0] ? Number(marketAccount.outcome_supplies[0]) / 1e9 : 0}
-                                    noSupply={marketAccount?.outcome_supplies?.[1] ? Number(marketAccount.outcome_supplies[1]) / 1e9 : 0}
-                                    marketOutcomes={marketOutcomes}
-                                />
-                            </div>
+                            {/* HOLDINGS SECTION REMOVED FROM HERE (Relocated Below) */}
 
                             {/* Multi-outcome Selector (if applicable) */}
+                            {isMultiOutcome && (
+                                <div className="px-6 mt-4 mb-4">
+                                    <div className="pt-6 border-t border-white/10">
+                                        <h3 className="text-sm font-black uppercase text-gray-500 mb-4 tracking-wider">Select an outcome to trade</h3>
+                                        <OutcomeList
+                                            outcomes={marketOutcomes}
+                                            selectedId={selectedOutcomeId}
+                                            onSelect={setSelectedOutcomeId}
+                                            onBuyClick={handleOutcomeBuyClick}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* CERBERUS AI - Clickable Panel (Relocated Here) */}
+                            <div className="px-6 mt-4 mb-2 group cursor-pointer" onClick={() => console.log('Cerberus AI clicked')}>
+                                <div className="relative overflow-hidden rounded-xl border border-white/10 bg-white/5 p-3 flex items-center justify-between hover:bg-white/10 transition-colors">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
+                                            <Bot size={18} className="text-blue-400" />
+                                        </div>
+                                        <span className="text-sm font-medium text-white group-hover:text-blue-200 transition-colors">
+                                            Click <span className="font-bold text-blue-400">Cerberus AI</span> to find info about the market
+                                        </span>
+                                    </div>
+                                    <ChevronRight size={16} className="text-white/30 group-hover:text-white/60" />
+                                </div>
+                            </div>
+
+                            {/* RESOLUTION CRITERIA (Relocated Here) */}
+                            <div className="px-6 mb-6">
+                                <div className="bg-[#0E0E0E] rounded-xl border border-white/5 p-6">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="text-sm font-bold text-white uppercase tracking-wider">Resolution Criteria</h3>
+                                        {/* Oracle Source Badge */}
+                                        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/5">
+                                            <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest mr-1">Oracle</span>
+                                            {marketAccount?.resolution_source ? (
+                                                <a href={marketAccount.resolution_source} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[#10B981] hover:underline font-mono text-xs">
+                                                    <span>{marketAccount.resolution_source.slice(0, 15)}...</span> <ExternalLink size={10} />
+                                                </a>
+                                            ) : (
+                                                <div className="flex items-center gap-1 text-white">
+                                                    <img src="/pyth-logo.png" className="w-3 h-3 rounded-full" onError={(e) => e.currentTarget.style.display = 'none'} />
+                                                    <span className="font-bold text-xs">Pyth</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <p className="text-gray-400 text-sm leading-relaxed mb-0 font-light">
+                                        This market will resolve to "YES" if the specific outcome defined in the title occurs by the resolution date.
+                                        The resolution is decentralized and verified by the oracle.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* TABS (Relocated UP - as requested) */}
+                            <div className="px-6 mb-8 mt-2">
+                                {/* ✅ HOLDINGS - ALWAYS VISIBLE ABOVE TABS */}
+                                <HoldingsSection
+                                    bets={userBets}
+                                    outcomeSupplies={marketOutcomes.map(o => o.supply)}
+                                    marketOutcomes={marketOutcomes}
+                                />
+
+                                <div className="flex items-center gap-6 mb-6 border-b border-white/5 pb-2">
+                                    <TabButton label="Activity" icon={<Activity size={14} />} active={bottomTab === 'ACTIVITY'} onClick={() => setBottomTab('ACTIVITY')} />
+                                    <TabButton label="Comments" icon={<MessageCircle size={14} />} active={bottomTab === 'COMMENTS'} onClick={() => setBottomTab('COMMENTS')} />
+                                    <TabButton label="Top Holders" icon={<Users size={14} />} active={bottomTab === 'HOLDERS'} onClick={() => setBottomTab('HOLDERS')} />
+                                </div>
+
+                                {/* TAB CONTENT */}
+                                {bottomTab === 'COMMENTS' && (
+                                    <CommentsSection
+                                        marketSlug={effectiveSlug}
+                                        publicKey={publicKey ? publicKey.toBase58() : null}
+                                        userProfile={userProfile}
+                                    />
+                                )}
+
+                                {bottomTab === 'ACTIVITY' && (
+                                    <div className="bg-[#0E0E0E] rounded-xl border border-white/5 overflow-hidden">
+                                        <div className="grid grid-cols-5 px-6 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500 border-b border-white/5">
+                                            <span className="col-span-1">Trader</span>
+                                            <span className="text-center col-span-1">Side</span>
+                                            <span className="text-center col-span-1">Shares</span>
+                                            <span className="text-right col-span-1">Value</span>
+                                            <span className="text-right col-span-1">Time</span>
+                                        </div>
+                                        <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
+                                            {activityList.length === 0 ? (
+                                                <div className="p-8 text-center text-gray-600 italic">No orders yet</div>
+                                            ) : (
+                                                activityList.map((act, i) => {
+                                                    const isBuy = act.order_type === 'BUY' || !act.order_type;
+                                                    const outcomeIdx = marketOutcomes.findIndex(o => o.title === act.action);
+                                                    const actionColor = getOutcomeColor(act.action, outcomeIdx === -1 ? (act.action === 'YES' ? 0 : 1) : outcomeIdx);
+
+                                                    return (
+                                                        <div key={i} className="grid grid-cols-5 items-center px-6 py-4 border-b border-white/5 hover:bg-white/5 transition-colors group">
+                                                            <div className="flex items-center gap-3 col-span-1">
+                                                                <div className="w-8 h-8 rounded-full bg-[#1A1A1A] flex items-center justify-center border border-white/10 overflow-hidden shrink-0">
+                                                                    {act.avatar_url ? <img src={act.avatar_url} className="w-full h-full object-cover" /> : <span className="text-sm">🧞</span>}
+                                                                </div>
+                                                                <div className="flex flex-col overflow-hidden">
+                                                                    <div className="flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity" onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        window.location.href = `/profile/${act.username || act.wallet_address}`;
+                                                                    }}>
+                                                                        <span className="text-xs font-bold text-white group-hover:text-[#F492B7] transition-colors font-mono truncate">
+                                                                            {act.username || `${act.wallet_address.slice(0, 4)}...`}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-center col-span-1">
+                                                                <span
+                                                                    className={`text-[9px] font-black uppercase px-2 py-1 rounded whitespace-nowrap`}
+                                                                    style={{
+                                                                        backgroundColor: `${actionColor}20`,
+                                                                        color: actionColor,
+                                                                        border: `1px solid ${actionColor}40`
+                                                                    }}
+                                                                >
+                                                                    {act.order_type || 'BUY'} {act.action}
+                                                                </span>
+                                                            </div>
+                                                            <div className="text-center col-span-1">
+                                                                <span className="text-xs font-mono text-gray-300">{act.shares?.toFixed(2) || '0.00'}</span>
+                                                            </div>
+                                                            <div className="text-right col-span-1">
+                                                                <div className="text-sm font-black text-white">${act.amount?.toFixed(2)}</div>
+                                                                <div className="text-[10px] font-mono text-gray-600">{act.sol_amount?.toFixed(3)} SOL</div>
+                                                            </div>
+                                                            <div className="text-right text-[10px] font-mono text-gray-500 col-span-1">
+                                                                {timeAgo(act.created_at)}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {bottomTab === 'HOLDERS' && (
+                                    <div className={`grid gap-12 ${marketOutcomes.length > 2 ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
+                                        {marketOutcomes.map((outcome, idx) => {
+                                            const title = outcome.title;
+                                            const color = getOutcomeColor(title, idx);
+                                            const outcomeHolders = holders
+                                                .filter(h => (h.positions?.[title] || 0) > 0.1)
+                                                .sort((a, b) => (b.positions?.[title] || 0) - (a.positions?.[title] || 0));
+
+                                            return (
+                                                <div key={title}>
+                                                    <div className="mb-4">
+                                                        <h3 className="text-sm font-bold text-white mb-2 uppercase tracking-wider" style={{ color: color }}>
+                                                            {title} Holders
+                                                        </h3>
+                                                        <div className="h-0.5 w-full bg-white/10" style={{ backgroundColor: `${color}20` }} />
+                                                    </div>
+                                                    <div className="space-y-0">
+                                                        {outcomeHolders.length === 0 ? (
+                                                            <div className="py-6 text-gray-500 text-sm italic">No holders</div>
+                                                        ) : (
+                                                            outcomeHolders.map((h: any, i: number) => {
+                                                                const isMe = publicKey && h.wallet_address === publicKey.toBase58();
+                                                                const shares = h.positions[title];
+                                                                return (
+                                                                    <div
+                                                                        key={i}
+                                                                        className={`flex items-center justify-between py-3 border-b border-white/5 group hover:bg-white/5 hover:px-2 rounded transition-all -mx-2 px-2 cursor-pointer ${isMe ? 'bg-white/5' : ''}`}
+                                                                        style={isMe ? { borderLeft: `2px solid ${color}` } : {}}
+                                                                        onClick={() => window.location.href = `/profile/${h.wallet_address}`}
+                                                                    >
+                                                                        <div className="flex items-center gap-3">
+                                                                            <div className="relative">
+                                                                                <div className="w-8 h-8 rounded-full bg-[#1A1A1A] overflow-hidden border border-white/10">
+                                                                                    {h.avatar ? <img src={h.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full opacity-80" style={{ background: `linear-gradient(135deg, ${color}, #000)` }} />}
+                                                                                </div>
+                                                                                <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold border border-[#0B0E14] ${i === 0 ? 'bg-gradient-to-br from-yellow-300 to-amber-500 text-black' : i === 1 ? 'bg-gradient-to-br from-gray-300 to-gray-400 text-black' : i === 2 ? 'bg-gradient-to-br from-orange-300 to-amber-700 text-white' : 'bg-gray-800 text-gray-400'}`}>
+                                                                                    {i + 1}
+                                                                                </div>
+                                                                            </div>
+                                                                            <div>
+                                                                                <div className="text-sm font-bold text-white group-hover:text-[#F492B7] transition-colors truncate max-w-[120px]">
+                                                                                    {h.name} {isMe && <span className="text-[9px] px-1 rounded ml-1 text-black" style={{ backgroundColor: color }}>YOU</span>}
+                                                                                </div>
+                                                                                <div className="text-xs font-medium font-mono flex items-center gap-1" style={{ color: color }}>
+                                                                                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
+                                                                                    {formatCompact(shares)} <span className="text-[10px] text-gray-500 uppercase">{title}</span>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* TABS (Relocated Inside Container) */}
                             {isMultiOutcome && (
                                 <div className="mt-6 pt-6 border-t border-white/10">
                                     <h3 className="text-sm font-black uppercase text-gray-500 mb-4 tracking-wider">Select an outcome to trade</h3>
@@ -2149,181 +2335,40 @@ export default function Page() {
                                     />
                                 </div>
                             )}
+
+                            {/* TABS (Relocated Inside Container) */}
+
                         </div>
 
 
 
 
-                        {/* RESOLUTION CRITERIA (Permanent Block) */}
-                        <div className="bg-[#0E0E0E] rounded-[2rem] border border-white/5 p-8">
-                            <h3 className="text-lg font-bold text-white mb-4">Resolution Criteria</h3>
-                            <p className="text-gray-400 leading-relaxed mb-6 font-light">
-                                This market will resolve to "YES" if the specific outcome defined in the title occurs by the resolution date.
-                                The resolution is decentralized and verified by the Pyth Network or designated oracle.
-                            </p>
-                            <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
-                                <span className="text-xs font-black uppercase text-gray-500 tracking-widest">Source Oracle</span>
-                                {marketAccount?.resolution_source ? (
-                                    <a href={marketAccount.resolution_source} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-[#10B981] hover:underline font-mono text-sm">
-                                        <span>{marketAccount.resolution_source}</span> <ExternalLink size={12} />
-                                    </a>
-                                ) : (
-                                    <div className="flex items-center gap-2 text-white">
-                                        <img src="/pyth-logo.png" className="w-4 h-4 rounded-full" onError={(e) => e.currentTarget.style.display = 'none'} />
-                                        <span className="font-bold">Pyth Network</span>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
+
+
+
 
                         {/* TABS (Activity, Opinions, Holders) */}
-                        <div>
-                            <div className="flex items-center gap-6 mb-6 border-b border-white/5 pb-0">
-                                <TabButton label="Activity" icon={<Activity size={14} />} active={bottomTab === 'ACTIVITY'} onClick={() => setBottomTab('ACTIVITY')} />
-                                <TabButton label="Comments" icon={<MessageCircle size={14} />} active={bottomTab === 'COMMENTS'} onClick={() => setBottomTab('COMMENTS')} />
-                                <TabButton label="Top Holders" icon={<Users size={14} />} active={bottomTab === 'HOLDERS'} onClick={() => setBottomTab('HOLDERS')} />
-                            </div>
-                        </div>
 
-                        {/* RESOLUTION TAB Content */}
-
-                        {bottomTab === 'COMMENTS' && (
-                            <CommentsSection
-                                marketSlug={effectiveSlug}
-                                publicKey={publicKey ? publicKey.toBase58() : null}
-                                userProfile={userProfile}
-                                marketOutcomes={marketOutcomes}
-                                myHeldPosition={myHeldSide}
-                                myHeldAmount={myHeldAmountStr}
-                            />
-                        )}
-
-                        {bottomTab === 'ACTIVITY' && (
-                            <div className="bg-[#0E0E0E] rounded-[2rem] border border-white/5 overflow-hidden">
-                                <div className="grid grid-cols-5 px-6 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500 border-b border-white/5">
-                                    <span className="col-span-1">Trader</span>
-                                    <span className="text-center col-span-1">Side</span>
-                                    <span className="text-center col-span-1">Shares</span>
-                                    <span className="text-right col-span-1">Value</span>
-                                    <span className="text-right col-span-1">Time</span>
-                                </div>
-                                <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
-                                    {activityList.length === 0 ? (
-                                        <div className="p-8 text-center text-gray-600 italic">No orders yet</div>
-                                    ) : (
-                                        activityList.map((act, i) => (
-                                            <div key={i} className="grid grid-cols-5 items-center px-6 py-4 border-b border-white/5 hover:bg-white/5 transition-colors group">
-                                                <div className="flex items-center gap-3 col-span-1">
-                                                    <div className="w-8 h-8 rounded-full bg-[#1A1A1A] flex items-center justify-center border border-white/10 overflow-hidden shrink-0">
-                                                        {act.avatar_url ? <img src={act.avatar_url} className="w-full h-full object-cover" /> : <span className="text-sm">🧞</span>}
-                                                    </div>
-                                                    <div className="flex flex-col overflow-hidden">
-                                                        <div className="flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity" onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            window.location.href = `/profile/${act.username || act.wallet_address}`;
-                                                        }}>
-                                                            <span className="text-xs font-bold text-white group-hover:text-[#F492B7] transition-colors font-mono truncate">
-                                                                {act.username || `${act.wallet_address.slice(0, 4)}...`}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div className="text-center col-span-1">
-                                                    <span className={`text-[10px] font-black uppercase px-2 py-1 rounded whitespace-nowrap ${(act.order_type === 'BUY' || !act.order_type) ? (act.action === 'YES' ? 'bg-[#10B981]/20 text-[#10B981]' : 'bg-red-500/20 text-red-500') : 'bg-white/10 text-gray-400'}`}>
-                                                        {act.order_type || 'BUY'} {act.action}
-                                                    </span>
-                                                </div>
-                                                <div className="text-center col-span-1">
-                                                    <span className="text-xs font-mono text-gray-300">{act.shares?.toFixed(2) || '0.00'}</span>
-                                                </div>
-                                                <div className="text-right col-span-1">
-                                                    <div className="text-sm font-black text-white">${act.amount?.toFixed(2)}</div>
-                                                    <div className="text-[10px] font-mono text-gray-600">{act.sol_amount?.toFixed(3)} SOL</div>
-                                                </div>
-                                                <div className="text-right text-[10px] font-mono text-gray-500 col-span-1">
-                                                    {timeAgo(act.created_at)}
-                                                </div>
-                                            </div>
-                                        ))
-                                    )}
-                                </div>
-                            </div>
-                        )}
-
-                        {bottomTab === 'HOLDERS' && (
-                            <div className={`grid gap-12 ${marketOutcomes.length > 2 ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
-                                {marketOutcomes.map((outcome) => {
-                                    const title = outcome.title;
-                                    const color = getOutcomeColor(title);
-
-                                    // Filter holders who have shares in this outcome
-                                    const outcomeHolders = holders
-                                        .filter(h => (h.positions?.[title] || 0) > 0.1)
-                                        .sort((a, b) => (b.positions?.[title] || 0) - (a.positions?.[title] || 0));
-
-                                    return (
-                                        <div key={title}>
-                                            <div className="mb-4">
-                                                <h3 className="text-sm font-bold text-white mb-2 uppercase tracking-wider" style={{ color: color }}>
-                                                    {title} Holders
-                                                </h3>
-                                                <div className="h-0.5 w-full bg-white/10" style={{ backgroundColor: `${color}20` }} />
-                                            </div>
-                                            <div className="space-y-0">
-                                                {outcomeHolders.length === 0 ? (
-                                                    <div className="py-6 text-gray-500 text-sm italic">No holders</div>
-                                                ) : (
-                                                    outcomeHolders.map((h: any, i: number) => {
-                                                        const isMe = publicKey && h.wallet_address === publicKey.toBase58();
-                                                        const shares = h.positions[title];
-
-                                                        return (
-                                                            <div
-                                                                key={i}
-                                                                className={`flex items-center justify-between py-3 border-b border-white/5 group hover:bg-white/5 hover:px-2 rounded transition-all -mx-2 px-2 cursor-pointer ${isMe ? 'bg-white/5' : ''}`}
-                                                                style={isMe ? { borderLeft: `2px solid ${color}` } : {}}
-                                                                onClick={() => window.location.href = `/profile/${h.wallet_address}`}
-                                                            >
-                                                                <div className="flex items-center gap-3">
-                                                                    <div className="relative">
-                                                                        <div className="w-8 h-8 rounded-full bg-[#1A1A1A] overflow-hidden border border-white/10">
-                                                                            {h.avatar ? <img src={h.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full opacity-80" style={{ background: `linear-gradient(135deg, ${color}, #000)` }} />}
-                                                                        </div>
-                                                                        {/* Rank Badge */}
-                                                                        <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold border border-[#0B0E14] 
-                                                                                ${i === 0 ? 'bg-gradient-to-br from-yellow-300 to-amber-500 text-black' :
-                                                                                i === 1 ? 'bg-gradient-to-br from-gray-300 to-gray-400 text-black' :
-                                                                                    i === 2 ? 'bg-gradient-to-br from-orange-300 to-amber-700 text-white' :
-                                                                                        'bg-gray-800 text-gray-400'}`}>
-                                                                            {i + 1}
-                                                                        </div>
-                                                                    </div>
-                                                                    <div>
-                                                                        <div className="text-sm font-bold text-white group-hover:text-[#F492B7] transition-colors truncate max-w-[120px]">
-                                                                            {h.name} {isMe && <span className="text-[9px] px-1 rounded ml-1 text-black" style={{ backgroundColor: color }}>YOU</span>}
-                                                                        </div>
-                                                                        <div className="text-xs font-medium font-mono flex items-center gap-1" style={{ color: color }}>
-                                                                            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
-                                                                            {formatCompact(shares)} <span className="text-[10px] text-gray-500 uppercase">{title}</span>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    })
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
 
                     </div> {/* End of LEFT COLUMN (col-span-8) */}
 
                     {/* RIGHT COLUMN: TRADING (Fixed Sidebar) - Glass Panel with Elevation */}
-                    <div className="hidden lg:block fixed right-4 xl:right-[calc((100vw-80rem)/2+1rem)] top-48 w-[360px] z-40 max-h-[calc(100vh-14rem)] overflow-visible scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                    <div className="hidden lg:block fixed right-8 xl:right-[8%] top-48 w-[360px] z-40 max-h-[calc(100vh-14rem)] overflow-visible scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
                         <div className="origin-top scale-[0.92]">
+                            {/* TOTAL POOL - ADDED TO SIDEBAR TOP */}
+                            <div className="mb-6 w-full flex flex-col items-center px-6 py-4 rounded-[1.5rem] bg-[#0E0E0E]/80 backdrop-blur-lg border border-[#F492B7]/30 shadow-2xl shadow-[#F492B7]/10 relative overflow-hidden group/pool">
+                                <span className="text-[10px] font-black uppercase tracking-[0.4em] text-[#F492B7]/60 mb-1">
+                                    Total Pool
+                                </span>
+                                <span className="text-4xl font-black text-white drop-shadow-[0_0_15px_rgba(244,146,183,0.4)] tracking-tighter italic -skew-x-6">
+                                    <AnimatedNumber
+                                        value={totalPoolSol}
+                                        decimals={2}
+                                        className="inline"
+                                    /> <span className="text-[#F492B7]">SOL</span>
+                                </span>
+                            </div>
+
                             {/* GLASS PANEL WITH ELEVATION */}
                             <div className="relative rounded-[24px] overflow-visible">
                                 {/* Elevation Shadow - Deep floating effect */}
@@ -2333,8 +2378,8 @@ export default function Page() {
                                 {/* Subtle border glow */}
                                 <div className="absolute -inset-[0.5px] rounded-[25px] bg-gradient-to-b from-white/25 via-white/10 to-white/5 pointer-events-none" />
 
-                                {/* Main glass body - Deep Dark Aesthetic */}
-                                <div className="relative bg-[#0B0E14]/40 backdrop-blur-2xl rounded-[24px] border border-white/10 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.05)] overflow-hidden">
+                                {/* Main glass body - Deep Dark Aesthetic with Relief */}
+                                <div className="relative bg-zinc-900/60 backdrop-blur-3xl rounded-[24px] border border-white/10 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8),inset_0_1px_0_rgba(255,255,255,0.1)] overflow-hidden">
 
                                     {/* Premium inner glow */}
                                     <div className="absolute inset-0 bg-gradient-to-tr from-[#F492B7]/5 via-transparent to-white/5 pointer-events-none" />

@@ -678,7 +678,7 @@ export async function createBet(bet: Omit<Bet, 'id' | 'payout' | 'claimed' | 'cr
     }
 }
 
-export async function reduceBetPosition(wallet: string, marketSlug: string, side: 'YES' | 'NO', sharesToRemove: number) {
+export async function reduceBetPosition(wallet: string, marketSlug: string, side: string, sharesToRemove: number) {
     // 1. Get ALL active bets (handling potential duplicates)
     const { data: existingBets, error: fetchError } = await supabase
         .from('bets')

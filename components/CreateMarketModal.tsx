@@ -45,9 +45,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
     ]);
     const [initialBuyAmount, setInitialBuyAmount] = useState('0'); // Default 0 - Protocol Virtual Liquidity Handles Depth
     const [initialBuySide, setInitialBuySide] = useState<'yes' | 'no'>('yes');
-    const [resolutionSeconds, setResolutionSeconds] = useState(7 * 24 * 60 * 60); // Default 7d
-    const [customDate, setCustomDate] = useState('');
-    const [showDatePicker, setShowDatePicker] = useState(false);
+    // Resolution Time Removed - Defaults to 7 Days
     const [error, setError] = useState('');
     const [successData, setSuccessData] = useState<{
         txSignature: string;
@@ -162,13 +160,9 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
 
             const slug = `${sanitizedName}-${timestamp}`;
 
-            // Calculate Resolution Time
-            let finalResolutionTime = 0;
-            if (showDatePicker && customDate) {
-                finalResolutionTime = Math.floor(new Date(customDate).getTime() / 1000);
-            } else {
-                finalResolutionTime = Math.floor(Date.now() / 1000) + resolutionSeconds;
-            }
+            // Calculate Resolution Time (Fixed to 7 Days)
+            const SEVEN_DAYS_SECONDS = 7 * 24 * 60 * 60;
+            const finalResolutionTime = Math.floor(Date.now() / 1000) + SEVEN_DAYS_SECONDS;
 
             // Upload image to IPFS (returns short URL, not base64)
             // This is required because Solana transactions have ~1KB limit
@@ -446,57 +440,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
 
                                 { /* LIQUIDITY DEPTH REMOVED - Protocol Virtual Liquidity Handles This */}
 
-                                {/* NEW: RESOLUTION TIME */}
-                                <div>
-                                    <div className="flex justify-between items-center mb-2">
-                                        <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
-                                            Resolution Time
-                                        </label>
-                                    </div>
-
-                                    {/* Grid of Options */}
-                                    <div className="grid grid-cols-4 gap-2 mb-3">
-                                        {[
-                                            { label: '15 min', val: 15 * 60 },
-                                            { label: '1 hour', val: 60 * 60 },
-                                            { label: '4 hours', val: 4 * 60 * 60 },
-                                            { label: '1 day', val: 24 * 60 * 60 },
-                                            { label: '7 days', val: 7 * 24 * 60 * 60 },
-                                            { label: '30 days', val: 30 * 24 * 60 * 60 },
-                                            { label: '90 days', val: 90 * 24 * 60 * 60 }
-                                        ].map((opt) => (
-                                            <button
-                                                key={opt.label}
-                                                onClick={() => { setResolutionSeconds(opt.val); setShowDatePicker(false); }}
-                                                className={`px-2 py-2 rounded-lg text-xs font-bold transition-all ${!showDatePicker && resolutionSeconds === opt.val
-                                                    ? 'bg-white text-black'
-                                                    : 'bg-white/5 text-gray-400 hover:bg-white/10'
-                                                    }`}
-                                            >
-                                                {opt.label}
-                                            </button>
-                                        ))}
-                                        <button
-                                            onClick={() => setShowDatePicker(true)}
-                                            className={`px-2 py-2 rounded-lg text-xs font-bold transition-all ${showDatePicker
-                                                ? 'bg-[#F492B7] text-black'
-                                                : 'bg-white/5 text-gray-400 hover:bg-white/10'
-                                                }`}
-                                        >
-                                            Pick Date
-                                        </button>
-                                    </div>
-
-                                    {/* Custom Date Picker */}
-                                    {showDatePicker && (
-                                        <input
-                                            type="datetime-local"
-                                            className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-sm font-medium outline-none focus:border-[#F492B7] text-white color-scheme-dark"
-                                            value={customDate}
-                                            onChange={(e) => setCustomDate(e.target.value)}
-                                        />
-                                    )}
-                                </div>
+                                { /* RESOLUTION TIME INPUT REMOVED - Defaulting to 7 Days internally */}
 
                                 <div className="space-y-2">
                                     <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest block">Source of Truth (URL)</label>

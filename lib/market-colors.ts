@@ -27,35 +27,58 @@ export const OUTCOME_COLORS: Record<string, string> = {
     Bolivia: "#F97316",
 };
 
+const FALLBACK_PALETTE = [
+    "#3b82f6", // Blue
+    "#F492B7", // Pink
+    "#10B981", // Green
+    "#A78BFA", // Purple
+    "#F59E0B", // Amber
+    "#EF4444", // Red
+    "#06B6D4", // Cyan
+    "#EC4899", // Pink (Rose)
+];
+
 /**
  * Get color for a given outcome title
- * Falls back to blue if no match is found
+ * Falls back to a distinct color from the palette if no match is found
  */
-export function getOutcomeColor(title: string): string {
-    if (!title) return "#3b82f6";
+export function getOutcomeColor(title: string, index?: number): string {
+    if (!title) return FALLBACK_PALETTE[(index || 0) % FALLBACK_PALETTE.length];
 
-    // Try exact match first
+    // Handle standard binary outcomes immediately for consistency
+    const lowerTitle = title.toLowerCase();
+    if (lowerTitle === 'yes' || lowerTitle.includes('yes')) return OUTCOME_COLORS.YES;
+    if (lowerTitle === 'no' || lowerTitle.includes('no')) return OUTCOME_COLORS.NO;
+
+    // Try exact match in map
     if (OUTCOME_COLORS[title]) {
         return OUTCOME_COLORS[title];
     }
 
-    // Try uppercase match
+    // Try uppercase match in map
     const upperTitle = title.toUpperCase();
     if (OUTCOME_COLORS[upperTitle]) {
         return OUTCOME_COLORS[upperTitle];
     }
 
-    // Try contains match for countries
-    const lowerTitle = title.toLowerCase();
+    // Try specific sub-string matches for countries
     if (lowerTitle.includes('chile')) return OUTCOME_COLORS.Chile;
     if (lowerTitle.includes('peru')) return OUTCOME_COLORS.Peru;
     if (lowerTitle.includes('brazil') || lowerTitle.includes('brasil')) return OUTCOME_COLORS.Brazil;
     if (lowerTitle.includes('argentina')) return OUTCOME_COLORS.Argentina;
     if (lowerTitle.includes('france')) return OUTCOME_COLORS.France;
     if (lowerTitle.includes('bolivia')) return OUTCOME_COLORS.Bolivia;
-    if (lowerTitle.includes('yes')) return OUTCOME_COLORS.YES;
-    if (lowerTitle.includes('no')) return OUTCOME_COLORS.NO;
 
-    // Default fallback
-    return "#3b82f6";
+    // Special case for binary markets with custom names (e.g. "Trump" vs "Harris")
+    // If it's the 2nd outcome and we have no match, pink is a good "Djinn" default
+    if (index === 1 && !OUTCOME_COLORS[title]) {
+        return "#F492B7"; // Pink
+    }
+
+    if (index === 0 && !OUTCOME_COLORS[title]) {
+        return "#10B981"; // Green/YES default
+    }
+
+    // Default fallback using the index to ensure distinction
+    return FALLBACK_PALETTE[(index || 0) % FALLBACK_PALETTE.length];
 }

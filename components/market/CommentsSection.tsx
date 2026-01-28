@@ -319,7 +319,15 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
                                 {/* Avatar */}
                                 <div className="shrink-0">
                                     {comment.avatar_url ? (
-                                        <img src={comment.avatar_url} className="w-10 h-10 rounded-full object-cover border border-white/10" alt={comment.username} />
+                                        <img
+                                            src={comment.avatar_url}
+                                            className="w-10 h-10 rounded-full object-cover border border-white/10"
+                                            alt={comment.username}
+                                            onError={(e) => {
+                                                e.currentTarget.onerror = null;
+                                                e.currentTarget.src = `https://ui-avatars.com/api/?name=${comment.username}&background=random`;
+                                            }}
+                                        />
                                     ) : (
                                         <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-lg">👤</div>
                                     )}
@@ -387,7 +395,15 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
                                                 <div key={reply.id} className="flex gap-3">
                                                     <div className="shrink-0">
                                                         {reply.avatar_url ? (
-                                                            <img src={reply.avatar_url} className="w-8 h-8 rounded-full object-cover border border-white/10" alt={reply.username} />
+                                                            <img
+                                                                src={reply.avatar_url}
+                                                                className="w-8 h-8 rounded-full object-cover border border-white/10"
+                                                                alt={reply.username}
+                                                                onError={(e) => {
+                                                                    e.currentTarget.onerror = null;
+                                                                    e.currentTarget.src = `https://ui-avatars.com/api/?name=${reply.username}&background=random`;
+                                                                }}
+                                                            />
                                                         ) : (
                                                             <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-xs">👤</div>
                                                         )}

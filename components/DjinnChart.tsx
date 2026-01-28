@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { formatCompact } from "@/lib/utils";
 import { calculateImpliedProbability } from "@/lib/core-amm";
+import { usePrice } from "@/lib/PriceContext";
 
 // Dynamic Import for Probability Chart
 const ProbabilityChart = dynamic(() => import("./ProbabilityChart"), {
@@ -51,6 +52,7 @@ function TheDjinnChart({
     onOutcomeChange
 }: TheDjinnChartProps) {
     const [timeframe, setTimeframe] = useState<'1m' | '5m' | '15m' | '1H' | '6H' | '1D' | '1W' | '1M' | 'ALL'>('1H');
+    const { solPrice } = usePrice();
 
     // Bubble State
     const [bubbles, setBubbles] = useState<Bubble[]>([]);
@@ -62,9 +64,10 @@ function TheDjinnChart({
             // Mark this event as processed to prevent duplicates
             setLastProcessedEventId(tradeEvent.id);
 
+            const usdValue = tradeEvent.amount * (solPrice || 0);
             const newBubble: Bubble = {
                 id: tradeEvent.id, // Use the trade event ID directly
-                text: `${tradeEvent.outcome} +${formatCompact(tradeEvent.amount)}`,
+                text: `${tradeEvent.outcome} +$${formatCompact(usdValue)}`,
                 color: tradeEvent.color,
                 y: Math.random() * 60 + 20 // 20% to 80% height
             };
@@ -146,7 +149,7 @@ function TheDjinnChart({
     // For now, passing necessary data to ProbabilityChart
 
     return (
-        <div className="w-full max-w-4xl mx-auto overflow-hidden relative font-sans h-[450px]">
+        <div className="w-full max-w-4xl mx-auto overflow-hidden relative font-sans h-[700px]">
             {/* CHART AREA */}
             <div className="w-full h-full bg-transparent">
                 <ProbabilityChart

@@ -119,6 +119,11 @@ const MarketCard: React.FC<MarketCardProps> = ({
                         src={icon}
                         alt=""
                         className="w-full h-full object-cover group-hover/card:scale-105 transition-all duration-500"
+                        onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                            e.currentTarget.parentElement?.classList.add('flex', 'items-center', 'justify-center', 'text-6xl', 'opacity-50');
+                            if (e.currentTarget.parentElement) e.currentTarget.parentElement.innerText = '🔮';
+                        }}
                     />
                 ) : (
                     <div className="w-full h-full flex items-center justify-center text-6xl opacity-50">{icon || '🔮'}</div>
