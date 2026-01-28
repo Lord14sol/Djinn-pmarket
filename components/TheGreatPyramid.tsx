@@ -32,13 +32,32 @@ export default function TheGreatPyramid({ topMarket }: TheGreatPyramidProps) {
                 <div className="flex flex-col md:flex-row h-full">
 
                     {/* LEFT SIDE: Big Image (40%) */}
-                    <div className="w-full md:w-[40%] h-[300px] md:h-auto relative overflow-hidden shrink-0 border-b md:border-b-0 md:border-r border-white/5">
-                        {typeof topMarket.icon === 'string' && (topMarket.icon.startsWith('http') || topMarket.icon.startsWith('/')) ? (
+                    <div className="w-full md:w-[40%] h-[300px] md:h-auto relative overflow-hidden shrink-0 border-b md:border-b-0 md:border-r border-white/5 bg-zinc-900">
+                        {topMarket.icon && (topMarket.icon.startsWith('http') || topMarket.icon.startsWith('/') || topMarket.icon.startsWith('data:') || topMarket.icon.includes('ipfs')) ? (
                             <>
                                 {/* Blurred background effect */}
-                                <img src={topMarket.icon} alt="" className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-20 scale-125" />
+                                <img
+                                    src={topMarket.icon}
+                                    alt=""
+                                    className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-20 scale-125"
+                                />
                                 {/* Main Sharp Image */}
-                                <img src={topMarket.icon} alt={topMarket.title} className="absolute inset-0 w-full h-full object-cover z-10 hover:scale-105 transition-transform duration-700" />
+                                <img
+                                    src={topMarket.icon}
+                                    alt={topMarket.title}
+                                    className="absolute inset-0 w-full h-full object-cover z-10 hover:scale-105 transition-transform duration-700"
+                                    onError={(e) => {
+                                        e.currentTarget.style.display = 'none';
+                                        const parent = e.currentTarget.parentElement;
+                                        if (parent) {
+                                            const fallback = parent.querySelector('.image-fallback');
+                                            if (fallback) (fallback as HTMLElement).style.display = 'flex';
+                                        }
+                                    }}
+                                />
+                                <div className="image-fallback hidden absolute inset-0 w-full h-full items-center justify-center text-9xl bg-gradient-to-br from-white/5 to-transparent z-0">
+                                    🔮
+                                </div>
                             </>
                         ) : (
                             <div className="w-full h-full flex items-center justify-center text-9xl bg-gradient-to-br from-white/5 to-transparent">
