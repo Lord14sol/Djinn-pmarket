@@ -29,14 +29,6 @@ export default function TheGreatPyramid({ topMarket }: TheGreatPyramidProps) {
         <section className="px-6 md:px-12 max-w-[1600px] mx-auto mb-16 mt-6">
             <div className="relative overflow-hidden rounded-[2.5rem] bg-[#0A0A0A] border border-white/5 shadow-2xl min-h-[500px]">
 
-                {/* Djinn Logo (Absolute Top Right) */}
-                <div className="absolute top-8 right-8 z-30 flex items-center gap-2 group cursor-pointer" onClick={() => window.location.href = '/'}>
-                    <div className="relative w-10 h-10 grayscale group-hover:grayscale-0 transition-all duration-300">
-                        <Image src="/djinn-logo.png" alt="Djinn" fill className="object-contain" />
-                    </div>
-                    <span className="text-xl font-bold text-white/40 group-hover:text-white transition-colors" style={{ fontFamily: 'var(--font-adriane), serif' }}>Djinn</span>
-                </div>
-
                 <div className="flex flex-col md:flex-row h-full">
 
                     {/* LEFT SIDE: Big Image (40%) */}
