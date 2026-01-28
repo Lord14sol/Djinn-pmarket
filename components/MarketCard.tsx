@@ -109,11 +109,12 @@ const MarketCard: React.FC<MarketCardProps> = ({
     return (
         <div
             onClick={() => window.location.href = `/market/${slug}`}
-            className="bg-black border-r border-b border-white/10 p-4 flex flex-col gap-4 relative hover:bg-white/[0.02] hover:-translate-y-2 transition-all duration-300 h-full min-h-[380px] group/card shadow-lg hover:shadow-xl cursor-pointer"
+            className="bg-black p-4 flex flex-col gap-4 relative hover:bg-white/[0.02] hover:-translate-y-2 transition-all duration-300 h-full min-h-[380px] group/card shadow-lg hover:shadow-xl cursor-pointer"
         >
 
             {/* 1. Header Image (Top) - Aspect Ratio Box */}
             <div className="w-full aspect-square rounded-xl overflow-hidden bg-[#1C212E]/50 relative z-10 border border-white/5 shadow-2xl">
+                {/* ... existing image logic ... */}
                 {typeof icon === 'string' && (icon.startsWith('http') || icon.startsWith('/') || icon.startsWith('data:image')) ? (
                     <img
                         src={icon}
@@ -146,20 +147,33 @@ const MarketCard: React.FC<MarketCardProps> = ({
                             <span className={`text-base font-black ${winningOutcome === 'YES' ? 'text-emerald-400' : 'text-rose-400'}`}>{winningOutcome}</span>
                         </div>
                     ) : isMultiple && options ? (
-                        <div className="flex flex-col gap-2 max-h-[120px] overflow-y-auto pr-1 customize-scrollbar">
-                            {options.map((opt: any) => (
-                                <div
-                                    key={opt.id}
-                                    className="flex items-center justify-between text-[11px] py-2 px-3 bg-[#111] border border-white/10 hover:bg-white/10 rounded-lg cursor-pointer transition-all duration-200 shrink-0"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        window.location.href = `/market/${slug}`;
-                                    }}
-                                >
-                                    <span className="text-gray-300 truncate font-medium max-w-[70%]">{opt.name}</span>
-                                    <span className="text-gray-500 font-bold">--%</span>
-                                </div>
-                            ))}
+                        <div className="flex flex-col gap-2 max-h-[140px] overflow-y-auto pr-1 customize-scrollbar">
+                            {options.map((opt: any, idx: number) => {
+                                // For multi-outcome, we attempt to show the PROBABILITY if chance is passed as an object
+                                // or if we have a simple split for binary with names.
+                                let optChance = 0;
+                                if (options.length === 2) {
+                                    optChance = idx === 0 ? (chance || 50) : (100 - (chance || 50));
+                                } else {
+                                    // For N outcomes, without full supply data here, we show a distributed view or a dash
+                                    // In the future, we could pass an array of chances.
+                                    optChance = 0;
+                                }
+
+                                return (
+                                    <div
+                                        key={typeof opt === 'string' ? opt : (opt.id || idx)}
+                                        className="flex items-center justify-between text-[11px] py-2 px-3 bg-[#111] border border-white/5 hover:bg-white/10 rounded-lg cursor-pointer transition-all duration-200 shrink-0"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            window.location.href = `/market/${slug}`;
+                                        }}
+                                    >
+                                        <span className="text-gray-300 truncate font-bold max-w-[70%]">{typeof opt === 'string' ? opt : opt.title}</span>
+                                        <span className="text-[#F492B7] font-black">{optChance > 0 ? `${optChance.toFixed(1)}%` : '--%'}</span>
+                                    </div>
+                                );
+                            })}
                         </div>
                     ) : (
                         <div className="grid grid-cols-2 gap-3">

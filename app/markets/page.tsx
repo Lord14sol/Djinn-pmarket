@@ -68,10 +68,8 @@ export default function Home() {
               createdAt: m.created_at ? new Date(m.created_at).getTime() : Date.now(),
               resolved: m.resolved,
               winningOutcome: m.winning_outcome,
-              marketPDA: m.market_pda,
-              yesTokenMint: m.yes_token_mint,
-              noTokenMint: m.no_token_mint,
-              resolutionSource: m.resolution_source
+              resolutionSource: m.resolution_source,
+              options: m.options // ✅ Pass options for multi-outcome cards
             };
           });
         }
@@ -146,11 +144,9 @@ export default function Home() {
           createdAt: new Date(payload.new.created_at).getTime(),
           resolved: payload.new.resolved,
           winningOutcome: payload.new.winning_outcome,
-          marketPDA: payload.new.market_pda,
-          yesTokenMint: payload.new.yes_token_mint,
-          noTokenMint: payload.new.no_token_mint,
           resolutionSource: payload.new.resolution_source,
           banner_url: payload.new.banner_url,
+          options: payload.new.options, // ✅ Pass options for live updates
           icon: payload.new.banner_url,
           isNew: true,
           justArrived: true // Flag for pump animation (10s)
@@ -347,7 +343,8 @@ export default function Home() {
       volume: top.volume || '$0',
       betsCount: Math.floor(Math.random() * 5000) + 500, // Mock for now
       chance: top.chance || 50,
-      endDate: top.endDate
+      endDate: top.endDate,
+      options: top.options
     };
   }, [markets]);
 
@@ -411,7 +408,7 @@ export default function Home() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.3 }}
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-0 border-t border-l border-white/10"
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-[1px] bg-white/10 overflow-hidden"
             >
               {sortedMarkets.map((market, index) => {
                 const isPumping = (market as any).justArrived;
