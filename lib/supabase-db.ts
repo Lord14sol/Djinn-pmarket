@@ -58,7 +58,7 @@ export interface Comment {
     avatar_url: string | null;
     text: string;
     image_url: string | null;
-    position: 'YES' | 'NO' | null;
+    position: string | null;
     position_amount: string | null;
     likes_count: number;
     parent_id: string | null;
@@ -130,7 +130,7 @@ export async function createComment(comment: Omit<Comment, 'id' | 'created_at' |
     return { data, error: null };
 }
 
-export async function updateCommentPosition(walletAddress: string, marketSlug: string, position: 'YES' | 'NO', positionAmount: string): Promise<boolean> {
+export async function updateCommentPosition(walletAddress: string, marketSlug: string, position: string, positionAmount: string): Promise<boolean> {
     const { error } = await supabase
         .from('comments')
         .update({ position, position_amount: positionAmount })
@@ -284,8 +284,7 @@ export interface Holder {
     rank: number;
     name: string;
     avatar: string | null;
-    yesShares: number;
-    noShares: number;
+    positions: Record<string, number>; // Dynamic: { "YES": 10, "Argentina": 50 }
     totalShares: number;
     wallet_address: string;
 }
@@ -300,7 +299,7 @@ export async function getTopHolders(slug: string): Promise<Holder[]> {
 
     if (error || !data) return [];
 
-    // Aggregate shares by wallet ONLY (merge sides)
+    // Aggregate shares by wallet
     const agg: Record<string, Holder> = {};
     const wallets: string[] = [];
 
@@ -309,26 +308,26 @@ export async function getTopHolders(slug: string): Promise<Holder[]> {
         if (!agg[key]) {
             agg[key] = {
                 rank: 0,
-                name: bet.wallet_address.slice(0, 6) + '...', // Default layout
+                name: bet.wallet_address.slice(0, 6) + '...',
                 avatar: null,
-                yesShares: 0,
-                noShares: 0,
+                positions: {},
                 totalShares: 0,
                 wallet_address: bet.wallet_address
             };
             wallets.push(bet.wallet_address);
         }
 
-        const shares = bet.shares || 0;
-        if (bet.side === 'YES') {
-            agg[key].yesShares += shares;
-        } else {
-            agg[key].noShares += shares;
+        const shares = Number(bet.shares || 0);
+        const side = bet.side; // Dynamic side string
+
+        if (!agg[key].positions[side]) {
+            agg[key].positions[side] = 0;
         }
+        agg[key].positions[side] += shares;
         agg[key].totalShares += shares;
     });
 
-    // Fetch profiles for these wallets to correct the names
+    // Fetch profiles for these wallets
     if (wallets.length > 0) {
         const { data: profiles } = await supabase
             .from('profiles')
@@ -428,6 +427,8 @@ export interface Market {
     resolution_source?: string;
     // Multi-outcome support
     options?: string[]; // Array of outcome names (e.g., ["Yes", "No"] or ["Brasil", "Argentina", "Chile"])
+    creator_username?: string;
+    creator_avatar?: string;
 }
 
 export async function createMarket(market: Partial<Market> & {
@@ -470,7 +471,8 @@ export async function getMarkets(): Promise<Market[]> {
 
 export async function getMarket(slug: string): Promise<Market | null> {
     return withRetry(async () => {
-        const { data, error } = await supabase
+        // 1. Fetch Market
+        const { data: market, error } = await supabase
             .from('markets')
             .select('*')
             .eq('slug', slug)
@@ -479,7 +481,27 @@ export async function getMarket(slug: string): Promise<Market | null> {
         if (error && error.code !== 'PGRST116') {
             throw error;
         }
-        return data;
+
+        if (market) {
+            // 2. Manual Fetch for Creator Profile (More robust than JOIN if FKs likely missing)
+            if (market.creator_wallet) {
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('username, avatar_url')
+                    .eq('wallet_address', market.creator_wallet)
+                    .single();
+
+                if (profile) {
+                    return {
+                        ...market,
+                        creator_username: profile.username,
+                        creator_avatar: profile.avatar_url
+                    };
+                }
+            }
+            return market;
+        }
+        return null;
     }, `getMarket(${slug})`);
 }
 
@@ -557,7 +579,7 @@ export interface Bet {
     id?: string;
     market_slug: string;
     wallet_address: string;
-    side: 'YES' | 'NO';
+    side: string; // Dynamic side string
     amount: number;
     sol_amount: number;
     shares: number;

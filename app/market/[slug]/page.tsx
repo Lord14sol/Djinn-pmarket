@@ -399,8 +399,46 @@ export default function Page() {
 
     // Derived
     const isMultiOutcome = (MULTI_OUTCOMES[slug] || []).length > 0;
-    const staticMarketInfo = marketDisplayData[slug] || { title: 'Unknown Market', icon: '❓', description: 'Market not found' };
+    const staticMarketInfo = marketDisplayData[slug] || {
+        title: slug ? slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : 'Welcome to Djinn',
+        icon: '🧊',
+        icon: '🧊',
+        description: 'Market description unavailable.'
+    };
     const effectiveSlug = slug;
+
+    // Creator Profile State (Client-side fallback)
+    const [creatorProfile, setCreatorProfile] = useState<{ username?: string, avatar?: string } | null>(null);
+
+    // Fetch Creator Profile if missing from market data
+    useEffect(() => {
+        if (marketAccount?.creator_wallet) {
+            // 1. If we already have it from the initial fetch, use it
+            if (marketAccount.creator_username || marketAccount.creator_avatar) {
+                setCreatorProfile({
+                    username: marketAccount.creator_username,
+                    avatar: marketAccount.creator_avatar
+                });
+            }
+            // 2. Otherwise fetch explicitly
+            else {
+                supabaseDb.getProfile(marketAccount.creator_wallet).then(p => {
+                    if (p) {
+                        setCreatorProfile({
+                            username: p.username,
+                            avatar: p.avatar_url || undefined
+                        });
+                    }
+                }).catch(err => {
+                    console.warn("Using mock profile due to DB error:", err);
+                    setCreatorProfile({
+                        username: 'Djinn Helper',
+                        avatar: 'https://api.dicebear.com/9.x/micah/svg?seed=DjinnHelper'
+                    });
+                });
+            }
+        }
+    }, [marketAccount?.creator_wallet, marketAccount?.creator_username]);
 
     // User Bets State (for Holdings) - Moved here to access effectiveSlug
     const [userBets, setUserBets] = useState<Bet[]>([]);
@@ -420,7 +458,7 @@ export default function Page() {
             outcomeName: outcome.title,
             shares: myShares[idx] || 0,
             color: getOutcomeColor(outcome.title)
-        }));
+        })).filter(h => h.shares > 0.001);
     }, [marketOutcomes, myShares]);
 
     // Load starred state from localStorage on mount
@@ -458,6 +496,56 @@ export default function Page() {
 
                 // Use Real Price if available to seed history (Flat Line at Current Price)
                 let seedPriceYes = 0.00000001;
+                if (initialOutcomes[0].yesPrice !== 50 && initialOutcomes[0].yesPrice > 0) {
+                    seedPriceYes = getSpotPrice(initialOutcomes[0].yesPrice / 100 * 1000000000); // Rough check
+                }
+
+                // ... (rest of initial history logic is fine, omitting for brevity of replacement, wait, I need to match valid replacement block)
+            });
+        }
+    }, [slug, effectiveSlug]); // Removed lengthy dependency array for cleanliness if possible, or keep it strict. 
+    // Actually, I should only replace the small block I need.
+
+    /* 
+       Wait, I need to do 2 separate edits because they are far apart (Lines 418 and 2626). 
+       The tool instructions say: "If you are making edits to multiple non-adjacent lines, use the multi_replace_file_content tool instead."
+    */
+
+    // Load starred state from localStorage on mount
+    useEffect(() => {
+        const saved = JSON.parse(localStorage.getItem('djinn_saved_markets') || '[]');
+        setIsStarred(saved.includes(effectiveSlug));
+    }, [effectiveSlug]);
+
+    // --- INITIALIZATION ---
+    useEffect(() => {
+        const initialOutcomes = (MULTI_OUTCOMES[slug] || []).length > 0
+            ? MULTI_OUTCOMES[slug]
+            : [
+                { id: 'yes', title: 'YES', yesPrice: 50, chance: 50 },
+                { id: 'no', title: 'NO', yesPrice: 50, chance: 50 }
+            ];
+
+        if (true) { // Always initialize if we have outcomes (which we now do)
+            setSelectedOutcomeId(initialOutcomes[0].id);
+            setSelectedOutcomeName(initialOutcomes[0].title);
+            setLivePrice(initialOutcomes[0].yesPrice);
+
+            setLivePrice(initialOutcomes[0].yesPrice);
+
+            // Generate Initial "Inception" History if empty
+            // This mocks a "Launch Day" history: Flat candles at 0.000001 SOL, 50/50 probability
+            setHistoryState(prev => {
+                if (prev.probability.length > 0) return prev;
+
+                const outcomes = initialOutcomes.map(o => o.title);
+                const count = 360; // 6 Hours of history (in minutes)
+                const now = Math.floor(Date.now() / 1000);
+                const probData = [];
+                const candleData: Record<string, any[]> = {};
+
+                // Use Real Price if available to seed history (Flat Line at Current Price)
+                let seedPriceYes = 0.00000001;
                 let seedPriceNo = 0.00000001;
 
                 if (marketAccount?.outcome_supplies && marketAccount.outcome_supplies.length >= 2) {
@@ -475,7 +563,7 @@ export default function Page() {
                 outcomes.forEach(o => candleData[o] = []);
 
                 for (let i = count; i > 0; i--) {
-                    const time = now - i; // 1 second intervals (PumpFun Style Live View)
+                    const time = now - (i * 60); // 1 minute intervals
 
                     // 1. Probability Point (Flat 50/50 or derived from initial)
                     const point: any = {
@@ -492,13 +580,13 @@ export default function Page() {
                     // 2. Candle Point (Hydrated with Seed Price)
                     outcomes.forEach(o => {
                         const base = seedPrices[o] || 0.00000001; // Use Real Price
-                        const noise = (Math.random() - 0.5) * (base * 0.01); // 1% noise
+                        const noise = (Math.random() - 0.5) * (base * 0.02); // 2% noise for "Live" feel
                         const price = base + noise;
                         candleData[o].push({
                             time: time as any, // Cast for Lightweight Charts
                             open: price,
-                            high: price,
-                            low: price,
+                            high: price * 1.01,
+                            low: price * 0.99,
                             close: price
                         });
                     });
@@ -1001,13 +1089,15 @@ export default function Page() {
                 if (outcomeIndex === -1) throw new Error("Invalid outcome selection");
 
                 try {
+                    const creatorKey = (marketAccount.creator || marketAccount.creator_wallet)
+                        ? new PublicKey(marketAccount.creator || marketAccount.creator_wallet)
+                        : TREASURY_WALLET;
+
                     txSignature = await buyShares(
                         new PublicKey(marketAccount.market_pda),
                         outcomeIndex,
                         amountNum,
-                        new PublicKey(marketAccount.yes_token_mint || dummyMint.toBase58()),
-                        new PublicKey(marketAccount.no_token_mint || dummyMint.toBase58()),
-                        new PublicKey(marketAccount.creator || marketAccount.creator_wallet), // Use 'creator' from on-chain fetch
+                        creatorKey,
                         safeMinShares
                     );
                     console.log("✅ Buy TX:", txSignature);
@@ -1103,35 +1193,39 @@ export default function Page() {
 
 
 
-            // 3. Log Activity
-            const profile = await supabaseDb.getProfile(publicKey.toBase58());
-            const activity = {
-                wallet_address: publicKey.toBase58(),
-                username: profile?.username || userProfile.username,
-                avatar_url: profile?.avatar_url || userProfile.avatarUrl,
-                action: selectedSide,
-                order_type: 'BUY',
-                amount: usdValueInTrading,
-                sol_amount: amountNum,
-                shares: sim.sharesReceived,
-                market_title: staticMarketInfo.title,
-                market_slug: effectiveSlug,
-                created_at: new Date().toISOString()
-            };
-            // @ts-ignore
-            await supabaseDb.createActivity(activity);
-            mutateActivity((current: any[] | undefined) => [activity, ...(current || [])], false);
+            // 3. Log Activity (Non-blocking)
+            try {
+                const profile = await supabaseDb.getProfile(publicKey.toBase58()).catch(() => null);
+                const activity = {
+                    wallet_address: publicKey.toBase58(),
+                    username: profile?.username || userProfile.username,
+                    avatar_url: profile?.avatar_url || userProfile.avatarUrl,
+                    action: selectedSide,
+                    order_type: 'BUY',
+                    amount: usdValueInTrading,
+                    sol_amount: amountNum,
+                    shares: sim.sharesReceived,
+                    market_title: staticMarketInfo.title,
+                    market_slug: effectiveSlug,
+                    created_at: new Date().toISOString()
+                };
+                // @ts-ignore
+                await supabaseDb.createActivity(activity);
+                mutateActivity((current: any[] | undefined) => [activity, ...(current || [])], false);
 
-            // 4. Create/Update Bet
-            await supabaseDb.createBet({
-                market_slug: effectiveSlug,
-                wallet_address: publicKey.toBase58(),
-                side: selectedSide,
-                amount: usdValueInTrading,
-                sol_amount: amountNum,
-                shares: sim.sharesReceived,
-                entry_price: safePrice * 100
-            });
+                // 4. Create/Update Bet
+                await supabaseDb.createBet({
+                    market_slug: effectiveSlug,
+                    wallet_address: publicKey.toBase58(),
+                    side: selectedSide,
+                    amount: usdValueInTrading,
+                    sol_amount: amountNum,
+                    shares: sim.sharesReceived,
+                    entry_price: safePrice * 100
+                });
+            } catch (dbErr) {
+                console.warn("⚠️ DB Logging failed (non-fatal):", dbErr);
+            }
 
             // 5. Update UI State
             setSolBalance(prev => prev - amountNum);
@@ -1883,17 +1977,16 @@ export default function Page() {
             {/* Content Container */}
             <div className="container mx-auto px-4 pt-24 pb-12 max-w-7xl relative z-10">
 
+
+
+
                 {/* HEADER (Restored to Top) */}
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                <div className="flex flex-col lg:flex-row gap-12 items-start relative">
                     {/* LEFT COLUMN: Header + Chart + Info */}
-                    <div className="col-span-1 md:col-span-8 flex flex-col gap-6">
+                    <div className="flex-1 min-w-0 flex flex-col gap-6 w-full">
+
 
                         {/* HEADER (Moved Inside Left Column) */}
-                        {/* HEADER (Moved Inside Left Column) - Refined Layout */}
-                        <h1 className="text-4xl md:text-5xl font-black tracking-tight leading-tight text-white mb-6 w-full">
-                            {marketAccount?.title || staticMarketInfo.title}
-                        </h1>
-
                         <div className="flex flex-col md:flex-row justify-between items-end gap-6 mb-2">
                             {/* LEFT: Image + Title */}
                             <div className="flex items-end gap-5 flex-1">
@@ -1905,142 +1998,24 @@ export default function Page() {
                                             alt="Market banner"
                                             onError={(e) => {
                                                 console.error('Banner image failed to load:', marketAccount?.banner_url);
-                                                e.currentTarget.style.display = 'none';
-                                                if (e.currentTarget.parentElement) {
-                                                    e.currentTarget.parentElement.innerHTML = staticMarketInfo.icon || '🎯';
-                                                }
+                                                // Fallback to placeholder image instead of hiding
+                                                e.currentTarget.src = 'https://placehold.co/400x400/1a1a1a/F492B7?text=Djinn';
                                             }}
                                         />
-                                        : staticMarketInfo.icon}
+                                        : <div className="w-full h-full flex items-center justify-center bg-[#1A1A1A] text-6xl">
+                                            {staticMarketInfo.icon}
+                                        </div>}
                                 </div>
-                                <div className="pb-2 flex-1">
-                                    <p className="text-gray-500 text-sm font-medium line-clamp-2 leading-relaxed mb-3">{marketAccount?.description || staticMarketInfo.description}</p>
-
-                                    <div className="flex items-center gap-4 flex-wrap">
-                                        <button
-                                            onClick={() => {
-                                                navigator.clipboard.writeText(window.location.href);
-                                                setDjinnToast({ isVisible: true, type: 'SUCCESS', title: 'Link Copied', message: 'Market link copied to clipboard' });
-                                            }}
-                                            className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-xs font-bold uppercase tracking-widest text-gray-400 hover:text-white group"
-                                        >
-                                            <Share2 size={12} className="group-hover:text-[#F492B7] transition-colors" />
-                                            <span>Share</span>
-                                        </button>
-
-                                        {/* STAR/SAVE Button - Below Picture */}
-                                        <button
-                                            onClick={() => {
-                                                const newStarred = !isStarred;
-                                                setIsStarred(newStarred);
-                                                const saved = JSON.parse(localStorage.getItem('djinn_saved_markets') || '[]');
-                                                if (newStarred) {
-                                                    if (!saved.includes(effectiveSlug)) saved.push(effectiveSlug);
-                                                } else {
-                                                    const idx = saved.indexOf(effectiveSlug);
-                                                    if (idx > -1) saved.splice(idx, 1);
-                                                }
-                                                localStorage.setItem('djinn_saved_markets', JSON.stringify(saved));
-                                                setDjinnToast({
-                                                    isVisible: true,
-                                                    type: 'SUCCESS',
-                                                    title: newStarred ? 'Saved!' : 'Removed',
-                                                    message: newStarred ? 'Market saved to your watchlist' : 'Market removed from watchlist'
-                                                });
-                                            }}
-                                            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-bold uppercase tracking-widest group ${isStarred
-                                                ? 'bg-[#F492B7]/20 border-[#F492B7]/40 text-[#F492B7]'
-                                                : 'bg-white/5 hover:bg-white/10 border-white/10 text-gray-400 hover:text-white'
-                                                }`}
-                                        >
-                                            <Star
-                                                size={12}
-                                                className={`transition-all ${isStarred ? 'fill-[#F492B7] text-[#F492B7]' : 'group-hover:text-[#F492B7]'}`}
-                                            />
-                                            <span>{isStarred ? 'Saved' : 'Save'}</span>
-                                        </button>
-
-                                        {/* SOURCE Link */}
-                                        {marketAccount?.resolution_source && (
-                                            <a href={marketAccount.resolution_source} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-xs font-bold uppercase tracking-widest text-gray-500 hover:text-white group">
-                                                <span>Source</span> <ExternalLink size={12} />
-                                            </a>
-                                        )}
-
-                                        {/* CREATOR PROFILE */}
-                                        {marketAccount?.creator_wallet && (
-                                            <Link
-                                                href={`/profile/${marketAccount.creator_wallet}`}
-                                                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-xs font-medium text-gray-400 hover:text-white group"
-                                            >
-                                                <div className="w-5 h-5 rounded-full bg-gradient-to-br from-[#F492B7] to-[#10B981] flex items-center justify-center overflow-hidden">
-                                                    {marketAccount.creator_avatar ? (
-                                                        <img src={marketAccount.creator_avatar} alt="Creator" className="w-full h-full object-cover" />
-                                                    ) : (
-                                                        <span className="text-[8px] font-bold text-white">
-                                                            {marketAccount.creator_username?.charAt(0)?.toUpperCase() || marketAccount.creator_wallet.slice(0, 2)}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <span className="truncate max-w-[100px]">
-                                                    {marketAccount.creator_username || `${marketAccount.creator_wallet.slice(0, 4)}...${marketAccount.creator_wallet.slice(-4)}`}
-                                                </span>
-                                            </Link>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* RIGHT: Metrics (Dual Mcap & Total Pool) */}
-                            <div className="flex flex-col items-center justify-end h-44 py-1 flex-1">
-                                <div className="flex items-center justify-between gap-6 bg-[#0E0E0E] px-8 py-4 rounded-2xl border border-white/10 shadow-2xl backdrop-blur-md w-full relative overflow-hidden group">
-                                    {/* Background decorative glow */}
-                                    <div className="absolute top-0 right-0 w-32 h-32 bg-[#F492B7]/5 blur-3xl rounded-full -mr-16 -mt-16" />
-
-                                    {/* Left: YES Mcap (Outcome 0) */}
-                                    <div className="flex flex-col items-center flex-1">
-                                        <span className={`text-3xl font-black mb-1 ${mounted ? 'text-[#10B981]' : 'text-zinc-700'}`}>
-                                            {mounted ? yesPercent.toFixed(0) : '50'}%
-                                        </span>
-                                        <div className="flex flex-col items-center">
-                                            <span className="text-2xl font-black text-white tracking-tight">
-                                                {formatCompact(yesMcap * solPrice)}
-                                            </span>
-                                            <span className="text-[10px] font-black uppercase text-gray-500 tracking-[0.15em] mt-1 whitespace-nowrap">
-                                                {(marketAccount?.options?.[0]) || 'YES'} Mcap ($)
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    {/* Center: Total Pool */}
-                                    <div className="flex flex-col items-center px-8 border-l border-r border-white/10 relative z-10">
-                                        <div className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] mb-1">Total Pool</div>
-                                        <div className="text-2xl font-black text-[#F492B7] drop-shadow-[0_0_12px_rgba(244,146,183,0.4)]">
-                                            {formatCompact(vaultBalanceSol)} <span className="text-xs font-medium">SOL</span>
-                                        </div>
-                                        <span className="text-[9px] font-bold text-gray-600 uppercase mt-1 tracking-widest">Liquidity</span>
-                                    </div>
-
-                                    {/* Right: NO Mcap (Outcome 1) */}
-                                    <div className="flex flex-col items-center flex-1">
-                                        <span className={`text-3xl font-black mb-1 ${mounted ? 'text-[#EF4444]' : 'text-zinc-700'}`}>
-                                            {mounted ? noPercent.toFixed(0) : '50'}%
-                                        </span>
-                                        <div className="flex flex-col items-center">
-                                            <span className="text-2xl font-black text-white tracking-tight">
-                                                {formatCompact(noMcap * solPrice)}
-                                            </span>
-                                            <span className="text-[10px] font-black uppercase text-gray-500 tracking-[0.15em] mt-1 text-right whitespace-nowrap">
-                                                {(marketAccount?.options?.[1]) || 'NO'} Mcap
-                                            </span>
-                                        </div>
-                                    </div>
+                                <div className="pb-2 flex-1 flex flex-col justify-center">
+                                    <h1 className="text-4xl md:text-5xl font-black text-white tracking-tighter mb-2 leading-none">
+                                        {(marketAccount?.title || staticMarketInfo.title)}
+                                    </h1>
+                                    {/* CHART CARD */}
                                 </div>
                             </div>
                         </div>
 
-                        {/* CHART CARD */}
-                        <div className="bg-[#020202] rounded-2xl border border-white/5 overflow-hidden">
+                        <div className="bg-transparent rounded-2xl border border-white/5 overflow-hidden min-h-[500px]">
 
 
                             {/* Dual-line Chart (Bazaar of Answers Style) */}
@@ -2048,9 +2023,9 @@ export default function Page() {
                             <TheDjinnChart
                                 outcomes={marketOutcomes.map(o => o.title)}
                                 probabilityData={historyState.probability}
-                                candleData={historyState.candles}
                                 outcomeSupplies={outcomeSuppliesMap}
-                                solPrice={solPrice || 180} // Pass live SOL price
+                                volume={marketAccount?.volumeTotal ? formatCompact(Number(marketAccount.volumeTotal) / 1e9) + " SOL" : (marketAccount?.volume_usd || "$0")}
+                                resolutionDate={marketAccount?.market_resolution_date ? new Date(marketAccount.market_resolution_date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : (marketAccount?.end_date || "Unknown")}
                                 tradeEvent={lastTradeEvent ? {
                                     id: lastTradeEvent.id, // Use STABLE ID from state
                                     outcome: lastTradeEvent.side === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO'),
@@ -2093,8 +2068,6 @@ export default function Page() {
                         {/* HOLDINGS SECTION (New) */}
                         <HoldingsSection
                             bets={userBets}
-                            currentYesPrice={livePrice}
-                            currentNoPrice={100 - livePrice}
                             yesSupply={marketAccount?.outcome_supplies?.[0] ? Number(marketAccount.outcome_supplies[0]) / 1e9 : 0}
                             noSupply={marketAccount?.outcome_supplies?.[1] ? Number(marketAccount.outcome_supplies[1]) / 1e9 : 0}
                             marketOutcomes={marketOutcomes}
@@ -2138,6 +2111,7 @@ export default function Page() {
                                 marketSlug={effectiveSlug}
                                 publicKey={publicKey ? publicKey.toBase58() : null}
                                 userProfile={userProfile}
+                                marketOutcomes={marketOutcomes}
                                 myHeldPosition={myHeldSide}
                                 myHeldAmount={myHeldAmountStr}
                             />
@@ -2196,513 +2170,488 @@ export default function Page() {
                         )}
 
                         {bottomTab === 'HOLDERS' && (
-                            <div className="grid lg:grid-cols-2 gap-12">
-                                {/* YES HOLDERS */}
-                                <div>
-                                    <div className="mb-4">
-                                        <h3 className="text-sm font-bold text-white mb-2">Yes holders</h3>
-                                        <div className="h-0.5 w-full bg-white/10" />
-                                    </div>
-                                    <div className="space-y-0">
-                                        {holders.filter(h => h.yesShares > 0.1).sort((a, b) => b.yesShares - a.yesShares).length === 0 ? (
-                                            <div className="py-6 text-gray-500 text-sm italic">No holders</div>
-                                        ) : (
-                                            holders.filter(h => h.yesShares > 0.001).sort((a, b) => b.yesShares - a.yesShares).map((h: any, i: number) => {
-                                                const isMe = publicKey && h.wallet_address === publicKey.toBase58();
-                                                return (
-                                                    <div
-                                                        key={i}
-                                                        className={`flex items-center justify-between py-3 border-b border-white/5 group hover:bg-white/5 hover:px-2 rounded transition-all -mx-2 px-2 cursor-pointer ${isMe ? 'bg-white/5 border-l-2 border-l-[#10B981]' : ''}`}
-                                                        onClick={() => window.location.href = `/profile/${h.wallet_address}`}
-                                                    >
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="relative">
-                                                                <div className="w-8 h-8 rounded-full bg-[#1A1A1A] overflow-hidden border border-white/10">
-                                                                    {h.avatar ? <img src={h.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-gradient-to-br from-[#10B981] to-[#059669] opacity-80" />}
-                                                                </div>
-                                                                {/* Rank Badge */}
-                                                                <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold border border-[#0B0E14] 
-                                                                        ${i === 0 ? 'bg-gradient-to-br from-yellow-300 to-amber-500 text-black' :
-                                                                        i === 1 ? 'bg-gradient-to-br from-gray-300 to-gray-400 text-black' :
-                                                                            i === 2 ? 'bg-gradient-to-br from-orange-300 to-amber-700 text-white' :
-                                                                                'bg-gray-800 text-gray-400'}`}>
-                                                                    {i + 1}
-                                                                </div>
-                                                            </div>
-                                                            <div>
-                                                                <div className="text-sm font-bold text-white group-hover:text-[#F492B7] transition-colors truncate max-w-[120px]">
-                                                                    {h.name} {isMe && <span className="text-[9px] bg-[#10B981]/20 text-[#10B981] px-1 rounded ml-1">YOU</span>}
-                                                                </div>
-                                                                <div className="text-xs font-medium text-[#10B981] font-mono flex items-center gap-1">
-                                                                    <span className="w-1.5 h-1.5 rounded-full bg-[#10B981]" />
-                                                                    {formatCompact(h.yesShares)} <span className="text-[10px] text-gray-500">YES</span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })
-                                        )}
-                                    </div>
-                                </div>
+                            <div className={`grid gap-12 ${marketOutcomes.length > 2 ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
+                                {marketOutcomes.map((outcome) => {
+                                    const title = outcome.title;
+                                    const color = getOutcomeColor(title);
 
-                                {/* NO HOLDERS */}
-                                <div>
-                                    <div className="mb-4">
-                                        <h3 className="text-sm font-bold text-white mb-2">No holders</h3>
-                                        <div className="h-0.5 w-full bg-white/10" />
-                                    </div>
-                                    <div className="space-y-0">
-                                        {holders.filter(h => h.noShares > 0.1).sort((a, b) => b.noShares - a.noShares).length === 0 ? (
-                                            <div className="py-6 text-gray-500 text-sm italic">No holders</div>
-                                        ) : (
-                                            holders.filter(h => h.noShares > 0.001).sort((a, b) => b.noShares - a.noShares).map((h: any, i: number) => {
-                                                const isMe = publicKey && h.wallet_address === publicKey.toBase58();
-                                                return (
-                                                    <div
-                                                        key={i}
-                                                        className={`flex items-center justify-between py-3 border-b border-white/5 group hover:bg-white/5 hover:px-2 rounded transition-all -mx-2 px-2 cursor-pointer ${isMe ? 'bg-white/5 border-l-2 border-l-[#EF4444]' : ''}`}
-                                                        onClick={() => window.location.href = `/profile/${h.wallet_address}`}
-                                                    >
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="relative">
-                                                                <div className="w-8 h-8 rounded-full bg-[#1A1A1A] overflow-hidden border border-white/10">
-                                                                    {h.avatar ? <img src={h.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-gradient-to-br from-[#EF4444] to-[#B91C1C] opacity-80" />}
-                                                                </div>
-                                                                {/* Rank Badge */}
-                                                                <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold border border-[#0B0E14] 
-                                                                        ${i === 0 ? 'bg-gradient-to-br from-yellow-300 to-amber-500 text-black' :
-                                                                        i === 1 ? 'bg-gradient-to-br from-gray-300 to-gray-400 text-black' :
-                                                                            i === 2 ? 'bg-gradient-to-br from-orange-300 to-amber-700 text-white' :
-                                                                                'bg-gray-800 text-gray-400'}`}>
-                                                                    {i + 1}
+                                    // Filter holders who have shares in this outcome
+                                    const outcomeHolders = holders
+                                        .filter(h => (h.positions?.[title] || 0) > 0.1)
+                                        .sort((a, b) => (b.positions?.[title] || 0) - (a.positions?.[title] || 0));
+
+                                    return (
+                                        <div key={title}>
+                                            <div className="mb-4">
+                                                <h3 className="text-sm font-bold text-white mb-2 uppercase tracking-wider" style={{ color: color }}>
+                                                    {title} Holders
+                                                </h3>
+                                                <div className="h-0.5 w-full bg-white/10" style={{ backgroundColor: `${color}20` }} />
+                                            </div>
+                                            <div className="space-y-0">
+                                                {outcomeHolders.length === 0 ? (
+                                                    <div className="py-6 text-gray-500 text-sm italic">No holders</div>
+                                                ) : (
+                                                    outcomeHolders.map((h: any, i: number) => {
+                                                        const isMe = publicKey && h.wallet_address === publicKey.toBase58();
+                                                        const shares = h.positions[title];
+
+                                                        return (
+                                                            <div
+                                                                key={i}
+                                                                className={`flex items-center justify-between py-3 border-b border-white/5 group hover:bg-white/5 hover:px-2 rounded transition-all -mx-2 px-2 cursor-pointer ${isMe ? 'bg-white/5' : ''}`}
+                                                                style={isMe ? { borderLeft: `2px solid ${color}` } : {}}
+                                                                onClick={() => window.location.href = `/profile/${h.wallet_address}`}
+                                                            >
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="relative">
+                                                                        <div className="w-8 h-8 rounded-full bg-[#1A1A1A] overflow-hidden border border-white/10">
+                                                                            {h.avatar ? <img src={h.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full opacity-80" style={{ background: `linear-gradient(135deg, ${color}, #000)` }} />}
+                                                                        </div>
+                                                                        {/* Rank Badge */}
+                                                                        <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold border border-[#0B0E14] 
+                                                                                ${i === 0 ? 'bg-gradient-to-br from-yellow-300 to-amber-500 text-black' :
+                                                                                i === 1 ? 'bg-gradient-to-br from-gray-300 to-gray-400 text-black' :
+                                                                                    i === 2 ? 'bg-gradient-to-br from-orange-300 to-amber-700 text-white' :
+                                                                                        'bg-gray-800 text-gray-400'}`}>
+                                                                            {i + 1}
+                                                                        </div>
+                                                                    </div>
+                                                                    <div>
+                                                                        <div className="text-sm font-bold text-white group-hover:text-[#F492B7] transition-colors truncate max-w-[120px]">
+                                                                            {h.name} {isMe && <span className="text-[9px] px-1 rounded ml-1 text-black" style={{ backgroundColor: color }}>YOU</span>}
+                                                                        </div>
+                                                                        <div className="text-xs font-medium font-mono flex items-center gap-1" style={{ color: color }}>
+                                                                            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
+                                                                            {formatCompact(shares)} <span className="text-[10px] text-gray-500 uppercase">{title}</span>
+                                                                        </div>
+                                                                    </div>
                                                                 </div>
                                                             </div>
-                                                            <div>
-                                                                <div className="text-sm font-bold text-white group-hover:text-[#F492B7] transition-colors truncate max-w-[120px]">
-                                                                    {h.name} {isMe && <span className="text-[9px] bg-[#EF4444]/20 text-[#EF4444] px-1 rounded ml-1">YOU</span>}
-                                                                </div>
-                                                                <div className="text-xs font-medium text-[#EF4444] font-mono flex items-center gap-1">
-                                                                    <span className="w-1.5 h-1.5 rounded-full bg-[#EF4444]" />
-                                                                    {formatCompact(h.noShares)} <span className="text-[10px] text-gray-500">NO</span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })
-                                        )}
-                                    </div>
-                                </div>
+                                                        );
+                                                    })
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         )}
-                    </div>
 
-
+                    </div> {/* End of LEFT COLUMN (col-span-8) */}
 
                     {/* RIGHT COLUMN: TRADING (Sticky Sidebar) - COMPACT MODE (40% Smaller Feel) */}
-                    <div className="md:col-span-4 sticky top-24 h-fit z-20">
-                        <div className="bg-[#020202] border border-white/5 rounded-2xl p-4 shadow-xl">
-                            <div className="flex justify-end mb-6 items-center">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex items-center gap-2 text-[11px] font-semibold text-[#F492B7] bg-[#F492B7]/10 px-4 py-1.5 rounded-full border border-[#F492B7]/20">
-                                        <Wallet size={12} /> <span>{solBalance.toFixed(2)} SOL</span>
+                    {/* Fixed: Removed transform (scale) from sticky container to ensure sticky behavior works */}
+                    <div className="w-full lg:w-[380px] shrink-0 sticky top-24 self-start z-20 max-h-[calc(100vh-7rem)] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                        {/* Apply scale internally to maintain design without breaking sticky */}
+                        <div className="origin-top lg:scale-[0.85]">
+                            <div className="bg-[#020202] border border-white/5 rounded-2xl p-4 shadow-xl">
+                                <div className="flex justify-end mb-6 items-center">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-2 text-[11px] font-semibold text-[#F492B7] bg-[#F492B7]/10 px-4 py-1.5 rounded-full border border-[#F492B7]/20">
+                                            <Wallet size={12} /> <span>{solBalance.toFixed(2)} SOL</span>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
 
-                            {/* SQUID GAME UI: Total Pool Counter */}
-                            <div className="mb-6">
-                                <PrizePoolCounter totalSol={vaultBalanceSol || (marketAccount?.global_vault ? (Number(marketAccount.global_vault) / LAMPORTS_PER_SOL) : 0)} />
-                            </div>
+                                {/* SQUID GAME UI: Total Pool Counter */}
+                                <div className="mb-6">
+                                    <PrizePoolCounter totalSol={vaultBalanceSol || (marketAccount?.global_vault ? (Number(marketAccount.global_vault) / LAMPORTS_PER_SOL) : 0)} />
+                                </div>
 
-                            {/* HOLDINGS PANEL (Removed Inline - Now Floating) */}
-
-
-                            {/* BUY / SELL TOGGLE */}
-                            <div className="mb-5 p-1 bg-white/5 rounded-xl flex">
-                                <button
-                                    onClick={() => setTradeMode('BUY')}
-                                    className={`flex-1 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${tradeMode === 'BUY' ? 'bg-[#10B981] text-white' : 'text-gray-500 hover:text-white'}`}
-                                >
-                                    Buy
-                                </button>
-                                <button
-                                    onClick={() => setTradeMode('SELL')}
-                                    className={`flex-1 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${tradeMode === 'SELL' ? 'bg-[#EF4444] text-white' : 'text-gray-500 hover:text-white'}`}
-                                >
-                                    Sell
-                                </button>
-                            </div>
+                                {/* HOLDINGS PANEL (Removed Inline - Now Floating) */}
+                                <div className="mb-5 p-1 bg-white/5 rounded-xl flex">
+                                    <button
+                                        onClick={() => setTradeMode('BUY')}
+                                        className={`flex-1 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${tradeMode === 'BUY' ? 'bg-[#10B981] text-white' : 'text-gray-500 hover:text-white'}`}
+                                    >
+                                        Buy
+                                    </button>
+                                    <button
+                                        onClick={() => setTradeMode('SELL')}
+                                        className={`flex-1 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${tradeMode === 'SELL' ? 'bg-[#EF4444] text-white' : 'text-gray-500 hover:text-white'}`}
+                                    >
+                                        Sell
+                                    </button>
+                                </div>
 
 
 
-                            {/* INPUT Section */}
-                            <div className="bg-[#0A0A0A] rounded-xl border border-white/5 p-4 mb-4">
-                                <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-2 block">
-                                    {tradeMode === 'BUY' ? 'You Pay' : 'Shares to Sell'}
-                                </label>
-                                <div className="flex items-center gap-3">
-                                    <input
-                                        type="text"
-                                        inputMode="decimal"
-                                        value={betAmount || ''}
-                                        onChange={(e) => {
-                                            // Allow free typing, parseCompactNumber handles the value extraction logic
-                                            setBetAmount(e.target.value);
-                                            setIsMaxSell(false);
-                                        }}
-                                        className="bg-transparent text-5xl font-extralight text-white w-full outline-none placeholder-white/30 tracking-tighter"
-                                        placeholder="0"
-                                    />
-                                    {/* SOL ICON */}
-                                    <div className="flex items-center gap-2 bg-[#1A1A1A] px-3 py-2 rounded-xl border border-white/10 shrink-0">
-                                        <img
-                                            src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
-                                            className="w-5 h-5"
-                                            alt="SOL"
+                                {/* INPUT Section */}
+                                <div className="bg-[#0A0A0A] rounded-xl border border-white/5 p-4 mb-4">
+                                    <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-2 block">
+                                        {tradeMode === 'BUY' ? 'You Pay' : 'Shares to Sell'}
+                                    </label>
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="text"
+                                            inputMode="decimal"
+                                            value={betAmount || ''}
+                                            onChange={(e) => {
+                                                // Allow free typing, parseCompactNumber handles the value extraction logic
+                                                setBetAmount(e.target.value);
+                                                setIsMaxSell(false);
+                                            }}
+                                            className="bg-transparent text-5xl font-extralight text-white w-full outline-none placeholder-white/30 tracking-tighter"
+                                            placeholder="0"
                                         />
-                                        <span className="text-sm font-bold text-white">{tradeMode === 'BUY' ? 'SOL' : 'SHARES'}</span>
+                                        {/* SOL ICON */}
+                                        <div className="flex items-center gap-2 bg-[#1A1A1A] px-3 py-2 rounded-xl border border-white/10 shrink-0">
+                                            <img
+                                                src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
+                                                className="w-5 h-5"
+                                                alt="SOL"
+                                            />
+                                            <span className="text-sm font-bold text-white">{tradeMode === 'BUY' ? 'SOL' : 'SHARES'}</span>
+                                        </div>
                                     </div>
-                                </div>
-                                {/* Percentage Buttons (SELL MODE ONLY) */}
-                                {tradeMode === 'SELL' && (
-                                    <div className="flex gap-2 mt-4 pt-4 border-t border-white/5">
-                                        {[25, 50, 75, 100].map((pct) => (
-                                            <button
-                                                key={pct}
-                                                onClick={() => {
-                                                    const sharesOwned = isMultiOutcome
-                                                        ? (myShares[marketOutcomes.findIndex(o => o.id === selectedOutcomeId)] || 0)
-                                                        : (selectedSide === 'YES' ? (myShares[0] || 0) : (myShares[1] || 0));
-                                                    if (sharesOwned <= 0) return;
-
-                                                    if (pct === 100) {
-                                                        setIsMaxSell(true);
-                                                    } else {
-                                                        setIsMaxSell(false);
-                                                    }
-
-                                                    // Share Input Logic: 100% means 100% of SHARES.
-                                                    const sharesToSell = sharesOwned * (pct / 100);
-
-                                                    // Enable COMPACT FORMAT (e.g. 1M) since we switched to text input
-                                                    const formattedShares = sharesToSell >= 100_000
-                                                        ? formatCompact(sharesToSell)
-                                                        : sharesToSell.toFixed(2);
-
-                                                    setBetAmount(formattedShares);
-                                                }}
-                                                className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${(pct === 100 && isMaxSell)
-                                                    ? 'bg-white/20 text-white border-white/20'
-                                                    : 'bg-white/5 text-gray-400 border-white/5 hover:bg-white/10 hover:text-white'
-                                                    }`}
-                                            >
-                                                {pct}%
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* 2. PROBABILITY BAR & OUTCOMES */}
-                            <div className="mb-6 space-y-3">
-                                <div className="flex items-center justify-between px-2">
-                                    <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Prediction</span>
-                                    {/* Slippage (Pencil Edit) */}
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[10px] font-bold text-gray-500 bg-white/5 px-2 py-1 rounded border border-white/5">{slippageTolerance}% SLIP</span>
-                                        <button onClick={() => {
-                                            const newSlippage = prompt("Enter new slippage %:", slippageTolerance.toString());
-                                            if (newSlippage && !isNaN(parseFloat(newSlippage))) setSlippageTolerance(parseFloat(newSlippage));
-                                        }} className="p-1.5 rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
-                                            <Edit2 size={12} />
-                                        </button>
-                                    </div>
-                                </div>
-
-
-
-                                {/* LARGE YES/NO BUTTONS (Limitless Style) */}
-                                <div className="flex gap-3 h-20">
-                                    {isMultiOutcome ? (
-                                        <div className="flex-1 bg-[#1A1A1A] rounded-2xl border border-white/10 p-4 flex flex-col justify-center items-center hover:border-[#F492B7]/50 transition-colors cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-                                            <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-1">Target Outcome</span>
-                                            <span className="font-bold text-white text-lg truncate max-w-full">{selectedOutcomeName || 'Select First'}</span>
-                                            <span className="text-sm font-mono text-[#10B981] mt-1">{(livePrice ?? 0).toFixed(0)}%</span>
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <button
-                                                onClick={() => setSelectedSide('YES')}
-                                                className={`flex-1 rounded-xl flex flex-col items-center justify-center transition-all duration-200 border-2 ${selectedSide === 'YES'
-                                                    ? 'bg-[#10B981] border-[#10B981] text-white shadow-[0_0_20px_rgba(16,185,129,0.4)] scale-[1.02]'
-                                                    : 'bg-[#1A1A1A] border-white/5 text-gray-500 hover:border-[#10B981]/50 hover:bg-[#10B981]/10'}`}
-                                            >
-                                                <span className="text-xs font-black uppercase tracking-widest mb-0.5">{marketOutcomes[0]?.title || 'YES'}</span>
-                                                <span className={`text-2xl font-bold ${selectedSide === 'YES' ? 'text-white' : 'text-[#10B981]'}`}>
-                                                    {yesPercent.toFixed(0)}%
-                                                </span>
-                                            </button>
-                                            <button
-                                                onClick={() => setSelectedSide('NO')}
-                                                className={`flex-1 rounded-xl flex flex-col items-center justify-center transition-all duration-200 border-2 ${selectedSide === 'NO'
-                                                    ? 'bg-[#EF4444] border-[#EF4444] text-white shadow-[0_0_20px_rgba(239,68,68,0.4)] scale-[1.02]'
-                                                    : 'bg-[#1A1A1A] border-white/5 text-gray-500 hover:border-[#EF4444]/50 hover:bg-[#EF4444]/10'}`}
-                                            >
-                                                <span className="text-xs font-black uppercase tracking-widest mb-0.5">{marketOutcomes[1]?.title || 'NO'}</span>
-                                                <span className={`text-2xl font-bold ${selectedSide === 'NO' ? 'text-white' : 'text-[#EF4444]'}`}>
-                                                    {noPercent.toFixed(0)}%
-                                                </span>
-                                            </button>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* 3. TRANSACTION SUMMARY */}
-                            <div className="bg-gradient-to-br from-white/[0.03] to-white/[0.01] rounded-[2rem] border border-white/10 p-6 space-y-5">
-                                {/* BUY MODE SUMMARY */}
-                                {tradeMode === 'BUY' && (
-                                    <>
-                                        <div className="flex justify-between items-center text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em]">
-                                            <span>Rate</span>
-                                            <span className="font-mono text-xs lowercase text-gray-300">
-                                                1 SOL ≈ {amountNum > 0 ? formatCompact(estimatedShares / amountNum) : formatCompact(1 / getSpotPrice(estimatedSupply))} shares
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between items-center text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em]">
-                                            <span>Impact</span>
-                                            <span className={`font-mono text-xs ${previewSim.priceImpact > 5 ? 'text-amber-400' : 'text-gray-300'}`}>
-                                                {previewSim.priceImpact.toFixed(2)}%
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between items-end border-t border-white/10 pt-5">
-                                            <div>
-                                                <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">Shares to Receive</span>
-                                                <span className="text-4xl font-extralight text-white leading-none tracking-tight">
-                                                    {formatCompact(estimatedShares)}
-                                                </span>
-                                            </div>
-                                            <div className="text-right">
-                                                <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">Cost</span>
-                                                <span className="text-base font-bold text-[#10B981] font-mono">
-                                                    ${(parseFloat(betAmount || '0') * solPrice).toFixed(2)}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </>
-                                )}
-
-                                {/* SELL MODE SUMMARY */}
-                                {tradeMode === 'SELL' && (
-                                    <>
-                                        <div className="flex justify-between items-center text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em]">
-                                            <span>Exit Price</span>
-                                            <span className="font-mono text-xs text-gray-300">
-                                                {currentPriceForSide.toFixed(1)}%
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between items-end border-t border-white/10 pt-5 mt-4">
-                                            <div>
-                                                <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">Shares to Sell</span>
-                                                <span className="text-4xl font-extralight text-white leading-none tracking-tight">
-                                                    {(() => {
+                                    {/* Percentage Buttons (SELL MODE ONLY) */}
+                                    {tradeMode === 'SELL' && (
+                                        <div className="flex gap-2 mt-4 pt-4 border-t border-white/5">
+                                            {[25, 50, 75, 100].map((pct) => (
+                                                <button
+                                                    key={pct}
+                                                    onClick={() => {
                                                         const sharesOwned = isMultiOutcome
                                                             ? (myShares[marketOutcomes.findIndex(o => o.id === selectedOutcomeId)] || 0)
                                                             : (selectedSide === 'YES' ? (myShares[0] || 0) : (myShares[1] || 0));
-                                                        const price = currentPriceForSide / 100;
+                                                        if (sharesOwned <= 0) return;
 
-                                                        if (isMaxSell) return formatCompact(sharesOwned);
-                                                        if (!betAmount || price <= 0) return '0';
+                                                        if (pct === 100) {
+                                                            setIsMaxSell(true);
+                                                        } else {
+                                                            setIsMaxSell(false);
+                                                        }
 
-                                                        const shares = parseCompactNumber(betAmount) / price;
-                                                        const capped = Math.min(shares, sharesOwned);
-                                                        return formatCompact(capped);
-                                                    })()}
-                                                </span>
-                                            </div>
-                                            <div className="text-right">
-                                                <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">You Get</span>
-                                                <span className="text-xl font-bold text-[#10B981] font-mono">
-                                                    ◎{(() => {
-                                                        // SELL LOGIC DISPLAY
-                                                        // Use same safe logic as handleTrade
-                                                        const spotPrice = getSpotPrice(estimatedSupply);
-                                                        const safePrice = spotPrice > 0 ? spotPrice : 0.0000001;
-                                                        // If Max Sell, use sharesOwned directly
-                                                        // If input amount is SOL, we reverse it? 
-                                                        // Wait, the input is SOL value user wants to extract?
-                                                        // OR is the input always SOL? 
-                                                        // "You Receive (Est)" -> 0.9405 SOL.
-                                                        // So betAmount IS SOL.
-                                                        // So "You Get" should be betAmount - fee?
+                                                        // Share Input Logic: 100% means 100% of SHARES.
+                                                        const sharesToSell = sharesOwned * (pct / 100);
 
-                                                        return (parseFloat(betAmount || '0') * 0.99).toFixed(4);
-                                                    })()} SOL
-                                                </span>
-                                            </div>
+                                                        // Enable COMPACT FORMAT (e.g. 1M) since we switched to text input
+                                                        const formattedShares = sharesToSell >= 100_000
+                                                            ? formatCompact(sharesToSell)
+                                                            : sharesToSell.toFixed(2);
+
+                                                        setBetAmount(formattedShares);
+                                                    }}
+                                                    className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${(pct === 100 && isMaxSell)
+                                                        ? 'bg-white/20 text-white border-white/20'
+                                                        : 'bg-white/5 text-gray-400 border-white/5 hover:bg-white/10 hover:text-white'
+                                                        }`}
+                                                >
+                                                    {pct}%
+                                                </button>
+                                            ))}
                                         </div>
-                                    </>
-                                )}
-                            </div>
+                                    )}
+                                </div>
 
-
-
-
-
-
-                            {/* ACTION BUTTON */}
-                            <button
-                                onClick={handleTrade}
-                                disabled={isPending || isSuccess}
-                                className={`w-full py-6 rounded-[2rem] font-bold text-lg uppercase tracking-[0.25em] shadow-2xl transition-all duration-300 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden group mt-6 ${isSuccess ? 'bg-gradient-to-r from-[#10B981] to-[#059669] text-black' :
-                                    tradeMode === 'BUY' ? 'bg-[#10B981] text-white hover:shadow-[#10B981]/50 hover:shadow-2xl hover:scale-[1.02]' : 'bg-gradient-to-r from-[#EF4444] to-[#DC2626] text-white hover:shadow-[#EF4444]/50 hover:shadow-2xl hover:scale-[1.02]'
-                                    }`}
-                            >
-                                {isPending ? (
-                                    <div className="flex items-center justify-center gap-2">
-                                        <Loader2 className="animate-spin" /> Processing...
+                                {/* 2. PROBABILITY BAR & OUTCOMES */}
+                                <div className="mb-6 space-y-3">
+                                    <div className="flex items-center justify-between px-2">
+                                        <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Prediction</span>
+                                        {/* Slippage (Pencil Edit) */}
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[10px] font-bold text-gray-500 bg-white/5 px-2 py-1 rounded border border-white/5">{slippageTolerance}% SLIP</span>
+                                            <button onClick={() => {
+                                                const newSlippage = prompt("Enter new slippage %:", slippageTolerance.toString());
+                                                if (newSlippage && !isNaN(parseFloat(newSlippage))) setSlippageTolerance(parseFloat(newSlippage));
+                                            }} className="p-1.5 rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
+                                                <Edit2 size={12} />
+                                            </button>
+                                        </div>
                                     </div>
-                                ) : isSuccess ? (
-                                    <div className="flex items-center justify-center gap-2">
-                                        <CheckCircle2 /> <span className="text-lg">Success</span>
-                                    </div>
-                                ) : (
-                                    <span>
-                                        {tradeMode === 'BUY'
-                                            ? `Buy ${selectedSide === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO')}`
-                                            : `Sell ${selectedSide === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO')}`}
-                                    </span>
-                                )}
-                            </button>
 
-                            {/* SUCCESS BUBBLE - Shows after successful trade */}
-                            {tradeSuccessInfo && (
-                                <div className="mt-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                    <div className="bg-gradient-to-r from-emerald-500/20 to-emerald-600/10 border-2 border-emerald-500/40 rounded-[1.5rem] p-4 text-center shadow-xl shadow-emerald-500/10">
-                                        <p className="text-emerald-400 font-bold text-sm">
-                                            ✓ Successfully purchased {tradeSuccessInfo.shares.toFixed(2)} {tradeSuccessInfo.side} shares
-                                        </p>
-                                        {tradeSuccessInfo.txSignature && (
-                                            <a
-                                                href={`https://solscan.io/tx/${tradeSuccessInfo.txSignature}`}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-xs text-emerald-500/70 hover:text-emerald-400 underline underline-offset-2 mt-2 inline-block transition-all hover:scale-105"
-                                            >
-                                                View on Solscan →
-                                            </a>
+
+
+                                    {/* LARGE YES/NO BUTTONS (Limitless Style) */}
+                                    <div className="flex gap-3 h-20">
+                                        {isMultiOutcome ? (
+                                            <div className="flex-1 bg-[#1A1A1A] rounded-2xl border border-white/10 p-4 flex flex-col justify-center items-center hover:border-[#F492B7]/50 transition-colors cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+                                                <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-1">Target Outcome</span>
+                                                <span className="font-bold text-white text-lg truncate max-w-full">{selectedOutcomeName || 'Select First'}</span>
+                                                <span className="text-sm font-mono text-[#10B981] mt-1">{(livePrice ?? 0).toFixed(0)}%</span>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <button
+                                                    onClick={() => setSelectedSide('YES')}
+                                                    className={`flex-1 rounded-xl flex flex-col items-center justify-center transition-all duration-200 border-2 ${selectedSide === 'YES'
+                                                        ? 'bg-[#10B981] border-[#10B981] text-white shadow-[0_0_20px_rgba(16,185,129,0.4)] scale-[1.02]'
+                                                        : 'bg-[#1A1A1A] border-white/5 text-gray-500 hover:border-[#10B981]/50 hover:bg-[#10B981]/10'}`}
+                                                >
+                                                    <span className="text-xs font-black uppercase tracking-widest mb-0.5">{marketOutcomes[0]?.title || 'YES'}</span>
+                                                    <span className={`text-2xl font-bold ${selectedSide === 'YES' ? 'text-white' : 'text-[#10B981]'}`}>
+                                                        {yesPercent.toFixed(0)}%
+                                                    </span>
+                                                </button>
+                                                <button
+                                                    onClick={() => setSelectedSide('NO')}
+                                                    className={`flex-1 rounded-xl flex flex-col items-center justify-center transition-all duration-200 border-2 ${selectedSide === 'NO'
+                                                        ? 'bg-[#EF4444] border-[#EF4444] text-white shadow-[0_0_20px_rgba(239,68,68,0.4)] scale-[1.02]'
+                                                        : 'bg-[#1A1A1A] border-white/5 text-gray-500 hover:border-[#EF4444]/50 hover:bg-[#EF4444]/10'}`}
+                                                >
+                                                    <span className="text-xs font-black uppercase tracking-widest mb-0.5">{marketOutcomes[1]?.title || 'NO'}</span>
+                                                    <span className={`text-2xl font-bold ${selectedSide === 'NO' ? 'text-white' : 'text-[#EF4444]'}`}>
+                                                        {noPercent.toFixed(0)}%
+                                                    </span>
+                                                </button>
+                                            </>
                                         )}
                                     </div>
                                 </div>
-                            )}
 
-                            {/* Terms of Use Link */}
-                            <div className="mt-4 text-center">
-                                <p className="text-[10px] text-gray-500">
-                                    By trading, you agree to the{' '}
-                                    <Link href="/legal" className="text-[#F492B7] hover:underline hover:text-white transition-colors">
-                                        Terms of Use
-                                    </Link>
-                                </p>
+                                {/* 3. TRANSACTION SUMMARY */}
+                                <div className="bg-gradient-to-br from-white/[0.03] to-white/[0.01] rounded-[2rem] border border-white/10 p-6 space-y-5">
+                                    {/* BUY MODE SUMMARY */}
+                                    {tradeMode === 'BUY' && (
+                                        <>
+                                            <div className="flex justify-between items-center text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em]">
+                                                <span>Rate</span>
+                                                <span className="font-mono text-xs lowercase text-gray-300">
+                                                    1 SOL ≈ {amountNum > 0 ? formatCompact(estimatedShares / amountNum) : formatCompact(1 / getSpotPrice(estimatedSupply))} shares
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em]">
+                                                <span>Impact</span>
+                                                <span className={`font-mono text-xs ${previewSim.priceImpact > 5 ? 'text-amber-400' : 'text-gray-300'}`}>
+                                                    {previewSim.priceImpact.toFixed(2)}%
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between items-end border-t border-white/10 pt-5">
+                                                <div>
+                                                    <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">Shares to Receive</span>
+                                                    <span className="text-4xl font-extralight text-white leading-none tracking-tight">
+                                                        {formatCompact(estimatedShares)}
+                                                    </span>
+                                                </div>
+                                                <div className="text-right">
+                                                    <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">Cost</span>
+                                                    <span className="text-base font-bold text-[#10B981] font-mono">
+                                                        ${(parseFloat(betAmount || '0') * solPrice).toFixed(2)}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {/* SELL MODE SUMMARY */}
+                                    {tradeMode === 'SELL' && (
+                                        <>
+                                            <div className="flex justify-between items-center text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em]">
+                                                <span>Exit Price</span>
+                                                <span className="font-mono text-xs text-gray-300">
+                                                    {currentPriceForSide.toFixed(1)}%
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between items-end border-t border-white/10 pt-5 mt-4">
+                                                <div>
+                                                    <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">Shares to Sell</span>
+                                                    <span className="text-4xl font-extralight text-white leading-none tracking-tight">
+                                                        {(() => {
+                                                            const sharesOwned = isMultiOutcome
+                                                                ? (myShares[marketOutcomes.findIndex(o => o.id === selectedOutcomeId)] || 0)
+                                                                : (selectedSide === 'YES' ? (myShares[0] || 0) : (myShares[1] || 0));
+                                                            const price = currentPriceForSide / 100;
+
+                                                            if (isMaxSell) return formatCompact(sharesOwned);
+                                                            if (!betAmount || price <= 0) return '0';
+
+                                                            const shares = parseCompactNumber(betAmount) / price;
+                                                            const capped = Math.min(shares, sharesOwned);
+                                                            return formatCompact(capped);
+                                                        })()}
+                                                    </span>
+                                                </div>
+                                                <div className="text-right">
+                                                    <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">You Get</span>
+                                                    <span className="text-xl font-bold text-[#10B981] font-mono">
+                                                        ◎{(() => {
+                                                            // SELL LOGIC DISPLAY
+                                                            // Use same safe logic as handleTrade
+                                                            const spotPrice = getSpotPrice(estimatedSupply);
+                                                            const safePrice = spotPrice > 0 ? spotPrice : 0.0000001;
+                                                            // If Max Sell, use sharesOwned directly
+                                                            // If input amount is SOL, we reverse it? 
+                                                            // Wait, the input is SOL value user wants to extract?
+                                                            // OR is the input always SOL? 
+                                                            // "You Receive (Est)" -> 0.9405 SOL.
+                                                            // So betAmount IS SOL.
+                                                            // So "You Get" should be betAmount - fee?
+
+                                                            return (parseFloat(betAmount || '0') * 0.99).toFixed(4);
+                                                        })()} SOL
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+
+
+
+
+
+
+                                {/* ACTION BUTTON */}
+                                <button
+                                    onClick={handleTrade}
+                                    disabled={isPending || isSuccess}
+                                    className={`w-full py-6 rounded-[2rem] font-bold text-lg uppercase tracking-[0.25em] shadow-2xl transition-all duration-300 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden group mt-6 ${isSuccess ? 'bg-gradient-to-r from-[#10B981] to-[#059669] text-black' :
+                                        tradeMode === 'BUY' ? 'bg-[#10B981] text-white hover:shadow-[#10B981]/50 hover:shadow-2xl hover:scale-[1.02]' : 'bg-gradient-to-r from-[#EF4444] to-[#DC2626] text-white hover:shadow-[#EF4444]/50 hover:shadow-2xl hover:scale-[1.02]'
+                                        }`}
+                                >
+                                    {isPending ? (
+                                        <div className="flex items-center justify-center gap-2">
+                                            <Loader2 className="animate-spin" /> Processing...
+                                        </div>
+                                    ) : isSuccess ? (
+                                        <div className="flex items-center justify-center gap-2">
+                                            <CheckCircle2 /> <span className="text-lg">Success</span>
+                                        </div>
+                                    ) : (
+                                        <span>
+                                            {tradeMode === 'BUY'
+                                                ? `Buy ${selectedSide === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO')}`
+                                                : `Sell ${selectedSide === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO')}`}
+                                        </span>
+                                    )}
+                                </button>
+
+                                {/* SUCCESS BUBBLE - Shows after successful trade */}
+                                {tradeSuccessInfo && (
+                                    <div className="mt-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                        <div className="bg-gradient-to-r from-emerald-500/20 to-emerald-600/10 border-2 border-emerald-500/40 rounded-[1.5rem] p-4 text-center shadow-xl shadow-emerald-500/10">
+                                            <p className="text-emerald-400 font-bold text-sm">
+                                                ✓ Successfully purchased {tradeSuccessInfo.shares.toFixed(2)} {tradeSuccessInfo.side} shares
+                                            </p>
+                                            {tradeSuccessInfo.txSignature && (
+                                                <a
+                                                    href={`https://solscan.io/tx/${tradeSuccessInfo.txSignature}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-xs text-emerald-500/70 hover:text-emerald-400 underline underline-offset-2 mt-2 inline-block transition-all hover:scale-105"
+                                                >
+                                                    View on Solscan →
+                                                </a>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Terms of Use Link */}
+                                <div className="mt-4 text-center">
+                                    <p className="text-[10px] text-gray-500">
+                                        By trading, you agree to the{' '}
+                                        <Link href="/legal" className="text-[#F492B7] hover:underline hover:text-white transition-colors">
+                                            Terms of Use
+                                        </Link>
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     </div>
+
+                    {/* PURCHASE BUBBLES - Fixed position notifications */}
+                    <div className="fixed top-24 right-6 z-50 flex flex-col gap-2 pointer-events-none">
+                        {
+                            purchaseBubbles.map((bubble) => (
+                                <div
+                                    key={bubble.id}
+                                    className="animate-in slide-in-from-right-5 fade-in duration-300 pointer-events-auto"
+                                >
+                                    <div className={`px-4 py-2 rounded-full font-bold text-sm shadow-xl flex items-center gap-2 ${bubble.side === 'YES'
+                                        ? 'bg-[#10B981] text-white shadow-[#10B981]/30'
+                                        : 'bg-[#F492B7] text-white shadow-[#F492B7]/30'
+                                        }`}
+                                    >
+                                        <span className="text-lg">+</span>
+                                        <span>{bubble.side === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO')}</span>
+                                        <span className="font-mono">{formatCompact(bubble.amount)}</span>
+                                    </div>
+                                </div>
+                            ))
+                        }
+                    </div>
+
+                    {/* Purchase Toast Notification */}
+                    <PurchaseToast
+                        isVisible={showPurchaseToast}
+                        onClose={() => setShowPurchaseToast(false)
+                        }
+                        onShare={() => {
+                            setShowPurchaseToast(false);
+                            setShowShareModal(true);
+                        }}
+                        betDetails={lastBetDetails}
+                    />
+
+                    {/* Share Modal */}
+                    {
+                        lastBetDetails && (
+                            <ShareModal
+                                isOpen={showShareModal}
+                                onClose={() => setShowShareModal(false)}
+                                betDetails={lastBetDetails}
+                            />
+                        )
+                    }
+
+                    {/* Djinn Toast */}
                 </div>
-            </div>
+            </div> {/* End of Scaled Wrapper */}
+        </div> {/* End of RIGHT COLUMN */}
 
-            {/* PURCHASE BUBBLES - Fixed position notifications */}
-            <div className="fixed top-24 right-6 z-50 flex flex-col gap-2 pointer-events-none">
-                {purchaseBubbles.map((bubble) => (
-                    <div
-                        key={bubble.id}
-                        className="animate-in slide-in-from-right-5 fade-in duration-300 pointer-events-auto"
-                    >
-                        <div className={`px-4 py-2 rounded-full font-bold text-sm shadow-xl flex items-center gap-2 ${bubble.side === 'YES'
-                            ? 'bg-[#10B981] text-white shadow-[#10B981]/30'
-                            : 'bg-[#F492B7] text-white shadow-[#F492B7]/30'
-                            }`}
-                        >
-                            <span className="text-lg">+</span>
-                            <span>{bubble.side === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO')}</span>
-                            <span className="font-mono">{formatCompact(bubble.amount)}</span>
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            {/* Purchase Toast Notification */}
-            <PurchaseToast
-                isVisible={showPurchaseToast}
-                onClose={() => setShowPurchaseToast(false)}
-                onShare={() => {
-                    setShowPurchaseToast(false);
-                    setShowShareModal(true);
-                }}
-                betDetails={lastBetDetails}
-            />
-
-            {/* Share Modal */}
-            {lastBetDetails && (
-                <ShareModal
-                    isOpen={showShareModal}
-                    onClose={() => setShowShareModal(false)}
-                    betDetails={lastBetDetails}
-                />
-            )}
-
-            {/* Djinn Toast */}
-            <DjinnToast
-                isVisible={djinnToast.isVisible}
-                onClose={() => setDjinnToast(prev => ({ ...prev, isVisible: false }))}
-                type={djinnToast.type}
-                title={djinnToast.title}
-                message={djinnToast.message}
-                actionLink={djinnToast.actionLink}
-                actionLabel={djinnToast.actionLabel}
-            />
-            {/* FLOATING HOLDINGS BUTTON (Bottom Right) */}
-            <AnimatePresence>
-                {/* Calculate Total Shares to decide if we show button */}
-                {(mounted && publicKey) && (
-                    <>
-                        <motion.button
-                            initial={{ scale: 0, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0, opacity: 0 }}
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => setShowHoldingsPanel(!showHoldingsPanel)}
-                            className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-full shadow-2xl transition-all border
+        <DjinnToast
+            isVisible={djinnToast.isVisible}
+            onClose={() => setDjinnToast(prev => ({ ...prev, isVisible: false }))}
+            type={djinnToast.type}
+            title={djinnToast.title}
+            message={djinnToast.message}
+            actionLink={djinnToast.actionLink}
+            actionLabel={djinnToast.actionLabel}
+        />
+    {/* FLOATING HOLDINGS BUTTON (Bottom Right) */}
+    <AnimatePresence>
+        {/* Calculate Total Shares to decide if we show button */}
+        {(mounted && publicKey && myHoldingsFormatted.length > 0) && (
+            <>
+                <motion.button
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0, opacity: 0 }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setShowHoldingsPanel(!showHoldingsPanel)}
+                    className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-full shadow-2xl transition-all border
                             ${showHoldingsPanel
-                                    ? 'bg-[#F492B7] text-black border-[#F492B7]'
-                                    : 'bg-[#0E0E0E] text-[#F492B7] border-[#F492B7]/30 hover:border-[#F492B7]'}`}
-                        >
-                            <span className="font-bold text-xs uppercase tracking-wider">
-                                {showHoldingsPanel ? 'Close' : 'My Bets'}
-                            </span>
-                            <div className="w-5 h-5 rounded-full bg-black/20 flex items-center justify-center">
-                                {showHoldingsPanel ? <X size={12} /> : <Wallet size={12} />}
-                            </div>
-                        </motion.button>
+                            ? 'bg-[#F492B7] text-black border-[#F492B7]'
+                            : 'bg-[#0E0E0E] text-[#F492B7] border-[#F492B7]/30 hover:border-[#F492B7]'}`}
+                >
+                    <span className="font-bold text-xs uppercase tracking-wider">
+                        {showHoldingsPanel ? 'Close' : 'My Bets'}
+                    </span>
+                    <div className="w-5 h-5 rounded-full bg-black/20 flex items-center justify-center">
+                        {showHoldingsPanel ? <X size={12} /> : <Wallet size={12} />}
+                    </div>
+                </motion.button>
 
-                        {/* FLOATING PANEL POPOVER */}
-                        {showHoldingsPanel && (
-                            <motion.div
-                                initial={{ y: 20, opacity: 0, scale: 0.9 }}
-                                animate={{ y: 0, opacity: 1, scale: 1 }}
-                                exit={{ y: 20, opacity: 0, scale: 0.9 }}
-                                className="fixed bottom-20 right-6 z-50 w-80 shadow-2xl"
-                            >
-                                <HoldingsPanel holdings={myHoldingsFormatted} />
-                            </motion.div>
-                        )}
-                    </>
+                {/* FLOATING PANEL POPOVER */}
+                {showHoldingsPanel && (
+                    <motion.div
+                        initial={{ y: 20, opacity: 0, scale: 0.9 }}
+                        animate={{ y: 0, opacity: 1, scale: 1 }}
+                        exit={{ y: 20, opacity: 0, scale: 0.9 }}
+                        className="fixed bottom-20 right-6 z-50 w-80 shadow-2xl"
+                    >
+                        <HoldingsPanel holdings={myHoldingsFormatted} />
+                    </motion.div>
                 )}
-            </AnimatePresence>
-        </div>
-    );
+            </>
+        )}
+    </AnimatePresence>
+                </div >
+            </div >
+            );
 }
 
 

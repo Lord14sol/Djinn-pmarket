@@ -34,6 +34,10 @@ interface TheDjinnChartProps {
     probabilityData?: any[];
     tradeEvent?: TradeEvent | null;
     outcomeSupplies?: Record<string, number>;
+    volume?: string;
+    resolutionDate?: string;
+    selectedOutcome?: string;
+    onOutcomeChange?: (outcome: string) => void;
 }
 
 function TheDjinnChart({
@@ -41,6 +45,10 @@ function TheDjinnChart({
     probabilityData = [],
     tradeEvent,
     outcomeSupplies = {},
+    volume,
+    resolutionDate,
+    selectedOutcome,
+    onOutcomeChange
 }: TheDjinnChartProps) {
     const [timeframe, setTimeframe] = useState<'1m' | '5m' | '15m' | '1H' | '6H' | '1D' | '1W' | '1M' | 'ALL'>('1H');
 
@@ -138,9 +146,9 @@ function TheDjinnChart({
     // For now, passing necessary data to ProbabilityChart
 
     return (
-        <div className="w-full max-w-4xl mx-auto bg-black rounded-xl border border-zinc-800 shadow-2xl overflow-hidden relative font-sans h-[450px]">
+        <div className="w-full max-w-4xl mx-auto overflow-hidden relative font-sans h-[450px]">
             {/* CHART AREA */}
-            <div className="w-full h-full bg-[#09090b]">
+            <div className="w-full h-full bg-transparent">
                 <ProbabilityChart
                     data={safeProbData}
                     outcomes={outcomes}
@@ -148,6 +156,10 @@ function TheDjinnChart({
                     timeframe={timeframe}
                     setTimeframe={setTimeframe}
                     currentProbabilities={currentProbabilities}
+                    volume={volume}
+                    resolutionDate={resolutionDate}
+                    selectedOutcome={selectedOutcome}
+                    onOutcomeChange={onOutcomeChange}
                 />
             </div>
         </div>

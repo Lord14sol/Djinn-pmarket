@@ -178,8 +178,22 @@ function NavbarContent() {
                     });
                     if (newProfile?.username) setUsername(newProfile.username);
                 }
-            } catch (err) {
-                console.error("Error loading remote profile", err);
+            } catch (err: any) {
+                console.error("🔍 PROFILE_DEBUG: Error loading remote profile", err);
+                // Try one more time to just upsert blindly if read failed (fix for RLS blocking public reads but allowing auth inserts)
+                try {
+                    const { upsertProfile } = await import('@/lib/supabase-db');
+                    const newProfile = await upsertProfile({
+                        wallet_address: publicKey.toBase58(),
+                        username: publicKey.toBase58().slice(0, 8) + '...',
+                        bio: '',
+                        avatar_url: null,
+                        banner_url: null
+                    });
+                    if (newProfile?.username) setUsername(newProfile.username);
+                } catch (upsertErr) {
+                    console.error("🔍 PROFILE_DEBUG: Upsert failed too", upsertErr);
+                }
             }
         }
     };

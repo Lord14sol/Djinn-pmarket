@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useEffect } from 'react';
 import { useAnchorWallet, useConnection } from '@solana/wallet-adapter-react';
+import { useWallet } from '@solana/wallet-adapter-react';
 import { Program, AnchorProvider, Idl, BN, web3, utils } from '@coral-xyz/anchor';
 import { PublicKey, SystemProgram } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddress, createAssociatedTokenAccountIdempotentInstruction } from '@solana/spl-token';
@@ -15,16 +16,17 @@ const PROGRAM_PUBKEY = new PublicKey(PROGRAM_ID);
 
 export const useDjinnProtocol = () => {
     const { connection } = useConnection();
-    const wallet = useAnchorWallet();
+    const anchorWallet = useAnchorWallet();
+    const { sendTransaction, publicKey } = useWallet();
 
     // 1. Stable Provider (Rule 5.4/5.5)
     // Only recreate if connection or wallet *identity* changes, not on every render.
     const provider = useMemo(() => {
-        if (!wallet) return null;
-        return new AnchorProvider(connection, wallet, {
+        if (!anchorWallet) return null;
+        return new AnchorProvider(connection, anchorWallet, {
             preflightCommitment: 'processed',
         });
-    }, [connection, wallet]);
+    }, [connection, anchorWallet]);
 
     // 2. Stable Program Instance
     // This is the critical fix. Previously checking 'provider' in dependency could loop if provider wasn't stable.
@@ -40,8 +42,8 @@ export const useDjinnProtocol = () => {
     }, [provider]);
 
     const isContractReady = useMemo(() => {
-        return !!(program && provider && wallet && wallet.publicKey);
-    }, [program, provider, wallet]);
+        return !!(program && provider && anchorWallet && anchorWallet.publicKey);
+    }, [program, provider, anchorWallet]);
 
     // Cleanup: Removed noisy useEffect logging loop
 
@@ -55,7 +57,7 @@ export const useDjinnProtocol = () => {
         initialBuyAmount: number = 0,
         initialBuySide: number = 0 // 0-based index
     ) => {
-        if (!isContractReady || !program || !wallet || !provider) {
+        if (!isContractReady || !program || !anchorWallet || !provider || !publicKey) {
             console.warn('⚠️ Contract not ready - falling back to local mode');
             throw new Error("Wallet not connected or contract not ready");
         }
@@ -64,7 +66,7 @@ export const useDjinnProtocol = () => {
             console.log('[Djinn] Starting on-chain creation...', { title, initialBuyAmount });
 
             // Pre-flight checks
-            const balance = await provider.connection.getBalance(wallet.publicKey);
+            const balance = await provider.connection.getBalance(anchorWallet.publicKey);
 
             if (balance < 0.05 * 1e9) {
                 throw new Error('Insufficient SOL balance (need ~0.05 SOL for market creation fee + gas)');
@@ -85,7 +87,7 @@ export const useDjinnProtocol = () => {
             const [marketPda] = await PublicKey.findProgramAddress(
                 [
                     Buffer.from("market"),
-                    wallet.publicKey.toBuffer(),
+                    anchorWallet.publicKey.toBuffer(),
                     Buffer.from(utils.sha256.hash(title), "hex"),
                     Buffer.from(nonceBuffer)
                 ],
@@ -123,7 +125,7 @@ export const useDjinnProtocol = () => {
                 .accounts({
                     market: marketPda,
                     marketVault: marketVaultPda,
-                    creator: wallet.publicKey,
+                    creator: anchorWallet.publicKey,
                     protocolTreasury: MASTER_TREASURY,
                     systemProgram: SystemProgram.programId,
                 })
@@ -131,41 +133,27 @@ export const useDjinnProtocol = () => {
 
             tx.add(ix);
 
-            // Fetch latest blockhash and sign
-            const latestBlockhash = await connection.getLatestBlockhash();
-            tx.recentBlockhash = latestBlockhash.blockhash;
-            tx.feePayer = wallet.publicKey;
-
-            // @ts-ignore
-            const signedTx = await wallet.signTransaction(tx);
-
-            const signature = await connection.sendRawTransaction(signedTx.serialize(), {
-                skipPreflight: true,
-            });
+            // Use sendTransaction from wallet adapter (handles signing + sending)
+            const signature = await sendTransaction(tx, connection, { skipPreflight: true });
 
             console.log("[Djinn] ✅ Transaction sent:", signature);
-            await connection.confirmTransaction(
-                { signature, ...latestBlockhash },
-                'confirmed'
-            );
+            await connection.confirmTransaction(signature, 'confirmed');
 
             return { tx: signature, marketPda, yesMintPda: marketPda, noMintPda: marketPda, numOutcomes };
         } catch (error) {
             console.error("Error creating market:", error);
             throw error;
         }
-    }, [program, wallet, isContractReady, provider, connection]);
+    }, [program, anchorWallet, isContractReady, provider, connection, publicKey]);
 
     const buyShares = useCallback(async (
         marketPda: PublicKey,
         outcomeIndex: number,
         amountSol: number,
-        yesMint: PublicKey,
-        noMint: PublicKey,
         marketCreator: PublicKey,
         minSharesOut: number = 0
     ) => {
-        if (!program || !wallet || !connection) throw new Error("Wallet not connected");
+        if (!program || !anchorWallet || !connection || !publicKey) throw new Error("Wallet not connected");
 
         try {
             const amountLamports = new BN(Math.round(amountSol * web3.LAMPORTS_PER_SOL));
@@ -173,7 +161,7 @@ export const useDjinnProtocol = () => {
 
             // V2: PDA now includes outcome_index
             const userPositionPda = PublicKey.findProgramAddressSync(
-                [Buffer.from("user_pos"), marketPda.toBuffer(), wallet.publicKey.toBuffer(), Buffer.from([outcomeIndex])],
+                [Buffer.from("user_pos"), marketPda.toBuffer(), publicKey.toBuffer(), Buffer.from([outcomeIndex])],
                 program.programId
             )[0];
 
@@ -202,7 +190,7 @@ export const useDjinnProtocol = () => {
                     market: marketPda,
                     marketVault: marketVaultPda,
                     userPosition: userPositionPda,
-                    user: wallet.publicKey,
+                    user: publicKey,
                     protocolTreasury: MASTER_TREASURY,
                     marketCreator: marketCreator,
                     systemProgram: SystemProgram.programId,
@@ -211,21 +199,10 @@ export const useDjinnProtocol = () => {
 
             tx.add(ix);
 
-            const latestBlockhash = await connection.getLatestBlockhash();
-            tx.recentBlockhash = latestBlockhash.blockhash;
-            tx.feePayer = wallet.publicKey;
-
-            // @ts-ignore
-            const signedTx = await wallet.signTransaction(tx);
-            const signature = await connection.sendRawTransaction(signedTx.serialize(), {
-                skipPreflight: true,
-            });
+            const signature = await sendTransaction(tx, connection, { skipPreflight: true });
 
             console.log("✅ Buy TX Sent Sig:", signature);
-            await connection.confirmTransaction(
-                { signature, ...latestBlockhash },
-                'confirmed'
-            );
+            await connection.confirmTransaction(signature, 'confirmed');
 
             return signature;
 
@@ -233,7 +210,7 @@ export const useDjinnProtocol = () => {
             console.error("Error buying shares:", error);
             throw error;
         }
-    }, [program, wallet, connection]);
+    }, [program, anchorWallet, connection, publicKey]);
 
     const resolveMarket = useCallback(async (
         marketPda: PublicKey,
@@ -255,20 +232,14 @@ export const useDjinnProtocol = () => {
                 .accounts({
                     market: marketPda,
                     marketVault: marketVaultPda,
-                    authority: wallet.publicKey,
+                    authority: publicKey,
                     protocolTreasury: MASTER_TREASURY,
                     systemProgram: SystemProgram.programId,
                 })
                 .instruction();
 
             tx.add(ix);
-            const latestBlockhash = await connection.getLatestBlockhash();
-            tx.recentBlockhash = latestBlockhash.blockhash;
-            tx.feePayer = wallet.publicKey;
-
-            // @ts-ignore
-            const signedTx = await wallet.signTransaction(tx);
-            const signature = await connection.sendRawTransaction(signedTx.serialize());
+            const signature = await sendTransaction(tx, connection);
 
             await connection.confirmTransaction(
                 { signature, ...latestBlockhash },
@@ -280,7 +251,7 @@ export const useDjinnProtocol = () => {
             console.error("Error resolving market:", error);
             throw error;
         }
-    }, [program, wallet, connection]);
+    }, [program, anchorWallet, connection, publicKey]);
 
     const claimReward = useCallback(async (
         marketPda: PublicKey,
@@ -299,7 +270,7 @@ export const useDjinnProtocol = () => {
             );
 
             const userPositionPda = PublicKey.findProgramAddressSync(
-                [Buffer.from("user_pos"), marketPda.toBuffer(), wallet.publicKey.toBuffer(), Buffer.from([outcomeIndex])],
+                [Buffer.from("user_pos"), marketPda.toBuffer(), publicKey.toBuffer(), Buffer.from([outcomeIndex])],
                 program.programId
             )[0];
 
@@ -310,38 +281,29 @@ export const useDjinnProtocol = () => {
                     market: marketPda,
                     marketVault: marketVaultPda,
                     userPosition: userPositionPda,
-                    user: wallet.publicKey,
+                    user: publicKey,
                     systemProgram: SystemProgram.programId,
                 })
                 .instruction();
 
             tx.add(ix);
-            const latestBlockhash = await connection.getLatestBlockhash();
-            tx.recentBlockhash = latestBlockhash.blockhash;
-            tx.feePayer = wallet.publicKey;
 
-            // @ts-ignore
-            const signedTx = await wallet.signTransaction(tx);
-            const signature = await connection.sendRawTransaction(signedTx.serialize(), {
-                skipPreflight: true,
-            });
+            // Use sendTransaction
+            const signature = await sendTransaction(tx, connection, { skipPreflight: true });
 
-            await connection.confirmTransaction(
-                { signature, ...latestBlockhash },
-                'confirmed'
-            );
+            await connection.confirmTransaction(signature, 'confirmed');
             return signature;
         } catch (error) {
             console.error("Error claiming winnings:", error);
             throw error;
         }
-    }, [program, wallet, connection]);
+    }, [program, anchorWallet, connection, publicKey]);
 
     const getUserBalance = useCallback(async (marketPda: PublicKey, outcomeIndex: number) => {
-        if (!program || !wallet) return 0;
+        if (!program || !anchorWallet || !publicKey) return 0;
         try {
             const [userPositionPda] = PublicKey.findProgramAddressSync(
-                [Buffer.from("user_pos"), marketPda.toBuffer(), wallet.publicKey.toBuffer(), Buffer.from([outcomeIndex])],
+                [Buffer.from("user_pos"), marketPda.toBuffer(), publicKey.toBuffer(), Buffer.from([outcomeIndex])],
                 program.programId
             );
             // @ts-ignore
@@ -350,7 +312,7 @@ export const useDjinnProtocol = () => {
         } catch (e) {
             return 0;
         }
-    }, [program, wallet]);
+    }, [program, anchorWallet, publicKey]);
 
     const sellShares = useCallback(async (
         marketPda: PublicKey,
@@ -362,12 +324,12 @@ export const useDjinnProtocol = () => {
         minSolOut: number = 0,
         sellMax: boolean = false
     ) => {
-        if (!program || !wallet) throw new Error("Wallet not connected");
+        if (!program || !anchorWallet || !publicKey) throw new Error("Wallet not connected");
 
         try {
 
             const userPositionPda = PublicKey.findProgramAddressSync(
-                [Buffer.from("user_pos"), marketPda.toBuffer(), wallet.publicKey.toBuffer(), Buffer.from([outcomeIndex])],
+                [Buffer.from("user_pos"), marketPda.toBuffer(), publicKey.toBuffer(), Buffer.from([outcomeIndex])],
                 program.programId
             )[0];
 
@@ -414,7 +376,7 @@ export const useDjinnProtocol = () => {
                         market: marketPda,
                         marketVault: PublicKey.findProgramAddressSync([Buffer.from("market_vault"), marketPda.toBuffer()], program.programId)[0],
                         userPosition: userPositionPda,
-                        user: wallet.publicKey,
+                        user: publicKey,
                         protocolTreasury: MASTER_TREASURY,
 
                         systemProgram: SystemProgram.programId,
@@ -427,7 +389,7 @@ export const useDjinnProtocol = () => {
                         market: marketPda,
                         marketVault: PublicKey.findProgramAddressSync([Buffer.from("market_vault"), marketPda.toBuffer()], program.programId)[0],
                         userPosition: userPositionPda,
-                        user: wallet.publicKey,
+                        user: publicKey,
                         protocolTreasury: MASTER_TREASURY,
 
                         systemProgram: SystemProgram.programId,
@@ -438,24 +400,15 @@ export const useDjinnProtocol = () => {
 
             tx.add(ix);
 
-            const latestBlockhash = await connection.getLatestBlockhash();
-            tx.recentBlockhash = latestBlockhash.blockhash;
-            tx.feePayer = wallet.publicKey;
+            const signature = await sendTransaction(tx, connection, { skipPreflight: true });
 
-            // @ts-ignore
-            const signedTx = await wallet.signTransaction(tx);
-            const signature = await connection.sendRawTransaction(signedTx.serialize());
-
-            await connection.confirmTransaction(
-                { signature, ...latestBlockhash },
-                'confirmed'
-            );
+            await connection.confirmTransaction(signature, 'confirmed');
             return signature;
         } catch (error: any) {
             console.error("❌ Error selling shares:", error);
             throw error;
         }
-    }, [program, wallet, connection]);
+    }, [program, anchorWallet, connection, publicKey]);
 
     return {
         program,

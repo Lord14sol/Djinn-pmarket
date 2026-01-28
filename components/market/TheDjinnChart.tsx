@@ -358,7 +358,11 @@ export default function TheDjinnChart({
                                 </defs>
                                 <XAxis
                                     dataKey="time"
-                                    tickFormatter={(t) => format(t, timeframe.ms > 24 * 3600 * 1000 ? 'MMM d' : 'h:mm a')}
+                                    tickFormatter={(t) => {
+                                        if (timeframe.ms < 60 * 1000) return format(t, 'h:mm:ss');
+                                        if (timeframe.ms <= 24 * 60 * 60 * 1000) return format(t, 'h:mm a');
+                                        return format(t, 'MMM d');
+                                    }}
                                     axisLine={false}
                                     tickLine={false}
                                     tick={{ fill: '#4B5563', fontSize: 10, fontFamily: 'monospace' }}

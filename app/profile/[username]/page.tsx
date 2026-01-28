@@ -315,36 +315,40 @@ export default function ProfilePage() {
         fetchCreatedMarkets();
     }, [isMyProfile, publicKey, targetWalletAddress]);
 
-    // 3. LOAD ACTIVE BETS FROM SUPABASE (using bets table, not activity)
+    // 3. LOAD ACTIVE BETS FROM SUPABASE
     const loadActiveBets = async (walletAddress: string) => {
         try {
-            // Use the bets table which properly tracks claimed status
             const bets = await supabaseDb.getUserBets(walletAddress);
-
-            // Filter only active (unclaimed) bets
             const activeBets = bets.filter(bet => !bet.claimed);
 
-            // Transform bets into display format with profit calculation
             const formattedBets = await Promise.all(activeBets.map(async (bet: any) => {
-                // Fetch current market price to calculate profit
-                const marketData = await supabaseDb.getMarketData(bet.market_slug);
+                // Fetch Market Metadata (Icon, Title) AND Live Data (Price, Volume)
+                // We'll run parallel fetches for speed
+                const [marketMeta, marketData] = await Promise.all([
+                    supabaseDb.getMarket(bet.market_slug),
+                    supabaseDb.getMarketData(bet.market_slug)
+                ]);
+
                 const currentPrice = marketData?.live_price || bet.entry_price || 50;
+                const volume = marketData?.volume || 0;
 
                 // Calculate based on YES/NO position
                 const purchasePrice = bet.side === 'YES' ? currentPrice : (100 - currentPrice);
                 const invested = bet.amount || 0;
                 const shares = bet.shares || 0;
 
-                // Simple profit calculation (shares value at current price - invested)
                 const currentValue = shares * (purchasePrice / 100);
                 const profit = currentValue - invested;
                 const change = invested > 0 ? ((profit / invested) * 100).toFixed(1) : '0.0';
 
                 return {
                     id: bet.id || bet.market_slug,
-                    title: bet.market_slug.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
+                    title: marketMeta?.title || bet.market_slug,
+                    market_icon: marketMeta?.icon || marketMeta?.banner_url || '🔮',
+                    volume: volume, // Add Volume
                     invested,
                     current: currentValue,
+                    shares: shares,
                     side: bet.side,
                     change: `${profit >= 0 ? '+' : ''}${change}%`,
                     profit,
@@ -677,7 +681,8 @@ function BetCard({ bet, onCashOut, router }: any) {
     const [showShareModal, setShowShareModal] = useState(false);
     const isPositive = bet.profit >= 0;
 
-    const handleShare = () => {
+    const handleShare = (e: any) => {
+        e.stopPropagation();
         setShowShareModal(true);
     };
 
@@ -689,64 +694,89 @@ function BetCard({ bet, onCashOut, router }: any) {
 
     return (
         <>
-            <div className="bg-gradient-to-br from-[#0D0D0D] to-black border border-white/10 rounded-[2rem] p-6 hover:border-[#F492B7]/30 transition-all group relative overflow-hidden">
-                {/* Background glow based on profit */}
-                <div className={`absolute top-0 right-0 w-32 h-32 ${isPositive ? 'bg-[#10B981]/10' : 'bg-red-500/10'} rounded-full blur-2xl pointer-events-none`}></div>
+            {/* TICKET CARD STYLE */}
+            <div
+                onClick={() => router.push(`/market/${bet.market_slug}`)}
+                className="group relative bg-[#0D0D0D] border border-white/5 rounded-3xl overflow-hidden hover:border-[#F492B7]/30 transition-all cursor-pointer shadow-xl hover:-translate-y-1"
+            >
+                {/* 1. TICKET HEADER (Market Image & Gradient) */}
+                <div className="h-32 w-full relative overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#0D0D0D] to-transparent z-10" />
+                    {typeof bet.market_icon === 'string' && (bet.market_icon.startsWith('http') || bet.market_icon.startsWith('data:')) ? (
+                        <img src={bet.market_icon} className="w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-700" alt="" />
+                    ) : (
+                        <div className="w-full h-full bg-[#1A1A1A] flex items-center justify-center text-4xl opacity-20">{bet.market_icon}</div>
+                    )}
 
-                {/* Djinn watermark */}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 opacity-[0.08]">
-                    <div className="flex items-center gap-0">
-                        <img src="/star.png" alt="" className="w-20 h-20 -mr-2" />
-                        <span className="text-3xl font-bold text-white" style={{ fontFamily: 'var(--font-adriane), serif' }}>Djinn</span>
+                    {/* Floating Badge: SIDE */}
+                    <div className={`absolute top-4 right-4 z-20 px-3 py-1 rounded-lg font-black text-xs uppercase tracking-widest border backdrop-blur-md shadow-lg ${bet.side === 'YES' ? 'bg-[#10B981]/20 border-[#10B981]/40 text-[#10B981]' : 'bg-[#EF4444]/20 border-[#EF4444]/40 text-[#EF4444]'}`}>
+                        {bet.side} Position
+                    </div>
+
+                    {/* MARKET TITLE (Overlaid) */}
+                    <div className="absolute bottom-4 left-6 right-6 z-20">
+                        <h4 className="text-xl font-black text-white leading-tight drop-shadow-lg line-clamp-1">{bet.title}</h4>
                     </div>
                 </div>
 
-                <div className="relative z-10">
-                    {/* Header */}
-                    <div className="flex justify-between items-start mb-4">
-                        <span className={`text-[11px] font-black px-4 py-2 rounded-lg ${bet.side === 'YES' ? 'bg-[#10B981]/20 text-[#10B981] border border-[#10B981]/30' : 'bg-red-500/20 text-red-500 border border-red-500/30'}`}>{bet.side}</span>
+                {/* 2. TICKET BODY (Stats) */}
+                <div className="p-6 relative">
+                    {/* Perforation Line Effect */}
+                    <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent border-t border-dashed border-white/10" />
+                    <div className="absolute -top-3 -left-3 w-6 h-6 bg-black rounded-full" />
+                    <div className="absolute -top-3 -right-3 w-6 h-6 bg-black rounded-full" />
+
+                    <div className="grid grid-cols-2 gap-y-6 gap-x-4 mb-6">
+                        {/* SHARES */}
+                        <div>
+                            <p className="text-[#6B7280] text-[10px] uppercase font-bold tracking-widest mb-1">Shares</p>
+                            <p className="text-white text-lg font-mono font-medium">{formatCompact(bet.shares)}</p>
+                        </div>
+                        {/* INVESTED SOL */}
+                        <div className="text-right">
+                            <p className="text-[#6B7280] text-[10px] uppercase font-bold tracking-widest mb-1">Invested</p>
+                            <p className="text-white text-lg font-mono font-medium">{bet.sol_amount?.toFixed(3)} SOL</p>
+                        </div>
+
+                        {/* MARKET VOLUME */}
+                        <div>
+                            <p className="text-[#6B7280] text-[10px] uppercase font-bold tracking-widest mb-1">Vol</p>
+                            <div className="flex items-center gap-1 text-zinc-400 font-mono text-sm">
+                                <span>{formatCompact(bet.volume)}</span>
+                            </div>
+                        </div>
+
+                        {/* PROFIT/LOSS */}
+                        <div className="text-right">
+                            <p className="text-[#6B7280] text-[10px] uppercase font-bold tracking-widest mb-1">P/L</p>
+                            <p className={`text-lg font-black ${isPositive ? 'text-[#10B981]' : 'text-[#EF4444]'}`}>
+                                {isPositive ? '+' : ''}{bet.change}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* ACTION FOOTER */}
+                    <div className="flex gap-3 mt-2">
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onCashOut(bet.id); }}
+                            className="flex-1 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/20 text-white py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all"
+                        >
+                            Sell
+                        </button>
                         <button
                             onClick={handleShare}
-                            className="text-gray-500 hover:text-[#F492B7] transition-colors text-xs font-bold flex items-center gap-1"
+                            className="bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/20 text-[#F492B7] w-12 flex items-center justify-center rounded-xl transition-all"
                         >
-                            📤 Share
+                            📤
                         </button>
                     </div>
 
-                    {/* Title */}
-                    <h4 onClick={() => router.push(`/market/${bet.market_slug || bet.id}`)} className="text-lg font-bold text-white mb-6 leading-tight hover:text-[#F492B7] cursor-pointer line-clamp-2">{bet.title}</h4>
-
-                    {/* Stats */}
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                        <div className="bg-white/5 rounded-xl p-3">
-                            <p className="text-gray-500 text-[10px] uppercase tracking-widest mb-1">Invested</p>
-                            <p className="text-white text-xl font-black">${Math.round(bet.invested)}</p>
-                        </div>
-                        <div className="bg-white/5 rounded-xl p-3">
-                            <p className="text-gray-500 text-[10px] uppercase tracking-widest mb-1">Value</p>
-                            <p className="text-white text-xl font-black">${Math.round(bet.current)}</p>
-                        </div>
-                    </div>
-
-                    {/* Profit */}
-                    <div className={`rounded-xl p-4 mb-4 ${isPositive ? 'bg-[#10B981]/10 border border-[#10B981]/20' : 'bg-red-500/10 border border-red-500/20'}`}>
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <span className={`text-3xl ${isPositive ? 'text-[#10B981]' : 'text-red-500'}`}>{isPositive ? '↗' : '↘'}</span>
-                                <span className={`text-2xl font-black ${isPositive ? 'text-[#10B981]' : 'text-red-500'}`}>{isPositive ? '+' : ''}${Math.round(bet.profit)}</span>
-                            </div>
-                            <span className={`text-xl font-black ${isPositive ? 'text-[#10B981]' : 'text-red-500'}`}>{bet.change}</span>
-                        </div>
-                    </div>
-
-                    {/* Sell Shares button */}
-                    <button onClick={() => onCashOut(bet.id)} className="w-full bg-gradient-to-r from-[#F492B7] to-[#E056A0] text-black py-4 rounded-xl text-sm font-black uppercase tracking-wider hover:brightness-110 transition-all shadow-[0_0_20px_rgba(244,146,183,0.2)]">Sell Shares</button>
                 </div>
             </div>
 
-            {/* SHARE MODAL */}
+            {/* SHARE MODAL (Preserved) */}
             {showShareModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/90 backdrop-blur-xl" onClick={() => setShowShareModal(false)}>
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/90 backdrop-blur-xl" onClick={(e) => { e.stopPropagation(); setShowShareModal(false); }}>
                     <div className="relative" onClick={(e) => e.stopPropagation()}>
                         {/* Share Card Preview */}
                         <div className="w-[400px] bg-gradient-to-br from-[#0D0D0D] to-black border border-white/20 rounded-3xl p-8 relative overflow-hidden">
@@ -774,7 +804,7 @@ function BetCard({ bet, onCashOut, router }: any) {
                                     </div>
                                     <div className="text-center">
                                         <p className="text-gray-500 text-[10px] uppercase mb-1">Value</p>
-                                        <p className="text-white text-lg font-black">${bet.current}</p>
+                                        <p className="text-white text-lg font-black">${bet.current.toFixed(2)}</p>
                                     </div>
                                     <div className="text-center">
                                         <p className="text-gray-500 text-[10px] uppercase mb-1">Return</p>

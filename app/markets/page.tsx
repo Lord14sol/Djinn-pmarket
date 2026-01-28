@@ -230,10 +230,10 @@ export default function Home() {
     }
 
     if (activeCategory === 'Earth') {
-      if (activeSubcategory) return market.region === activeSubcategory;
-      return market.category === 'Earth' || market.region;
+      if (activeSubcategory) return (market.region || '').toLowerCase() === activeSubcategory.toLowerCase();
+      return (market.category || '').toLowerCase() === 'earth' || !!market.region;
     }
-    return market.category === activeCategory;
+    return (market.category || '').toLowerCase() === activeCategory.toLowerCase();
   });
 
   // Sorting Logic

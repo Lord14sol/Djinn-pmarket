@@ -8,10 +8,30 @@ import * as supabaseDb from '@/lib/supabase-db';
 interface CommentsSectionProps {
     marketSlug: string;
     publicKey: string | null;
-    userProfile: { username: string; avatarUrl: string | null };
-    myHeldPosition: 'YES' | 'NO' | null;
+    marketOutcomes: any[]; // Passed from parent to determine colors
+    myHeldPosition: string | null;
     myHeldAmount: string | null;
 }
+
+// Helper for dynamic colors (replicated from page.tsx for consistency)
+const getOutcomeColor = (title: string, outcomes: any[]) => {
+    if (!title) return '#9CA3AF'; // Gray
+    const normalized = title.toUpperCase();
+    if (normalized === 'YES') return '#10B981';
+    if (normalized === 'NO') return '#EF4444';
+
+    // Try to find in outcomes if color is defined there
+    const outcome = outcomes.find(o => o.title === title);
+    if (outcome && outcome.color) return outcome.color;
+
+    // Fallback hash for dynamic outcomes
+    let hash = 0;
+    for (let i = 0; i < title.length; i++) {
+        hash = title.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const hue = Math.abs(hash % 360);
+    return `hsl(${hue}, 70%, 50%)`;
+};
 
 // FORMAT TIME AGO (Mejorado para mostrar "Just now", "2m ago", etc. correctamente)
 function formatTimeAgo(timestamp: string): string {
@@ -311,7 +331,14 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
                                             </Link>
                                             <span className="text-[10px] text-gray-500 font-medium">{comment.timeAgo}</span>
                                             {comment.position && (
-                                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${comment.position === 'YES' ? 'border-[#10B981]/30 text-[#10B981] bg-[#10B981]/10' : 'border-red-500/30 text-red-500 bg-red-500/10'}`}>
+                                                <span
+                                                    className="text-[9px] font-black px-1.5 py-0.5 rounded border ml-2"
+                                                    style={{
+                                                        borderColor: `${getOutcomeColor(comment.position, [])}40`, // 40 = 25% opacity
+                                                        backgroundColor: `${getOutcomeColor(comment.position, [])}20`, // 20 = 12% opacity
+                                                        color: getOutcomeColor(comment.position, [])
+                                                    }}
+                                                >
                                                     BOUGHT {comment.position} {comment.position_amount}
                                                 </span>
                                             )}
