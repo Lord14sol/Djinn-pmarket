@@ -261,13 +261,6 @@ export default function Page() {
                 // Calculate Independent Price (Memecoin Style)
                 const spotPrice = getSpotPrice(supply);
 
-                // For Probability (Chance), we normalize against all prices
-                // This is calculated later or we can approximate here if needed.
-                // However, for Djinn Mode (Price), we strictly use 'spotPrice * 100' or raw price.
-
-                // Calculate Independent Price (Memecoin Style)
-                const spotPrice = getSpotPrice(supply);
-
                 // Calculate Independent MCAP (Supply * Price)
                 const mcapSOL = supply * spotPrice;
 
