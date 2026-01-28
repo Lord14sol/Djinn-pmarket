@@ -1,149 +1,127 @@
 'use client';
 
 import React from 'react';
-import Link from 'next/link';
-import Image from 'next/image';
-
-interface PyramidMarket {
-    title: string;
-    slug: string;
-    icon: string;
-    volume: string;
-    betsCount: number;
-    chance: number;
-    endDate?: Date;
-    options?: any[];
-}
+import MarketCard from '@/components/MarketCard';
+import { motion } from 'framer-motion';
 
 interface TheGreatPyramidProps {
-    topMarket: PyramidMarket | null;
+    topMarkets: any[];
 }
 
-export default function TheGreatPyramid({ topMarket }: TheGreatPyramidProps) {
-    if (!topMarket) return null;
+export default function TheGreatPyramid({ topMarkets }: TheGreatPyramidProps) {
+    if (!topMarkets || topMarkets.length === 0) return null;
 
-    const isMultiple = !!(topMarket.options && topMarket.options.length > 2);
-    const options = topMarket.options || ['YES', 'NO'];
+    // Podium indices: Center (Winner) is index 0. Left is index 1. Right is index 2.
+    const winner = topMarkets[0];
+    const second = topMarkets.length > 1 ? topMarkets[1] : null;
+    const third = topMarkets.length > 2 ? topMarkets[2] : null;
 
     return (
-        <section className="px-6 md:px-12 max-w-[1600px] mx-auto mb-16 mt-6">
-            <div className="relative overflow-hidden rounded-[2.5rem] bg-[#0A0A0A] border border-white/5 shadow-2xl min-h-[500px]">
-
-                <div className="flex flex-col md:flex-row h-full">
-
-                    {/* LEFT SIDE: Big Image (40%) */}
-                    <div className="w-full md:w-[40%] h-[300px] md:h-auto relative overflow-hidden shrink-0 border-b md:border-b-0 md:border-r border-white/5 bg-zinc-900">
-                        {topMarket.icon && (topMarket.icon.startsWith('http') || topMarket.icon.startsWith('/') || topMarket.icon.startsWith('data:') || topMarket.icon.includes('ipfs')) ? (
-                            <>
-                                {/* Blurred background effect */}
-                                <img
-                                    src={topMarket.icon}
-                                    alt=""
-                                    className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-20 scale-125"
-                                />
-                                {/* Main Sharp Image */}
-                                <img
-                                    src={topMarket.icon}
-                                    alt={topMarket.title}
-                                    className="absolute inset-0 w-full h-full object-cover z-10 hover:scale-105 transition-transform duration-700"
-                                    onError={(e) => {
-                                        e.currentTarget.style.display = 'none';
-                                        const parent = e.currentTarget.parentElement;
-                                        if (parent) {
-                                            const fallback = parent.querySelector('.image-fallback');
-                                            if (fallback) (fallback as HTMLElement).style.display = 'flex';
-                                        }
-                                    }}
-                                />
-                                <div className="image-fallback hidden absolute inset-0 w-full h-full items-center justify-center text-9xl bg-gradient-to-br from-white/5 to-transparent z-0">
-                                    🔮
-                                </div>
-                            </>
-                        ) : (
-                            <div className="w-full h-full flex items-center justify-center text-9xl bg-gradient-to-br from-white/5 to-transparent">
-                                {topMarket.icon || '🔮'}
-                            </div>
-                        )}
-                        {/* Gradient overlay for better text blending if needed */}
-                        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/60 to-transparent z-20 pointer-events-none" />
-                    </div>
-
-                    {/* RIGHT SIDE: Data & Buttons (60%) */}
-                    <div className="flex-1 p-8 md:p-16 flex flex-col justify-center gap-10 relative z-10">
-
-                        {/* Title Section */}
-                        <div className="flex flex-col gap-4">
-                            <div className="flex items-center gap-2">
-                                <span className="px-3 py-1 bg-[#F492B7]/10 text-[#F492B7] text-[10px] font-black uppercase tracking-[0.2em] rounded-full border border-[#F492B7]/20">
-                                    Top Volume
-                                </span>
-                                <span className="text-gray-500 text-[10px] font-black uppercase tracking-[0.2em]">
-                                    Active Market
-                                </span>
-                            </div>
-                            <h2 className="text-3xl md:text-5xl font-black text-white leading-[1.1] tracking-tight hover:text-[#F492B7] transition-colors cursor-pointer" onClick={() => window.location.href = `/market/${topMarket.slug}`}>
-                                {topMarket.title}
-                            </h2>
-                        </div>
-
-                        {/* Stats Row */}
-                        <div className="flex items-center gap-10">
-                            <div className="flex flex-col">
-                                <span className="text-[10px] uppercase font-black text-gray-500 tracking-widest mb-1">Total Volume</span>
-                                <span className="text-2xl font-black text-white">{topMarket.volume}</span>
-                            </div>
-                            <div className="h-10 w-px bg-white/10" />
-                            <div className="flex flex-col">
-                                <span className="text-[10px] uppercase font-black text-gray-500 tracking-widest mb-1">Trades</span>
-                                <span className="text-2xl font-black text-white">{topMarket.betsCount.toLocaleString()}</span>
-                            </div>
-                        </div>
-
-                        {/* Buttons Section */}
-                        <div className="flex flex-col gap-4">
-                            {isMultiple ? (
-                                <div className="grid grid-cols-1 gap-3">
-                                    {options.slice(0, 3).map((opt: any, idx: number) => (
-                                        <div
-                                            key={idx}
-                                            className="flex items-center justify-between p-5 bg-white/[0.03] border border-white/5 rounded-2xl hover:bg-white/10 transition-all group cursor-pointer"
-                                            onClick={() => window.location.href = `/market/${topMarket.slug}`}
-                                        >
-                                            <span className="text-lg font-bold text-gray-300 group-hover:text-white">
-                                                {typeof opt === 'string' ? opt : opt.title}
-                                            </span>
-                                            <div className="flex items-center gap-4">
-                                                <button className="px-6 py-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-black rounded-xl hover:bg-emerald-500 hover:text-white transition-all uppercase">Yes</button>
-                                                <button className="px-6 py-2 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-black rounded-xl hover:bg-rose-500 hover:text-white transition-all uppercase">No</button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                    {options.length > 3 && (
-                                        <Link href={`/market/${topMarket.slug}`} className="text-center text-[10px] font-black uppercase text-gray-500 hover:text-white transition-colors tracking-widest">
-                                            + {options.length - 3} More Options
-                                        </Link>
-                                    )}
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-2 gap-4">
-                                    <Link href={`/market/${topMarket.slug}`} className="w-full group/btn">
-                                        <div className="bg-emerald-500/10 border border-emerald-500/20 py-8 rounded-3xl flex flex-col items-center gap-1 group-hover/btn:bg-emerald-500 transition-all duration-300 shadow-[0_0_30px_rgba(16,185,129,0.05)]">
-                                            <span className="text-[10px] font-black uppercase text-emerald-400 group-hover/btn:text-white opacity-60 tracking-[0.2em]">Yes</span>
-                                            <span className="text-4xl font-black text-emerald-400 group-hover/btn:text-white">{topMarket.chance}¢</span>
-                                        </div>
-                                    </Link>
-                                    <Link href={`/market/${topMarket.slug}`} className="w-full group/btn">
-                                        <div className="bg-rose-500/10 border border-rose-500/20 py-8 rounded-3xl flex flex-col items-center gap-1 group-hover/btn:bg-rose-500 transition-all duration-300 shadow-[0_0_30px_rgba(244,63,94,0.05)]">
-                                            <span className="text-[10px] font-black uppercase text-rose-400 group-hover/btn:text-white opacity-60 tracking-[0.2em]">No</span>
-                                            <span className="text-4xl font-black text-rose-400 group-hover/btn:text-white">{100 - topMarket.chance}¢</span>
-                                        </div>
-                                    </Link>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
+        <section className="px-4 md:px-12 max-w-[1400px] mx-auto mb-24 mt-10 relative">
+            <div className="flex items-center gap-3 mb-10 justify-center">
+                <div className="h-px w-24 bg-gradient-to-r from-transparent to-white/20"></div>
+                <h2 className="text-3xl font-black text-white tracking-tight uppercase">Trending Podium</h2>
+                <div className="h-px w-24 bg-gradient-to-l from-transparent to-white/20"></div>
             </div>
+
+            <div className="flex flex-col md:flex-row items-center justify-center gap-6 md:gap-8 lg:gap-12 relative">
+
+                {/* 2nd Place (Left) */}
+                {second && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 50, x: 20 }}
+                        animate={{
+                            opacity: 1,
+                            y: [0, -10, 0],
+                            x: 0
+                        }}
+                        transition={{
+                            duration: 0.6,
+                            y: {
+                                duration: 4,
+                                repeat: Infinity,
+                                ease: "easeInOut",
+                                delay: 0.5
+                            }
+                        }}
+                        className="order-2 md:order-1 w-full md:w-[320px] lg:w-[350px] relative mt-12 md:mt-32 z-10 perspective-1000 group"
+                    >
+                        {/* Large Rank Number - 2 */}
+                        <div className="absolute -left-10 top-0 -translate-y-1/2 z-0">
+                            <span className="text-[10rem] font-black text-white/5 leading-none select-none drop-shadow-md group-hover:text-white/10 transition-colors" style={{ fontFamily: 'var(--font-adriane), serif' }}>2</span>
+                        </div>
+                        <div className="relative z-10 transform md:scale-95 hover:scale-[0.98] transition-transform duration-300 hover:shadow-[0_20px_40px_rgba(0,0,0,0.4)]">
+                            <MarketCard {...second} />
+                        </div>
+                    </motion.div>
+                )}
+
+                {/* 1st Place (Center - Elevated) */}
+                <motion.div
+                    initial={{ opacity: 0, y: 50, scale: 0.9 }}
+                    animate={{
+                        opacity: 1,
+                        y: [0, -15, 0],
+                        scale: 1
+                    }}
+                    transition={{
+                        duration: 0.8,
+                        type: "spring",
+                        y: {
+                            duration: 5,
+                            repeat: Infinity,
+                            ease: "easeInOut"
+                        }
+                    }}
+                    className="order-1 md:order-2 w-full md:w-[360px] lg:w-[400px] relative z-20 perspective-1000"
+                >
+                    {/* Crown - Static, no bounce */}
+                    <div className="absolute -top-16 left-1/2 -translate-x-1/2 z-30">
+                        <div className="text-6xl drop-shadow-[0_0_25px_rgba(255,215,0,0.6)] filter brightness-110">👑</div>
+                    </div>
+
+                    {/* Winner Card with Clean Pink Border */}
+                    <div className="transform md:scale-105 rounded-2xl p-[2px] bg-gradient-to-b from-[#F492B7] to-[#F492B7]/20 shadow-[0_0_60px_rgba(244,146,183,0.25)]">
+                        <div className="rounded-[14px] overflow-hidden bg-[#0A0A0A] h-full">
+                            <MarketCard {...winner} />
+                        </div>
+                    </div>
+                </motion.div>
+
+                {/* 3rd Place (Right) */}
+                {third && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 50, x: -20 }}
+                        animate={{
+                            opacity: 1,
+                            y: [0, -10, 0],
+                            x: 0
+                        }}
+                        transition={{
+                            duration: 0.6,
+                            delay: 0.2,
+                            y: {
+                                duration: 4.5,
+                                repeat: Infinity,
+                                ease: "easeInOut",
+                                delay: 1
+                            }
+                        }}
+                        className="order-3 md:order-3 w-full md:w-[320px] lg:w-[350px] relative mt-12 md:mt-32 z-10 perspective-1000 group"
+                    >
+                        {/* Large Rank Number - 3 */}
+                        <div className="absolute -right-10 top-0 -translate-y-1/2 z-0">
+                            <span className="text-[10rem] font-black text-white/5 leading-none select-none drop-shadow-md group-hover:text-white/10 transition-colors" style={{ fontFamily: 'var(--font-adriane), serif' }}>3</span>
+                        </div>
+                        <div className="relative z-10 transform md:scale-95 hover:scale-[0.98] transition-transform duration-300 hover:shadow-[0_20px_40px_rgba(0,0,0,0.4)]">
+                            <MarketCard {...third} />
+                        </div>
+                    </motion.div>
+                )}
+            </div>
+
+            {/* Podium Base Gradient */}
+            <div className="absolute bottom-[-50px] left-1/2 -translate-x-1/2 w-[80%] h-[100px] bg-[#F492B7] blur-[150px] opacity-10 pointer-events-none"></div>
         </section>
     );
 }
