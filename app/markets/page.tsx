@@ -60,7 +60,7 @@ export default function Home() {
               title: m.title,
               icon: m.banner_url || '🔮', // Use uploaded image as icon
               chance: liveChance ?? (Math.round((m.total_yes_pool / (m.total_yes_pool + m.total_no_pool + 1)) * 100) || 50),
-              volume: liveVolume ?? `$${formatCompact(m.total_yes_pool + m.total_no_pool)}`,
+              volume: liveVolume ?? `$${formatCompact(Math.abs(m.total_yes_pool + m.total_no_pool))}`,
               type: 'binary',
               category: (m as any).category || 'Trending',
               endDate: m.end_date ? new Date(m.end_date) : new Date('2026-12-31'),
@@ -136,7 +136,7 @@ export default function Home() {
           id: payload.new.id,
           title: payload.new.title,
           chance: Math.round((payload.new.total_yes_pool / (payload.new.total_yes_pool + payload.new.total_no_pool + 1)) * 100) || 50,
-          volume: `$${formatCompact(payload.new.total_yes_pool + payload.new.total_no_pool)}`,
+          volume: `$${formatCompact(Math.abs(payload.new.total_yes_pool + payload.new.total_no_pool))}`,
           type: 'binary',
           category: payload.new.category || 'Trending',
           endDate: payload.new.end_date ? new Date(payload.new.end_date) : new Date('2026-12-31'),
@@ -172,7 +172,7 @@ export default function Home() {
             ? {
               ...m,
               chance: Math.round(payload.new.live_price),
-              volume: `$${formatCompact(payload.new.volume)}`
+              volume: `$${formatCompact(Math.abs(payload.new.volume))}`
             }
             : m
         ));

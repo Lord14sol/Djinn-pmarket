@@ -198,7 +198,7 @@ const MarketCard: React.FC<MarketCardProps> = ({
                 {/* Footer: Volume, Time & STAR */}
                 <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 uppercase tracking-wider border-t border-white/5 pt-3 mt-1 pointer-events-auto">
                     <div className="flex items-center gap-3">
-                        <span className="text-gray-400">${volume} Vol</span>
+                        <span className="text-gray-400">{volume} Vol</span>
                         {timeLeft && <span className="text-gray-600">{timeLeft}</span>}
                     </div>
 
