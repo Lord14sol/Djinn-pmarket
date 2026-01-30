@@ -396,7 +396,7 @@ export default function Home() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.3 }}
-              className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 bg-transparent overflow-visible"
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-[1px] bg-white/10 overflow-hidden"
             >
               {sortedMarkets
                 // NEW: If Trending, Top 3 are in the Pyramid, allow grid to show filtered list starting from #4
@@ -426,7 +426,6 @@ export default function Home() {
                         <MarketCard
                           {...market}
                           isNew={market.createdAt && market.createdAt > oneDayAgo}
-                          compact={true} // Apply compact mode for grid items
                         />
                       </PumpEffect>
                     </motion.div>
