@@ -11,6 +11,8 @@ export interface Outcome {
     noPrice: number;
     chance: number;
     image?: string; // Optional image for the outcome
+    mcapSOL?: number;
+    supply?: number;
 }
 
 interface OutcomeListProps {

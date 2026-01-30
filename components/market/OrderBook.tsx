@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useMemo } from 'react';
+import Link from 'next/link';
 
 interface OrderBookProps {
     currentPrice: number;
@@ -70,16 +71,20 @@ export default function OrderBook({ currentPrice, outcome, lastOrder, activityDa
                             />
 
                             {/* User */}
-                            <div className="relative z-10 flex items-center gap-2">
-                                {order.avatar_url ? (
-                                    <img src={order.avatar_url} alt="" className="w-5 h-5 rounded-full" />
-                                ) : (
-                                    <div className="w-5 h-5 rounded-full bg-gradient-to-br from-[#F492B7] to-[#E056A0] flex items-center justify-center text-[8px] font-bold text-black">
-                                        {order.username?.slice(0, 1)?.toUpperCase() || '?'}
-                                    </div>
-                                )}
-                                <span className="text-white font-medium truncate text-[11px]">{order.username?.slice(0, 8) || 'Anon'}</span>
-                            </div>
+                            <Link
+                                href={`/profile/${order.username}`}
+                                className="relative z-10 flex items-center gap-2 group/user hover:opacity-80 transition-all cursor-pointer overflow-hidden min-w-0"
+                            >
+                                <div className="w-5 h-5 rounded-full overflow-hidden border border-white/10 shrink-0">
+                                    <img
+                                        src={order.avatar_url || "/pink-pfp.png"}
+                                        alt=""
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => (e.currentTarget.src = "/pink-pfp.png")}
+                                    />
+                                </div>
+                                <span className="text-white font-medium truncate text-[11px] group-hover/user:text-[#F492B7] transition-colors">{order.username || 'Anon'}</span>
+                            </Link>
 
                             {/* SOL */}
                             <div className="relative z-10 text-right">

@@ -27,19 +27,14 @@ export default function TheGreatPyramid({ topMarkets }: TheGreatPyramidProps) {
                         initial={{ opacity: 0, y: 50, x: 20 }}
                         animate={{
                             opacity: 1,
-                            y: [0, -10, 0],
+                            y: 0,
                             x: 0
                         }}
                         transition={{
                             duration: 0.6,
-                            y: {
-                                duration: 4,
-                                repeat: Infinity,
-                                ease: "easeInOut",
-                                delay: 0.5
-                            }
+                            delay: 0.1
                         }}
-                        className="order-2 md:order-1 w-full md:w-[280px] lg:w-[310px] relative mt-8 md:-mt-4 z-10 perspective-1000 group"
+                        className="order-2 md:order-1 w-full md:w-[280px] lg:w-[310px] relative mt-12 md:mt-12 z-10 perspective-1000 group"
                     >
                         {/* Large Rank Number - 2 */}
                         <div className="absolute -left-10 top-0 -translate-y-[80%] z-0">
@@ -51,24 +46,19 @@ export default function TheGreatPyramid({ topMarkets }: TheGreatPyramidProps) {
                     </motion.div>
                 )}
 
-                {/* 1st Place (Center - Elevated & Crown Removed) */}
+                {/* 1st Place (Center - Highest) */}
                 <motion.div
                     initial={{ opacity: 0, y: 50, scale: 0.9 }}
                     animate={{
                         opacity: 1,
-                        y: [0, -15, 0],
+                        y: 0, // No bobbing
                         scale: 1
                     }}
                     transition={{
                         duration: 0.8,
-                        type: "spring",
-                        y: {
-                            duration: 5,
-                            repeat: Infinity,
-                            ease: "easeInOut"
-                        }
+                        type: "spring"
                     }}
-                    className="order-1 md:order-2 w-full md:w-[360px] lg:w-[400px] relative z-20 perspective-1000 md:-mt-24"
+                    className="order-1 md:order-2 w-full md:w-[360px] lg:w-[400px] relative z-20 perspective-1000 md:-mt-12 lg:-mt-16"
                 >
                     {/* Winner Card with Clean Pink Border */}
                     <div className="transform md:scale-105 rounded-2xl p-[2px] bg-gradient-to-b from-[#F492B7] to-[#F492B7]/20 shadow-[0_0_60px_rgba(244,146,183,0.25)]">
@@ -78,26 +68,20 @@ export default function TheGreatPyramid({ topMarkets }: TheGreatPyramidProps) {
                     </div>
                 </motion.div>
 
-                {/* 3rd Place (Right) */}
+                {/* 3rd Place (Right - Lowest) */}
                 {third && (
                     <motion.div
                         initial={{ opacity: 0, y: 50, x: -20 }}
                         animate={{
                             opacity: 1,
-                            y: [0, -10, 0],
+                            y: 0,
                             x: 0
                         }}
                         transition={{
                             duration: 0.6,
-                            delay: 0.2,
-                            y: {
-                                duration: 4.5,
-                                repeat: Infinity,
-                                ease: "easeInOut",
-                                delay: 1
-                            }
+                            delay: 0.2
                         }}
-                        className="order-3 md:order-3 w-full md:w-[280px] lg:w-[310px] relative mt-8 md:mt-4 z-10 perspective-1000 group"
+                        className="order-3 md:order-3 w-full md:w-[280px] lg:w-[310px] relative mt-12 md:mt-32 z-10 perspective-1000 group"
                     >
                         {/* Large Rank Number - 3 */}
                         <div className="absolute -right-10 top-0 -translate-y-[80%] z-0">

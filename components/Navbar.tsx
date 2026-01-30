@@ -10,6 +10,8 @@ import { useModal } from '@/lib/ModalContext';
 import OnboardingModal from './OnboardingModal';
 import CustomWalletModal from './CustomWalletModal';
 import CategoryMegaMenu from './CategoryMegaMenu';
+import WalletProfileMenu from './WalletProfileMenu';
+import { useRouter } from 'next/navigation';
 
 // --- ICONOS ---
 // Premium multi-layer animated fire for Trending
@@ -128,11 +130,13 @@ const earthSubcategories = ["North America", "Central America", "South America",
 
 function NavbarContent() {
     const [isOpen, setIsOpen] = useState(false);
+    const [isNavMenuOpen, setIsNavMenuOpen] = useState(false);
     const { activeCategory, setActiveCategory, activeSubcategory, setActiveSubcategory } = useCategory();
     const [userPfp, setUserPfp] = useState<string | null>(null);
     const [username, setUsername] = useState<string>("User");
     const [balance, setBalance] = useState<number>(0);
     const { openCreateMarket, openActivityFeed } = useModal();
+    const router = useRouter();
 
     // HYDRATION FIX: Prevent SSR/client mismatch for wallet-dependent content
     const [mounted, setMounted] = useState(false);
@@ -147,64 +151,137 @@ function NavbarContent() {
     const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
 
     // Cargar perfil (Local + Supabase + Balance)
+    // 🔥 FUNCIÓN PARA CARGAR PERFIL (Cache-First Strategy)
     const loadProfile = async () => {
-        if (connected && publicKey) {
-            // 1. Balance
-            try {
-                const bal = await connection.getBalance(publicKey);
-                setBalance(bal / LAMPORTS_PER_SOL);
-            } catch (e) {
-                console.error("Error loading balance", e);
+        if (!connected || !publicKey) {
+            setUsername('');
+            setUserPfp('');
+            return;
+        }
+
+        const walletAddress = publicKey.toBase58();
+
+        // 1️⃣ PRIMERO: Intentar cargar desde localStorage (INSTANTÁNEO)
+        try {
+            const cachedProfile = localStorage.getItem(`djinn_profile_${walletAddress}`);
+            if (cachedProfile) {
+                const profile = JSON.parse(cachedProfile);
+                setUsername(profile.username || 'Anon');
+                setUserPfp(profile.avatar_url && profile.avatar_url.trim() ? profile.avatar_url : '/pink-pfp.png');
+                console.log('✅ Profile loaded from cache');
             }
+        } catch (e) {
+            console.error('Cache read error:', e);
+        }
 
-            // 2. Profile
-            try {
-                // Dynamic import to avoid SSR issues with some libs
-                const { getProfile } = await import('@/lib/supabase-db');
-                const dbProfile = await getProfile(publicKey.toBase58());
+        // 2️⃣ SEGUNDO: Sincronizar con la base de datos (BACKGROUND)
+        try {
+            const { getProfile, upsertProfile } = await import('@/lib/supabase-db');
+            const dbProfile = await getProfile(walletAddress);
 
-                if (dbProfile) {
-                    if (dbProfile.avatar_url) setUserPfp(dbProfile.avatar_url);
-                    if (dbProfile.username) setUsername(dbProfile.username);
-                } else {
-                    // Auto-create profile with wallet address
-                    const { upsertProfile } = await import('@/lib/supabase-db');
-                    const newProfile = await upsertProfile({
-                        wallet_address: publicKey.toBase58(),
-                        username: publicKey.toBase58().slice(0, 8) + '...',
-                        bio: '',
-                        avatar_url: null,
-                        banner_url: null
-                    });
-                    if (newProfile?.username) setUsername(newProfile.username);
-                }
-            } catch (err: any) {
-                console.error("🔍 PROFILE_DEBUG: Error loading remote profile", err);
-                // Try one more time to just upsert blindly if read failed (fix for RLS blocking public reads but allowing auth inserts)
+            if (dbProfile) {
+                const profileData = {
+                    username: dbProfile.username || `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}`,
+                    avatar_url: dbProfile.avatar_url && dbProfile.avatar_url.trim() ? dbProfile.avatar_url : '/pink-pfp.png',
+                    bio: dbProfile.bio || ''
+                };
+
+                // Actualizar state
+                setUsername(profileData.username);
+                setUserPfp(profileData.avatar_url);
+
+                // Actualizar cache con optimización para no guardar base64 pesados que saturan localStorage
                 try {
-                    const { upsertProfile } = await import('@/lib/supabase-db');
-                    const newProfile = await upsertProfile({
-                        wallet_address: publicKey.toBase58(),
-                        username: publicKey.toBase58().slice(0, 8) + '...',
-                        bio: '',
-                        avatar_url: null,
-                        banner_url: null
-                    });
-                    if (newProfile?.username) setUsername(newProfile.username);
-                } catch (upsertErr) {
-                    console.error("🔍 PROFILE_DEBUG: Upsert failed too", upsertErr);
+                    const storageCopy = { ...profileData };
+                    if (storageCopy.avatar_url?.startsWith('data:image')) {
+                        storageCopy.avatar_url = null; // No guardar la imagen pesada en localStorage
+                    }
+                    localStorage.setItem(
+                        `djinn_profile_${walletAddress}`,
+                        JSON.stringify(storageCopy)
+                    );
+                } catch (quotaErr) {
+                    console.warn('⚠️ LocalStorage full, skipped profile cache update');
+                }
+
+                console.log('✅ Profile synced from database');
+            } else {
+                // Auto-create if not found
+                const newProfile = await upsertProfile({
+                    wallet_address: walletAddress,
+                    username: `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}`,
+                    bio: 'New Djinn Trader',
+                    avatar_url: '/pink-pfp.png'
+                });
+                if (newProfile) {
+                    setUsername(newProfile.username);
+                    setUserPfp(newProfile.avatar_url || '/pink-pfp.png');
                 }
             }
+        } catch (err) {
+            console.error('Database sync error:', err);
         }
     };
 
     useEffect(() => {
-        loadProfile();
+        let subscriptionId: number;
+
+        if (connected && publicKey) {
+            loadProfile();
+
+            // Fetch initial balance
+            connection.getBalance(publicKey).then((bal) => {
+                setBalance(bal / LAMPORTS_PER_SOL);
+            }).catch(e => console.error("Initial balance fetch error:", e));
+
+            // Real-time balance updates
+            try {
+                subscriptionId = connection.onAccountChange(
+                    publicKey,
+                    (updatedAccountInfo) => {
+                        setBalance(updatedAccountInfo.lamports / LAMPORTS_PER_SOL);
+                    },
+                    'confirmed'
+                );
+            } catch (e) {
+                console.error("Failed to subscribe to account changes:", e);
+            }
+
+            // GLOBAL SYNC: Listen for profile updates from other components
+            const handleProfileUpdate = () => {
+                console.log("🔄 Navbar received profile update event");
+                loadProfile();
+            };
+            window.addEventListener('djinn-profile-updated', handleProfileUpdate);
+
+            return () => {
+                if (subscriptionId) connection.removeAccountChangeListener(subscriptionId);
+                window.removeEventListener('djinn-profile-updated', handleProfileUpdate);
+            };
+        }
     }, [connected, publicKey, connection]);
 
+    // Initial Load & Polling Fallback (30s)
+    useEffect(() => {
+        loadProfile();
+        const interval = setInterval(loadProfile, 30000);
+        return () => clearInterval(interval);
+    }, [connected, publicKey]);
+
+    // AUTO-OPEN MENU ON CONNECTION
+    useEffect(() => {
+        if (connected) {
+            // Short delay to allow UI to settle
+            setTimeout(() => setIsOpen(true), 500);
+        } else {
+            setIsOpen(false);
+        }
+    }, [connected]);
+
     return (
-        <nav className="fixed top-0 left-0 w-full z-50 bg-black/60 backdrop-blur-xl border-b border-white/5">
-            <style jsx global>{`
+        <>
+            <nav className="fixed top-0 left-0 w-full z-50 bg-black/60 backdrop-blur-xl border-b border-white/5">
+                <style jsx global>{`
                 @keyframes breathe {
                     0%, 100% { opacity: 1; transform: scale(1); }
                     50% { opacity: 0.6; transform: scale(0.9); }
@@ -219,181 +296,168 @@ function NavbarContent() {
                 .animate-flame-modern { animation: flameModern 1.2s ease-in-out infinite; transform-origin: bottom center; }
             `}</style>
 
-            <div className="w-full px-6 md:px-12 h-24 flex items-center justify-between relative">
-                <Link href="/markets" className="flex items-center group gap-0">
-                    <div className="relative w-16 h-16 md:w-24 md:h-24 transition-transform duration-500 group-hover:scale-110 -mr-3">
-                        <Image src="/djinn-logo.png?v=3" alt="Djinn Logo" fill className="object-contain" priority unoptimized />
-                    </div>
-                    <span className="text-3xl md:text-5xl text-white mt-1 relative z-10" style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}>
-                        Djinn
-                    </span>
-                </Link>
+                <div className="w-full px-6 md:px-12 h-24 flex items-center justify-between relative">
+                    <Link href="/markets" className="flex items-center group gap-0">
+                        <div className="relative w-16 h-16 md:w-24 md:h-24 transition-transform duration-500 group-hover:scale-110 -mr-3">
+                            <Image src="/djinn-logo.png?v=3" alt="Djinn Logo" fill className="object-contain" priority unoptimized />
+                        </div>
+                        <span className="text-3xl md:text-5xl text-white mt-1 relative z-10" style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}>
+                            Djinn
+                        </span>
+                    </Link>
 
-                <div className="flex items-center gap-4">
-                    <div className="hidden sm:flex items-center gap-4">
-                        {/* Botón Create Market estilo principal */}
-                        <button
-                            onClick={openCreateMarket}
-                            className="bg-[#F492B7] text-black text-sm font-black py-3 px-6 rounded-xl shadow-[0_0_10px_rgba(244,146,183,0.1)] hover:scale-105 active:scale-95 transition-all uppercase tracking-wide"
-                        >
-                            Create a Market
-                        </button>
-
-                        {/* HYDRATION FIX: Only render wallet state after mount */}
-                        {!mounted ? (
-                            /* Placeholder during SSR */
-                            <div className="px-5 py-2.5 rounded-xl bg-[#1A1A1A] text-gray-400 text-[11px] font-black uppercase tracking-wider">
-                                Loading...
-                            </div>
-                        ) : !connected ? (
-                            /* Desconectado */
+                    <div className="flex items-center gap-4">
+                        <div className="hidden sm:flex items-center gap-4">
+                            {/* Botón Create Market estilo principal */}
                             <button
-                                onClick={() => setIsWalletModalOpen(true)}
-                                className="px-5 py-2.5 rounded-xl bg-[#F492B7] text-black text-[11px] font-black uppercase tracking-wider hover:bg-[#ff6fb7] hover:scale-105 active:scale-95 transition-all duration-300 shadow-[0_0_20px_rgba(244,146,183,0.2)]"
+                                onClick={openCreateMarket}
+                                className="bg-[#F492B7] text-black text-sm font-black py-3 px-6 rounded-xl shadow-[0_0_10px_rgba(244,146,183,0.1)] hover:scale-105 active:scale-95 transition-all uppercase tracking-wide"
                             >
-                                Connect Wallet
+                                Create a Market
                             </button>
-                        ) : (
-                            /* Conectado: Rediseño estilo usuario - Clean Transparent */
-                            <div className="flex items-center gap-3 cursor-pointer group hover:opacity-80 transition-opacity" onClick={() => setIsOpen(!isOpen)}>
-                                {/* Avatar - No white border */}
-                                <div className="relative w-8 h-8 rounded-full overflow-hidden bg-white/5">
-                                    {userPfp ? (
-                                        <img
-                                            src={userPfp}
-                                            alt="Profile"
-                                            className="w-full h-full object-cover"
-                                            onError={(e) => {
-                                                e.currentTarget.style.display = 'none';
-                                                e.currentTarget.parentElement?.classList.add('fallback-avatar');
-                                            }}
-                                        />
-                                    ) : (
-                                        <div className="w-full h-full bg-gradient-to-br from-[#F492B7] to-purple-600 flex items-center justify-center text-xs text-white font-bold">
-                                            {username && username !== 'User' ? username.charAt(0).toUpperCase() : '👤'}
+
+                            {/* HYDRATION FIX: Only render wallet state after mount */}
+                            {!mounted ? (
+                                /* Placeholder during SSR */
+                                <div className="px-5 py-2.5 rounded-xl bg-[#1A1A1A] text-gray-400 text-[11px] font-black uppercase tracking-wider">
+                                    Loading...
+                                </div>
+                            ) : !connected ? (
+                                /* Desconectado */
+                                <button
+                                    onClick={() => setIsWalletModalOpen(true)}
+                                    className="px-5 py-2.5 rounded-xl bg-[#F492B7] text-black text-[11px] font-black uppercase tracking-wider hover:bg-[#ff6fb7] hover:scale-105 active:scale-95 transition-all duration-300 shadow-[0_0_20px_rgba(244,146,183,0.2)]"
+                                >
+                                    Connect Wallet
+                                </button>
+                            ) : (
+                                <>
+                                    {/* Conectado: Rediseño estilo usuario - Clean Transparent */}
+                                    <div className="flex items-center gap-3">
+                                        {/* Avatar Trigger Area */}
+                                        <div
+                                            className="relative w-8 h-8 rounded-full overflow-hidden bg-white/5 cursor-pointer hover:opacity-80 transition-opacity"
+                                            onClick={() => setIsOpen(!isOpen)}
+                                        >
+                                            {userPfp ? (
+                                                <img
+                                                    src={userPfp}
+                                                    alt="Profile"
+                                                    className="w-full h-full object-cover"
+                                                    onError={(e) => {
+                                                        setUserPfp(null);
+                                                    }}
+                                                />
+                                            ) : (
+                                                <img
+                                                    src="/pink-pfp.png"
+                                                    alt="Default Profile"
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            )}
                                         </div>
-                                    )}
-                                </div>
 
-                                <div className="flex flex-col items-start leading-none">
-                                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">
-                                        {username && username !== 'User' && !username.startsWith(publicKey?.toString().slice(0, 4) || 'xxxx')
-                                            ? username
-                                            : `${publicKey?.toString().slice(0, 4)}...${publicKey?.toString().slice(-4)}`
-                                        }
-                                    </span>
-                                    <span className="text-xs font-bold text-white tracking-tight" style={{ fontFamily: 'var(--font-adriane), serif' }}>
-                                        {balance.toFixed(2)} SOL
-                                    </span>
-                                </div>
+                                        {/* Identity Link */}
+                                        <Link
+                                            href={`/profile/${username}`}
+                                            className="flex flex-col items-start leading-none group hover:opacity-80 transition-all"
+                                        >
+                                            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5 group-hover:text-[#F492B7]">
+                                                {username && username !== 'User' && !username.startsWith(publicKey?.toString().slice(0, 4) || 'xxxx')
+                                                    ? username
+                                                    : `${publicKey?.toString().slice(0, 4)}...${publicKey?.toString().slice(-4)}`
+                                                }
+                                            </span>
+                                            <span className="text-xs font-bold text-white tracking-tight" style={{ fontFamily: 'var(--font-adriane), serif' }}>
+                                                {balance.toFixed(2)} SOL
+                                            </span>
+                                        </Link>
 
-                                <span className="text-gray-500 text-xs group-hover:text-white transition-colors">▼</span>
-                            </div>
-                        )}
-                    </div>
-
-                    <button
-                        onClick={() => setIsOpen(!isOpen)}
-                        className="p-2 text-gray-400 hover:text-white transition-colors sm:hidden"
-                    >
-                        {isOpen ? <CloseIcon /> : <MenuIcon />}
-                    </button>
-                </div>
-
-                {isOpen && (
-                    <div className="absolute top-24 right-6 w-64 bg-[#0B0E14] border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-5 z-[60]">
-                        <div className="p-2">
-                            {connected && (
-                                <Link
-                                    href={`/profile/${publicKey?.toString()}`}
-                                    onClick={() => setIsOpen(false)}
-                                    className="flex items-center gap-3 p-4 rounded-xl hover:bg-white/5 transition-colors group"
-                                >
-                                    <div className="text-blue-400/80 group-hover:text-blue-400 transition-colors">
-                                        <UserIcon />
+                                        <span
+                                            className="text-gray-500 text-xs cursor-pointer hover:text-white transition-colors ml-1"
+                                            onClick={() => setIsOpen(!isOpen)}
+                                        >
+                                            ▼
+                                        </span>
                                     </div>
-                                    <span className="text-sm font-bold text-gray-200 uppercase tracking-widest">My Profile</span>
-                                </Link>
-                            )}
 
+                                    {/* HAMBURGER MENU NEXT TO PFP */}
+                                    <div className="relative">
+                                        <button
+                                            onClick={() => setIsNavMenuOpen(!isNavMenuOpen)}
+                                            className="p-2 text-gray-400 hover:text-[#F492B7] transition-all hover:scale-110 active:scale-95 bg-white/5 rounded-lg border border-white/5"
+                                        >
+                                            <MenuIcon />
+                                        </button>
 
+                                        {/* DROPDOWN MENU */}
+                                        {isNavMenuOpen && (
+                                            <>
+                                                <div className="fixed inset-0 z-[100]" onClick={() => setIsNavMenuOpen(false)} />
+                                                <div className="absolute top-12 right-0 w-48 bg-[#0A0A0A]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl z-[101] py-3 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                                                    <Link
+                                                        href="/leaderboard"
+                                                        onClick={() => setIsNavMenuOpen(false)}
+                                                        className="w-full flex items-center gap-3 px-5 py-3 text-gray-300 hover:text-[#F492B7] hover:bg-white/5 transition-all text-sm font-bold group"
+                                                    >
+                                                        <PodiumIcon />
+                                                        <span>Leaderboard</span>
+                                                    </Link>
+                                                    <button
+                                                        onClick={() => {
+                                                            setIsNavMenuOpen(false);
+                                                            openActivityFeed();
+                                                        }}
+                                                        className="w-full flex items-center gap-3 px-5 py-3 text-gray-300 hover:text-[#F492B7] hover:bg-white/5 transition-all text-sm font-bold group text-left"
+                                                    >
+                                                        <ActivityIcon />
+                                                        <span>Activity</span>
+                                                    </button>
 
-                            {/* Mobile Create Market */}
-                            <button
-                                onClick={() => { setIsOpen(false); openCreateMarket(); }}
-                                className="flex w-full sm:hidden items-center gap-3 p-4 rounded-xl hover:bg-white/5 transition-colors group text-left"
-                            >
-                                <div className="text-green-400/80 group-hover:text-green-400 transition-colors">
-                                    <span className="text-lg">✨</span>
-                                </div>
-                                <span className="text-sm font-bold text-gray-200 uppercase tracking-widest">Create Market</span>
-                            </button>
+                                                    <div className="border-t border-white/5 my-1" />
 
-                            <Link
-                                href="/leaderboard"
-                                onClick={() => setIsOpen(false)}
-                                className="flex items-center gap-3 p-4 rounded-xl hover:bg-white/5 transition-colors group"
-                            >
-                                <div className="text-yellow-500/80 group-hover:text-yellow-500 transition-colors">
-                                    <PodiumIcon />
-                                </div>
-                                <span className="text-sm font-bold text-gray-200 uppercase tracking-widest">Leaderboard</span>
-                            </Link>
-                            <button
-                                onClick={() => { setIsOpen(false); openActivityFeed(); }}
-                                className="flex w-full items-center gap-3 p-4 rounded-xl hover:bg-white/5 transition-colors group text-left"
-                            >
-                                <div className="text-[#F492B7]/80 group-hover:text-[#F492B7] transition-colors">
-                                    <ActivityIcon />
-                                </div>
-                                <span className="text-sm font-bold text-gray-200 uppercase tracking-widest">Activity</span>
-                            </button>
-
-                            {/* Oracle Bot - Only visible to Protocol Authority */}
-                            {connected && publicKey?.toString() === "G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma" && (
-                                <Link
-                                    href="/admin/oracle"
-                                    onClick={() => setIsOpen(false)}
-                                    className="flex items-center gap-3 p-4 rounded-xl hover:bg-[#00FF41]/10 transition-colors group border border-[#00FF41]/20"
-                                >
-                                    <div className="text-[#00FF41]/80 group-hover:text-[#00FF41] transition-colors">
-                                        <span className="text-lg">🤖</span>
+                                                    <Link
+                                                        href={`/profile/me`}
+                                                        onClick={() => setIsNavMenuOpen(false)}
+                                                        className="w-full flex items-center gap-3 px-5 py-3 text-[#F492B7] hover:bg-white/5 transition-all text-sm font-black uppercase tracking-wider"
+                                                    >
+                                                        <span className="text-lg">👤</span>
+                                                        <span>Profile</span>
+                                                    </Link>
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
-                                    <span className="text-sm font-bold text-[#00FF41] uppercase tracking-widest">Oracle Bot</span>
-                                </Link>
+                                </>
                             )}
                         </div>
-                        {connected && (
-                            <div className="p-2 border-t border-white/5 bg-black/40">
-                                <button
-                                    onClick={() => { disconnect(); setIsOpen(false); }}
-                                    className="w-full text-center py-3 text-[10px] text-gray-500 hover:text-red-400 uppercase tracking-[0.2em] font-black transition-colors"
-                                >
-                                    Disconnect Wallet
-                                </button>
-                            </div>
-                        )}
                     </div>
-                )}
-            </div>
 
-            {/* Category Mega Menu */}
-            <CategoryMegaMenu />
+                    <CustomWalletModal
+                        isOpen={isWalletModalOpen}
+                        onClose={() => setIsWalletModalOpen(false)}
+                    />
+                </div>
+            </nav>
 
-            <OnboardingModal
-                isOpen={showOnboarding}
-                onClose={() => setShowOnboarding(false)}
-                onProfileCreated={() => {
-                    setShowOnboarding(false);
-                    loadProfile();
+            {/* Wallet Profile Menu OUTSIDE nav to allow world-space absolute/fixed positioning */}
+            <WalletProfileMenu
+                isOpen={isOpen}
+                onClose={() => setIsOpen(false)}
+                username={username || 'Anon'}
+                pfp={userPfp || '/pink-pfp.png'}
+                walletAddress={publicKey ? publicKey.toBase58() : ''}
+                disconnect={() => { disconnect(); setIsOpen(false); }}
+                onEditProfile={() => {
+                    setIsOpen(false);
+                    if (username) router.push(`/profile/${username}`);
                 }}
+                openCreateMarket={openCreateMarket}
+                openActivityFeed={openActivityFeed}
+                connected={connected}
+                publicKey={publicKey}
             />
-
-            <CustomWalletModal
-                isOpen={isWalletModalOpen}
-                onClose={() => setIsWalletModalOpen(false)}
-            />
-        </nav>
+        </>
     );
 }
 

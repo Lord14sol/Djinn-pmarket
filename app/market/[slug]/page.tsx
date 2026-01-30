@@ -350,7 +350,80 @@ export default function Page() {
 
     const [myShares, setMyShares] = useState<Record<number, number>>({});
     // holders and activityList are now from SWR
-    const [userProfile, setUserProfile] = useState({ username: '', avatarUrl: '' });
+    const [userProfile, setUserProfile] = useState({ username: 'Anon', avatarUrl: '/pink-pfp.png' });
+
+    // 🔥 NEW: Robust Profile Loading (Cache-First + Event Listener)
+    const loadUserProfile = useCallback(async () => {
+        if (!publicKey) return;
+        const walletAddress = publicKey.toBase58();
+        const dynamicKey = `djinn_profile_${walletAddress}`;
+
+        // 1. Try LocalStorage (Fastest)
+        try {
+            const cached = localStorage.getItem(dynamicKey);
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                if (parsed.username || parsed.avatarUrl) {
+                    console.log("👤 Page: Loaded profile from cache:", parsed);
+                    setUserProfile({
+                        username: parsed.username || 'Anon',
+                        avatarUrl: parsed.avatarUrl || '/pink-pfp.png'
+                    });
+                }
+            }
+        } catch (e) {
+            console.warn("Error reading local profile:", e);
+        }
+
+        // 2. Try Supabase (Background Sync)
+        try {
+            const profile = await supabaseDb.getProfile(walletAddress);
+            if (profile) {
+                setUserProfile(prev => {
+                    // Start with what we have (likely cached)
+                    const newState = { ...prev };
+                    let changed = false;
+
+                    // Only update if server has data
+                    if (profile.username && profile.username !== prev.username) {
+                        newState.username = profile.username;
+                        changed = true;
+                    }
+                    if (profile.avatar_url && profile.avatar_url !== prev.avatarUrl) {
+                        newState.avatarUrl = profile.avatar_url;
+                        changed = true;
+                    }
+
+                    if (changed) {
+                        // Update cache to match server
+                        try {
+                            localStorage.setItem(dynamicKey, JSON.stringify(newState));
+                        } catch (e) {
+                            console.warn("Storage quota full, could not cache profile update", e);
+                        }
+                        return newState;
+                    }
+                    return prev;
+                });
+            }
+        } catch (error) {
+            console.error('Error fetching user profile:', error);
+        }
+    }, [publicKey]);
+
+    // Initial Load & Event Listener
+    useEffect(() => {
+        loadUserProfile();
+
+        const handleProfileUpdate = () => {
+            console.log("✨ Page: Profile update event received, reloading...");
+            loadUserProfile();
+        };
+
+        window.addEventListener('djinn-profile-updated', handleProfileUpdate);
+        return () => window.removeEventListener('djinn-profile-updated', handleProfileUpdate);
+    }, [loadUserProfile]);
+
 
     // UI State
     const [betAmount, setBetAmount] = useState('');
@@ -377,30 +450,45 @@ export default function Page() {
 
     const [lastTradeEvent, setLastTradeEvent] = useState<{ id: string; amount: number; side: 'YES' | 'NO' } | null>(null);
     const [tradeMode, setTradeMode] = useState<'BUY' | 'SELL'>('BUY');
-
     const [isMaxSell, setIsMaxSell] = useState(false);
     const [showPurchaseToast, setShowPurchaseToast] = useState(false);
     const [showShareModal, setShowShareModal] = useState(false);
     const [lastBetDetails, setLastBetDetails] = useState<any>(null);
     const [bottomTab, setBottomTab] = useState<'ACTIVITY' | 'COMMENTS' | 'HOLDERS'>('ACTIVITY');
     const [slippageTolerance, setSlippageTolerance] = useState<number>(5); // Default 5%
-
-    // Star/Save feature
     const [isStarred, setIsStarred] = useState(false);
-
-    // Purchase bubble notifications (shows when someone buys)
     const [purchaseBubbles, setPurchaseBubbles] = useState<{ id: number; side: 'YES' | 'NO'; amount: number }[]>([]);
 
-    // Helper to safely normalize shares if they come in raw (e.g. > 1e12)
-    const normalizeShares = (val: number) => {
-        // Just return the value, we'll ensure it's normalized at the source
-        return val;
+    const normalizeShares = (val: number) => val;
+    const updateMyShares = (index: number, amount: number) => {
+        setMyShares(prev => ({ ...prev, [index]: amount }));
     };
 
-    const updateMyShares = (index: number, amount: number) => {
-        const safeAmount = normalizeShares(amount);
-        setMyShares(prev => ({ ...prev, [index]: safeAmount }));
-    };
+
+    // ...
+
+    // 🔥 HELPER: Creator Display Logic
+    // If the creator is ME (current user), use my local up-to-date profile.
+    // Otherwise, use the marketAccount data.
+    const creatorDisplay = useMemo(() => {
+        const wallet = marketAccount?.creator_wallet;
+        const defaultName = wallet ? `${wallet.slice(0, 4)}...${wallet.slice(-4)}` : 'Djinn Creator';
+
+        // If I am the creator
+        if (wallet && publicKey && wallet === publicKey.toBase58()) {
+            return {
+                username: userProfile.username && userProfile.username !== 'Anon' ? userProfile.username : (marketAccount.creator_username || defaultName),
+                avatar: userProfile.avatarUrl || marketAccount.creator_avatar || '/pink-pfp.png',
+                isMe: true
+            };
+        }
+        return {
+            username: (marketAccount?.creator_username && marketAccount.creator_username !== 'Djinn Creator') ? marketAccount.creator_username : defaultName,
+            avatar: marketAccount?.creator_avatar || '/pink-pfp.png',
+            isMe: false
+        };
+    }, [marketAccount, userProfile, publicKey]);
+
 
     // Derived
     const isMultiOutcome = (MULTI_OUTCOMES[slug] || []).length > 0 || ((marketAccount?.options?.length || 0) > 2);
@@ -543,97 +631,246 @@ export default function Page() {
             if (effectiveSlug) {
                 // Reconstruct History from Activity Log ("Memory")
                 const reconstructHistory = async () => {
-                    const activities = await supabaseDb.getAllMarketActivity(effectiveSlug);
+                    console.log("📜 Starting History Reconstruction for:", effectiveSlug);
+                    try {
+                        const activities = await supabaseDb.getAllMarketActivity(effectiveSlug);
+                        console.log("📜 Fetched Activities:", activities?.length);
 
-                    if (!activities || activities.length === 0) {
-                        // Fallback: If no activity, use CURRENT live price to seed history
-                        // This prevents "reset to 50%" if market has moved but logs are missing
-                        let seedYes = 50;
+                        if (!activities || activities.length === 0) {
+                            console.log("📜 No activity found. Using seed fallback.");
+                            // Fallback: If no activity, use CURRENT live price to seed history
+                            // This prevents "reset to 50%" if market has moved but logs are missing
+                            let seedYes = 50;
 
-                        // 1. Try Market Data (Live Price)
-                        if (marketData?.live_price) {
-                            seedYes = marketData.live_price;
-                        }
-                        // 2. Try On-Chain/DB Supplies
-                        else if (marketAccount?.outcome_supplies && marketAccount.outcome_supplies.length >= 2) {
-                            const sYes = Number(marketAccount.outcome_supplies[0]);
-                            const sNo = Number(marketAccount.outcome_supplies[1]);
-                            if (sYes > 0 || sNo > 0) {
-                                seedYes = calculateImpliedProbability(sYes, sNo);
+                            // 1. Try Market Data (Live Price)
+                            if (marketData?.live_price) {
+                                seedYes = marketData.live_price;
                             }
+                            // 2. Try On-Chain/DB Supplies
+                            else if (marketAccount?.outcome_supplies && marketAccount.outcome_supplies.length >= 2) {
+                                const sYes = Number(marketAccount.outcome_supplies[0]);
+                                const sNo = Number(marketAccount.outcome_supplies[1]);
+                                if (sYes > 0 || sNo > 0) {
+                                    // NOTE: On-chain supplies are likely atomic (1e9) if read directly from account without /1e9 normalization
+                                    // BUT, in loadOnChainData we normalize them by /1e9 usually. 
+                                    // Let's assume safely that calculation handles ratio, so huge numbers are fine for ratio.
+                                    seedYes = calculateImpliedProbability(sYes, sNo);
+                                }
+                            }
+
+                            console.log("📜 Seeding Chart with Price:", seedYes);
+
+                            console.log("📜 Seeding Chart with Price:", seedYes);
+
+                            setHistoryState(prev => {
+                                // De-dup if already seeded
+                                if (prev.probability.length > 0 && Math.abs(prev.probability[prev.probability.length - 1].YES - seedYes) < 0.1) return prev;
+
+                                const now = Math.floor(Date.now() / 1000);
+                                // Generate a flat line at the current SEED price
+                                // CRITICAL FIX: Ensure we have enough history for the "ALL" view to look reasonable (e.g. start at market creation or 24h ago)
+                                // If market creation time is unavailable, fallback to 24h ago.
+                                const startTime = marketAccount?.created_at
+                                    ? Math.floor(new Date(marketAccount.created_at).getTime() / 1000)
+                                    : (now - 86400);
+
+                                return {
+                                    probability: [{
+                                        time: startTime,
+                                        dateStr: new Date(startTime * 1000).toLocaleTimeString(),
+                                        YES: seedYes,
+                                        NO: 100 - seedYes
+                                    }, {
+                                        time: now,
+                                        dateStr: new Date(now * 1000).toLocaleTimeString(),
+                                        YES: seedYes,
+                                        NO: 100 - seedYes
+                                    }],
+                                    candles: {}
+                                };
+                            });
+                            return;
                         }
 
-                        setHistoryState(prev => {
-                            if (prev.probability.length > 0 && Math.abs(prev.probability[prev.probability.length - 1].YES - seedYes) < 0.1) return prev;
+                        // Replay Logic
+                        // We assume simple binary for now or reconstruct based on outcome names
+                        // For Binary: YES/NO.
+                        let sYes = 0;
+                        let sNo = 0;
 
-                            const now = Math.floor(Date.now() / 1000);
-                            // Generate a flat line at the current SEED price
-                            return {
-                                probability: [{
-                                    time: now - 3600, // 1 hour ago
-                                    dateStr: new Date((now - 3600) * 1000).toLocaleTimeString(),
-                                    YES: seedYes,
-                                    NO: 100 - seedYes
-                                }, {
-                                    time: now,
-                                    dateStr: new Date(now * 1000).toLocaleTimeString(),
-                                    YES: seedYes,
-                                    NO: 100 - seedYes
-                                }],
-                                candles: {}
-                            };
-                        });
-                        return;
-                    }
+                        const probData: any[] = [];
+                        // Initialize with inception point
+                        const firstAct = activities[0];
 
-                    // Replay Logic
-                    // We assume simple binary for now or reconstruct based on outcome names
-                    // For Binary: YES/NO.
-                    let sYes = 0;
-                    let sNo = 0;
-
-                    const probData: any[] = [];
-                    // Initialize with inception point
-                    const firstTime = new Date(activities[0].created_at!).getTime() / 1000;
-                    probData.push({
-                        time: firstTime - 60,
-                        dateStr: new Date((firstTime - 60) * 1000).toLocaleTimeString(),
-                        YES: 50,
-                        NO: 50
-                    });
-
-                    activities.forEach(act => {
-                        const shares = Number(act.shares);
-                        const isYes = act.action === 'YES';
-                        const isBuy = act.order_type === 'BUY' || !act.order_type;
-
-                        if (isBuy) {
-                            if (isYes) sYes += shares; else sNo += shares;
-                        } else {
-                            // Sell
-                            if (isYes) sYes = Math.max(0, sYes - shares);
-                            else sNo = Math.max(0, sNo - shares);
+                        // FIX: Ensure firstTime is valid
+                        let firstTime = Date.now() / 1000;
+                        if (firstAct && firstAct.created_at) {
+                            firstTime = new Date(firstAct.created_at).getTime() / 1000;
                         }
 
-                        // Convert to atomic units for calc logic if needed. 
-                        // Assuming shares from DB are human readable, we multiply by 1e9 to match virtual floor logic in core-amm
-                        // calculateImpliedProbability uses VIRTUAL_FLOOR = 15_000_000.
-                        // If we pass 10 (human), we get 10 / (10 + 15M) ~ 0.
-                        // So we MUST pass atomic.
-                        const prob = calculateImpliedProbability(sYes * 1e9, sNo * 1e9);
-
+                        // Add "Inception" point at 0 (or 50/50) just before first activity
+                        // This ensures the chart starts from the left
                         probData.push({
-                            time: new Date(act.created_at!).getTime() / 1000,
-                            dateStr: new Date(act.created_at!).toLocaleTimeString(),
-                            YES: prob,
-                            NO: 100 - prob
+                            time: firstTime - 3600, // Start 1h before first action
+                            dateStr: new Date((firstTime - 3600) * 1000).toLocaleTimeString(),
+                            YES: 50, // Markets start at 50% usually
+                            NO: 50
                         });
-                    });
 
-                    setHistoryState({ probability: probData, candles: {} });
+                        activities.forEach((act, idx) => {
+                            // DEBUG: Ensure 'shares' exists and is a number. 
+                            let shares = Number(act.shares);
+
+                            if (isNaN(shares) || shares === 0) {
+                                // if (idx < 5) console.warn(`📜 Activity [${idx}] has invalid shares:`, act.shares, act);
+                                shares = 0;
+                            }
+
+                            // FIX: Handle both 'YES'/'NO' and outcome names (e.g. 'Evo Morales')
+                            let isYes = false;
+
+                            if (act.action === 'YES') {
+                                isYes = true;
+                            } else if (act.action === 'NO') {
+                                isYes = false;
+                            } else {
+                                // Map outcome title to Side
+                                // Assume Outcome 0 is YES side, Outcome 1 is NO side
+                                // For Multi-Outcome, we likely track them as individual indices, but here we assume Binary Probability Chart logic for now.
+                                const outcomeIdx = marketOutcomes.findIndex(o => o.title === act.action);
+                                if (outcomeIdx === 0) isYes = true;
+                                else isYes = false;
+                                // Note: For true multi-outcome charts, we need to track [s0, s1, s2...] separately!
+                                // But current reconstructHistory uses sYes/sNo binary logic.
+                                // If > 2 outcomes, this logic forces them into binary buckets which might be approx correct for "Selected vs Rest"?
+                                // But let's stick to simple mapping for now.
+                            }
+
+                            const isBuy = act.order_type === 'BUY' || !act.order_type;
+
+                            if (isBuy) {
+                                if (isYes) sYes += shares; else sNo += shares;
+                            } else {
+                                // Sell
+                                if (isYes) sYes = Math.max(0, sYes - shares);
+                                else sNo = Math.max(0, sNo - shares);
+                            }
+
+                            // FIX: Shares in DB are in correct relative units (1B Supply context).
+                            // Multiplying by 1e9 was causing "Probability Explosion" (100% / 0%).
+                            const prob = calculateImpliedProbability(sYes, sNo);
+
+                            // Log unexpected jumps
+                            // if (idx % 100 === 0) console.log(`📜 Replay [${idx}] - Shares: ${sYes.toFixed(0)}/${sNo.toFixed(0)} -> Prob: ${prob.toFixed(2)}%`);
+
+                            probData.push({
+                                time: new Date(act.created_at!).getTime() / 1000,
+                                dateStr: new Date(act.created_at!).toLocaleTimeString(),
+                                YES: prob,
+                                NO: 100 - prob
+                            });
+                        });
+
+                        console.log("📜 History Reconstructed. Points:", probData.length, "Final Prob:", probData[probData.length - 1].YES);
+                        setHistoryState({ probability: probData, candles: {} });
+
+                    } catch (e) {
+                        console.error("❌ History Reconstruction Failed:", e);
+                        // Fallback: Seed empty history
+                        const now = Math.floor(Date.now() / 1000);
+                        setHistoryState({
+                            probability: [{
+                                time: now - 86400,
+                                YES: 50,
+                                NO: 50
+                            }, {
+                                time: now,
+                                YES: 50,
+                                NO: 50
+                            }],
+                            candles: {}
+                        });
+                    }
                 };
 
-                reconstructHistory();
+                // NEW: Load history function logic (Self-contained)
+                const loadHistory = async () => {
+                    if (!marketPubkey) return;
+
+                    try {
+                        // Dynamic import or assume imported
+                        const { getMarketActivities } = await import('@/lib/supabase-db');
+                        const activities = await getMarketActivities(marketPubkey.toBase58());
+
+                        if (!activities || activities.length === 0) {
+                            console.log("⚠️ No history found, seeding...");
+                            const now = Math.floor(Date.now() / 1000);
+                            const startTime = marketAccount?.created_at
+                                ? Math.floor(new Date(marketAccount.created_at).getTime() / 1000)
+                                : (now - 86400);
+
+                            setHistoryState({
+                                probability: [
+                                    { time: startTime, YES: 50, NO: 50 },
+                                    { time: now, YES: 50, NO: 50 }
+                                ],
+                                candles: {}
+                            });
+                            return;
+                        }
+
+                        console.log(`📊 Building history from ${activities.length} activities...`);
+                        const historyPoints: any[] = [];
+
+                        // Inception
+                        const firstAct = activities[0];
+                        const creationTime = marketAccount?.created_at
+                            ? Math.floor(new Date(marketAccount.created_at).getTime() / 1000)
+                            : (new Date(firstAct.created_at).getTime() / 1000) - 3600;
+
+                        historyPoints.push({
+                            time: creationTime,
+                            YES: 50,
+                            NO: 50
+                        });
+
+                        // Process
+                        let currentYes = 50;
+                        activities.forEach((act: any) => {
+                            if (act.type === 'BUY' || act.type === 'SELL') {
+                                const yes_tokens = parseFloat(act.yes_amount || '0');
+                                const no_tokens = parseFloat(act.no_amount || '0');
+                                const total = yes_tokens + no_tokens;
+
+                                if (total > 0) {
+                                    currentYes = (yes_tokens / total) * 100;
+                                }
+
+                                historyPoints.push({
+                                    time: Math.floor(new Date(act.created_at).getTime() / 1000),
+                                    YES: currentYes,
+                                    NO: 100 - currentYes
+                                });
+                            }
+                        });
+
+                        // Add current time point
+                        const now = Math.floor(Date.now() / 1000);
+                        if (historyPoints.length > 0) {
+                            historyPoints.push({
+                                time: now,
+                                YES: currentYes,
+                                NO: 100 - currentYes
+                            });
+                        }
+
+                        setHistoryState({ probability: historyPoints, candles: {} });
+
+                    } catch (e) {
+                        console.error("Error loading history:", e);
+                    }
+                };
+
             }
         }
     }, [slug, marketAccount?.outcome_supplies]); // Re-run when supplies load to fix "Dark Chart"
@@ -691,15 +928,48 @@ export default function Page() {
         if (savedProfile) setUserProfile(JSON.parse(savedProfile));
 
         if (publicKey) {
-            supabaseDb.getProfile(publicKey.toBase58()).then(p => {
+            supabaseDb.getProfile(publicKey.toBase58()).then(async (p) => {
                 if (p) {
-                    setUserProfile({
-                        username: p.username || '',
-                        avatarUrl: p.avatar_url || ''
-                    });
+                    // Only overwrite if DB has data, otherwise keep LocalStorage
+                    setUserProfile(prev => ({
+                        username: p.username || prev.username,
+                        avatarUrl: p.avatar_url || prev.avatarUrl
+                    }));
+                } else {
+                    // If profile missing, try to create it here too (safety net)
+                    try {
+                        const { upsertProfile } = await import('@/lib/supabase-db');
+                        const newProfile = await upsertProfile({
+                            wallet_address: publicKey.toBase58(),
+                            username: publicKey.toBase58().slice(0, 8) + '...',
+                            bio: '',
+                            avatar_url: null,
+                            banner_url: null
+                        });
+                        if (newProfile) {
+                            setUserProfile({
+                                username: newProfile.username || '',
+                                avatarUrl: newProfile.avatar_url || ''
+                            });
+                        }
+                    } catch (e) {
+                        console.error("Failed to auto-create profile in page:", e);
+                    }
                 }
             });
         }
+
+        // GLOBAL SYNC
+        const handleProfileUpdate = () => {
+            if (publicKey) {
+                supabaseDb.getProfile(publicKey.toBase58()).then(p => {
+                    if (p) setUserProfile({ username: p.username || '', avatarUrl: p.avatar_url || '' });
+                });
+            }
+        };
+        window.addEventListener('djinn-profile-updated', handleProfileUpdate);
+        return () => window.removeEventListener('djinn-profile-updated', handleProfileUpdate);
+
     }, [publicKey]);
 
     // ✅ ACCOUNT INDEPENDENCE: Clear state when wallet switches/disconnects
@@ -961,6 +1231,16 @@ export default function Page() {
 
         if (!publicKey) return setDjinnToast({ isVisible: true, type: 'ERROR', title: 'Wallet Error', message: "Please connect wallet" });
         if (amountNum <= 0) return setDjinnToast({ isVisible: true, type: 'ERROR', title: 'Invalid Amount', message: "Enter an amount" });
+
+        // Fix Scope Issue: Define outcomeIndex here so it is available for logging, trade, AND common updates
+        const outcomeIndex = isMultiOutcome
+            ? marketOutcomes.findIndex(o => o.id === selectedOutcomeId)
+            : (selectedSide === 'YES' ? 0 : 1);
+
+        if (outcomeIndex === -1) {
+            setDjinnToast({ isVisible: true, type: 'ERROR', title: 'Invalid Outcome', message: "Please select a valid outcome." });
+            return;
+        }
         if (isOverBalance) {
             setDjinnToast({
                 isVisible: true,
@@ -974,7 +1254,7 @@ export default function Page() {
         setIsPending(true);
 
         try {
-            let txSignature = '';
+            let buyTxSignature = '';
             // CHECK if REAL or SIMULATED
             // V4 Contract uses Internal Ledger (UserPosition), so 'yes_token_mint' check is legacy.
             // We rely on 'market_pda' presence and valid structure.
@@ -1007,7 +1287,7 @@ export default function Page() {
 
                         // Parse num_outcomes (at offset 8 + 32 + (4+64) + 8 = 116)
                         const numOutcomes = marketAcct.data.readUInt8(116);
-                        const outcomeIndex = selectedSide === 'YES' ? 0 : 1;
+                        // Using outer outcomeIndex
                         console.log("  - Num outcomes:", numOutcomes);
                         console.log("  - Outcome index:", outcomeIndex);
                         console.log("  - Index valid?", outcomeIndex < numOutcomes);
@@ -1023,7 +1303,7 @@ export default function Page() {
                     // @ts-ignore
                     const freshMarket = await program.account.market.fetch(marketPda);
                     if (freshMarket) {
-                        const outcomeIndex = selectedSide === 'YES' ? 0 : 1;
+                        // Using outer outcomeIndex
                         // Assuming 9 decimals
                         const safeFreshSupply = Number((freshMarket as any).outcomeSupplies[outcomeIndex]) / 1e9;
                         console.log(`🔄 Fresh Supply fetched: ${safeFreshSupply} (Old State: ${estimatedSupply})`);
@@ -1069,25 +1349,21 @@ export default function Page() {
                 // Use dummy mints if not present (V4 doesn't use them in contract, but hook signature might expect them)
                 const dummyMint = new PublicKey("So11111111111111111111111111111111111111112");
 
-                const outcomeIndex = isMultiOutcome
-                    ? marketOutcomes.findIndex(o => o.id === selectedOutcomeId)
-                    : (selectedSide === 'YES' ? 0 : 1);
-
-                if (outcomeIndex === -1) throw new Error("Invalid outcome selection");
+                // outcomeIndex is now defined at top of function
 
                 try {
                     const creatorKey = (marketAccount.creator || marketAccount.creator_wallet)
                         ? new PublicKey(marketAccount.creator || marketAccount.creator_wallet)
                         : TREASURY_WALLET;
 
-                    txSignature = await buyShares(
+                    buyTxSignature = await buyShares(
                         new PublicKey(marketAccount.market_pda),
                         outcomeIndex,
                         amountNum,
                         creatorKey,
                         safeMinShares
                     );
-                    console.log("✅ Buy TX:", txSignature);
+                    console.log("✅ Buy TX:", buyTxSignature);
 
                     // LOCK CHART: Determine to use optimistic price for 10s
                     // This prevents background polling from overwriting the new price with old on-chain data
@@ -1331,40 +1607,47 @@ export default function Page() {
             });
 
             // ✅ OPTIMISTIC UPDATE: Update User Shares Immediately
-            const outcomeIdx = isMultiOutcome
+            // Use local variable for index as multiOutcome index definition might differ or need re-calc
+            const mySharesOutcomeIdx = isMultiOutcome
                 ? marketOutcomes.findIndex(o => o.id === selectedOutcomeId)
                 : (selectedSide === 'YES' ? 0 : 1);
 
-            if (outcomeIdx !== -1) {
-                updateMyShares(outcomeIdx, (myShares[outcomeIdx] || 0) + sim.sharesReceived);
-                console.log(`🚀 Optimistic MyShares Update (BUY): +${sim.sharesReceived} shares for index ${outcomeIdx}`);
+            if (mySharesOutcomeIdx !== -1) {
+                updateMyShares(mySharesOutcomeIdx, (myShares[mySharesOutcomeIdx] || 0) + sim.sharesReceived);
+                console.log(`🚀 Optimistic MyShares Update (BUY): +${sim.sharesReceived} shares for index ${mySharesOutcomeIdx}`);
             }
 
             setIsSuccess(true);
             setBetAmount('');
             setTimeout(() => setLastTradeEvent(null), 3000);
-            setLastBetDetails({
-                outcomeName: selectedOutcomeName || staticMarketInfo.title,
+
+            // Re-calculate index for color logic
+            const colorIdx = isMultiOutcome
+                ? marketOutcomes.findIndex(o => o.title === (selectedOutcomeName || 'YES'))
+                : (selectedSide === 'YES' ? 0 : 1);
+
+            setLastTradeEvent({
+                id: Date.now().toString(),
+                amount: amountNum,
                 side: selectedSide,
-                solAmount: amountNum,
-                usdAmount: usdValueInTrading,
-                marketTitle: staticMarketInfo.title,
-                probability: livePrice,
-                username: userProfile.username,
-                type: 'BUY',
-                imageUrl: marketAccount?.icon || (typeof staticMarketInfo.icon === 'string' && staticMarketInfo.icon.startsWith('http') ? staticMarketInfo.icon : undefined)
+                title: isMultiOutcome ? selectedOutcomeName : (selectedSide === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO')),
+                color: getOutcomeColor(selectedOutcomeName || (selectedSide === 'YES' ? 'YES' : 'NO'), colorIdx)
             });
 
-            const tradeSideName = selectedSide === 'YES'
-                ? (marketOutcomes[0]?.title || 'YES')
-                : (marketOutcomes[1]?.title || 'NO');
+            const tradeSideName = isMultiOutcome
+                ? (selectedOutcomeName || 'YES')
+                : (selectedSide === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO'));
+
+            // Use the buyTxSignature from outer scope if available, else 'pending'
+            const finalTxSignature = buyTxSignature || '';
 
             setDjinnToast({
                 isVisible: true,
                 type: 'SUCCESS',
                 title: 'SUCCESS',
                 message: `Successfully bought ${formatCompact(sim.sharesReceived)} ${tradeSideName} shares.`,
-                actionLink: txSignature ? `https://solscan.io/tx/${txSignature}?cluster=devnet` : undefined,
+                // @ts-ignore
+                actionLink: finalTxSignature ? `https://solscan.io/tx/${finalTxSignature}?cluster=devnet` : undefined,
                 actionLabel: 'View on Solscan'
             });
 
@@ -1372,7 +1655,7 @@ export default function Page() {
             setTradeSuccessInfo({
                 shares: sim.sharesReceived,
                 side: tradeSideName,
-                txSignature: txSignature || ''
+                txSignature: finalTxSignature
             });
 
             // Show purchase bubble notification
@@ -2035,15 +2318,15 @@ export default function Page() {
 
                                     {/* Creator Metadata - Clean Minimal Style */}
                                     <div className="flex items-start gap-12">
-                                        {/* Creator Info (No border/bg) - FIXED: Use marketAccount derived data */}
-                                        <div
+                                        {/* Creator Info (No border/bg) - FIXED: Use creatorDisplay for live updates */}
+                                        <Link
+                                            href={`/profile/${marketAccount.creator_username || marketAccount.creator_wallet}`}
                                             className="flex items-center gap-2 cursor-pointer group"
-                                            onClick={() => marketAccount?.creator_wallet && (window.location.href = `/profile/${marketAccount.creator_username || marketAccount.creator_wallet}`)}
                                         >
                                             <div className="w-8 h-8 rounded-full overflow-hidden bg-zinc-800 shrink-0">
-                                                {marketAccount?.creator_avatar ? (
+                                                {creatorDisplay.avatar ? (
                                                     <img
-                                                        src={marketAccount.creator_avatar}
+                                                        src={creatorDisplay.avatar}
                                                         className="w-full h-full object-cover"
                                                         alt="avatar"
                                                         onError={(e) => {
@@ -2056,318 +2339,111 @@ export default function Page() {
                                                     />
                                                 ) : (
                                                     <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-500 font-bold bg-[#1A1A1A]">
-                                                        {marketAccount?.creator_username ? marketAccount.creator_username.charAt(0).toUpperCase() : '👤'}
+                                                        {creatorDisplay.username ? creatorDisplay.username.charAt(0).toUpperCase() : '👤'}
                                                     </div>
                                                 )}
                                             </div>
                                             <span className="text-sm font-bold text-gray-400 group-hover:text-gray-200 transition-colors">
-                                                by <span className="text-[#F492B7] font-black">{marketAccount?.creator_username || 'Djinn Creator'}</span>
+                                                by <span className="text-[#F492B7] font-black">{creatorDisplay.username}</span>
                                             </span>
-                                        </div>
+                                        </Link>
                                     </div>
                                 </div>
-
-
                             </div>
-                        </div>
 
-                        {/* MCAPS - DYNAMIC GRID (Premium 'Agent Skills' UI) */}
-                        <div className={`grid gap-4 mb-4 ${marketOutcomes.length > 2 ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-2'}`}>
-                            {marketOutcomes.map((outcome, idx) => {
-                                const color = getOutcomeColor(outcome.title, idx);
-                                const mcapUSD = (outcome.mcapSOL || 0) * (solPrice || 0);
-                                return (
-                                    <div
-                                        key={outcome.title || idx}
-                                        className="relative overflow-hidden flex flex-col items-center justify-center px-4 py-4 rounded-2xl bg-[#0B0E14]/60 backdrop-blur-xl border border-white/10 group transition-all hover:bg-[#0B0E14]/80"
-                                        style={{
-                                            boxShadow: `0 0 20px ${color}0D, inset 0 0 10px ${color}05`
-                                        }}
+
+                        </div>
+                    </div>
+
+                    {/* MCAPS - DYNAMIC GRID (Premium 'Agent Skills' UI) */}
+                    <div className={`grid gap-4 mb-4 ${marketOutcomes.length > 2 ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-2'}`}>
+                        {marketOutcomes.map((outcome, idx) => {
+                            const color = getOutcomeColor(outcome.title, idx);
+                            const mcapUSD = (outcome.mcapSOL || 0) * (solPrice || 0);
+                            return (
+                                <div
+                                    key={outcome.title || idx}
+                                    className="relative overflow-hidden flex flex-col items-center justify-center px-4 py-4 rounded-2xl bg-[#0B0E14]/60 backdrop-blur-xl border border-white/10 group transition-all hover:bg-[#0B0E14]/80"
+                                    style={{
+                                        boxShadow: `0 0 20px ${color}0D, inset 0 0 10px ${color}05`
+                                    }}
+                                >
+                                    {/* Relief inner glow/border inspired by 'Agent Skills' */}
+                                    <div className="absolute inset-0 rounded-2xl border border-white/5 pointer-events-none" />
+                                    <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+
+                                    {/* Dynamic outcome aura */}
+                                    <div className="absolute -bottom-10 -right-10 w-20 h-20 blur-3xl rounded-full opacity-10 pointer-events-none" style={{ backgroundColor: color }} />
+
+                                    <span
+                                        className="text-[10px] font-black uppercase tracking-[0.2em] mb-1.5 flex items-center gap-2 text-white/50"
                                     >
-                                        {/* Relief inner glow/border inspired by 'Agent Skills' */}
-                                        <div className="absolute inset-0 rounded-2xl border border-white/5 pointer-events-none" />
-                                        <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-
-                                        {/* Dynamic outcome aura */}
-                                        <div className="absolute -bottom-10 -right-10 w-20 h-20 blur-3xl rounded-full opacity-10 pointer-events-none" style={{ backgroundColor: color }} />
-
-                                        <span
-                                            className="text-[10px] font-black uppercase tracking-[0.2em] mb-1.5 flex items-center gap-2 text-white/50"
-                                        >
-                                            <div
-                                                className="w-2 h-2 rounded-full"
-                                                style={{
-                                                    backgroundColor: color,
-                                                    boxShadow: `0 0 10px ${color}`
-                                                }}
-                                            />
-                                            {outcome.title} MCAP
-                                        </span>
-                                        <div className="flex flex-col items-center">
-                                            <span
-                                                className="text-2xl font-black text-white tabular-nums tracking-tight leading-none mb-1"
-                                                style={{ filter: `drop-shadow(0 0 8px ${color}44)` }}
-                                            >
-                                                ${formatCompact(mcapUSD)}
-                                            </span>
-                                            <span className="text-[10px] font-bold text-gray-500 tabular-nums uppercase tracking-widest">
-                                                {formatCompact(outcome.mcapSOL || 0)} SOL
-                                            </span>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-
-
-
-                        <div className="bg-transparent rounded-2xl border border-white/5 overflow-hidden min-h-[850px] relative">
-
-
-
-
-                            {/* Dual-line Chart (Bazaar of Answers Style) */}
-                            <TheDjinnChart
-                                outcomes={marketOutcomes.map(o => o.title)}
-                                probabilityData={historyState.probability}
-                                outcomeSupplies={outcomeSuppliesMap}
-                                volume={marketAccount?.volumeTotal ? formatCompact(Number(marketAccount.volumeTotal) / 1e9) + " SOL" : (marketAccount?.volume_usd || "$0")}
-                                resolutionDate={marketAccount?.market_resolution_date ? new Date(marketAccount.market_resolution_date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : (marketAccount?.end_date || "Unknown")}
-                                tradeEvent={lastTradeEvent ? {
-                                    id: lastTradeEvent.id,
-                                    outcome: lastTradeEvent.title || lastTradeEvent.side,
-                                    amount: lastTradeEvent.amount,
-                                    color: lastTradeEvent.color || (lastTradeEvent.side === 'YES' ? '#10B981' : '#EF4444')
-                                } : null}
-                                selectedOutcome={selectedOutcomeName || (selectedSide === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO'))}
-                                onOutcomeChange={(name: string) => {
-                                    setSelectedOutcomeName(name);
-                                    // Also find the ID and Side to keep everything in sync
-                                    const outcome = marketOutcomes.find(o => o.title === name);
-                                    if (outcome) {
-                                        setSelectedOutcomeId(outcome.id);
-                                        // For binary markets, map to YES/NO sides
-                                        if (marketOutcomes.length === 2) {
-                                            setSelectedSide(outcome.title === marketOutcomes[0].title ? 'YES' : 'NO');
-                                        }
-                                    }
-                                }}
-                            />
-
-                            {/* HOLDINGS SECTION REMOVED FROM HERE (Relocated Below) */}
-
-                            {/* Multi-outcome Selector (if applicable) */}
-                            {isMultiOutcome && (
-                                <div className="px-6 mt-4 mb-4">
-                                    <div className="pt-6 border-t border-white/10">
-                                        <h3 className="text-sm font-black uppercase text-gray-500 mb-4 tracking-wider">Select an outcome to trade</h3>
-                                        <OutcomeList
-                                            outcomes={marketOutcomes}
-                                            selectedId={selectedOutcomeId}
-                                            onSelect={setSelectedOutcomeId}
-                                            onBuyClick={handleOutcomeBuyClick}
+                                        <div
+                                            className="w-2 h-2 rounded-full"
+                                            style={{
+                                                backgroundColor: color,
+                                                boxShadow: `0 0 10px ${color}`
+                                            }}
                                         />
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* CERBERUS AI - Clickable Panel (Relocated Here) */}
-                            <div className="px-6 mt-4 mb-2 group cursor-pointer" onClick={() => console.log('Cerberus AI clicked')}>
-                                <div className="relative overflow-hidden rounded-xl border border-white/10 bg-white/5 p-3 flex items-center justify-between hover:bg-white/10 transition-colors">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
-                                            <Bot size={18} className="text-blue-400" />
-                                        </div>
-                                        <span className="text-sm font-medium text-white group-hover:text-blue-200 transition-colors">
-                                            Click <span className="font-bold text-blue-400">Cerberus AI</span> to find info about the market
+                                        {outcome.title} MCAP
+                                    </span>
+                                    <div className="flex flex-col items-center">
+                                        <span
+                                            className="text-2xl font-black text-white tabular-nums tracking-tight leading-none mb-1"
+                                            style={{ filter: `drop-shadow(0 0 8px ${color}44)` }}
+                                        >
+                                            ${formatCompact(mcapUSD)}
+                                        </span>
+                                        <span className="text-[10px] font-bold text-gray-500 tabular-nums uppercase tracking-widest">
+                                            {formatCompact(outcome.mcapSOL || 0)} SOL
                                         </span>
                                     </div>
-                                    <ChevronRight size={16} className="text-white/30 group-hover:text-white/60" />
                                 </div>
-                            </div>
+                            );
+                        })}
+                    </div>
 
-                            {/* RESOLUTION CRITERIA (Relocated Here) */}
-                            <div className="px-6 mb-6">
-                                <div className="bg-[#0E0E0E] rounded-xl border border-white/5 p-6">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <h3 className="text-sm font-bold text-white uppercase tracking-wider">Resolution Criteria</h3>
-                                        {/* Oracle Source Badge */}
-                                        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/5">
-                                            <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest mr-1">Oracle</span>
-                                            {marketAccount?.resolution_source ? (
-                                                <a href={marketAccount.resolution_source} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[#10B981] hover:underline font-mono text-xs">
-                                                    <span>{marketAccount.resolution_source.slice(0, 15)}...</span> <ExternalLink size={10} />
-                                                </a>
-                                            ) : (
-                                                <div className="flex items-center gap-1 text-white">
-                                                    <img src="/pyth-logo.png" className="w-3 h-3 rounded-full" onError={(e) => e.currentTarget.style.display = 'none'} />
-                                                    <span className="font-bold text-xs">Pyth</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
 
-                                    <p className="text-gray-400 text-sm leading-relaxed mb-0 font-light">
-                                        This market will resolve to "YES" if the specific outcome defined in the title occurs by the resolution date.
-                                        The resolution is decentralized and verified by the oracle.
-                                    </p>
-                                </div>
-                            </div>
 
-                            {/* TABS (Relocated UP - as requested) */}
-                            <div className="px-6 mb-8 mt-2">
-                                {/* ✅ HOLDINGS - ALWAYS VISIBLE ABOVE TABS */}
-                                <HoldingsSection
-                                    bets={userBets}
-                                    outcomeSupplies={marketOutcomes.map(o => o.supply)}
-                                    marketOutcomes={marketOutcomes}
-                                />
+                    <div className="bg-transparent rounded-2xl border border-white/5 overflow-hidden min-h-[850px] relative">
 
-                                <div className="flex items-center gap-6 mb-6 border-b border-white/5 pb-2">
-                                    <TabButton label="Activity" icon={<Activity size={14} />} active={bottomTab === 'ACTIVITY'} onClick={() => setBottomTab('ACTIVITY')} />
-                                    <TabButton label="Comments" icon={<MessageCircle size={14} />} active={bottomTab === 'COMMENTS'} onClick={() => setBottomTab('COMMENTS')} />
-                                    <TabButton label="Top Holders" icon={<Users size={14} />} active={bottomTab === 'HOLDERS'} onClick={() => setBottomTab('HOLDERS')} />
-                                </div>
 
-                                {/* TAB CONTENT */}
-                                {bottomTab === 'COMMENTS' && (
-                                    <CommentsSection
-                                        marketSlug={effectiveSlug}
-                                        publicKey={publicKey ? publicKey.toBase58() : null}
-                                        userProfile={userProfile}
-                                    />
-                                )}
 
-                                {bottomTab === 'ACTIVITY' && (
-                                    <div className="bg-[#0E0E0E] rounded-xl border border-white/5 overflow-hidden">
-                                        <div className="grid grid-cols-5 px-6 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500 border-b border-white/5">
-                                            <span className="col-span-1">Trader</span>
-                                            <span className="text-center col-span-1">Side</span>
-                                            <span className="text-center col-span-1">Shares</span>
-                                            <span className="text-right col-span-1">Value</span>
-                                            <span className="text-right col-span-1">Time</span>
-                                        </div>
-                                        <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
-                                            {activityList.length === 0 ? (
-                                                <div className="p-8 text-center text-gray-600 italic">No orders yet</div>
-                                            ) : (
-                                                activityList.map((act, i) => {
-                                                    const isBuy = act.order_type === 'BUY' || !act.order_type;
-                                                    const outcomeIdx = marketOutcomes.findIndex(o => o.title === act.action);
-                                                    const actionColor = getOutcomeColor(act.action, outcomeIdx === -1 ? (act.action === 'YES' ? 0 : 1) : outcomeIdx);
 
-                                                    return (
-                                                        <div key={i} className="grid grid-cols-5 items-center px-6 py-4 border-b border-white/5 hover:bg-white/5 transition-colors group">
-                                                            <div className="flex items-center gap-3 col-span-1">
-                                                                <div className="w-8 h-8 rounded-full bg-[#1A1A1A] flex items-center justify-center border border-white/10 overflow-hidden shrink-0">
-                                                                    {act.avatar_url ? <img src={act.avatar_url} className="w-full h-full object-cover" /> : <span className="text-sm">🧞</span>}
-                                                                </div>
-                                                                <div className="flex flex-col overflow-hidden">
-                                                                    <div className="flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity" onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        window.location.href = `/profile/${act.username || act.wallet_address}`;
-                                                                    }}>
-                                                                        <span className="text-xs font-bold text-white group-hover:text-[#F492B7] transition-colors font-mono truncate">
-                                                                            {act.username || `${act.wallet_address.slice(0, 4)}...`}
-                                                                        </span>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <div className="text-center col-span-1">
-                                                                <span
-                                                                    className={`text-[9px] font-black uppercase px-2 py-1 rounded whitespace-nowrap`}
-                                                                    style={{
-                                                                        backgroundColor: `${actionColor}20`,
-                                                                        color: actionColor,
-                                                                        border: `1px solid ${actionColor}40`
-                                                                    }}
-                                                                >
-                                                                    {act.order_type || 'BUY'} {act.action}
-                                                                </span>
-                                                            </div>
-                                                            <div className="text-center col-span-1">
-                                                                <span className="text-xs font-mono text-gray-300">{act.shares?.toFixed(2) || '0.00'}</span>
-                                                            </div>
-                                                            <div className="text-right col-span-1">
-                                                                <div className="text-sm font-black text-white">${act.amount?.toFixed(2)}</div>
-                                                                <div className="text-[10px] font-mono text-gray-600">{act.sol_amount?.toFixed(3)} SOL</div>
-                                                            </div>
-                                                            <div className="text-right text-[10px] font-mono text-gray-500 col-span-1">
-                                                                {timeAgo(act.created_at)}
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
+                        {/* Dual-line Chart (Bazaar of Answers Style) */}
+                        <TheDjinnChart
+                            outcomes={marketOutcomes.map(o => o.title)}
+                            probabilityData={historyState.probability}
+                            outcomeSupplies={outcomeSuppliesMap}
+                            volume={marketAccount?.volumeTotal ? formatCompact(Number(marketAccount.volumeTotal) / 1e9) + " SOL" : (marketAccount?.volume_usd || "$0")}
+                            resolutionDate={marketAccount?.market_resolution_date ? new Date(marketAccount.market_resolution_date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : (marketAccount?.end_date || "Unknown")}
+                            tradeEvent={lastTradeEvent ? {
+                                id: lastTradeEvent.id,
+                                outcome: lastTradeEvent.title || lastTradeEvent.side,
+                                amount: lastTradeEvent.amount,
+                                color: lastTradeEvent.color || (lastTradeEvent.side === 'YES' ? '#10B981' : '#EF4444')
+                            } : null}
+                            selectedOutcome={selectedOutcomeName || (selectedSide === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO'))}
+                            onOutcomeChange={(name: string) => {
+                                setSelectedOutcomeName(name);
+                                // Also find the ID and Side to keep everything in sync
+                                const outcome = marketOutcomes.find(o => o.title === name);
+                                if (outcome) {
+                                    setSelectedOutcomeId(outcome.id);
+                                    // For binary markets, map to YES/NO sides
+                                    if (marketOutcomes.length === 2) {
+                                        setSelectedSide(outcome.title === marketOutcomes[0].title ? 'YES' : 'NO');
+                                    }
+                                }
+                            }}
+                        />
 
-                                {bottomTab === 'HOLDERS' && (
-                                    <div className={`grid gap-12 ${marketOutcomes.length > 2 ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
-                                        {marketOutcomes.map((outcome, idx) => {
-                                            const title = outcome.title;
-                                            const color = getOutcomeColor(title, idx);
-                                            const outcomeHolders = holders
-                                                .filter(h => (h.positions?.[title] || 0) > 0.1)
-                                                .sort((a, b) => (b.positions?.[title] || 0) - (a.positions?.[title] || 0));
+                        {/* HOLDINGS SECTION REMOVED FROM HERE (Relocated Below) */}
 
-                                            return (
-                                                <div key={title}>
-                                                    <div className="mb-4">
-                                                        <h3 className="text-sm font-bold text-white mb-2 uppercase tracking-wider" style={{ color: color }}>
-                                                            {title} Holders
-                                                        </h3>
-                                                        <div className="h-0.5 w-full bg-white/10" style={{ backgroundColor: `${color}20` }} />
-                                                    </div>
-                                                    <div className="space-y-0">
-                                                        {outcomeHolders.length === 0 ? (
-                                                            <div className="py-6 text-gray-500 text-sm italic">No holders</div>
-                                                        ) : (
-                                                            outcomeHolders.map((h: any, i: number) => {
-                                                                const isMe = publicKey && h.wallet_address === publicKey.toBase58();
-                                                                const shares = h.positions[title];
-                                                                return (
-                                                                    <div
-                                                                        key={i}
-                                                                        className={`flex items-center justify-between py-3 border-b border-white/5 group hover:bg-white/5 hover:px-2 rounded transition-all -mx-2 px-2 cursor-pointer ${isMe ? 'bg-white/5' : ''}`}
-                                                                        style={isMe ? { borderLeft: `2px solid ${color}` } : {}}
-                                                                        onClick={() => window.location.href = `/profile/${h.wallet_address}`}
-                                                                    >
-                                                                        <div className="flex items-center gap-3">
-                                                                            <div className="relative">
-                                                                                <div className="w-8 h-8 rounded-full bg-[#1A1A1A] overflow-hidden border border-white/10">
-                                                                                    {h.avatar ? <img src={h.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full opacity-80" style={{ background: `linear-gradient(135deg, ${color}, #000)` }} />}
-                                                                                </div>
-                                                                                <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold border border-[#0B0E14] ${i === 0 ? 'bg-gradient-to-br from-yellow-300 to-amber-500 text-black' : i === 1 ? 'bg-gradient-to-br from-gray-300 to-gray-400 text-black' : i === 2 ? 'bg-gradient-to-br from-orange-300 to-amber-700 text-white' : 'bg-gray-800 text-gray-400'}`}>
-                                                                                    {i + 1}
-                                                                                </div>
-                                                                            </div>
-                                                                            <div>
-                                                                                <div className="text-sm font-bold text-white group-hover:text-[#F492B7] transition-colors truncate max-w-[120px]">
-                                                                                    {h.name} {isMe && <span className="text-[9px] px-1 rounded ml-1 text-black" style={{ backgroundColor: color }}>YOU</span>}
-                                                                                </div>
-                                                                                <div className="text-xs font-medium font-mono flex items-center gap-1" style={{ color: color }}>
-                                                                                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
-                                                                                    {formatCompact(shares)} <span className="text-[10px] text-gray-500 uppercase">{title}</span>
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                );
-                                                            })
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* TABS (Relocated Inside Container) */}
-                            {isMultiOutcome && (
-                                <div className="mt-6 pt-6 border-t border-white/10">
+                        {/* Multi-outcome Selector (if applicable) */}
+                        {isMultiOutcome && (
+                            <div className="px-6 mt-4 mb-4">
+                                <div className="pt-6 border-t border-white/10">
                                     <h3 className="text-sm font-black uppercase text-gray-500 mb-4 tracking-wider">Select an outcome to trade</h3>
                                     <OutcomeList
                                         outcomes={marketOutcomes}
@@ -2376,200 +2452,435 @@ export default function Page() {
                                         onBuyClick={handleOutcomeBuyClick}
                                     />
                                 </div>
-                            )}
+                            </div>
+                        )}
 
-                            {/* TABS (Relocated Inside Container) */}
-
+                        {/* CERBERUS AI - Clickable Panel (Relocated Here) */}
+                        <div className="px-6 mt-4 mb-2 group cursor-pointer" onClick={() => console.log('Cerberus AI clicked')}>
+                            <div className="relative overflow-hidden rounded-xl border border-white/10 bg-white/5 p-3 flex items-center justify-between hover:bg-white/10 transition-colors">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
+                                        <Bot size={18} className="text-blue-400" />
+                                    </div>
+                                    <span className="text-sm font-medium text-white group-hover:text-blue-200 transition-colors">
+                                        Click <span className="font-bold text-blue-400">Cerberus AI</span> to find info about the market
+                                    </span>
+                                </div>
+                                <ChevronRight size={16} className="text-white/30 group-hover:text-white/60" />
+                            </div>
                         </div>
 
+                        {/* RESOLUTION CRITERIA (Relocated Here) */}
+                        <div className="px-6 mb-6">
+                            <div className="bg-[#0E0E0E] rounded-xl border border-white/5 p-6">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Resolution Criteria</h3>
+                                    {/* Oracle Source Badge */}
+                                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/5">
+                                        <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest mr-1">Oracle</span>
+                                        {marketAccount?.resolution_source ? (
+                                            <a href={marketAccount.resolution_source} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[#10B981] hover:underline font-mono text-xs">
+                                                <span>{marketAccount.resolution_source.slice(0, 15)}...</span> <ExternalLink size={10} />
+                                            </a>
+                                        ) : (
+                                            <div className="flex items-center gap-1 text-white">
+                                                <img src="/pyth-logo.png" className="w-3 h-3 rounded-full" onError={(e) => e.currentTarget.style.display = 'none'} />
+                                                <span className="font-bold text-xs">Pyth</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
 
+                                <p className="text-gray-400 text-sm leading-relaxed mb-0 font-light">
+                                    This market will resolve to "YES" if the specific outcome defined in the title occurs by the resolution date.
+                                    The resolution is decentralized and verified by the oracle.
+                                </p>
+                            </div>
+                        </div>
 
+                        {/* TABS (Relocated UP - as requested) */}
+                        <div className="px-6 mb-8 mt-2">
+                            {/* ✅ HOLDINGS - ALWAYS VISIBLE ABOVE TABS */}
+                            <HoldingsSection
+                                bets={userBets}
+                                outcomeSupplies={marketOutcomes.map(o => o.supply)}
+                                marketOutcomes={marketOutcomes}
+                            />
 
-
-
-
-
-                        {/* TABS (Activity, Opinions, Holders) */}
-
-
-                    </div> {/* End of LEFT COLUMN (col-span-8) */}
-
-                    {/* RIGHT COLUMN: TRADING (Fixed Sidebar) - Glass Panel with Elevation */}
-                    <div className="hidden lg:block fixed right-8 xl:right-[8%] top-48 w-[360px] z-40 max-h-[calc(100vh-14rem)] overflow-visible scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-                        <div className="origin-top scale-[0.92]">
-                            {/* TOTAL POOL - ADDED TO SIDEBAR TOP */}
-                            <div className="mb-6 w-full flex flex-col items-center px-6 py-4 rounded-[1.5rem] bg-[#0E0E0E]/80 backdrop-blur-lg border border-[#F492B7]/30 shadow-2xl shadow-[#F492B7]/10 relative overflow-hidden group/pool">
-                                <span className="text-[10px] font-black uppercase tracking-[0.4em] text-[#F492B7]/60 mb-1">
-                                    Total Pool
-                                </span>
-                                <span className="text-4xl font-black text-white drop-shadow-[0_0_15px_rgba(244,146,183,0.4)] tracking-tighter italic -skew-x-6">
-                                    <AnimatedNumber
-                                        value={totalPoolSol}
-                                        decimals={2}
-                                        className="inline"
-                                    /> <span className="text-[#F492B7]">SOL</span>
-                                </span>
+                            <div className="flex items-center gap-6 mb-6 border-b border-white/5 pb-2">
+                                <TabButton label="Activity" icon={<Activity size={14} />} active={bottomTab === 'ACTIVITY'} onClick={() => setBottomTab('ACTIVITY')} />
+                                <TabButton label="Comments" icon={<MessageCircle size={14} />} active={bottomTab === 'COMMENTS'} onClick={() => setBottomTab('COMMENTS')} />
+                                <TabButton label="Top Holders" icon={<Users size={14} />} active={bottomTab === 'HOLDERS'} onClick={() => setBottomTab('HOLDERS')} />
                             </div>
 
-                            {/* GLASS PANEL WITH ELEVATION */}
-                            <div className="relative rounded-[24px] overflow-visible">
-                                {/* Elevation Shadow - Deep floating effect */}
-                                <div className="absolute -inset-1 rounded-[26px] bg-black/40 blur-2xl translate-y-4 pointer-events-none" />
-                                <div className="absolute -inset-2 rounded-[28px] bg-black/30 blur-3xl translate-y-6 pointer-events-none" />
+                            {/* TAB CONTENT */}
+                            {bottomTab === 'COMMENTS' && (
+                                <CommentsSection
+                                    marketSlug={effectiveSlug}
+                                    publicKey={publicKey ? publicKey.toBase58() : null}
+                                    userProfile={userProfile}
+                                    marketOutcomes={marketOutcomes}
+                                    myHeldPosition={null} // Pass null or actual position if available
+                                    myHeldAmount={0}
+                                />
+                            )}
 
-                                {/* Subtle border glow */}
-                                <div className="absolute -inset-[0.5px] rounded-[25px] bg-gradient-to-b from-white/25 via-white/10 to-white/5 pointer-events-none" />
+                            {bottomTab === 'ACTIVITY' && (
+                                <div className="bg-[#0E0E0E] rounded-xl border border-white/5 overflow-hidden">
+                                    <div className="grid grid-cols-5 px-6 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500 border-b border-white/5">
+                                        <span className="col-span-1">Trader</span>
+                                        <span className="text-center col-span-1">Side</span>
+                                        <span className="text-center col-span-1">Shares</span>
+                                        <span className="text-right col-span-1">Value</span>
+                                        <span className="text-right col-span-1">Time</span>
+                                    </div>
+                                    <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
+                                        {activityList.length === 0 ? (
+                                            <div className="p-8 text-center text-gray-600 italic">No orders yet</div>
+                                        ) : (
+                                            activityList.map((act, i) => {
+                                                const isBuy = act.order_type === 'BUY' || !act.order_type;
 
-                                {/* Main glass body - Deep Dark Aesthetic with Relief */}
-                                <div className="relative bg-zinc-900/60 backdrop-blur-3xl rounded-[24px] border border-white/10 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8),inset_0_1px_0_rgba(255,255,255,0.1)] overflow-hidden">
+                                                // FIX: Resolve "YES"/"NO" to Outcome Titles
+                                                let displayAction = act.action;
+                                                let actionColor = '#808080';
 
-                                    {/* Premium inner glow */}
-                                    <div className="absolute inset-0 bg-gradient-to-tr from-[#F492B7]/5 via-transparent to-white/5 pointer-events-none" />
-                                    <div className="absolute -top-24 -right-24 w-48 h-48 bg-[#F492B7]/10 blur-[60px] rounded-full pointer-events-none" />
-                                    <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-emerald-500/10 blur-[60px] rounded-full pointer-events-none" />
+                                                // Helper to find outcome index safely
+                                                const findOutcomeIndex = (name: string) => marketOutcomes.findIndex(o => o.title === name);
 
-                                    {/* TRADE PANEL CONTENT - Scrollable inner area */}
-                                    <div className="p-4 max-h-[calc(100vh-14rem)] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                                                if (act.action === 'YES' || act.action === 'NO') {
+                                                    const outcomeIdx = act.action === 'YES' ? 0 : 1;
+                                                    if (marketOutcomes[outcomeIdx]) {
+                                                        displayAction = marketOutcomes[outcomeIdx].title;
+                                                        actionColor = getOutcomeColor(displayAction, outcomeIdx);
+                                                    } else {
+                                                        actionColor = getOutcomeColor(act.action, outcomeIdx);
+                                                    }
+                                                } else {
+                                                    // It's already an outcome name
+                                                    const outcomeIdx = findOutcomeIndex(act.action);
+                                                    actionColor = getOutcomeColor(act.action, outcomeIdx !== -1 ? outcomeIdx : undefined);
+                                                }
 
-                                        {/* BUY/SELL TOGGLE - At top now */}
-                                        <div className="mb-4 p-1 bg-white/5 rounded-xl flex">
-                                            <button
-                                                onClick={() => setTradeMode('BUY')}
-                                                className={`flex-1 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${tradeMode === 'BUY' ? 'bg-[#10B981] text-white' : 'text-gray-500 hover:text-white'}`}
-                                            >
-                                                Buy
-                                            </button>
-                                            <button
-                                                onClick={() => setTradeMode('SELL')}
-                                                className={`flex-1 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${tradeMode === 'SELL' ? 'bg-[#EF4444] text-white' : 'text-gray-500 hover:text-white'}`}
-                                            >
-                                                Sell
-                                            </button>
-                                        </div>
-
-
-
-                                        {/* INPUT Section */}
-                                        <div className="bg-[#0A0A0A] rounded-xl border border-white/5 p-4 mb-4">
-                                            <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-2 block">
-                                                {tradeMode === 'BUY' ? 'You Pay' : 'Shares to Sell'}
-                                            </label>
-                                            <div className="flex items-center gap-3">
-                                                <input
-                                                    type="text"
-                                                    inputMode="decimal"
-                                                    value={betAmount || ''}
-                                                    onChange={(e) => {
-                                                        // Allow free typing, parseCompactNumber handles the value extraction logic
-                                                        setBetAmount(e.target.value);
-                                                        setIsMaxSell(false);
-                                                    }}
-                                                    className="bg-transparent text-5xl font-extralight text-white w-full outline-none placeholder-white/30 tracking-tighter"
-                                                    placeholder="0"
-                                                />
-                                                {/* SOL ICON */}
-                                                <div className="flex items-center gap-2 bg-[#1A1A1A] px-3 py-2 rounded-xl border border-white/10 shrink-0">
-                                                    <img
-                                                        src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
-                                                        className="w-5 h-5"
-                                                        alt="SOL"
-                                                    />
-                                                    <span className="text-sm font-bold text-white">{tradeMode === 'BUY' ? 'SOL' : 'SHARES'}</span>
-                                                </div>
-                                            </div>
-                                            {/* Percentage Buttons (SELL MODE ONLY) */}
-                                            {tradeMode === 'SELL' && (
-                                                <div className="flex gap-2 mt-4 pt-4 border-t border-white/5">
-                                                    {[25, 50, 75, 100].map((pct) => (
-                                                        <button
-                                                            key={pct}
-                                                            onClick={() => {
-                                                                const sharesOwned = isMultiOutcome
-                                                                    ? (myShares[marketOutcomes.findIndex(o => o.id === selectedOutcomeId)] || 0)
-                                                                    : (selectedSide === 'YES' ? (myShares[0] || 0) : (myShares[1] || 0));
-                                                                if (sharesOwned <= 0) return;
-
-                                                                if (pct === 100) {
-                                                                    setIsMaxSell(true);
-                                                                } else {
-                                                                    setIsMaxSell(false);
-                                                                }
-
-                                                                // Share Input Logic: 100% means 100% of SHARES.
-                                                                const sharesToSell = sharesOwned * (pct / 100);
-
-                                                                // Enable COMPACT FORMAT (e.g. 1M) since we switched to text input
-                                                                const formattedShares = sharesToSell >= 100_000
-                                                                    ? formatCompact(sharesToSell)
-                                                                    : sharesToSell.toFixed(2);
-
-                                                                setBetAmount(formattedShares);
-                                                            }}
-                                                            className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${(pct === 100 && isMaxSell)
-                                                                ? 'bg-white/20 text-white border-white/20'
-                                                                : 'bg-white/5 text-gray-400 border-white/5 hover:bg-white/10 hover:text-white'
-                                                                }`}
-                                                        >
-                                                            {pct}%
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* 2. PROBABILITY BAR & OUTCOMES */}
-                                        <div className="mb-6 space-y-3">
-                                            <div className="flex items-center justify-between px-2">
-                                                <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Prediction</span>
-                                                {/* Slippage (Pencil Edit) */}
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-[10px] font-bold text-gray-500 bg-white/5 px-2 py-1 rounded border border-white/5">{slippageTolerance}% SLIP</span>
-                                                    <button onClick={() => {
-                                                        const newSlippage = prompt("Enter new slippage %:", slippageTolerance.toString());
-                                                        if (newSlippage && !isNaN(parseFloat(newSlippage))) setSlippageTolerance(parseFloat(newSlippage));
-                                                    }} className="p-1.5 rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
-                                                        <Edit2 size={12} />
-                                                    </button>
-                                                </div>
-                                            </div>
-
-
-
-                                            {/* LARGE YES/NO BUTTONS (Limitless Style) */}
-                                            <div className="flex gap-3 h-36">
-                                                {isMultiOutcome ? (
-                                                    <div className="flex-1 bg-[#1A1A1A] rounded-2xl border border-white/10 p-4 flex flex-col justify-center items-center hover:border-[#F492B7]/50 transition-colors cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-                                                        <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-1">Target Outcome</span>
-                                                        <span className="font-bold text-white text-lg truncate max-w-full">{selectedOutcomeName || 'Select First'}</span>
-                                                        <span className="text-sm font-mono text-[#10B981] mt-1">{(livePrice ?? 0).toFixed(0)}%</span>
+                                                return (
+                                                    <div key={i} className="grid grid-cols-5 items-center px-6 py-4 border-b border-white/5 hover:bg-white/5 transition-colors group">
+                                                        <div className="flex items-center gap-3 col-span-1">
+                                                            <Link
+                                                                href={`/profile/${act.username || act.wallet_address}`}
+                                                                className="w-8 h-8 rounded-full bg-[#1A1A1A] flex items-center justify-center border border-white/10 overflow-hidden shrink-0 hover:opacity-80 transition-opacity"
+                                                            >
+                                                                <img
+                                                                    src={act.avatar_url || '/pink-pfp.png'}
+                                                                    className="w-full h-full object-cover"
+                                                                    onError={(e) => {
+                                                                        e.currentTarget.src = '/pink-pfp.png';
+                                                                    }}
+                                                                />
+                                                            </Link>
+                                                            <div className="flex flex-col overflow-hidden">
+                                                                <Link href={`/profile/${act.username || act.wallet_address}`} className="flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity">
+                                                                    <span className="text-xs font-bold text-white group-hover:text-[#F492B7] transition-colors font-mono truncate">
+                                                                        {act.username || `${act.wallet_address.slice(0, 4)}...`}
+                                                                    </span>
+                                                                </Link>
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-center col-span-1">
+                                                            <span
+                                                                className={`text-[9px] font-black uppercase px-2 py-1 rounded whitespace-nowrap`}
+                                                                style={{
+                                                                    backgroundColor: `${actionColor}20`,
+                                                                    color: actionColor,
+                                                                    border: `1px solid ${actionColor}40`
+                                                                }}
+                                                            >
+                                                                {act.order_type || 'BUY'} {displayAction}
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-center col-span-1">
+                                                            <span className="text-xs font-mono text-gray-300">{formatCompact(act.shares || 0)}</span>
+                                                        </div>
+                                                        <div className="text-right col-span-1">
+                                                            <div className="text-sm font-black text-white">${act.amount?.toFixed(2)}</div>
+                                                            <div className="text-[10px] font-mono text-gray-600">{act.sol_amount?.toFixed(3)} SOL</div>
+                                                        </div>
+                                                        <div className="text-right text-[10px] font-mono text-gray-500 col-span-1">
+                                                            {timeAgo(act.created_at)}
+                                                        </div>
                                                     </div>
-                                                ) : (
-                                                    <>
-                                                        <button
-                                                            onClick={() => setSelectedSide('YES')}
-                                                            className={`flex-1 rounded-xl flex flex-col items-center justify-center transition-all duration-200 border-2 ${selectedSide === 'YES'
-                                                                ? 'bg-[#10B981] border-[#10B981] text-white shadow-[0_0_20px_rgba(16,185,129,0.4)] scale-[1.02]'
-                                                                : 'bg-[#1A1A1A] border-white/5 text-gray-500 hover:border-[#10B981]/50 hover:bg-[#10B981]/10'}`}
-                                                        >
-                                                            <span className="text-xs font-black uppercase tracking-widest mb-0.5">{marketOutcomes[0]?.title || 'YES'}</span>
-                                                            <span className={`text-2xl font-bold ${selectedSide === 'YES' ? 'text-white' : 'text-[#10B981]'}`}>
-                                                                {yesPercent.toFixed(0)}%
-                                                            </span>
-                                                        </button>
-                                                        <button
-                                                            onClick={() => setSelectedSide('NO')}
-                                                            className={`flex-1 rounded-xl flex flex-col items-center justify-center transition-all duration-200 border-2 ${selectedSide === 'NO'
-                                                                ? 'bg-[#EF4444] border-[#EF4444] text-white shadow-[0_0_20px_rgba(239,68,68,0.4)] scale-[1.02]'
-                                                                : 'bg-[#1A1A1A] border-white/5 text-gray-500 hover:border-[#EF4444]/50 hover:bg-[#EF4444]/10'}`}
-                                                        >
-                                                            <span className="text-xs font-black uppercase tracking-widest mb-0.5">{marketOutcomes[1]?.title || 'NO'}</span>
-                                                            <span className={`text-2xl font-bold ${selectedSide === 'NO' ? 'text-white' : 'text-[#EF4444]'}`}>
-                                                                {noPercent.toFixed(0)}%
-                                                            </span>
-                                                        </button>
-                                                    </>
-                                                )}
+                                                );
+                                            })
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {bottomTab === 'HOLDERS' && (
+                                <div className={`grid gap-12 ${marketOutcomes.length > 2 ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
+                                    {marketOutcomes.map((outcome, idx) => {
+                                        const title = outcome.title;
+                                        const color = getOutcomeColor(title, idx);
+                                        const outcomeHolders = holders
+                                            .filter(h => (h.positions?.[title] || 0) > 0.1)
+                                            .sort((a, b) => (b.positions?.[title] || 0) - (a.positions?.[title] || 0));
+
+                                        return (
+                                            <div key={title}>
+                                                <div className="mb-4">
+                                                    <h3 className="text-sm font-bold text-white mb-2 uppercase tracking-wider" style={{ color: color }}>
+                                                        {title} Holders
+                                                    </h3>
+                                                    <div className="h-0.5 w-full bg-white/10" style={{ backgroundColor: `${color}20` }} />
+                                                </div>
+                                                <div className="space-y-0">
+                                                    {outcomeHolders.length === 0 ? (
+                                                        <div className="py-6 text-gray-500 text-sm italic">No holders</div>
+                                                    ) : (
+                                                        outcomeHolders.map((h: any, i: number) => {
+                                                            const isMe = publicKey && h.wallet_address === publicKey.toBase58();
+                                                            const shares = h.positions[title];
+                                                            return (
+                                                                <div
+                                                                    key={i}
+                                                                    className={`flex items-center justify-between py-3 border-b border-white/5 group hover:bg-white/5 hover:px-2 rounded transition-all -mx-2 px-2 cursor-pointer ${isMe ? 'bg-white/5' : ''}`}
+                                                                    style={isMe ? { borderLeft: `2px solid ${color}` } : {}}
+                                                                    onClick={() => window.location.href = `/profile/${h.wallet_address}`}
+                                                                >
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="relative">
+                                                                            <div className="w-8 h-8 rounded-full bg-[#1A1A1A] overflow-hidden border border-white/10">
+                                                                                {h.avatar ? <img src={h.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full opacity-80" style={{ background: `linear-gradient(135deg, ${color}, #000)` }} />}
+                                                                            </div>
+                                                                            <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold border border-[#0B0E14] ${i === 0 ? 'bg-gradient-to-br from-yellow-300 to-amber-500 text-black' : i === 1 ? 'bg-gradient-to-br from-gray-300 to-gray-400 text-black' : i === 2 ? 'bg-gradient-to-br from-orange-300 to-amber-700 text-white' : 'bg-gray-800 text-gray-400'}`}>
+                                                                                {i + 1}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div>
+                                                                            <div className="text-sm font-bold text-white group-hover:text-[#F492B7] transition-colors truncate max-w-[120px]">
+                                                                                {h.name} {isMe && <span className="text-[9px] px-1 rounded ml-1 text-black" style={{ backgroundColor: color }}>YOU</span>}
+                                                                            </div>
+                                                                            <div className="text-xs font-medium font-mono flex items-center gap-1" style={{ color: color }}>
+                                                                                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
+                                                                                {formatCompact(shares)} <span className="text-[10px] text-gray-500 uppercase">{title}</span>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })
+                                                    )}
+                                                </div>
                                             </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* TABS (Relocated Inside Container) */}
+                        {isMultiOutcome && (
+                            <div className="mt-6 pt-6 border-t border-white/10">
+                                <h3 className="text-sm font-black uppercase text-gray-500 mb-4 tracking-wider">Select an outcome to trade</h3>
+                                <OutcomeList
+                                    outcomes={marketOutcomes}
+                                    selectedId={selectedOutcomeId}
+                                    onSelect={setSelectedOutcomeId}
+                                    onBuyClick={handleOutcomeBuyClick}
+                                />
+                            </div>
+                        )}
+
+                        {/* TABS (Relocated Inside Container) */}
+
+                    </div>
+
+
+
+
+
+
+
+
+                    {/* TABS (Activity, Opinions, Holders) */}
+
+
+                </div> {/* End of LEFT COLUMN (col-span-8) */}
+
+                {/* RIGHT COLUMN: TRADING (Fixed Sidebar) - Glass Panel with Elevation */}
+                <div className="hidden lg:block fixed right-8 xl:right-[8%] top-48 w-[360px] z-40 max-h-[calc(100vh-14rem)] overflow-visible scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                    <div className="origin-top scale-[0.92]">
+                        {/* TOTAL POOL - ADDED TO SIDEBAR TOP */}
+                        <div className="mb-6 w-full flex flex-col items-center px-6 py-4 rounded-[1.5rem] bg-[#0E0E0E]/80 backdrop-blur-lg border border-[#F492B7]/30 shadow-2xl shadow-[#F492B7]/10 relative overflow-hidden group/pool">
+                            <span className="text-[10px] font-black uppercase tracking-[0.4em] text-[#F492B7]/60 mb-1">
+                                Total Pool
+                            </span>
+                            <span className="text-4xl font-black text-white drop-shadow-[0_0_15px_rgba(244,146,183,0.4)] tracking-tighter italic -skew-x-6">
+                                <AnimatedNumber
+                                    value={totalPoolSol}
+                                    decimals={2}
+                                    className="inline"
+                                /> <span className="text-[#F492B7]">SOL</span>
+                            </span>
+                        </div>
+
+                        {/* GLASS PANEL WITH ELEVATION */}
+                        <div className="relative rounded-[24px] overflow-visible">
+                            {/* Elevation Shadow - Deep floating effect */}
+                            <div className="absolute -inset-1 rounded-[26px] bg-black/40 blur-2xl translate-y-4 pointer-events-none" />
+                            <div className="absolute -inset-2 rounded-[28px] bg-black/30 blur-3xl translate-y-6 pointer-events-none" />
+
+                            {/* Subtle border glow */}
+                            <div className="absolute -inset-[0.5px] rounded-[25px] bg-gradient-to-b from-white/25 via-white/10 to-white/5 pointer-events-none" />
+
+                            {/* Main glass body - Deep Dark Aesthetic with Relief */}
+                            <div className="relative bg-zinc-900/60 backdrop-blur-3xl rounded-[24px] border border-white/10 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8),inset_0_1px_0_rgba(255,255,255,0.1)] overflow-hidden">
+
+                                {/* Premium inner glow */}
+                                <div className="absolute inset-0 bg-gradient-to-tr from-[#F492B7]/5 via-transparent to-white/5 pointer-events-none" />
+                                <div className="absolute -top-24 -right-24 w-48 h-48 bg-[#F492B7]/10 blur-[60px] rounded-full pointer-events-none" />
+                                <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-emerald-500/10 blur-[60px] rounded-full pointer-events-none" />
+
+                                {/* TRADE PANEL CONTENT - Scrollable inner area */}
+                                <div className="p-4 max-h-[calc(100vh-14rem)] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+
+                                    {/* BUY/SELL TOGGLE - At top now */}
+                                    <div className="mb-4 p-1 bg-white/5 rounded-xl flex">
+                                        <button
+                                            onClick={() => setTradeMode('BUY')}
+                                            className={`flex-1 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${tradeMode === 'BUY' ? 'bg-[#10B981] text-white' : 'text-gray-500 hover:text-white'}`}
+                                        >
+                                            Buy
+                                        </button>
+                                        <button
+                                            onClick={() => setTradeMode('SELL')}
+                                            className={`flex-1 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${tradeMode === 'SELL' ? 'bg-[#EF4444] text-white' : 'text-gray-500 hover:text-white'}`}
+                                        >
+                                            Sell
+                                        </button>
+                                    </div>
+
+
+
+                                    {/* INPUT Section */}
+                                    <div className="bg-[#0A0A0A] rounded-xl border border-white/5 p-4 mb-4">
+                                        <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-2 block">
+                                            {tradeMode === 'BUY' ? 'You Pay' : 'Shares to Sell'}
+                                        </label>
+                                        <div className="flex items-center gap-3">
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                value={betAmount || ''}
+                                                onChange={(e) => {
+                                                    // Allow free typing, parseCompactNumber handles the value extraction logic
+                                                    setBetAmount(e.target.value);
+                                                    setIsMaxSell(false);
+                                                }}
+                                                className="bg-transparent text-5xl font-extralight text-white w-full outline-none placeholder-white/30 tracking-tighter"
+                                                placeholder="0"
+                                            />
+                                            {/* SOL ICON */}
+                                            <div className="flex items-center gap-2 bg-[#1A1A1A] px-3 py-2 rounded-xl border border-white/10 shrink-0">
+                                                <img
+                                                    src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
+                                                    className="w-5 h-5"
+                                                    alt="SOL"
+                                                />
+                                                <span className="text-sm font-bold text-white">{tradeMode === 'BUY' ? 'SOL' : 'SHARES'}</span>
+                                            </div>
+                                        </div>
+                                        {/* Percentage Buttons (SELL MODE ONLY) */}
+                                        {tradeMode === 'SELL' && (
+                                            <div className="flex gap-2 mt-4 pt-4 border-t border-white/5">
+                                                {[25, 50, 75, 100].map((pct) => (
+                                                    <button
+                                                        key={pct}
+                                                        onClick={() => {
+                                                            const sharesOwned = isMultiOutcome
+                                                                ? (myShares[marketOutcomes.findIndex(o => o.id === selectedOutcomeId)] || 0)
+                                                                : (selectedSide === 'YES' ? (myShares[0] || 0) : (myShares[1] || 0));
+                                                            if (sharesOwned <= 0) return;
+
+                                                            if (pct === 100) {
+                                                                setIsMaxSell(true);
+                                                            } else {
+                                                                setIsMaxSell(false);
+                                                            }
+
+                                                            // Share Input Logic: 100% means 100% of SHARES.
+                                                            const sharesToSell = sharesOwned * (pct / 100);
+
+                                                            // Enable COMPACT FORMAT (e.g. 1M) since we switched to text input
+                                                            const formattedShares = sharesToSell >= 100_000
+                                                                ? formatCompact(sharesToSell)
+                                                                : sharesToSell.toFixed(2);
+
+                                                            setBetAmount(formattedShares);
+                                                        }}
+                                                        className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${(pct === 100 && isMaxSell)
+                                                            ? 'bg-white/20 text-white border-white/20'
+                                                            : 'bg-white/5 text-gray-400 border-white/5 hover:bg-white/10 hover:text-white'
+                                                            }`}
+                                                    >
+                                                        {pct}%
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* 2. PROBABILITY BAR & OUTCOMES */}
+                                    <div className="mb-6 space-y-3">
+                                        <div className="flex items-center justify-between px-2">
+                                            <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Prediction</span>
+                                            {/* Slippage (Pencil Edit) */}
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[10px] font-bold text-gray-500 bg-white/5 px-2 py-1 rounded border border-white/5">{slippageTolerance}% SLIP</span>
+                                                <button onClick={() => {
+                                                    const newSlippage = prompt("Enter new slippage %:", slippageTolerance.toString());
+                                                    if (newSlippage && !isNaN(parseFloat(newSlippage))) setSlippageTolerance(parseFloat(newSlippage));
+                                                }} className="p-1.5 rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
+                                                    <Edit2 size={12} />
+                                                </button>
+                                            </div>
+                                        </div>
+
+
+
+                                        {/* LARGE YES/NO BUTTONS (Limitless Style) */}
+                                        <div className="flex gap-3 h-36">
+                                            {isMultiOutcome ? (
+                                                <div className="flex-1 bg-[#1A1A1A] rounded-2xl border border-white/10 p-4 flex flex-col justify-center items-center hover:border-[#F492B7]/50 transition-colors cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+                                                    <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-1">Target Outcome</span>
+                                                    <span className="font-bold text-white text-lg truncate max-w-full">{selectedOutcomeName || 'Select First'}</span>
+                                                    <span className="text-sm font-mono text-[#10B981] mt-1">{(livePrice ?? 0).toFixed(0)}%</span>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <button
+                                                        onClick={() => setSelectedSide('YES')}
+                                                        className={`flex-1 rounded-xl flex flex-col items-center justify-center transition-all duration-200 border-2 ${selectedSide === 'YES'
+                                                            ? 'bg-[#10B981] border-[#10B981] text-white shadow-[0_0_20px_rgba(16,185,129,0.4)] scale-[1.02]'
+                                                            : 'bg-[#1A1A1A] border-white/5 text-gray-500 hover:border-[#10B981]/50 hover:bg-[#10B981]/10'}`}
+                                                    >
+                                                        <span className="text-xs font-black uppercase tracking-widest mb-0.5">{marketOutcomes[0]?.title || 'YES'}</span>
+                                                        <span className={`text-2xl font-bold ${selectedSide === 'YES' ? 'text-white' : 'text-[#10B981]'}`}>
+                                                            {yesPercent.toFixed(0)}%
+                                                        </span>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setSelectedSide('NO')}
+                                                        className={`flex-1 rounded-xl flex flex-col items-center justify-center transition-all duration-200 border-2 ${selectedSide === 'NO'
+                                                            ? 'bg-[#EF4444] border-[#EF4444] text-white shadow-[0_0_20px_rgba(239,68,68,0.4)] scale-[1.02]'
+                                                            : 'bg-[#1A1A1A] border-white/5 text-gray-500 hover:border-[#EF4444]/50 hover:bg-[#EF4444]/10'}`}
+                                                    >
+                                                        <span className="text-xs font-black uppercase tracking-widest mb-0.5">{marketOutcomes[1]?.title || 'NO'}</span>
+                                                        <span className={`text-2xl font-bold ${selectedSide === 'NO' ? 'text-white' : 'text-[#EF4444]'}`}>
+                                                            {noPercent.toFixed(0)}%
+                                                        </span>
+                                                    </button>
+                                                </>
+                                            )}
                                         </div>
 
                                         {/* 3. TRANSACTION SUMMARY */}
@@ -2784,10 +3095,9 @@ export default function Page() {
                     />
                     {/* Floating Holdings Button Removed */}
 
-                </div >
-            </div >
-        </div >
-
+                </div>
+            </div>
+        </div>
     );
 }
 

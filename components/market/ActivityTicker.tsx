@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from "react";
+import Link from "next/link";
 import { formatCompact } from "@/lib/utils";
 import { Clock, TrendingUp, User } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -57,17 +58,26 @@ export default function ActivityTicker({ activities }: ActivityTickerProps) {
                     const borderColorClass = isYes ? "border-emerald-500/20" : "border-red-500/20";
 
                     return (
-                        <div key={`${item.id}-${idx}`} className={`flex items-center gap-3 px-3 py-1.5 rounded-full border ${borderColorClass} ${bgColorClass} min-w-[200px]`}>
+                        <Link
+                            key={`${item.id}-${idx}`}
+                            href={`/profile/${item.username || item.id}`}
+                            className={`flex items-center gap-3 px-3 py-1.5 rounded-full border ${borderColorClass} ${bgColorClass} min-w-[200px] hover:scale-105 transition-transform cursor-pointer`}
+                        >
                             {/* AVATAR / ICON */}
-                            <div className={`p-1.5 rounded-full ${isYes ? 'bg-emerald-500/20' : 'bg-red-500/20'}`}>
-                                <User className={`w-3 h-3 ${colorClass}`} />
+                            <div className="w-6 h-6 rounded-full overflow-hidden border border-white/10 shrink-0">
+                                <img
+                                    src={(item as any).avatar_url || "/pink-pfp.png"}
+                                    className="w-full h-full object-cover"
+                                    alt=""
+                                    onError={(e) => (e.currentTarget.src = "/pink-pfp.png")}
+                                />
                             </div>
 
                             {/* DETAILS */}
                             <div className="flex flex-col text-xs leading-none gap-0.5">
                                 <div className="flex items-center gap-1.5">
+                                    <span className="text-white font-bold truncate max-w-[80px]">{item.username || "Anon"}</span>
                                     <span className={`font-bold ${colorClass}`}>{item.side}</span>
-                                    <span className="text-zinc-400 opacity-60">bought</span>
                                     <span className="text-zinc-200 font-mono">{formatCompact(item.amountSol)} SOL</span>
                                 </div>
                                 <div className="flex items-center gap-2 text-[10px] text-zinc-500">
@@ -81,7 +91,7 @@ export default function ActivityTicker({ activities }: ActivityTickerProps) {
                                     </span>
                                 </div>
                             </div>
-                        </div>
+                        </Link>
                     );
                 })}
             </div>

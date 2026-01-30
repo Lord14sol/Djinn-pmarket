@@ -60,7 +60,7 @@ export default function Home() {
               title: m.title,
               icon: m.banner_url || '🔮', // Use uploaded image as icon
               chance: liveChance ?? (Math.round((m.total_yes_pool / (m.total_yes_pool + m.total_no_pool + 1)) * 100) || 50),
-              volume: liveVolume ?? `$${formatCompact(Math.abs(m.total_yes_pool + m.total_no_pool))}`,
+              volume: liveVolume ?? `$${formatCompact(Math.abs(Number(m.total_yes_pool || 0) + Number(m.total_no_pool || 0)))}`,
               type: 'binary',
               category: (m as any).category || 'Trending',
               endDate: m.end_date ? new Date(m.end_date) : new Date('2026-12-31'),
@@ -136,7 +136,7 @@ export default function Home() {
           id: payload.new.id,
           title: payload.new.title,
           chance: Math.round((payload.new.total_yes_pool / (payload.new.total_yes_pool + payload.new.total_no_pool + 1)) * 100) || 50,
-          volume: `$${formatCompact(Math.abs(payload.new.total_yes_pool + payload.new.total_no_pool))}`,
+          volume: `$${formatCompact(Math.abs(Number(payload.new.total_yes_pool || 0) + Number(payload.new.total_no_pool || 0)))}`,
           type: 'binary',
           category: payload.new.category || 'Trending',
           endDate: payload.new.end_date ? new Date(payload.new.end_date) : new Date('2026-12-31'),
@@ -396,7 +396,7 @@ export default function Home() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.3 }}
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-[1px] bg-white/10 overflow-hidden"
+              className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 bg-transparent overflow-visible"
             >
               {sortedMarkets
                 // NEW: If Trending, Top 3 are in the Pyramid, allow grid to show filtered list starting from #4
@@ -426,6 +426,7 @@ export default function Home() {
                         <MarketCard
                           {...market}
                           isNew={market.createdAt && market.createdAt > oneDayAgo}
+                          compact={true} // Apply compact mode for grid items
                         />
                       </PumpEffect>
                     </motion.div>

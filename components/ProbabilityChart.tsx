@@ -114,6 +114,19 @@ const PulsingDot = React.memo((props: any) => {
 
 PulsingDot.displayName = 'PulsingDot';
 
+// 🔥 CONFIGURACIÓN DE TEMPORALIDADES
+const TIMEFRAMES = {
+    '1m': { label: '1 Minuto', seconds: 60 },
+    '5m': { label: '5 Minutos', seconds: 300 },
+    '15m': { label: '15 Minutos', seconds: 900 },
+    '1H': { label: '1 Hora', seconds: 3600 },
+    '6H': { label: '6 Horas', seconds: 21600 },
+    '1D': { label: '1 Día', seconds: 86400 },
+    '1W': { label: '1 Semana', seconds: 604800 },
+    '1M': { label: '1 Mes', seconds: 2592000 },
+    'ALL': { label: 'Todo', seconds: Infinity }
+} as const;
+
 export default React.memo(function ProbabilityChart({
     data,
     outcomes,
@@ -129,11 +142,68 @@ export default React.memo(function ProbabilityChart({
     const [hoverData, setHoverData] = useState<any>(null);
     const [now, setNow] = useState(Math.floor(Date.now() / 1000));
 
+    // 🔥 Helper for Time Formatting
+    const formatTimeLabel = (timestamp: number, timeframe: string): string => {
+        const date = new Date(timestamp * 1000);
+
+        switch (timeframe) {
+            case '1m':
+            case '5m':
+            case '15m':
+            case '30m':
+            case '1H':
+            case '6H':
+                // Formato: HH:MM
+                return date.toLocaleTimeString('es-AR', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                });
+
+            case '4H':
+            case '1D':
+                // Formato: DD/MM HH:MM
+                return `${date.toLocaleDateString('es-AR', {
+                    day: '2-digit',
+                    month: '2-digit'
+                })} ${date.toLocaleTimeString('es-AR', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                })}`;
+
+            case '1W':
+            case '1M':
+                // Formato: DD/MM
+                return date.toLocaleDateString('es-AR', {
+                    day: '2-digit',
+                    month: '2-digit'
+                });
+
+            case 'ALL':
+                // Formato: DD/MM/YY
+                return date.toLocaleDateString('es-AR', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: '2-digit'
+                });
+
+            default:
+                return date.toLocaleTimeString('es-AR', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                });
+        }
+    };
+
+
+
     // OPTIMIZATION 1: Reduce heartbeat frequency to reduce re-renders
     useEffect(() => {
         const interval = setInterval(() => {
             setNow(Math.floor(Date.now() / 1000));
-        }, 10000); // Changed from 5s to 10s for better performance
+        }, 1000); // 1s tick for live feel
         return () => clearInterval(interval);
     }, []);
 
@@ -216,46 +286,74 @@ export default React.memo(function ProbabilityChart({
 
     // OPTIMIZATION 6: Memoize timeframe calculation
     const timeframeConfig = useMemo(() => {
-        const configs: Record<string, number> = {
-            '1m': 60,
-            '5m': 300,
-            '15m': 900,
-            '1H': 3600,
-            '6H': 21600,
-            '1D': 86400,
-            '1W': 604800,
-            '1M': 2592000,
-            'ALL': 0
-        };
-        return configs[timeframe] || 0;
+        // Use the TIMEFRAMES constant we defined above
+        // We need to map the prop string ('1m', '1H') to our keys
+        // The existing props seem to match our keys mostly.
+        // If prop is '5M' (uppercase) and key is '5m' (lowercase), handle it.
+        // The prop type says '1m' | '5m' ... so it should match.
+        // Fallback to 1H if not found.
+        const key = timeframe as keyof typeof TIMEFRAMES;
+        return TIMEFRAMES[key]?.seconds || 3600;
     }, [timeframe]);
 
-    // OPTIMIZATION 7: Efficient filtering with single pass
-    const { filteredData, domainMin } = useMemo(() => {
-        const cutoffSeconds = timeframeConfig;
-        const windowStart = timeframe === 'ALL' ? (syncedData[0]?.time || now) : (now - cutoffSeconds);
 
-        let filtered = syncedData;
-        if (timeframe !== 'ALL') {
-            filtered = syncedData.filter(d => d.time >= windowStart);
+    // 🔥 FILTRAR DATOS SEGÚN TEMPORALIDAD
+    const { filteredData, domainMin, domainMax } = useMemo(() => {
+        if (!syncedData || syncedData.length === 0) {
+            return { filteredData: [], domainMin: 'dataMin', domainMax: 'dataMax' };
+        }
 
-            if (filtered.length > 0 && filtered[0].time > windowStart) {
-                const previousPoint = syncedData.filter(d => d.time < windowStart).pop();
-                if (previousPoint) {
-                    filtered = [{ ...previousPoint, time: windowStart }, ...filtered];
+        const config = TIMEFRAMES[timeframe as keyof typeof TIMEFRAMES] || TIMEFRAMES['1H'];
+        const windowStart = config.seconds === Infinity
+            ? 0
+            : now - config.seconds;
+
+        // Filtrar datos dentro de la ventana de tiempo
+        let filtered = syncedData.filter((d: any) => d.time >= windowStart && d.time <= now);
+
+        // 🔥 CRITICAL: Asegurar al menos 2 puntos para dibujar línea
+        if (filtered.length === 0 && syncedData.length > 0) {
+            // No hay datos en esta ventana, usar el último punto conocido
+            const lastPoint = syncedData[syncedData.length - 1];
+            filtered = [
+                { ...lastPoint, time: windowStart },
+                { ...lastPoint, time: now }
+            ];
+        } else if (filtered.length === 1) {
+            // Solo 1 punto, extender hacia atrás
+            const singlePoint = filtered[0];
+            filtered = [
+                { ...singlePoint, time: windowStart },
+                singlePoint,
+                { ...singlePoint, time: now }
+            ];
+        } else if (filtered.length > 0) {
+            // Ensure continuity from left side
+            if (filtered[0].time > windowStart) {
+                // Try to find the point just before windowStart
+                const firstInsideIndex = syncedData.indexOf(filtered[0]);
+                if (firstInsideIndex > 0) {
+                    const prev = syncedData[firstInsideIndex - 1];
+                    // Interpolate or just add prev point clamped?
+                    filtered.unshift({ ...prev, time: windowStart });
                 } else {
-                    filtered = [{ ...filtered[0], time: windowStart }, ...filtered];
+                    // If no previous, just extend first point to left edge
+                    filtered.unshift({ ...filtered[0], time: windowStart });
                 }
             }
         }
 
-        if (filtered.length === 1) {
-            filtered = [{ ...filtered[0], time: windowStart }, filtered[0]];
-        }
+        // Ensure end point is 'now' if not present (handled by syncedData mostly but safe to check)
+        // syncedData usually ends at 'now' due to logic above.
 
-        const dMin = timeframe === 'ALL' ? 'dataMin' : windowStart;
-        return { filteredData: filtered, domainMin: dMin };
-    }, [syncedData, timeframe, timeframeConfig, now]);
+        console.log(`📊 Timeframe: ${timeframe}, Points: ${filtered.length}`);
+
+        return {
+            filteredData: filtered,
+            domainMin: windowStart,
+            domainMax: now
+        };
+    }, [syncedData, timeframe, now]);
 
     // OPTIMIZATION 8: Stable display probabilities reference
     const displayProbs = useMemo(() => {
@@ -451,14 +549,13 @@ export default React.memo(function ProbabilityChart({
                         <XAxis
                             dataKey="time"
                             type="number"
-                            scale="linear"
+                            scale="time"
                             domain={['dataMin', 'dataMax']}
                             axisLine={false}
                             tickLine={false}
+                            tickFormatter={(timestamp) => formatTimeLabel(timestamp, timeframe)}
                             tick={{ fill: '#ffffff', fontSize: 12, fontWeight: 700 }}
-                            dy={10}
-                            minTickGap={80} // Increased from 50 to prevent overlap (blurry text)
-                            tickCount={5}   // Reduced from 6 for cleaner layout
+                            minTickGap={50}
                         />
                         <YAxis
                             orientation="right"

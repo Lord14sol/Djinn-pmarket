@@ -9,7 +9,9 @@ import { SolanaProvider } from "@/components/SolanaProvider";
 import { CategoryProvider } from "@/lib/CategoryContext";
 import { ModalProvider } from "@/lib/ModalContext";
 import { PriceProvider } from "@/lib/PriceContext";
+import { AchievementProvider } from "@/lib/AchievementContext";
 import AchievementNotification from "@/components/achievements/AchievementNotification";
+import MinecraftAchievement from "@/components/achievements/MinecraftAchievement";
 import WalletSuccessModal from "@/components/WalletSuccessModal";
 
 const geistSans = Geist({
@@ -87,18 +89,21 @@ export default function RootLayout({
         <SolanaProvider>
           <React.Suspense fallback={null}>
             <CategoryProvider>
-              <ModalProvider>
-                <PriceProvider>
-                  <LayoutWrapper>
-                    <AchievementNotification />
-                    <WalletSuccessModal />
-                    <main className="flex-grow relative z-10">
-                      {children}
-                    </main>
-                  </LayoutWrapper>
-                  <Footer />
-                </PriceProvider>
-              </ModalProvider>
+              <AchievementProvider>
+                <ModalProvider>
+                  <PriceProvider>
+                    <LayoutWrapper>
+                      <AchievementNotification />
+                      <MinecraftAchievement />
+                      <WalletSuccessModal />
+                      <main className="flex-grow relative z-10">
+                        {children}
+                      </main>
+                    </LayoutWrapper>
+                    <Footer />
+                  </PriceProvider>
+                </ModalProvider>
+              </AchievementProvider>
             </CategoryProvider>
           </React.Suspense>
         </SolanaProvider>

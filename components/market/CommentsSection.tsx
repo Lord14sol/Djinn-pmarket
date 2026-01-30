@@ -65,6 +65,69 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
     const fileInputRef = useRef<HTMLInputElement>(null);
     const isPostingCommentRef = useRef(false);
 
+    // 🔥 Estado del perfil del usuario actual
+    const [currentUserProfile, setCurrentUserProfile] = useState({
+        username: publicKey ? `${publicKey.slice(0, 4)}...${publicKey.slice(-4)}` : 'Guest',
+        pfp: '/pink-pfp.png'
+    });
+
+    // 🔥 FUNCIÓN PARA CARGAR PERFIL DEL USUARIO
+    const loadCurrentUserProfile = async () => {
+        if (!publicKey) {
+            setCurrentUserProfile({ username: 'Guest', pfp: '/pink-pfp.png' });
+            return;
+        }
+
+        const walletAddress = publicKey; // publicKey string in props
+        const defaultName = `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}`;
+
+        // 1️⃣ Intentar cache primero
+        try {
+            const cached = localStorage.getItem(`djinn_profile_${walletAddress}`);
+            if (cached) {
+                const profile = JSON.parse(cached);
+                setCurrentUserProfile({
+                    username: profile.username || defaultName,
+                    pfp: profile.avatar_url || '/pink-pfp.png'
+                });
+            }
+        } catch (e) {
+            console.error('Cache error:', e);
+        }
+
+        // 2️⃣ Sincronizar con DB
+        try {
+            const dbProfile = await supabaseDb.getProfile(walletAddress);
+            if (dbProfile) {
+                const updated = {
+                    username: dbProfile.username || defaultName,
+                    pfp: dbProfile.avatar_url || '/pink-pfp.png'
+                };
+                setCurrentUserProfile(updated);
+            }
+        } catch (err) {
+            console.error('Comment profile sync error:', err);
+        }
+    };
+
+    // 🔥 EFFECT: Cargar perfil y escuchar actualizaciones
+    useEffect(() => {
+        if (publicKey) {
+            loadCurrentUserProfile();
+
+            const handleProfileUpdate = () => {
+                console.log('🔄 CommentSection: Refreshing profile');
+                loadCurrentUserProfile();
+            };
+
+            window.addEventListener('djinn-profile-updated', handleProfileUpdate);
+
+            return () => {
+                window.removeEventListener('djinn-profile-updated', handleProfileUpdate);
+            };
+        }
+    }, [publicKey]);
+
     // Cargar comentarios
     const loadComments = useCallback(async () => {
         try {
@@ -95,8 +158,6 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
         // Suscripción Realtime
         const channel = supabaseDb.subscribeToComments(marketSlug, (payload: any) => {
             // Recargar todo si hay cambios (para simplificar replies y estado)
-            // Pero evitar recargas si acabamos de crear un comentario nosotros mismos
-            // El payload de Supabase tiene new (INSERT/UPDATE) o old (DELETE)
             if ((payload?.new || payload?.old) && !isPostingCommentRef.current) {
                 loadComments().catch(err => console.error('Error reloading comments:', err));
             }
@@ -266,11 +327,14 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
             {/* INPUT AREA */}
             <div className="flex gap-4 mb-10">
                 <div className="shrink-0">
-                    {userProfile.avatarUrl ? (
-                        <img src={userProfile.avatarUrl} className="w-10 h-10 rounded-full object-cover" alt={userProfile.username} />
-                    ) : (
-                        <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-lg">👤</div>
-                    )}
+                    <img
+                        src={userProfile.avatarUrl || '/pink-pfp.png'}
+                        className="w-10 h-10 rounded-full object-cover"
+                        alt={userProfile.username}
+                        onError={(e) => {
+                            e.currentTarget.src = '/pink-pfp.png';
+                        }}
+                    />
                 </div>
                 <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
@@ -317,25 +381,23 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
                         <div key={comment.id} className="group">
                             <div className="flex gap-4">
                                 {/* Avatar */}
-                                <div className="shrink-0">
-                                    {comment.avatar_url ? (
+                                <Link href={`/profile/${comment.username}`} className="shrink-0 hover:opacity-80 transition-opacity">
+                                    <div className="w-10 h-10 rounded-full overflow-hidden border border-white/10">
                                         <img
-                                            src={comment.avatar_url}
-                                            className="w-10 h-10 rounded-full object-cover border border-white/10"
+                                            src={comment.avatar_url || "/pink-pfp.png"}
+                                            className="w-full h-full object-cover"
                                             alt={comment.username}
                                             onError={(e) => {
                                                 e.currentTarget.onerror = null;
-                                                e.currentTarget.src = `https://ui-avatars.com/api/?name=${comment.username}&background=random`;
+                                                e.currentTarget.src = "/pink-pfp.png";
                                             }}
                                         />
-                                    ) : (
-                                        <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-lg">👤</div>
-                                    )}
-                                </div>
+                                    </div>
+                                </Link>
                                 <div className="flex-1">
                                     <div className="flex items-baseline justify-between mb-1">
                                         <div className="flex items-center gap-2">
-                                            <Link href={comment.username === userProfile.username ? `/profile/${userProfile.username}` : '/profile/default'} className={`text-sm font-bold hover:underline ${comment.username === userProfile.username ? 'text-[#F492B7]' : 'text-white'}`}>
+                                            <Link href={`/profile/${comment.username}`} className={`text-sm font-bold hover:text-[#F492B7] transition-colors ${comment.username === currentUserProfile.username ? 'text-[#F492B7]' : 'text-white'}`}>
                                                 {comment.username}
                                             </Link>
                                             <span className="text-[10px] text-gray-500 font-medium">{comment.timeAgo}</span>

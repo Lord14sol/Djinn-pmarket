@@ -24,6 +24,7 @@ interface MarketCardProps {
     winningOutcome?: string;
     options?: any[];
     resolutionSource?: string;
+    compact?: boolean; // New prop for grid view
 }
 
 const StarIcon = ({ active, onClick }: { active: boolean, onClick: (e: any) => void }) => {
@@ -54,7 +55,8 @@ const MarketCard: React.FC<MarketCardProps> = ({
     resolved,
     winningOutcome,
     options,
-    resolutionSource
+    resolutionSource,
+    compact = false
 }) => {
     const { publicKey } = useWallet();
     const [timeLeft, setTimeLeft] = useState('');
@@ -111,11 +113,15 @@ const MarketCard: React.FC<MarketCardProps> = ({
     return (
         <div
             onClick={() => window.location.href = `/market/${slug}`}
-            className="bg-black p-4 flex flex-col gap-4 relative hover:bg-white/[0.02] hover:-translate-y-2 transition-all duration-300 h-full min-h-[380px] group/card shadow-lg hover:shadow-xl cursor-pointer"
+            className={`bg-black flex flex-col relative hover:bg-white/[0.02] hover:-translate-y-2 transition-all duration-300 h-full group/card shadow-lg hover:shadow-xl cursor-pointer
+                ${compact ? 'p-3 gap-2 min-h-[200px]' : 'p-4 gap-4 min-h-[380px]'}
+            `}
         >
 
             {/* 1. Header Image (Top) - Aspect Ratio Box */}
-            <div className="w-full aspect-square rounded-xl overflow-hidden bg-[#1C212E]/50 relative z-10 border border-white/5 shadow-2xl">
+            <div className={`w-full overflow-hidden bg-[#1C212E]/50 relative z-10 border border-white/5 shadow-2xl rounded-xl
+                aspect-square
+            `}>
                 {/* ... existing image logic ... */}
                 {typeof icon === 'string' && (icon.startsWith('http') || icon.startsWith('/') || icon.startsWith('data:image')) ? (
                     <img
@@ -134,22 +140,28 @@ const MarketCard: React.FC<MarketCardProps> = ({
             </div>
 
             {/* 2. Body Content (Bottom) */}
-            <div className="flex-1 flex flex-col gap-4 relative z-10 pointer-events-none">
+            <div className="flex-1 flex flex-col gap-2 relative z-10 pointer-events-none">
 
                 {/* Title */}
-                <h3 className="text-lg font-bold text-gray-100 group-hover/card:text-[#F492B7] transition-colors leading-tight pointer-events-auto line-clamp-2 mt-2">
+                <h3 className={`font-bold text-gray-100 group-hover/card:text-[#F492B7] transition-colors leading-tight pointer-events-auto line-clamp-2 mt-1
+                    ${compact ? 'text-sm' : 'text-lg mt-2'}
+                `}>
                     {title}
                 </h3>
 
                 {/* Outcomes Information */}
                 <div className="mt-auto pointer-events-auto w-full">
                     {resolved ? (
-                        <div className="flex items-center justify-center gap-2 bg-white/5 border border-white/5 p-3 rounded-lg">
+                        <div className={`flex items-center justify-center gap-2 bg-white/5 border border-white/5 rounded-lg
+                             ${compact ? 'p-1.5' : 'p-3'}
+                        `}>
                             <span className="text-[10px] uppercase font-black text-gray-500 tracking-[0.2em]">Winner</span>
-                            <span className={`text-base font-black ${winningOutcome === 'YES' ? 'text-emerald-400' : 'text-rose-400'}`}>{winningOutcome}</span>
+                            <span className={`font-black ${winningOutcome === 'YES' ? 'text-emerald-400' : 'text-rose-400'} ${compact ? 'text-sm' : 'text-base'}`}>{winningOutcome}</span>
                         </div>
                     ) : isMultiple && options ? (
-                        <div className="flex flex-col gap-2 max-h-[140px] overflow-y-auto pr-1 customize-scrollbar">
+                        <div className={`flex flex-col overflow-y-auto pr-1 customize-scrollbar
+                            ${compact ? 'gap-1 max-h-[80px]' : 'gap-2 max-h-[140px]'}
+                        `}>
                             {options.map((opt: any, idx: number) => {
                                 // For multi-outcome, we attempt to show the PROBABILITY if chance is passed as an object
                                 // or if we have a simple split for binary with names.
@@ -165,7 +177,9 @@ const MarketCard: React.FC<MarketCardProps> = ({
                                 return (
                                     <div
                                         key={typeof opt === 'string' ? opt : (opt.id || idx)}
-                                        className="flex items-center justify-between text-[11px] py-2 px-3 bg-[#111] border border-white/5 hover:bg-white/10 rounded-lg cursor-pointer transition-all duration-200 shrink-0"
+                                        className={`flex items-center justify-between bg-[#111] border border-white/5 hover:bg-white/10 rounded-lg cursor-pointer transition-all duration-200 shrink-0
+                                            ${compact ? 'text-[10px] py-1 px-2' : 'text-[11px] py-2 px-3'}
+                                        `}
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             window.location.href = `/market/${slug}`;
@@ -178,27 +192,33 @@ const MarketCard: React.FC<MarketCardProps> = ({
                             })}
                         </div>
                     ) : (
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className={`grid grid-cols-2 ${compact ? 'gap-1.5' : 'gap-3'}`}>
                             <button
                                 onClick={(e) => handleBetClick(e, 'yes')}
-                                className="flex flex-col items-center justify-center py-2 bg-[#10B981] border border-[#10B981] shadow-[0_0_20px_rgba(16,185,129,0.4)] rounded-lg group/yes transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                                className={`flex flex-col items-center justify-center bg-[#10B981] border border-[#10B981] shadow-[0_0_20px_rgba(16,185,129,0.4)] rounded-lg group/yes transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]
+                                    ${compact ? 'py-1' : 'py-2'}
+                                `}
                             >
-                                <span className="text-[10px] font-black text-white uppercase tracking-wider mb-0.5">Yes</span>
-                                <span className="text-lg font-black text-white">{chance || 50}%</span>
+                                <span className={`font-black text-white uppercase tracking-wider mb-0.5 ${compact ? 'text-[9px]' : 'text-[10px]'}`}>Yes</span>
+                                <span className={`font-black text-white ${compact ? 'text-sm' : 'text-lg'}`}>{chance || 50}%</span>
                             </button>
                             <button
                                 onClick={(e) => handleBetClick(e, 'no')}
-                                className="flex flex-col items-center justify-center py-2 bg-[#EF4444] border border-[#EF4444] shadow-[0_0_20px_rgba(239,68,68,0.4)] rounded-lg group/no transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                                className={`flex flex-col items-center justify-center bg-[#EF4444] border border-[#EF4444] shadow-[0_0_20px_rgba(239,68,68,0.4)] rounded-lg group/no transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]
+                                    ${compact ? 'py-1' : 'py-2'}
+                                `}
                             >
-                                <span className="text-[10px] font-black text-white uppercase tracking-wider mb-0.5">No</span>
-                                <span className="text-lg font-black text-white">{100 - (chance || 50)}%</span>
+                                <span className={`font-black text-white uppercase tracking-wider mb-0.5 ${compact ? 'text-[9px]' : 'text-[10px]'}`}>No</span>
+                                <span className={`font-black text-white ${compact ? 'text-sm' : 'text-lg'}`}>{100 - (chance || 50)}%</span>
                             </button>
                         </div>
                     )}
                 </div>
 
                 {/* Footer: Volume, Time & STAR */}
-                <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 uppercase tracking-wider border-t border-white/5 pt-3 mt-1 pointer-events-auto">
+                <div className={`flex items-center justify-between font-bold text-gray-500 uppercase tracking-wider border-t border-white/5 pointer-events-auto
+                    ${compact ? 'text-[9px] pt-2 mt-0.5' : 'text-[11px] pt-3 mt-1'}
+                `}>
                     <div className="flex items-center gap-3">
                         <span className="text-white">{volume} Vol</span>
                         {timeLeft && <span className="text-white">{timeLeft}</span>}

@@ -225,7 +225,8 @@ export default function LeaderboardPage() {
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -50, scale: 0.8 }}
                         transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                        className="fixed top-12 left-1/2 -translate-x-1/2 z-[100] bg-[#1a1a1a] border-2 border-[#FFD700] rounded-lg p-4 flex items-center gap-4 shadow-[0_0_30px_rgba(255,215,0,0.3)] min-w-[320px]"
+                        onClick={() => setShowAchievement(false)}
+                        className="fixed top-12 left-1/2 -translate-x-1/2 z-[100] bg-[#1a1a1a] border-2 border-[#FFD700] rounded-lg p-4 flex items-center gap-4 shadow-[0_0_30px_rgba(255,215,0,0.3)] min-w-[320px] cursor-pointer hover:scale-[1.02] transition-transform"
                     >
                         <div className="w-12 h-12 bg-[#FFD700]/20 rounded-full flex items-center justify-center border border-[#FFD700]">
                             <img src="/gold-trophy.png" alt="Trophy" className="w-8 h-8 object-contain drop-shadow-md" />
@@ -238,16 +239,20 @@ export default function LeaderboardPage() {
                     </motion.div>
                 )}
                 {/* BIGGEST WIN UNLOCK TOAST */}
-                 {true && (
+                {true && (
                     <motion.div
                         initial={{ opacity: 0, y: -50, scale: 0.8 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -50, scale: 0.8 }}
                         transition={{ type: "spring", stiffness: 300, damping: 20, delay: 1 }}
-                        className="fixed top-28 left-1/2 -translate-x-1/2 z-[100] bg-[#0A0A0A] border border-[#10B981]/50 rounded-2xl p-4 flex items-center gap-4 shadow-[0_0_30px_rgba(16,185,129,0.3)] min-w-[320px]"
+                        onClick={(e) => {
+                            // This is a demo toast in an 'if(true)', but let's make it clickable if it were real
+                            (e.currentTarget as HTMLElement).style.display = 'none';
+                        }}
+                        className="fixed top-28 left-1/2 -translate-x-1/2 z-[100] bg-[#0A0A0A] border border-[#10B981]/50 rounded-2xl p-4 flex items-center gap-4 shadow-[0_0_30px_rgba(16,185,129,0.3)] min-w-[320px] cursor-pointer hover:scale-[1.02] transition-transform"
                     >
                         <div className="relative shrink-0 w-12 h-12">
-                             <img src="/gems-trophy.png" className="w-full h-full object-contain drop-shadow-lg" />
+                            <img src="/gems-trophy.png" className="w-full h-full object-contain drop-shadow-lg" />
                         </div>
                         <div>
                             <p className="text-[#10B981] text-[10px] font-black uppercase tracking-[0.2em] mb-0.5">UNLOCKED</p>
@@ -255,7 +260,7 @@ export default function LeaderboardPage() {
                             <p className="text-gray-400 text-[10px] uppercase font-bold tracking-wider">Top 1 Biggest Win All Time</p>
                         </div>
                     </motion.div>
-                 )}
+                )}
             </AnimatePresence>
 
             <div className="max-w-[1440px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">

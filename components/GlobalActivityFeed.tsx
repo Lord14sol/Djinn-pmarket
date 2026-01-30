@@ -87,12 +87,13 @@ export default function GlobalActivityFeed() {
                         >
                             <div className="flex items-center gap-4 flex-1 min-w-0">
                                 {/* Avatar */}
-                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#F492B7] to-purple-600 flex-shrink-0 overflow-hidden">
-                                    {activity.avatar_url ? (
-                                        <img src={activity.avatar_url} className="w-full h-full object-cover" alt="" />
-                                    ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-lg">👤</div>
-                                    )}
+                                <div className="w-10 h-10 rounded-full bg-black/20 flex-shrink-0 overflow-hidden border border-white/10">
+                                    <img
+                                        src={activity.avatar_url || "/pink-pfp.png"}
+                                        className="w-full h-full object-cover"
+                                        alt=""
+                                        onError={(e) => (e.currentTarget.src = "/pink-pfp.png")}
+                                    />
                                 </div>
 
                                 {/* Activity Info */}
@@ -105,8 +106,8 @@ export default function GlobalActivityFeed() {
                                             {activity.username}
                                         </Link>
                                         <span className={`text-xs font-black uppercase px-2 py-0.5 rounded-md ${activity.action === 'YES'
-                                                ? 'bg-[#10B981]/20 text-[#10B981] border border-[#10B981]/30'
-                                                : 'bg-red-500/20 text-red-500 border border-red-500/30'
+                                            ? 'bg-[#10B981]/20 text-[#10B981] border border-[#10B981]/30'
+                                            : 'bg-red-500/20 text-red-500 border border-red-500/30'
                                             }`}>
                                             {activity.action}
                                         </span>

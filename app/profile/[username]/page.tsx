@@ -46,46 +46,22 @@ export default function ProfilePage() {
 
     // CROPPER STATE
     const [croppingFile, setCroppingFile] = useState<string | null>(null);
-    const [cropTarget, setCropTarget] = useState<'banner' | 'pfp' | null>(null);
+    const [cropTarget, setCropTarget] = useState<'pfp' | null>(null);
 
-    const initialProfile: {
-        username: string;
-        bio: string;
-        pfp: string;
-        banner: string;
-        gems: number;
-        profit: number;
-        portfolio: number;
-        winRate: number;
-        biggestWin: number;
-        medals: string[];
-        activeBets: any[];
-        closedBets: any[];
-        achievements: any[];
-        createdMarkets: any[];
-        showGems: boolean;
-    } = {
-        username: "lord",
-        bio: "The future is priced in. Controlling the Solana prediction bazaar with arcane precision.",
-        pfp: "https://api.dicebear.com/7.x/avataaars/svg?seed=lord",
-        banner: "https://images.unsplash.com/photo-1614850523296-d8c1af93d400?q=80&w=2070",
+    const initialProfile = {
+        username: "...",
+        pfp: "/pink-pfp.png",
+        bio: "Djinn Trader",
         gems: 0,
         profit: 0,
         portfolio: 0,
         winRate: 0,
         biggestWin: 0,
-        medals: [],
-        activeBets: [],
-        closedBets: [],
-        achievements: [
-            {
-                code: 'FIRST_MARKET',
-                name: 'Genesis Creator',
-                image_url: '/genesis.png',
-                xp: 50
-            }
-        ],
-        createdMarkets: [],
+        medals: [] as string[],
+        activeBets: [] as any[],
+        closedBets: [] as any[],
+        achievements: [] as any[],
+        createdMarkets: [] as any[],
         showGems: true
     };
 
@@ -95,8 +71,11 @@ export default function ProfilePage() {
     const [tempBio, setTempBio] = useState(profile.bio);
     const [tempShowGems, setTempShowGems] = useState(true); // New temp state
     const [tempPfp, setTempPfp] = useState('');
-    const [tempBanner, setTempBanner] = useState('');
-    const bannerInputRef = useRef<HTMLInputElement>(null);
+
+    // Availability Check State
+    const [nameAvailable, setNameAvailable] = useState<boolean | null>(null);
+    const [isCheckingName, setIsCheckingName] = useState(false);
+    const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const pfpInputRef = useRef<HTMLInputElement>(null);
 
     // Sync temp state when modal opens or profile changes
@@ -106,18 +85,47 @@ export default function ProfilePage() {
             setTempBio(profile.bio);
             setTempShowGems(profile.showGems !== undefined ? profile.showGems : true);
             setTempPfp(profile.pfp);
-            setTempBanner(profile.banner);
+            setNameAvailable(true); // Default to true for current name
         }
     }, [isEditModalOpen, profile]);
 
+    // Real-time Availability Check
+    useEffect(() => {
+        if (!isEditModalOpen) return;
 
-    // --- 1. OBTENER SALDO REAL DE SOLANA ---
+        // Reset if name hasn't changed from original or is too short
+        if (tempName === profile.username) {
+            setNameAvailable(true);
+            return;
+        }
+        if (tempName.length < 3) {
+            setNameAvailable(null);
+            return;
+        }
+
+        setIsCheckingName(true);
+        if (checkTimeoutRef.current) clearTimeout(checkTimeoutRef.current);
+
+        checkTimeoutRef.current = setTimeout(async () => {
+            if (!publicKey) return;
+            const available = await supabaseDb.isUsernameAvailable(tempName, publicKey.toBase58());
+            setNameAvailable(available);
+            setIsCheckingName(false);
+        }, 500);
+
+        return () => {
+            if (checkTimeoutRef.current) clearTimeout(checkTimeoutRef.current);
+        };
+    }, [tempName, isEditModalOpen, profile.username, publicKey]);
+
+
+    // --- 1. OBTENER SALDO REAL DE SOLANA (ONLY USER CLAIMS) ---
     useEffect(() => {
         if (!connection || !publicKey) return;
-        connection.getBalance(publicKey).then((balance) => {
-            const solAmount = balance / LAMPORTS_PER_SOL;
-            setProfile(prev => ({ ...prev, portfolio: solAmount }));
-        });
+
+        // Only update portfolio here if we know for sure we are viewing OURSELVES and structure isn't ready
+        // Actually, let loadProfile handle portfolio.
+        // We strictly use this for "Private" data like unclaimed payouts which only I can see.
 
         // Load unclaimed payouts
         supabaseDb.getUnclaimedPayouts(publicKey.toBase58()).then(payouts => {
@@ -135,16 +143,21 @@ export default function ProfilePage() {
     const [activeTab, setActiveTab] = useState<'positions' | 'activity' | 'markets'>('positions');
     const [marketsWithFees, setMarketsWithFees] = useState<any[]>([]); // For CreatorRewardsCard optimization if needed
 
+    // FOLLOW STATE
+    const [followersCount, setFollowersCount] = useState(0);
+    const [followingCount, setFollowingCount] = useState(0);
+    const [isFollowingUser, setIsFollowingUser] = useState(false);
+    const [isFollowLoading, setIsFollowLoading] = useState(false);
+
     // ... rest of existing state
 
-    // 2. CARGA DE PERFIL (SUPABASE + LOCALSTORAGE) - SUPPORT FOR OTHER USERS
+    // 2. CARGA DE PERFIL ROBUSTA (Separation of Concern: Viewer vs Subject)
     useEffect(() => {
         if (isDefaultProfile) {
             setProfile({
                 username: "New User",
                 bio: "This user hasn't customized their profile yet.",
                 pfp: "https://api.dicebear.com/7.x/avataaars/svg?seed=default",
-                banner: "https://images.unsplash.com/photo-1614850523296-d8c1af93d400?q=80&w=2070",
                 gems: 0, profit: 0, portfolio: 0, winRate: 0, biggestWin: 0, medals: [],
                 achievements: [],
                 activeBets: [], closedBets: [], createdMarkets: [], showGems: true
@@ -156,282 +169,150 @@ export default function ProfilePage() {
 
         const loadProfile = async () => {
             setIsLoading(true);
-
-            let profileData: typeof initialProfile = { ...initialProfile, achievements: [] as any[] };
-            let walletAddr: string | null = null;
-            let isMe = false;
+            let targetAddress: string | null = null;
+            let isMeCheck = false;
 
             try {
-                // FORCE DEMO & TEST WALLET
-                const TEST_WALLET = 'C31JQfZBVRsnvFqiNptD95rvbEx8fsuPwdZn62yEWx9X';
-                const currentWallet = publicKey?.toBase58();
+                // A. RESOLVE IDENTITY
+                const myWallet = publicKey?.toBase58();
+                const GOD_WALLET = 'C31JQfZBVRsnvFqiNptD95rvbEx8fsuPwdZn62yEWx9X';
 
-                if (profileSlug.toLowerCase() === 'lord' || currentWallet === TEST_WALLET) {
-                    isMe = true;
-                    // Inject Achievements (Demo & Test Wallet)
-                    const hasGenesis = profileData.achievements.some((a: any) => a.code === 'FIRST_MARKET');
-                    if (!hasGenesis) {
-                        profileData.achievements.push({
-                            code: 'FIRST_MARKET',
-                            name: 'Genesis Creator',
-                            image_url: '/genesis-medal-v2.png',
-                            xp: 100
-                        });
-                        if (!profileData.medals.includes('GENESIS')) profileData.medals.push('GENESIS');
+                // 1. Check if slug matches my wallet or special "me"
+                if (myWallet && (profileSlug.toLowerCase() === 'me' || profileSlug === myWallet)) {
+                    targetAddress = myWallet;
+                    isMeCheck = true;
+                }
+                // 2. Check if slug is a valid Solana Address
+                else {
+                    try {
+                        const pubKey = new PublicKey(profileSlug);
+                        if (PublicKey.isOnCurve(pubKey.toBuffer())) {
+                            targetAddress = profileSlug;
+                        }
+                    } catch (e) {
+                        // Not a public key, treat as username
                     }
-
-
-                    // Inject Oracle Achievement
-                    const hasOracle = profileData.achievements.some((a: any) => a.code === 'ORACLE');
-                    if (!hasOracle) {
-                        profileData.achievements.push({
-                            code: 'ORACLE',
-                            name: 'Grand Oracle',
-                            image_url: '/orange-crystal-v2.png',
-                            xp: 250
-                        });
-                        if (!profileData.medals.includes('ORACLE')) profileData.medals.push('ORACLE');
-                    }
-
-                    // Inject Diamond Hands Achievement
-                    const hasDiamond = profileData.achievements.some((a: any) => a.code === 'DIAMOND_HANDS');
-                    if (!hasDiamond) {
-                        profileData.achievements.push({
-                            code: 'DIAMOND_HANDS',
-                            name: 'Diamond Hands',
-                            image_url: '/diamond-crystal.png',
-                            xp: 1000
-                        });
-                        if (!profileData.medals.includes('DIAMOND_HANDS')) profileData.medals.push('DIAMOND_HANDS');
-                    }
-
-                    // Inject Pink Crystal Achievement
-                    const hasPink = profileData.achievements.some((a: any) => a.code === 'PINK_CRYSTAL');
-                    if (!hasPink) {
-                        profileData.achievements.push({
-                            code: 'PINK_CRYSTAL',
-                            name: 'Mystic Rose',
-                            image_url: '/pink-crystal.png',
-                            xp: 2000
-                        });
-                        if (!profileData.medals.includes('PINK_CRYSTAL')) profileData.medals.push('PINK_CRYSTAL');
-                    }
-
-                    // Inject Green Crystal Achievement
-                    const hasGreen = profileData.achievements.some((a: any) => a.code === 'EMERALD_SAGE');
-                    if (!hasGreen) {
-                        profileData.achievements.push({
-                            code: 'EMERALD_SAGE',
-                            name: 'Emerald Sage',
-                            image_url: '/green-crystal.png',
-                            xp: 2500
-                        });
-                        if (!profileData.medals.includes('EMERALD_SAGE')) profileData.medals.push('EMERALD_SAGE');
-                    }
-
-                    // Inject Moon Crystal Achievement
-                    const hasMoon = profileData.achievements.some((a: any) => a.code === 'MOON_DANCER');
-                    if (!hasMoon) {
-                        profileData.achievements.push({
-                            code: 'MOON_DANCER',
-                            name: 'Moon Dancer',
-                            image_url: '/moon-crystal.png',
-                            xp: 3000
-                        });
-                        if (!profileData.medals.includes('MOON_DANCER')) profileData.medals.push('MOON_DANCER');
-                    }
-
-                    // Inject Sniper Achievement
-                    const hasSniper = profileData.achievements.some((a: any) => a.code === 'MARKET_SNIPER');
-                    if (!hasSniper) {
-                        profileData.achievements.push({
-                            code: 'MARKET_SNIPER',
-                            name: 'Market Sniper',
-                            image_url: '/emerald-sniper.png',
-                            xp: 5000
-                        });
-                        if (!profileData.medals.includes('MARKET_SNIPER')) profileData.medals.push('MARKET_SNIPER');
-                    }
-
-                    // Inject Apex Skull Achievement
-                    const hasApex = profileData.achievements.some((a: any) => a.code === 'APEX_PREDATOR');
-                    if (!hasApex) {
-                        profileData.achievements.push({
-                            code: 'APEX_PREDATOR',
-                            name: 'Apex Predator',
-                            image_url: '/apex-skull.png',
-                            xp: 10000
-                        });
-                        if (!profileData.medals.includes('APEX_PREDATOR')) profileData.medals.push('APEX_PREDATOR');
-                    }
-
-                    // Inject Gold Trophy Achievement (Rank 1)
-                    const hasTrophy = profileData.achievements.some((a: any) => a.code === 'THE_CHAMPION');
-                    if (!hasTrophy) {
-                        profileData.achievements.push({
-                            code: 'THE_CHAMPION',
-                            name: 'The Champion',
-                            image_url: '/gold-trophy.png',
-                            xp: 50000
-                        });
-                        // Auto-equip for demo/lord
-                        if (!profileData.medals.includes('GOLD_TROPHY')) profileData.medals.unshift('GOLD_TROPHY');
-                    }
-
-                    // Inject Legendary Trader Achievement (Gems Trophy for Biggest Win)
-                    const hasLegendary = profileData.achievements.some((a: any) => a.code === 'LEGENDARY_TRADER');
-                    if (!hasLegendary) {
-                        profileData.achievements.push({
-                            code: 'LEGENDARY_TRADER',
-                            name: 'Legendary Trader',
-                            image_url: '/gems-trophy.png',
-                            xp: 100000
-                        });
-                        // Auto-equip for demo/lord
-                        if (!profileData.medals.includes('LEGENDARY_TRADER')) profileData.medals.unshift('LEGENDARY_TRADER');
-                    }
-
-                    // Cleanup legacy VOID_WALKER
-                    profileData.medals = profileData.medals.filter(m => m !== 'VOID_WALKER');
                 }
 
-                // PRIORITY 1: If user has wallet connected, check if this is THEIR profile
-                if (publicKey) {
-                    const myWallet = publicKey.toBase58();
+                // 3. Fallback to Username Lookup
+                if (!targetAddress) {
+                    const profileByUsername = await supabaseDb.getProfileByUsername(profileSlug);
+                    if (profileByUsername) {
+                        targetAddress = profileByUsername.wallet_address;
+                    }
+                }
 
-                    // Load saved profile from localStorage first (fast, avoids flash)
-                    const savedLocal = localStorage.getItem('djinn_user_profile');
-                    if (savedLocal) {
+                // B. GHOST PROFILE / NO ADDRESS RESOLVED
+                if (!targetAddress) {
+                    const isLordSlug = profileSlug.toLowerCase() === 'lord';
+                    let ghost = {
+                        ...initialProfile,
+                        username: isLordSlug ? "Lord" : (profileSlug.length > 10 ? `${profileSlug.slice(0, 4)}...${profileSlug.slice(-4)}` : profileSlug),
+                        bio: isLordSlug ? "The Master of Djinns" : "New Djinn Trader",
+                        pfp: "/pink-pfp.png",
+                        showGems: true
+                    };
+
+                    if (isLordSlug) {
+                        ghost.medals = ['GENESIS', 'ORACLE', 'DIAMOND_HANDS', 'PINK_CRYSTAL', 'EMERALD_SAGE', 'MOON_DANCER', 'MARKET_SNIPER', 'APEX_PREDATOR', 'GOLD_TROPHY', 'LEGENDARY_TRADER'];
+                        ghost.gems = 99999;
+                        ghost.profit = 1250000;
+                        ghost.achievements = [
+                            { code: 'FIRST_MARKET', name: 'Genesis Creator', image_url: '/genesis-medal-v2.png', xp: 100 },
+                            { code: 'ORACLE', name: 'Grand Oracle', image_url: '/orange-crystal-v2.png', xp: 250 },
+                            { code: 'DIAMOND_HANDS', name: 'Diamond Hands', image_url: '/diamond-crystal.png', xp: 1000 },
+                            { code: 'PINK_CRYSTAL', name: 'Mystic Rose', image_url: '/pink-crystal.png', xp: 2000 },
+                            { code: 'EMERALD_SAGE', name: 'Emerald Sage', image_url: '/green-crystal.png', xp: 2500 },
+                            { code: 'MOON_DANCER', name: 'Moon Dancer', image_url: '/moon-crystal.png', xp: 3000 },
+                            { code: 'MARKET_SNIPER', name: 'Market Sniper', image_url: '/emerald-sniper.png', xp: 5000 },
+                            { code: 'APEX_PREDATOR', name: 'Apex Predator', image_url: '/apex-skull.png', xp: 10000 },
+                            { code: 'THE_CHAMPION', name: 'The Champion', image_url: '/gold-trophy.png', xp: 50000 },
+                            { code: 'LEGENDARY_TRADER', name: 'Legendary Trader', image_url: '/gems-trophy.png', xp: 100000 }
+                        ];
+                    }
+
+                    setProfile(ghost);
+                    setIsLoading(false);
+                    return;
+                }
+
+                // C. FINAL TARGET RESOLVED
+                setTargetWalletAddress(targetAddress);
+                isMeCheck = (!!myWallet && myWallet === targetAddress);
+                setIsMyProfile(isMeCheck);
+
+                // D. LOAD ACTUAL DATA (Memory Source of Truth)
+                let finalProfile = {
+                    ...initialProfile,
+                    username: `${targetAddress.slice(0, 4)}...${targetAddress.slice(-4)}`,
+                    pfp: "/pink-pfp.png",
+                    bio: "New Djinn Trader"
+                };
+
+                // 1. Database - Source of Truth for everyone
+                const dbProfile = await supabaseDb.getProfile(targetAddress);
+                if (dbProfile) {
+                    finalProfile.username = dbProfile.username || finalProfile.username;
+                    finalProfile.bio = dbProfile.bio || finalProfile.bio;
+                    // IF DB has a URL, we use it. If not, we keep the default.
+                    if (dbProfile.avatar_url) finalProfile.pfp = dbProfile.avatar_url;
+                }
+
+                // 2. Local Storage Override (ONLY for ME)
+                if (isMeCheck) {
+                    const local = localStorage.getItem(`djinn_profile_${targetAddress}`);
+                    if (local) {
                         try {
-                            const parsed = JSON.parse(savedLocal);
-                            // Check if URL slug matches saved username (case insensitive)
-                            if (parsed.username?.toLowerCase() === profileSlug.toLowerCase()) {
-                                isMe = true;
-                                walletAddr = myWallet;
-                                setTargetWalletAddress(walletAddr);
-                                // Apply saved data
-                                profileData = {
-                                    ...profileData,
-                                    username: parsed.username || profileData.username,
-                                    bio: parsed.bio || profileData.bio,
-                                    pfp: parsed.pfp || profileData.pfp,
-                                    banner: parsed.banner || profileData.banner,
-                                    gems: parsed.gems || 0,
-                                    profit: parsed.profit || 0,
-                                    medals: parsed.medals || [],
-                                    activeBets: parsed.activeBets || profileData.activeBets,
-                                    createdMarkets: parsed.createdMarkets || []
-                                };
-                            }
-                        } catch (e) {
-                            console.error('Error parsing localStorage profile:', e);
-                        }
-                    }
-
-                    // Also check: if slug is "LORD" (default), or slug IS the wallet address
-                    // but user is authenticated -> treat as their profile
-                    const isSlugLord = profileSlug.toLowerCase() === 'lord' || profileSlug.toLowerCase() === initialProfile.username.toLowerCase();
-                    const isSlugMyWallet = profileSlug === myWallet;
-
-                    if (!isMe && (isSlugLord || isSlugMyWallet)) {
-                        isMe = true;
-                        walletAddr = myWallet;
-                        setTargetWalletAddress(walletAddr);
-
-                        // Load from localStorage if available
-                        if (savedLocal) {
-                            try {
-                                const parsed = JSON.parse(savedLocal);
-                                profileData = {
-                                    ...profileData,
-                                    username: parsed.username || profileData.username,
-                                    bio: parsed.bio || profileData.bio,
-                                    pfp: parsed.pfp || profileData.pfp,
-                                    banner: parsed.banner || profileData.banner,
-                                    gems: parsed.gems || 0,
-                                    profit: parsed.profit || 0,
-                                    medals: parsed.medals || [],
-                                    activeBets: parsed.activeBets || profileData.activeBets,
-                                    createdMarkets: parsed.createdMarkets || []
-                                };
-                            } catch (e) {
-                                console.error('Error parsing saved profile:', e);
-                            }
-                        }
-                    }
-
-                    // Try to enhance with Supabase data if available
-                    if (isMe) {
-                        const dbProfile = await supabaseDb.getProfile(myWallet);
-                        if (dbProfile) {
-                            // Supabase overwrites localStorage for certain fields
-                            if (dbProfile.avatar_url) profileData.pfp = dbProfile.avatar_url;
-                            if (dbProfile.banner_url) profileData.banner = dbProfile.banner_url;
-                            if (dbProfile.bio) profileData.bio = dbProfile.bio;
-                            if (dbProfile.username) profileData.username = dbProfile.username;
-                        }
+                            const p = JSON.parse(local);
+                            if (p.username) finalProfile.username = p.username;
+                            // ONLY override if the local value is a real string, not null/empty
+                            if (p.pfp && typeof p.pfp === 'string') finalProfile.pfp = p.pfp;
+                            if (p.avatar_url && typeof p.avatar_url === 'string') finalProfile.pfp = p.avatar_url;
+                        } catch (e) { }
                     }
                 }
 
-                // PRIORITY 2: If not my profile, check if viewing someone else's profile
-                if (!isMe) {
-                    // Try to find user in activity by username
-                    const allProfiles = await supabaseDb.getActivity();
-                    const userActivity = allProfiles.find((a: any) =>
-                        a.username?.toLowerCase() === profileSlug.toLowerCase()
-                    );
+                // 3. Special "Architect" Injection (Absolute Memory)
+                // Lock legendary medals to the specific GOD_WALLET only
+                // User can still customize Name/Bio/PFP
+                const isLordWallet = targetAddress === GOD_WALLET || targetAddress === 'C31JQfZBVRsnvFqiNptD95rvbEx8fsuPwdZn62yEWx9X';
 
-                    if (userActivity) {
-                        walletAddr = userActivity.wallet_address;
-                        setTargetWalletAddress(walletAddr);
+                if (isLordWallet) {
 
-                        // Load their profile from Supabase
-                        const profileDb = await supabaseDb.getProfile(walletAddr);
-                        if (profileDb) {
-                            profileData.username = profileDb.username;
-                            profileData.bio = profileDb.bio || profileData.bio;
-                            profileData.pfp = profileDb.avatar_url || profileData.pfp;
-                            profileData.banner = profileDb.banner_url || profileData.banner;
-                        } else {
-                            profileData.username = userActivity.username;
-                        }
-                    } else if (profileSlug.toLowerCase() !== 'lord' && profileSlug.toLowerCase() !== initialProfile.username.toLowerCase()) {
-                        // GHOST PROFILE - user doesn't exist
-                        profileData = {
-                            ...initialProfile,
-                            username: profileSlug,
-                            bio: "This Djinn has not yet manifested fully in this realm.",
-                            pfp: `https://api.dicebear.com/7.x/avataaars/svg?seed=${profileSlug}`,
-                            gems: 0,
-                            profit: 0,
-                            portfolio: 0,
-                            activeBets: [],
-                            createdMarkets: [],
-                            medals: [],
-                            achievements: [],
-                            showGems: true
-                        };
-                    }
+                    finalProfile.medals = ['GENESIS', 'ORACLE', 'DIAMOND_HANDS', 'PINK_CRYSTAL', 'EMERALD_SAGE', 'MOON_DANCER', 'MARKET_SNIPER', 'APEX_PREDATOR', 'GOLD_TROPHY', 'LEGENDARY_TRADER'];
+                    finalProfile.gems = 99999;
+                    finalProfile.profit = 1250000;
+                    setViewCount(99999);
+                    finalProfile.achievements = [
+                        { code: 'FIRST_MARKET', name: 'Genesis Creator', image_url: '/genesis-medal-v2.png', xp: 100 },
+                        { code: 'ORACLE', name: 'Grand Oracle', image_url: '/orange-crystal-v2.png', xp: 250 },
+                        { code: 'DIAMOND_HANDS', name: 'Diamond Hands', image_url: '/diamond-crystal.png', xp: 1000 },
+                        { code: 'PINK_CRYSTAL', name: 'Mystic Rose', image_url: '/pink-crystal.png', xp: 2000 },
+                        { code: 'EMERALD_SAGE', name: 'Emerald Sage', image_url: '/green-crystal.png', xp: 2500 },
+                        { code: 'MOON_DANCER', name: 'Moon Dancer', image_url: '/moon-crystal.png', xp: 3000 },
+                        { code: 'MARKET_SNIPER', name: 'Market Sniper', image_url: '/emerald-sniper.png', xp: 5000 },
+                        { code: 'APEX_PREDATOR', name: 'Apex Predator', image_url: '/apex-skull.png', xp: 10000 },
+                        { code: 'THE_CHAMPION', name: 'The Champion', image_url: '/gold-trophy.png', xp: 50000 },
+                        { code: 'LEGENDARY_TRADER', name: 'Legendary Trader', image_url: '/gems-trophy.png', xp: 100000 }
+                    ];
+                } else {
+                    // Regular users medals
+                    const ach = await supabaseDb.getUserAchievements(targetAddress);
+                    finalProfile.achievements = ach;
+                    finalProfile.medals = ach.map(a => a.code);
                 }
 
-                // Load created markets from localStorage (for all profiles, user created markets are stored locally)
-                const savedMarkets = localStorage.getItem('djinn_markets');
-                if (savedMarkets && isMe) {
-                    profileData.createdMarkets = JSON.parse(savedMarkets);
-                }
+                // 4. On-chain Balance
+                try {
+                    const bal = await connection.getBalance(new PublicKey(targetAddress));
+                    finalProfile.portfolio = bal / LAMPORTS_PER_SOL;
+                } catch (e) { }
 
-                setIsMyProfile(isMe);
-                setProfile(profileData);
+                // 5. Load Active Bets for everyone
+                loadActiveBets(targetAddress);
 
-                // Load active bets - use publicKey if it's my profile, otherwise use walletAddr
-                const betsWallet = isMe && publicKey ? publicKey.toBase58() : walletAddr;
-                if (betsWallet) {
-                    loadActiveBets(betsWallet);
-                    // Load Achievements
-                    supabaseDb.getUserAchievements(betsWallet).then(achievements => {
-                        setProfile(prev => ({ ...prev, achievements }));
-                    });
-                }
+                setProfile(finalProfile);
+
             } catch (error) {
                 console.error('Error loading profile:', error);
             } finally {
@@ -440,7 +321,25 @@ export default function ProfilePage() {
         };
 
         loadProfile();
-    }, [isDefaultProfile, publicKey, profileSlug]);
+    }, [isDefaultProfile, publicKey, profileSlug, connection]);
+
+    // 2.2. LOAD FOLLOW DATA
+    useEffect(() => {
+        if (!targetWalletAddress) return;
+
+        const loadFollowData = async () => {
+            const counts = await supabaseDb.getFollowCounts(targetWalletAddress);
+            setFollowersCount(counts.followers);
+            setFollowingCount(counts.following);
+
+            if (publicKey && publicKey.toBase58() !== targetWalletAddress) {
+                const following = await supabaseDb.isFollowing(publicKey.toBase58(), targetWalletAddress);
+                setIsFollowingUser(following);
+            }
+        };
+
+        loadFollowData();
+    }, [targetWalletAddress, publicKey]);
 
     // 4. LOAD CREATED MARKETS (Explicit Fetch)
     useEffect(() => {
@@ -577,31 +476,74 @@ export default function ProfilePage() {
     };
 
     const updateAndSave = async (newData: any) => {
+        // Immediate UI Update
         setProfile(newData);
 
-        // Guardar estado local (bets, medals, stats)
-        const { createdMarkets, portfolio, ...profileToSave } = newData;
-        localStorage.setItem('djinn_user_profile', JSON.stringify(profileToSave));
+        if (!publicKey) return;
+        const walletAddress = publicKey.toBase58();
 
-        // Guardar identidad en Supabase
-        if (publicKey) {
-            await supabaseDb.upsertProfile({
-                wallet_address: publicKey.toBase58(),
+        // 1. SAVE TO LOCAL STORAGE (Dynamic Key - Single Source of Truth for this wallet)
+        const dynamicKey = `djinn_profile_${walletAddress}`;
+
+        // Prepare strict object for storage (avoid saving derived stats like portfolio/medals if we want those to source from elsewhere, but for now we save what we edit)
+        const toSave = {
+            username: newData.username,
+            bio: newData.bio,
+            pfp: newData.pfp,
+            avatar_url: newData.pfp, // Alias for Supabase compat
+            // Preserve existing medals/gem cache if needed
+        };
+
+        try {
+            // OPTIMIZATION: Don't store huge base64 PFPs in localStorage if they are already in the UI state
+            // Only store small metadata to preserve quota
+            const storageCopy = { ...toSave };
+            if (storageCopy.pfp?.startsWith('data:image')) storageCopy.pfp = null;
+            if (storageCopy.avatar_url?.startsWith('data:image')) storageCopy.avatar_url = null;
+
+            localStorage.setItem(dynamicKey, JSON.stringify(storageCopy));
+            console.log("✅ Saved to LocalStorage (optimized):", dynamicKey);
+        } catch (e) {
+            console.error("Local Save Error:", e);
+            // If quota error, try clearing everything starting with djinn_profile_
+            if (e instanceof Error && e.name === 'QuotaExceededError') {
+                Object.keys(localStorage).forEach(k => { if (k.startsWith('djinn_profile_')) localStorage.removeItem(k); });
+            }
+        }
+
+        // 2. SAVE TO SUPABASE (Background)
+        try {
+            const result = await supabaseDb.upsertProfile({
+                wallet_address: walletAddress,
                 username: newData.username,
                 bio: newData.bio,
-                avatar_url: newData.pfp,
-                banner_url: newData.banner
+                avatar_url: newData.pfp
             });
+
+            if (!result) {
+                console.warn("⚠️ Supabase save returned null (RLS or Network Error?)");
+            } else {
+                console.log("✅ Saved to Supabase:", result);
+            }
+        } catch (err) {
+            console.error("Supabase Save Error:", err);
+            // Don't revert UI, local storage is enough for session
         }
+
+        // 3. BROADCAST UPDATE
+        window.dispatchEvent(new Event('djinn-profile-updated'));
     };
 
     const saveIdentity = () => {
+        if (tempName !== profile.username && nameAvailable === false) {
+            return; // Block save if name is taken
+        }
+
         const updated = {
             ...profile,
             username: tempName || profile.username,
             bio: tempBio || profile.bio,
-            pfp: tempPfp || profile.pfp,
-            banner: tempBanner || profile.banner
+            pfp: tempPfp || profile.pfp
         };
         updateAndSave(updated);
         setIsEditModalOpen(false);
@@ -624,15 +566,47 @@ export default function ProfilePage() {
         setBetTab('closed');
     };
 
-    const addMedal = (medal: string = "🔮") => {
+    const addMedal = async (medal: string = "🔮") => {
         if (profile.medals.length < 9) {
             updateAndSave({ ...profile, medals: [...profile.medals, medal] });
+
+            // Persist Achievement to DB if it's a known code
+            if (publicKey && ['GOLD_TROPHY', 'LEGENDARY_TRADER', 'GENESIS', 'APEX_PREDATOR'].includes(medal)) {
+                await supabaseDb.grantAchievement(publicKey.toBase58(), medal);
+            }
         }
     };
 
     const removeMedal = (index: number) => {
         const newMedals = profile.medals.filter((_, i) => i !== index);
         updateAndSave({ ...profile, medals: newMedals });
+    };
+
+    const handleToggleFollow = async () => {
+        if (!publicKey || !targetWalletAddress || isFollowLoading) return;
+
+        setIsFollowLoading(true);
+        const myWallet = publicKey.toBase58();
+
+        try {
+            if (isFollowingUser) {
+                const ok = await supabaseDb.unfollowUser(myWallet, targetWalletAddress);
+                if (ok) {
+                    setIsFollowingUser(false);
+                    setFollowersCount(prev => Math.max(0, prev - 1));
+                }
+            } else {
+                const ok = await supabaseDb.followUser(myWallet, targetWalletAddress);
+                if (ok) {
+                    setIsFollowingUser(true);
+                    setFollowersCount(prev => prev + 1);
+                }
+            }
+        } catch (err) {
+            console.error("Follow error:", err);
+        } finally {
+            setIsFollowLoading(false);
+        }
     };
 
     // --- WALLET SYNC ---
@@ -654,7 +628,7 @@ export default function ProfilePage() {
         }
     }, [publicKey, connection]);
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner' | 'pfp') => {
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'pfp') => {
         const file = e.target.files?.[0];
         if (file) {
             const reader = new FileReader();
@@ -668,11 +642,7 @@ export default function ProfilePage() {
     };
 
     const handleCropComplete = (croppedImage: string) => {
-        if (cropTarget === 'banner') {
-            setTempBanner(croppedImage);
-        } else if (cropTarget === 'pfp') {
-            setTempPfp(croppedImage);
-        }
+        setTempPfp(croppedImage);
         setCroppingFile(null);
         setCropTarget(null);
     };
@@ -681,7 +651,6 @@ export default function ProfilePage() {
         setCroppingFile(null);
         setCropTarget(null);
         // Reset inputs
-        if (bannerInputRef.current) bannerInputRef.current.value = '';
         if (pfpInputRef.current) pfpInputRef.current.value = '';
     };
 
@@ -691,25 +660,45 @@ export default function ProfilePage() {
             {croppingFile && (
                 <ImageCropper
                     imageSrc={croppingFile}
-                    aspectRatio={cropTarget === 'banner' ? 320 / 100 : 1} // Banner ~3.2:1 (ish), PFP 1:1. Let's adjust banner ratio dynamically if needed but 3:1 is a safe bet for a wide banner. User has h-320 w-screen... screen varies. Let's pick a wide standard 3:1.
+                    aspectRatio={1}
                     onCropComplete={handleCropComplete}
                     onCancel={handleCropCancel}
                 />
             )}
-            {/* BANNER */}
-            <div className="w-full h-[320px] relative overflow-hidden bg-[#0A0A0A] -mt-32 border-b border-white/5 shadow-2xl">
-                <img src={profile.banner} className="w-full h-full object-cover object-center" alt="" />
-            </div>
+            {/* NO BANNER - Space Theme Background from global or main */}
 
-            <div className="max-w-[1600px] mx-auto px-14">
-                {/* PROFILE HEADER - Start below banner */}
-                {/* PROFILE HEADER - Start below banner */}
-                <div className="flex items-start gap-12 -mt-32 relative z-10 mb-8">
-                    <div className="w-60 h-60 rounded-full border-[6px] border-black overflow-hidden bg-black shadow-2xl">
-                        <img src={profile.pfp} className="w-full h-full object-cover" alt="" />
+            <div className="max-w-[1600px] mx-auto px-14 pt-2">
+                {/* PROFILE HEADER - Redesigned without banner */}
+                <div className="flex items-start gap-12 relative z-10 mb-12">
+                    <div className="flex flex-col items-center gap-6">
+                        <div className="w-60 h-60 rounded-full border-[6px] border-white/5 overflow-hidden bg-[#0A0A0A] shadow-2xl group relative">
+                            <img
+                                src={(profile.pfp && profile.pfp.trim()) ? profile.pfp : '/pink-pfp.png'}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                alt=""
+                                onError={(e) => {
+                                    (e.currentTarget as HTMLImageElement).src = '/pink-pfp.png';
+                                }}
+                            />
+                        </div>
+
+                        {/* FOLLOW BUTTON ONLY BELOW PFP */}
+                        {!isMyProfile && (
+                            <button
+                                onClick={handleToggleFollow}
+                                disabled={isFollowLoading || !publicKey}
+                                className={`w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all border ${isFollowingUser
+                                    ? 'bg-transparent border-white/20 text-white hover:bg-white/5'
+                                    : 'bg-[#F492B7] border-[#F492B7] text-black hover:brightness-110 shadow-lg shadow-[#F492B7]/20'
+                                    } disabled:opacity-50`}
+                            >
+                                {isFollowLoading ? '...' : (isFollowingUser ? 'Following' : 'Follow')}
+                            </button>
+                        )}
                     </div>
-                    <div className="mt-36 flex-1">
-                        <div className="flex items-center justify-between align-middle mb-2">
+
+                    <div className="flex-1 pt-6">
+                        <div className="flex items-center justify-between align-middle mb-4">
                             <div className="flex flex-col">
                                 <div className="flex items-center gap-4 align-middle">
                                     <h1 className="text-7xl font-black tracking-tighter leading-none drop-shadow-2xl">{profile.username}</h1>
@@ -737,19 +726,48 @@ export default function ProfilePage() {
                                     <div className="flex items-center gap-2">
                                         <span className="text-white">{viewCount.toLocaleString()} Views</span>
                                     </div>
+                                    {targetWalletAddress && (
+                                        <>
+                                            <span>•</span>
+                                            <button
+                                                onClick={() => {
+                                                    navigator.clipboard.writeText(targetWalletAddress);
+                                                    const btn = document.getElementById('wallet-copy-btn-header');
+                                                    if (btn) {
+                                                        btn.textContent = 'COPIED';
+                                                        setTimeout(() => { btn.textContent = 'COPY ADDRESS'; }, 2000);
+                                                    }
+                                                }}
+                                                className="group flex items-center gap-2 hover:text-[#F492B7] transition-colors"
+                                            >
+                                                <span className="text-white/40">{targetWalletAddress.slice(0, 4)}...{targetWalletAddress.slice(-4)}</span>
+                                                <span id="wallet-copy-btn-header" className="text-[10px] bg-white/5 px-2 py-0.5 rounded border border-white/10 group-hover:bg-[#F492B7] group-hover:text-black transition-all">COPY ADDRESS</span>
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                                {/* FOLLOW COUNTS ROW */}
+                                <div className="flex items-center gap-6 mt-4 text-sm font-bold tracking-widest uppercase">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-white text-xl">{formatCompact(followersCount)}</span>
+                                        <span className="text-gray-500 text-[11px]">Followers</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-white text-xl">{formatCompact(followingCount)}</span>
+                                        <span className="text-gray-500 text-[11px]">Following</span>
+                                    </div>
                                 </div>
                             </div>
-                            {/* EDIT PROFILE BUTTON - MOVED TO TOP RIGHT */}
-                            {(isMyProfile || profile.username.toLowerCase() === 'lord') && (
+                            {/* EDIT PROFILE BUTTON */}
+                            {isMyProfile && (
                                 <button
                                     onClick={() => {
                                         setTempName(profile.username);
                                         setTempBio(profile.bio);
                                         setTempPfp(profile.pfp);
-                                        setTempBanner(profile.banner);
                                         setIsEditModalOpen(true);
                                     }}
-                                    className="border border-white/20 bg-[#F492B7] text-black px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest hover:brightness-110 transition-all shadow-lg shadow-[#F492B7]/20 flex items-center gap-2 ml-auto"
+                                    className="border border-white/20 bg-white/5 text-white px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-[#F492B7] hover:text-black transition-all flex items-center gap-2 ml-auto h-fit"
                                 >
                                     <span>✎</span> Edit Profile
                                 </button>
@@ -767,42 +785,25 @@ export default function ProfilePage() {
                                 <span className="text-[#F492B7] text-sm font-black uppercase tracking-widest">💎 Gems</span>
                             </div>
                         )}
-
-                        {/* Wallet address - click anywhere to copy */}
-                        {targetWalletAddress && (
-                            <button
-                                onClick={() => {
-                                    navigator.clipboard.writeText(targetWalletAddress);
-                                    // Visual feedback
-                                    const btn = document.getElementById('wallet-copy-btn');
-                                    if (btn) {
-                                        btn.textContent = '✅ Copied!';
-                                        setTimeout(() => { btn.textContent = '📋 Copy'; }, 1500);
-                                    }
-                                }}
-                                className="flex items-center gap-2 mt-4 group cursor-pointer hover:opacity-80 transition-opacity"
-                            >
-                                <span className="text-gray-600 text-sm font-mono bg-white/5 px-3 py-1 rounded-lg group-hover:bg-white/10 transition-colors">
-                                    {targetWalletAddress.slice(0, 6)}...{targetWalletAddress.slice(-4)}
-                                </span>
-                                <span id="wallet-copy-btn" className="text-gray-500 group-hover:text-[#F492B7] transition-colors text-xs">
-                                    📋 Copy
-                                </span>
-                            </button>
-                        )}
-
-
                     </div>
                 </div>
 
                 {/* STATS GRID */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
                     <StatCard
-                        label="Wallet balance"
-                        value={`${profile.portfolio.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} SOL`}
+                        label="Positions Value"
+                        value={`${(profile.activeBets.reduce((acc: number, bet: any) => acc + (bet.current || 0), 0)).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}`}
                     />
-                    <StatCard label="Win rate" value="0.0%" color="text-[#F492B7]" />
-                    <StatCard label="Biggest win" value="+$0" color="text-[#10B981]" />
+                    <StatCard
+                        label="Win rate"
+                        value={`${profile.winRate || '0.0'}%`}
+                        color="text-[#F492B7]"
+                    />
+                    <StatCard
+                        label="Biggest win"
+                        value={`+$${profile.biggestWin?.toLocaleString() || '0'}`}
+                        color="text-[#10B981]"
+                    />
                     <StatCard label="Markets created" value={profile.createdMarkets?.length || 0} color="text-blue-400" />
                 </div>
 
@@ -879,13 +880,13 @@ export default function ProfilePage() {
                     tempBio={tempBio}
                     setTempName={setTempName}
                     setTempBio={setTempBio}
-                    tempBanner={tempBanner}
                     tempPfp={tempPfp}
+                    showGems={tempShowGems}
+                    setShowGems={setTempShowGems}
                     onClose={() => setIsEditModalOpen(false)}
                     onSave={saveIdentity}
                     addMedal={addMedal}
                     removeMedal={removeMedal}
-                    bannerInputRef={bannerInputRef}
                     pfpInputRef={pfpInputRef}
                     handleFileChange={handleFileChange}
                 />
@@ -1142,7 +1143,7 @@ function BetCard({ bet, onCashOut, router }: any) {
 }
 
 // --- EDIT MODAL ---
-function EditModal({ profile, tempName, tempBio, setTempName, setTempBio, tempBanner, tempPfp, showGems, setShowGems, onClose, onSave, addMedal, removeMedal, bannerInputRef, pfpInputRef, handleFileChange }: any) {
+function EditModal({ profile, tempName, tempBio, setTempName, setTempBio, tempPfp, showGems, setShowGems, onClose, onSave, addMedal, removeMedal, pfpInputRef, handleFileChange }: any) {
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-3xl">
             <div className="relative bg-[#080808] border border-white/10 w-full max-w-2xl max-h-[90vh] flex flex-col rounded-[2.5rem] shadow-2xl overflow-hidden">
@@ -1259,18 +1260,7 @@ function EditModal({ profile, tempName, tempBio, setTempName, setTempBio, tempBa
 
                     {/* MAIN FORM */}
                     <div className="space-y-8">
-                        {/* BANNER PREVIEW */}
-                        <div className="w-full">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-3 ml-1">Profile Banner</p>
-                            <button onClick={() => bannerInputRef.current?.click()} className="w-full h-40 bg-[#0A0A0A] border border-dashed border-white/20 rounded-3xl overflow-hidden relative group hover:border-[#F492B7]/40 transition-all cursor-pointer">
-                                <img src={tempBanner || profile.banner} className="w-full h-full object-cover object-center opacity-70 group-hover:opacity-100 transition-all duration-500" alt="Banner Preview" />
-                                <div className="absolute inset-0 flex items-center justify-center bg-black/40 group-hover:bg-black/20 transition-all">
-                                    <span className="text-xs font-black uppercase tracking-widest text-white border border-white/20 px-4 py-2 rounded-lg bg-black/50 backdrop-blur-md group-hover:bg-[#F492B7] group-hover:text-black group-hover:border-[#F492B7] transition-all">Change Banner</span>
-                                </div>
-                            </button>
-                        </div>
-
-                        {/* PFP & DETAILS ROW */}
+                        {/* PFP & DETAILS ROW - NO BANNER */}
                         <div className="flex gap-8">
                             <div className="shrink-0 space-y-3 pb-8">
                                 <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">Avatar</p>
@@ -1282,8 +1272,36 @@ function EditModal({ profile, tempName, tempBio, setTempName, setTempBio, tempBa
 
                             <div className="flex-1 space-y-6">
                                 <div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2 ml-1">Username</p>
-                                    <input type="text" className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-[#F492B7] transition-all" placeholder="Username" value={tempName} onChange={(e) => setTempName(e.target.value)} />
+                                    <div className="flex items-center justify-between mb-2 ml-1">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Username</p>
+                                        <div className="flex items-center gap-1.5 transition-all duration-300">
+                                            {isCheckingName ? (
+                                                <Loader2 className="w-3 h-3 text-[#F492B7] animate-spin" />
+                                            ) : tempName.length >= 3 && tempName !== profile.username ? (
+                                                nameAvailable ? (
+                                                    <div className="flex items-center gap-1 text-[#F492B7]">
+                                                        <span className="text-[10px] font-black uppercase tracking-widest">Available</span>
+                                                        <span className="text-sm">✓</span>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex items-center gap-1 text-red-500">
+                                                        <span className="text-[10px] font-black uppercase tracking-widest">Taken</span>
+                                                        <span className="text-sm">✕</span>
+                                                    </div>
+                                                )
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                    <input
+                                        type="text"
+                                        className={`w-full bg-white/5 border ${nameAvailable === false && tempName !== profile.username ? 'border-red-500/50' : 'border-white/10'} rounded-2xl p-4 text-white font-bold outline-none focus:border-[#F492B7] transition-all`}
+                                        placeholder="Username"
+                                        value={tempName}
+                                        onChange={(e) => setTempName(e.target.value.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 15))}
+                                    />
+                                    {nameAvailable === false && tempName !== profile.username && (
+                                        <p className="text-[9px] text-red-500 font-bold uppercase tracking-widest mt-2 ml-1">This username is already claimed by another Djinn.</p>
+                                    )}
                                 </div>
                                 <div>
                                     <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2 ml-1">Bio</p>
@@ -1317,7 +1335,6 @@ function EditModal({ profile, tempName, tempBio, setTempName, setTempBio, tempBa
                 </div>
 
                 {/* HIDDEN INPUTS */}
-                <input type="file" ref={bannerInputRef} className="hidden" onChange={(e) => handleFileChange(e, 'banner')} />
                 <input type="file" ref={pfpInputRef} className="hidden" onChange={(e) => handleFileChange(e, 'pfp')} />
             </div>
         </div>

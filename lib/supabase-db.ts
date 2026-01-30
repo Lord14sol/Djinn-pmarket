@@ -31,10 +31,53 @@ export async function getProfile(walletAddress: string): Promise<Profile | null>
     }, `getProfile(${walletAddress})`);
 }
 
-export async function upsertProfile(profile: Partial<Profile> & { wallet_address: string }): Promise<Profile | null> {
+export async function getProfileByUsername(username: string): Promise<Profile | null> {
+    return withRetry(async () => {
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            // Case-insensitive search
+            .ilike('username', username)
+            .single();
+
+        if (error && error.code !== 'PGRST116') {
+            // If strictly not found, it's fine
+            return null;
+        }
+        return data;
+    }, `getProfileByUsername(${username})`);
+}
+
+export async function isUsernameAvailable(username: string, excludeWallet: string): Promise<boolean> {
     const { data, error } = await supabase
         .from('profiles')
-        .upsert(profile, { onConflict: 'wallet_address' })
+        .select('wallet_address')
+        .ilike('username', username)
+        .neq('wallet_address', excludeWallet)
+        .maybeSingle();
+
+    if (error) {
+        console.error('Error checking username availability:', error);
+        return false;
+    }
+
+    return !data;
+}
+
+export async function upsertProfile(profile: Partial<Profile> & { wallet_address: string }): Promise<Profile | null> {
+    const walletAddress = profile.wallet_address;
+    const toUpsert = {
+        ...profile
+    };
+    // Only add defaults if it's potentially a new profile and fields are missing
+    if (!toUpsert.username) toUpsert.username = `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}`;
+    if (!toUpsert.avatar_url) toUpsert.avatar_url = '/pink-pfp.png';
+    if (!toUpsert.banner_url) toUpsert.banner_url = '/default-banner-v2.png';
+    if (!toUpsert.bio) toUpsert.bio = 'New Djinn Trader';
+
+    const { data, error } = await supabase
+        .from('profiles')
+        .upsert(toUpsert, { onConflict: 'wallet_address' })
         .select()
         .single();
 
@@ -66,6 +109,26 @@ export async function incrementProfileViews(walletAddress: string): Promise<numb
 }
 
 
+
+// ============================================
+// MARKET ACTIVITIES
+// ============================================
+
+export async function getMarketActivities(marketPubkey: string) {
+    try {
+        const { data, error } = await supabase
+            .from('activities')
+            .select('*')
+            .eq('market', marketPubkey)
+            .order('created_at', { ascending: true });
+
+        if (error) throw error;
+        return data || [];
+    } catch (err) {
+        console.error('Error fetching activities:', err);
+        return [];
+    }
+}
 
 // ============================================
 // COMMENTS
@@ -132,9 +195,21 @@ export async function getComments(marketSlug: string, currentWallet?: string): P
 }
 
 export async function createComment(comment: Omit<Comment, 'id' | 'created_at' | 'likes_count' | 'liked_by_me' | 'replies'>): Promise<{ data: Comment | null, error: any }> {
+    const wallet = comment.wallet_address;
+    const defaultData = {
+        username: comment.username || `${wallet.slice(0, 4)}...${wallet.slice(-4)}`,
+        avatar_url: comment.avatar_url || '/pink-pfp.png'
+    };
+
+    const toSave = {
+        ...comment,
+        ...defaultData,
+        likes_count: 0
+    };
+
     const { data, error } = await supabase
         .from('comments')
-        .insert({ ...comment, likes_count: 0 })
+        .insert(toSave)
         .select()
         .single();
 
@@ -261,7 +336,7 @@ export interface Activity {
     wallet_address: string;
     username: string;
     avatar_url: string | null;
-    action: 'YES' | 'NO';
+    action: string;
     amount: number; // USD Amount
     sol_amount?: number;
     shares: number;
@@ -305,7 +380,8 @@ export async function getAllMarketActivity(slug: string): Promise<Activity[]> {
         .from('activity')
         .select('*')
         .eq('market_slug', slug)
-        .order('created_at', { ascending: true }); // Important: Oldest first for replay
+        .order('created_at', { ascending: true }) // Important: Oldest first for replay
+        .limit(2000); // Fetch sizeable history for chart
 
     if (error) {
         console.error('Error fetching all activity:', error);
@@ -739,6 +815,7 @@ export async function reduceBetPosition(wallet: string, marketSlug: string, side
         .eq('market_slug', marketSlug)
         .eq('side', side)
         .eq('claimed', false)
+        .gt('created_at', '2026-01-30T15:45:00.000Z') // SYSTEM RESET TIMESTAMP
         .order('created_at', { ascending: true }); // FIFO
 
     if (fetchError || !existingBets || existingBets.length === 0) {
@@ -807,6 +884,7 @@ export async function getUserBets(walletAddress: string): Promise<Bet[]> {
         .from('bets')
         .select('*')
         .eq('wallet_address', walletAddress)
+        .gt('created_at', '2026-01-30T15:45:00.000Z') // SYSTEM RESET TIMESTAMP
         .order('created_at', { ascending: false });
 
     if (error) {
@@ -836,6 +914,7 @@ export async function getUnclaimedPayouts(walletAddress: string): Promise<Bet[]>
         .eq('wallet_address', walletAddress)
         .eq('claimed', false)
         .not('payout', 'is', null)
+        .gt('created_at', '2026-01-30T15:45:00.000Z') // SYSTEM RESET
         .gt('payout', 0);
 
     if (error) console.error('Error fetching unclaimed payouts:', error);
@@ -1016,6 +1095,8 @@ export async function checkWinMilestones(walletAddress: string): Promise<Achieve
             .from('bets')
             .select('payout')
             .eq('wallet_address', walletAddress)
+            .eq('claimed', true) // 'payout_claimed' logic might be different but let's assume filtering applies to bet creation
+            .gt('created_at', '2026-01-30T15:45:00.000Z') // SYSTEM RESET TIMESTAMP
             .not('payout', 'is', null)
             .order('created_at', { ascending: false })
             .limit(5);
@@ -1096,4 +1177,59 @@ export async function searchProfiles(query: string) {
 
     if (error) console.error('Error searching profiles:', error);
     return data || [];
+}
+
+// ============================================
+// FOLLOW SYSTEM
+// ============================================
+
+export async function followUser(followerWallet: string, followingWallet: string): Promise<boolean> {
+    const { error } = await supabase
+        .from('follows')
+        .insert({ follower_wallet: followerWallet, following_wallet: followingWallet });
+
+    if (error) {
+        if (error.code === '23505') return true; // Already following
+        console.error('Error following user:', error);
+        return false;
+    }
+    return true;
+}
+
+export async function unfollowUser(followerWallet: string, followingWallet: string): Promise<boolean> {
+    const { error } = await supabase
+        .from('follows')
+        .delete()
+        .eq('follower_wallet', followerWallet)
+        .eq('following_wallet', followingWallet);
+
+    if (error) {
+        console.error('Error unfollowing user:', error);
+        return false;
+    }
+    return true;
+}
+
+export async function isFollowing(followerWallet: string, followingWallet: string): Promise<boolean> {
+    if (!followerWallet || !followingWallet) return false;
+    const { data, error } = await supabase
+        .from('follows')
+        .select('id')
+        .eq('follower_wallet', followerWallet)
+        .eq('following_wallet', followingWallet)
+        .single();
+
+    return !!data;
+}
+
+export async function getFollowCounts(walletAddress: string): Promise<{ followers: number, following: number }> {
+    const [followersRes, followingRes] = await Promise.all([
+        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_wallet', walletAddress),
+        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_wallet', walletAddress)
+    ]);
+
+    return {
+        followers: followersRes.count || 0,
+        following: followingRes.count || 0
+    };
 }

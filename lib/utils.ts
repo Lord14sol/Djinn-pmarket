@@ -57,12 +57,13 @@ export function formatTimeAgo(timestamp: string): string {
 }
 
 // Format large numbers as M/K/B/T (Hype Notation)
-export const formatCompact = (num: number): string => {
-    if (!num && num !== 0) return '0';
+export const formatCompact = (num: number | string): string => {
+    const n = typeof num === 'string' ? parseFloat(num) : num;
+    if (!n && n !== 0) return '0';
     return new Intl.NumberFormat('en-US', {
         notation: "compact",
         maximumFractionDigits: 2
-    }).format(num);
+    }).format(n);
 };
 
 // Parse compact number strings back to full numbers
