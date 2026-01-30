@@ -741,10 +741,6 @@ export default function ProfilePage() {
                                     <span>•</span>
                                     <div className="flex items-center gap-2">
                                         <span className="text-white">{viewCount.toLocaleString()} Views</span>
-                                        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
-                                            <span className="text-[9px] text-green-500 font-black uppercase tracking-widest">Actualizado Sincronizado</span>
-                                        </div>
                                     </div>
                                     {targetWalletAddress && (
                                         <>
