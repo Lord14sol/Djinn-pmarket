@@ -23,7 +23,7 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
     useEffect(() => {
         if (connected && publicKey) {
             const walletAddr = publicKey.toBase58();
-            const flagKey = `djinn_genesis_notified_v14_${walletAddr}`;
+            const flagKey = `djinn_genesis_notified_v15_${walletAddr}`;
 
             // Check if already notified in localStorage
             if (localStorage.getItem(flagKey)) {

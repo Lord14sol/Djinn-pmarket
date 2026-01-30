@@ -543,7 +543,8 @@ export default function ProfilePage() {
             ...profile,
             username: tempName || profile.username,
             bio: tempBio || profile.bio,
-            pfp: tempPfp || profile.pfp
+            pfp: tempPfp || profile.pfp,
+            showGems: tempShowGems
         };
         updateAndSave(updated);
         setIsEditModalOpen(false);
@@ -883,6 +884,8 @@ export default function ProfilePage() {
                     tempPfp={tempPfp}
                     showGems={tempShowGems}
                     setShowGems={setTempShowGems}
+                    nameAvailable={nameAvailable}
+                    isCheckingName={isCheckingName}
                     onClose={() => setIsEditModalOpen(false)}
                     onSave={saveIdentity}
                     addMedal={addMedal}
@@ -1143,7 +1146,7 @@ function BetCard({ bet, onCashOut, router }: any) {
 }
 
 // --- EDIT MODAL ---
-function EditModal({ profile, tempName, tempBio, setTempName, setTempBio, tempPfp, showGems, setShowGems, onClose, onSave, addMedal, removeMedal, pfpInputRef, handleFileChange }: any) {
+function EditModal({ profile, tempName, tempBio, setTempName, setTempBio, tempPfp, showGems, setShowGems, nameAvailable, isCheckingName, onClose, onSave, addMedal, removeMedal, pfpInputRef, handleFileChange }: any) {
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-3xl">
             <div className="relative bg-[#080808] border border-white/10 w-full max-w-2xl max-h-[90vh] flex flex-col rounded-[2.5rem] shadow-2xl overflow-hidden">
