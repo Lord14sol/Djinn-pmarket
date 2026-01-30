@@ -1317,7 +1317,7 @@ function EditModal({ profile, tempName, tempBio, setTempName, setTempBio, tempPf
                         <div className="flex items-center justify-between bg-white/5 p-5 rounded-2xl border border-white/10">
                             <div>
                                 <p className="font-bold text-white text-sm">Show Gems</p>
-                                <p className="text-[11px] text-gray-500">Display your gem balance publicly</p>
+                                <p className="text-[11px] text-gray-500">Display your gem balance publicly ({profile.gems.toLocaleString()} Gems)</p>
                             </div>
                             <button
                                 onClick={() => setShowGems(!showGems)}
