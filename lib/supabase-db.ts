@@ -89,17 +89,15 @@ export async function upsertProfile(profile: Partial<Profile> & { wallet_address
 }
 
 export async function incrementProfileViews(walletAddress: string): Promise<number> {
-    // 1. Get current
     const { data: profile } = await supabase
         .from('profiles')
         .select('views')
         .eq('wallet_address', walletAddress)
         .single();
 
-    const currentViews = profile?.views || 0;
+    const currentViews = (profile && typeof profile.views === 'number') ? profile.views : 0;
     const newViews = currentViews + 1;
 
-    // 2. Update
     await supabase
         .from('profiles')
         .update({ views: newViews })

@@ -25,36 +25,73 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
             const walletAddr = publicKey.toBase58();
             const flagKey = `djinn_genesis_notified_v15_${walletAddr}`;
 
-            // Check if already notified in localStorage
-            if (localStorage.getItem(flagKey)) {
-                console.log(`ℹ️ [Genesis] Already notified for ${walletAddr.slice(0, 8)}`);
-                return;
-            }
+            // Track if checking DB to avoid duplicate async calls
+            const checkAndNotify = async () => {
+                // 1. Double check localStorage AND current session ref (fast)
+                if (localStorage.getItem(flagKey) || genesisTriggeredRef.current === walletAddr) return;
 
-            // Session check: ensure we don't start multiple timers for the same wallet
-            if (genesisTriggeredRef.current === walletAddr) return;
-            genesisTriggeredRef.current = walletAddr;
+                // Mark as triggered EARLY to prevent race conditions during async check
+                genesisTriggeredRef.current = walletAddr;
 
-            console.log(`🚀 Genesis trigger initiated for ${walletAddr}`);
+                // 2. Check Supabase (once per lifetime)
+                try {
+                    const achievements = await supabaseDb.getUserAchievements(walletAddr);
+                    if (achievements.some(a => a.code === 'FIRST_MARKET')) {
+                        // Mark as notified in LS silently and stop
+                        try { localStorage.setItem(flagKey, 'true'); } catch (e) { }
+                        return;
+                    }
+                } catch (err) {
+                    console.error("Error checking achievements:", err);
+                    // On error, we reset the ref so it can try again next mount if needed,
+                    // but usually we want to be safe.
+                    genesisTriggeredRef.current = null;
+                    return;
+                }
 
-            const timer = setTimeout(() => {
-                unlockAchievement({
-                    name: "GENESIS",
-                    description: "First time connecting to Djinn",
-                    image_url: "/genesis-medal-v2.png"
-                });
+                // 3. Initiate Notification
+                console.log(`🚀 Genesis trigger initiated for ${walletAddr}`);
 
-                // Only grant to DB if not already there (handled by supabase-db.ts)
-                supabaseDb.grantAchievement(walletAddr, 'GENESIS').then(res => {
-                    if (res) console.log("✅ GENESIS Medal permanently unlocked in DB");
-                });
+                const timer = setTimeout(() => {
+                    unlockAchievement({
+                        name: "Genesis Creator",
+                        description: "First time connecting to Djinn",
+                        image_url: "/genesis-medal-v2.png"
+                    });
 
-                localStorage.setItem(flagKey, 'true');
-            }, 3000); // 3s delay for smoother entry
+                    supabaseDb.grantAchievement(walletAddr, 'FIRST_MARKET').then(res => {
+                        if (res) console.log("✅ GENESIS Medal permanently unlocked in DB");
+                    });
 
-            return () => clearTimeout(timer);
+                    try {
+                        localStorage.setItem(flagKey, 'true');
+                    } catch (e) {
+                        // SILENT FAIL - Never red-screen the user for a flag
+                        if (e instanceof Error && e.name === 'QuotaExceededError') {
+                            try {
+                                // Aggressive cleanup: remove all djinn_profile_ caches to make room
+                                Object.keys(localStorage).forEach(k => {
+                                    if (k.startsWith('djinn_profile_')) {
+                                        localStorage.removeItem(k);
+                                    }
+                                });
+                                // Try one last time
+                                localStorage.setItem(flagKey, 'true');
+                            } catch (retryErr) {
+                                // Ignore retry failure
+                            }
+                        }
+                    }
+                }, 3000);
+
+                return () => clearTimeout(timer);
+            };
+
+            const cleanup = checkAndNotify();
+            return () => {
+                if (typeof cleanup === 'function') (cleanup as any)();
+            };
         } else if (!connected) {
-            // Reset ref if wallet disconnects to allow fresh trigger if they reconnect another wallet
             genesisTriggeredRef.current = null;
         }
     }, [connected, publicKey, unlockAchievement]);

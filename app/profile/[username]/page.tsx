@@ -40,6 +40,10 @@ export default function ProfilePage() {
     const { publicKey } = useWallet();
 
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [isVaultOpen, setIsVaultOpen] = useState(false);
+    const [tempMedals, setTempMedals] = useState<string[]>([]);
+
+    // ... rest of state
     const [betTab, setBetTab] = useState<'active' | 'closed'>('active');
     const [isLoading, setIsLoading] = useState(true);
     const [unclaimedPayouts, setUnclaimedPayouts] = useState<supabaseDb.Bet[]>([]);
@@ -62,7 +66,8 @@ export default function ProfilePage() {
         closedBets: [] as any[],
         achievements: [] as any[],
         createdMarkets: [] as any[],
-        showGems: true
+        showGems: true,
+        joinedAt: ""
     };
 
     const [profile, setProfile] = useState(initialProfile);
@@ -78,16 +83,18 @@ export default function ProfilePage() {
     const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const pfpInputRef = useRef<HTMLInputElement>(null);
 
-    // Sync temp state when modal opens or profile changes
+    // Sync temp state ONLY when modal opens
+    // This prevents "reversion" when background data (like bets) updates
     useEffect(() => {
         if (isEditModalOpen) {
             setTempName(profile.username);
             setTempBio(profile.bio);
             setTempShowGems(profile.showGems !== undefined ? profile.showGems : true);
             setTempPfp(profile.pfp);
+            setTempMedals(profile.medals || []); // Sync medals
             setNameAvailable(true); // Default to true for current name
         }
-    }, [isEditModalOpen, profile]);
+    }, [isEditModalOpen]); // Removed profile from dependency
 
     // Real-time Availability Check
     useEffect(() => {
@@ -214,7 +221,7 @@ export default function ProfilePage() {
                     };
 
                     if (isLordSlug) {
-                        ghost.medals = ['GENESIS', 'ORACLE', 'DIAMOND_HANDS', 'PINK_CRYSTAL', 'EMERALD_SAGE', 'MOON_DANCER', 'MARKET_SNIPER', 'APEX_PREDATOR', 'GOLD_TROPHY', 'LEGENDARY_TRADER'];
+                        ghost.medals = ['FIRST_MARKET', 'ORACLE', 'DIAMOND_HANDS', 'PINK_CRYSTAL', 'EMERALD_SAGE', 'MOON_DANCER', 'MARKET_SNIPER', 'APEX_PREDATOR', 'GOLD_TROPHY', 'LEGENDARY_TRADER'];
                         ghost.gems = 99999;
                         ghost.profit = 1250000;
                         ghost.achievements = [
@@ -256,18 +263,24 @@ export default function ProfilePage() {
                     finalProfile.bio = dbProfile.bio || finalProfile.bio;
                     // IF DB has a URL, we use it. If not, we keep the default.
                     if (dbProfile.avatar_url) finalProfile.pfp = dbProfile.avatar_url;
+                    if (dbProfile.created_at) finalProfile.joinedAt = dbProfile.created_at;
+                    if (typeof dbProfile.views === 'number') setViewCount(dbProfile.views);
                 }
 
                 // 2. Local Storage Override (ONLY for ME)
+                // Actualizar cache solo si es necesario (ej: no hay cache previo o es diferente)
+                // Usamos una estrategia de "Local Storage as Source of Truth for MY EDITS"
                 if (isMeCheck) {
                     const local = localStorage.getItem(`djinn_profile_${targetAddress}`);
                     if (local) {
                         try {
                             const p = JSON.parse(local);
                             if (p.username) finalProfile.username = p.username;
-                            // ONLY override if the local value is a real string, not null/empty
-                            if (p.pfp && typeof p.pfp === 'string') finalProfile.pfp = p.pfp;
-                            if (p.avatar_url && typeof p.avatar_url === 'string') finalProfile.pfp = p.avatar_url;
+                            if (p.medals && Array.isArray(p.medals)) finalProfile.medals = p.medals;
+                            if (p.showGems !== undefined) finalProfile.showGems = p.showGems;
+                            // Prefer cached version if it exists and is not empty
+                            if (p.pfp && typeof p.pfp === 'string' && p.pfp.length > 5) finalProfile.pfp = p.pfp;
+                            else if (p.avatar_url && typeof p.avatar_url === 'string' && p.avatar_url.length > 5) finalProfile.pfp = p.avatar_url;
                         } catch (e) { }
                     }
                 }
@@ -279,7 +292,7 @@ export default function ProfilePage() {
 
                 if (isLordWallet) {
 
-                    finalProfile.medals = ['GENESIS', 'ORACLE', 'DIAMOND_HANDS', 'PINK_CRYSTAL', 'EMERALD_SAGE', 'MOON_DANCER', 'MARKET_SNIPER', 'APEX_PREDATOR', 'GOLD_TROPHY', 'LEGENDARY_TRADER'];
+                    finalProfile.medals = ['FIRST_MARKET', 'ORACLE', 'DIAMOND_HANDS', 'PINK_CRYSTAL', 'EMERALD_SAGE', 'MOON_DANCER', 'MARKET_SNIPER', 'APEX_PREDATOR', 'GOLD_TROPHY', 'LEGENDARY_TRADER'];
                     finalProfile.gems = 99999;
                     finalProfile.profit = 1250000;
                     setViewCount(99999);
@@ -485,29 +498,31 @@ export default function ProfilePage() {
         // 1. SAVE TO LOCAL STORAGE (Dynamic Key - Single Source of Truth for this wallet)
         const dynamicKey = `djinn_profile_${walletAddress}`;
 
-        // Prepare strict object for storage (avoid saving derived stats like portfolio/medals if we want those to source from elsewhere, but for now we save what we edit)
+        // Optimización: Si el PFP es un base64 muy grande, no lo guardamos en cache local
+        // Solo guardamos si es una URL corta o un base64 pequeño (< 100KB)
+        const pfpToCache = (newData.pfp && newData.pfp.length > 100000 && newData.pfp.startsWith('data:'))
+            ? "/pink-pfp.png"
+            : newData.pfp;
+
         const toSave = {
             username: newData.username,
             bio: newData.bio,
-            pfp: newData.pfp,
-            avatar_url: newData.pfp, // Alias for Supabase compat
-            // Preserve existing medals/gem cache if needed
+            pfp: pfpToCache,
+            avatar_url: pfpToCache,
+            medals: newData.medals || [],
+            showGems: newData.showGems !== undefined ? newData.showGems : true
         };
 
         try {
-            // OPTIMIZATION: Don't store huge base64 PFPs in localStorage if they are already in the UI state
-            // Only store small metadata to preserve quota
-            const storageCopy = { ...toSave };
-            if (storageCopy.pfp?.startsWith('data:image')) storageCopy.pfp = null;
-            if (storageCopy.avatar_url?.startsWith('data:image')) storageCopy.avatar_url = null;
-
-            localStorage.setItem(dynamicKey, JSON.stringify(storageCopy));
-            console.log("✅ Saved to LocalStorage (optimized):", dynamicKey);
+            localStorage.setItem(dynamicKey, JSON.stringify(toSave));
+            console.log("✅ Profile cached safely");
         } catch (e) {
-            console.error("Local Save Error:", e);
-            // If quota error, try clearing everything starting with djinn_profile_
             if (e instanceof Error && e.name === 'QuotaExceededError') {
-                Object.keys(localStorage).forEach(k => { if (k.startsWith('djinn_profile_')) localStorage.removeItem(k); });
+                // Wipe all djinn caches if full
+                Object.keys(localStorage).forEach(k => {
+                    if (k.startsWith('djinn_profile_')) localStorage.removeItem(k);
+                });
+                try { localStorage.setItem(dynamicKey, JSON.stringify(toSave)); } catch (err) { }
             }
         }
 
@@ -527,7 +542,6 @@ export default function ProfilePage() {
             }
         } catch (err) {
             console.error("Supabase Save Error:", err);
-            // Don't revert UI, local storage is enough for session
         }
 
         // 3. BROADCAST UPDATE
@@ -544,7 +558,8 @@ export default function ProfilePage() {
             username: tempName || profile.username,
             bio: tempBio || profile.bio,
             pfp: tempPfp || profile.pfp,
-            showGems: tempShowGems
+            showGems: tempShowGems,
+            medals: tempMedals // Save the new medals order
         };
         updateAndSave(updated);
         setIsEditModalOpen(false);
@@ -572,7 +587,7 @@ export default function ProfilePage() {
             updateAndSave({ ...profile, medals: [...profile.medals, medal] });
 
             // Persist Achievement to DB if it's a known code
-            if (publicKey && ['GOLD_TROPHY', 'LEGENDARY_TRADER', 'GENESIS', 'APEX_PREDATOR'].includes(medal)) {
+            if (publicKey && ['GOLD_TROPHY', 'LEGENDARY_TRADER', 'FIRST_MARKET', 'APEX_PREDATOR'].includes(medal)) {
                 await supabaseDb.grantAchievement(publicKey.toBase58(), medal);
             }
         }
@@ -656,7 +671,7 @@ export default function ProfilePage() {
     };
 
     return (
-        <main className="min-h-screen text-white font-sans pb-40 selection:bg-[#F492B7] pt-52">
+        <main className="min-h-screen text-white font-sans pb-40 selection:bg-[#F492B7] pt-32">
             {/* IMAGE CROPPER MODAL */}
             {croppingFile && (
                 <ImageCropper
@@ -705,8 +720,8 @@ export default function ProfilePage() {
                                     <h1 className="text-7xl font-black tracking-tighter leading-none drop-shadow-2xl">{profile.username}</h1>
                                     {profile.medals && profile.medals.map((m: string, i: number) => {
                                         if (m === 'GOLD_TROPHY') return <img key={i} src="/gold-trophy.png" className="w-20 h-20 object-contain drop-shadow-[0_0_25px_rgba(255,215,0,0.6)] hover:scale-110 transition-transform cursor-help z-10" title="Achieved Top 1 Leaderboard" alt="Trophy" />;
-                                        if (m === 'LEGENDARY_TRADER') return <img key={i} src="/gems-trophy.png" className="w-24 h-24 object-contain drop-shadow-[0_0_25px_rgba(16,185,129,0.8)] hover:scale-110 transition-transform cursor-help z-20 -ml-4" title="Biggest Win All Time" alt="Legendary" />;
-                                        if (m === 'GENESIS') return <img key={i} src="/genesis-medal-v2.png" className="w-16 h-16 object-contain drop-shadow-[0_0_15px_rgba(244,146,183,0.5)] hover:scale-110 transition-transform cursor-help" title="Genesis Creator" alt="Genesis" />;
+                                        if (m === 'LEGENDARY_TRADER') return <img key={i} src="/gems-trophy.png" className="w-22 h-22 object-contain hover:scale-110 transition-transform cursor-help z-20" title="Biggest Win All Time" alt="Legendary" />;
+                                        if (m === 'FIRST_MARKET') return <img key={i} src="/genesis-medal-v2.png" className="w-16 h-16 object-contain drop-shadow-[0_0_15px_rgba(244,146,183,0.5)] hover:scale-110 transition-transform cursor-help" title="Genesis Creator" alt="Genesis" />;
                                         if (m === 'MARKET_MAKER') return <img key={i} src="/blue-crystal.png" className="w-16 h-16 object-contain drop-shadow-[0_0_15px_rgba(59,130,246,0.5)] hover:scale-110 transition-transform cursor-help" title="Market Maker" alt="Market Maker" />;
                                         if (m === 'ORACLE') return <img key={i} src="/orange-crystal-v2.png" className="w-16 h-16 object-contain drop-shadow-[0_0_15px_rgba(245,158,11,0.5)] hover:scale-110 transition-transform cursor-help" title="Grand Oracle" alt="Oracle" />;
                                         if (m === 'DIAMOND_HANDS') return <img key={i} src="/diamond-crystal.png" className="w-16 h-16 object-contain drop-shadow-[0_0_20px_rgba(56,189,248,0.6)] hover:scale-110 transition-transform cursor-help" title="Diamond Hands" alt="Diamond" />;
@@ -722,10 +737,14 @@ export default function ProfilePage() {
                                 </div>
                                 {/* METADATA ROW */}
                                 <div className="flex items-center gap-4 mt-2 text-gray-400 text-sm font-bold uppercase tracking-widest">
-                                    <span>Joined 18 March</span>
+                                    <span>Joined {profile.joinedAt ? new Date(profile.joinedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long' }) : new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long' })}</span>
                                     <span>•</span>
                                     <div className="flex items-center gap-2">
                                         <span className="text-white">{viewCount.toLocaleString()} Views</span>
+                                        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
+                                            <span className="text-[9px] text-green-500 font-black uppercase tracking-widest">Actualizado Sincronizado</span>
+                                        </div>
                                     </div>
                                     {targetWalletAddress && (
                                         <>
@@ -892,6 +911,19 @@ export default function ProfilePage() {
                     removeMedal={removeMedal}
                     pfpInputRef={pfpInputRef}
                     handleFileChange={handleFileChange}
+                    openVault={() => setIsVaultOpen(true)}
+                    tempMedals={tempMedals}
+                />
+            )}
+
+            {/* MEDAL VAULT OVERLAY */}
+            {isVaultOpen && (
+                <MedalVault
+                    profile={profile}
+                    earnedAchievements={profile.achievements}
+                    selectedMedals={tempMedals}
+                    setSelectedMedals={setTempMedals}
+                    onClose={() => setIsVaultOpen(false)}
                 />
             )}
         </main>
@@ -1146,7 +1178,7 @@ function BetCard({ bet, onCashOut, router }: any) {
 }
 
 // --- EDIT MODAL ---
-function EditModal({ profile, tempName, tempBio, setTempName, setTempBio, tempPfp, showGems, setShowGems, nameAvailable, isCheckingName, onClose, onSave, addMedal, removeMedal, pfpInputRef, handleFileChange }: any) {
+function EditModal({ profile, tempName, tempBio, setTempName, setTempBio, tempPfp, showGems, setShowGems, nameAvailable, isCheckingName, onClose, onSave, pfpInputRef, handleFileChange, openVault, tempMedals }: any) {
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-3xl">
             <div className="relative bg-[#080808] border border-white/10 w-full max-w-2xl max-h-[90vh] flex flex-col rounded-[2.5rem] shadow-2xl overflow-hidden">
@@ -1159,107 +1191,36 @@ function EditModal({ profile, tempName, tempBio, setTempName, setTempBio, tempPf
                 {/* BODY - SCROLLABLE */}
                 <div className="p-10 overflow-y-auto flex-1 custom-scrollbar space-y-10">
 
-                    {/* MEDALS SECTION */}
-                    {profile.medals.length < 9 && (
-                        <div className="space-y-4">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">Featured Medals</p>
-                            <div className="flex flex-wrap gap-4">
-                                {profile.medals.map((medal: string, i: number) => (
-                                    <button key={i} onClick={() => removeMedal(medal)} className="relative group w-16 h-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-red-500/20 hover:border-red-500 transition-all">
-                                        <div className="text-2xl">
-                                            {medal === 'GENESIS' ? <img src="/genesis-medal-v2.png" className="w-10 h-10 object-contain" /> :
-                                                medal === 'GOLD_TROPHY' ? <img src="/gold-trophy.png" className="w-12 h-12 object-contain" /> :
-                                                    medal === 'LEGENDARY_TRADER' ? <img src="/gems-trophy.png" className="w-14 h-14 object-contain" /> :
-                                                        medal}
-                                        </div>
-                                        <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <span className="text-white font-bold">×</span>
-                                        </div>
-                                    </button>
-                                ))}
-
-                                {/* ADD NEW MEDAL BUTTONS */}
-                                <div className="flex flex-wrap gap-2">
-                                    {/* GOLD TROPHY SELECTION */}
-                                    {profile.achievements.some((a: any) => a.code === 'THE_CHAMPION') && !profile.medals.includes('GOLD_TROPHY') && (
-                                        <button onClick={() => addMedal('GOLD_TROPHY')} className="w-16 h-16 rounded-full border-2 border-dashed border-[#FFD700]/40 p-2 hover:bg-[#FFD700]/10 transition-all flex items-center justify-center animate-pulse" title="Equip The Champion Trophy">
-                                            <img src="/gold-trophy.png" className="w-full h-full object-contain" />
-                                        </button>
-                                    )}
-
-                                    {/* LEGENDARY TRADER (GEMS TROPHY) SELECTION */}
-                                    {profile.achievements.some((a: any) => a.code === 'LEGENDARY_TRADER') && !profile.medals.includes('LEGENDARY_TRADER') && (
-                                        <button onClick={() => addMedal('LEGENDARY_TRADER')} className="w-16 h-16 rounded-full border-2 border-dashed border-[#10B981]/40 p-1 hover:bg-[#10B981]/10 transition-all flex items-center justify-center animate-pulse" title="Equip Legendary Gems Trophy">
-                                            <img src="/gems-trophy.png" className="w-full h-full object-contain" />
-                                        </button>
-                                    )}
-
-                                    <button onClick={() => addMedal("🔮")} className="w-16 h-16 rounded-full border-2 border-dashed border-white/10 text-2xl text-white/20 hover:bg-white/5 hover:border-[#F492B7] hover:text-[#F492B7] transition-all flex items-center justify-center" title="Add Crystal">🔮</button>
-                                    {/* GENESIS MEDAL OPTION */}
-                                    {profile.achievements.some((a: any) => a.code === 'FIRST_MARKET') && !profile.medals.includes('GENESIS') && (
-                                        <button onClick={() => addMedal('GENESIS')} className="w-16 h-16 rounded-full border-2 border-dashed border-[#F492B7]/40 p-3 hover:bg-[#F492B7]/10 transition-all flex items-center justify-center animate-pulse" title="Unlock Genesis Medal">
-                                            <img src="/genesis-medal-v2.png" className="w-full h-full object-contain" />
-                                        </button>
-                                    )}
-                                    {/* MARKET MAKER BLUE CRYSTAL */}
-                                    {profile.achievements.some((a: any) => a.code === 'MARKET_MAKER') && !profile.medals.includes('MARKET_MAKER') && (
-                                        <button onClick={() => addMedal('MARKET_MAKER')} className="w-16 h-16 rounded-full border-2 border-dashed border-blue-500/40 p-3 hover:bg-blue-500/10 transition-all flex items-center justify-center animate-pulse" title="Unlock Market Maker Medal">
-                                            <img src="/blue-crystal-v2.png" className="w-full h-full object-contain" />
-                                        </button>
-                                    )}
-
-                                    {/* ORACLE ORANGE CRYSTAL */}
-                                    {profile.achievements.some((a: any) => a.code === 'ORACLE') && !profile.medals.includes('ORACLE') && (
-                                        <button onClick={() => addMedal('ORACLE')} className="w-16 h-16 rounded-full border-2 border-dashed border-orange-500/40 p-3 hover:bg-orange-500/10 transition-all flex items-center justify-center animate-pulse" title="Unlock Oracle Medal">
-                                            <img src="/orange-crystal-v2.png" className="w-full h-full object-contain" />
-                                        </button>
-                                    )}
-
-                                    {/* DIAMOND HANDS */}
-                                    {profile.achievements.some((a: any) => a.code === 'DIAMOND_HANDS') && !profile.medals.includes('DIAMOND_HANDS') && (
-                                        <button onClick={() => addMedal('DIAMOND_HANDS')} className="w-16 h-16 rounded-full border-2 border-dashed border-cyan-500/40 p-3 hover:bg-cyan-500/10 transition-all flex items-center justify-center animate-pulse" title="Unlock Diamond Hands Medal">
-                                            <img src="/diamond-crystal.png" className="w-full h-full object-contain" />
-                                        </button>
-                                    )}
-
-                                    {/* PINK CRYSTAL */}
-                                    {profile.achievements.some((a: any) => a.code === 'PINK_CRYSTAL') && !profile.medals.includes('PINK_CRYSTAL') && (
-                                        <button onClick={() => addMedal('PINK_CRYSTAL')} className="w-16 h-16 rounded-full border-2 border-dashed border-pink-500/40 p-3 hover:bg-pink-500/10 transition-all flex items-center justify-center animate-pulse" title="Unlock Mystic Rose Medal">
-                                            <img src="/pink-crystal.png" className="w-full h-full object-contain" />
-                                        </button>
-                                    )}
-
-                                    {/* EMERALD SAGE */}
-                                    {profile.achievements.some((a: any) => a.code === 'EMERALD_SAGE') && !profile.medals.includes('EMERALD_SAGE') && (
-                                        <button onClick={() => addMedal('EMERALD_SAGE')} className="w-16 h-16 rounded-full border-2 border-dashed border-green-500/40 p-3 hover:bg-green-500/10 transition-all flex items-center justify-center animate-pulse" title="Unlock Emerald Sage Medal">
-                                            <img src="/green-crystal.png" className="w-full h-full object-contain" />
-                                        </button>
-                                    )}
-
-                                    {/* MOON DANCER */}
-                                    {profile.achievements.some((a: any) => a.code === 'MOON_DANCER') && !profile.medals.includes('MOON_DANCER') && (
-                                        <button onClick={() => addMedal('MOON_DANCER')} className="w-16 h-16 rounded-full border-2 border-dashed border-purple-500/40 p-3 hover:bg-purple-500/10 transition-all flex items-center justify-center animate-pulse" title="Unlock Moon Dancer Medal">
-                                            <img src="/moon-crystal.png" className="w-full h-full object-contain" />
-                                        </button>
-                                    )}
-
-                                    {/* MARKET SNIPER */}
-                                    {profile.achievements.some((a: any) => a.code === 'MARKET_SNIPER') && !profile.medals.includes('MARKET_SNIPER') && (
-                                        <button onClick={() => addMedal('MARKET_SNIPER')} className="w-16 h-16 rounded-full border-2 border-dashed border-emerald-600/40 p-3 hover:bg-emerald-600/10 transition-all flex items-center justify-center animate-pulse" title="Unlock Market Sniper Medal">
-                                            <img src="/emerald-sniper.png" className="w-full h-full object-contain" />
-                                        </button>
-                                    )}
-
-                                    {/* APEX PREDATOR */}
-                                    {profile.achievements.some((a: any) => a.code === 'APEX_PREDATOR') && !profile.medals.includes('APEX_PREDATOR') && (
-                                        <button onClick={() => addMedal('APEX_PREDATOR')} className="w-16 h-16 rounded-full border-2 border-dashed border-white/40 p-3 hover:bg-white/10 transition-all flex items-center justify-center animate-pulse" title="Unlock Apex Predator Medal">
-                                            <img src="/apex-skull.png" className="w-full h-full object-contain" />
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
+                    {/* GEMS & ASSETS QUICK SECTION */}
+                    <div className="flex items-center gap-6 bg-white/5 p-6 rounded-3xl border border-white/10 group cursor-pointer hover:bg-white/10 transition-all" onClick={openVault}>
+                        <div className="w-16 h-16 rounded-2xl bg-[#F492B7]/10 flex items-center justify-center border border-[#F492B7]/20 group-hover:scale-110 transition-transform">
+                            <span className="text-3xl">💎</span>
                         </div>
-                    )}
+                        <div className="flex-1">
+                            <p className="text-sm font-black text-white uppercase tracking-tighter">Gems</p>
+                            <p className="text-[11px] text-gray-500 font-bold uppercase tracking-widest mt-1">Manage featured gems ({tempMedals.length}/9 slots used)</p>
+                        </div>
+                        <div className="flex gap-2">
+                            {tempMedals.slice(0, 3).map((m: string, i: number) => {
+                                let src = "/genesis-medal-v2.png";
+                                if (m === 'FIRST_MARKET') src = "/genesis-medal-v2.png";
+                                if (m === 'GOLD_TROPHY') src = "/gold-trophy.png";
+                                if (m === 'LEGENDARY_TRADER') src = "/gems-trophy.png";
+                                if (m === 'ORACLE') src = "/orange-crystal-v2.png";
+                                if (m === 'MARKET_MAKER') src = "/blue-crystal-v2.png";
+                                if (m === 'DIAMOND_HANDS') src = "/diamond-crystal.png";
+                                if (m === 'PINK_CRYSTAL') src = "/pink-crystal.png";
+                                if (m === 'EMERALD_SAGE') src = "/green-crystal.png";
+                                if (m === 'MOON_DANCER') src = "/moon-crystal.png";
+                                if (m === 'MARKET_SNIPER') src = "/emerald-sniper.png";
+                                if (m === 'APEX_PREDATOR') src = "/apex-skull.png";
+
+                                return <img key={i} src={src} className="w-8 h-8 object-contain" alt="" />;
+                            })}
+                            {tempMedals.length > 3 && <span className="text-gray-500 text-xs font-bold flex items-center">+{tempMedals.length - 3}</span>}
+                        </div>
+                        <div className="text-[#F492B7] font-black text-xl translate-x-0 group-hover:translate-x-2 transition-transform">→</div>
+                    </div>
 
                     {/* MAIN FORM */}
                     <div className="space-y-8">
@@ -1900,3 +1861,154 @@ function MyMarketsList({ markets }: { markets: any[] }) {
         </div>
     );
 }
+// --- MEDAL VAULT COMPONENT (REDESIGNED AS GEMS VAULT) ---
+function MedalVault({ profile, earnedAchievements, selectedMedals, setSelectedMedals, onClose }: any) {
+    const [hovered, setHovered] = useState<string | null>(null);
+
+    const MEDAL_DETAILS: Record<string, { title: string, desc: string, img: string }> = {
+        'FIRST_MARKET': { title: 'Genesis Creator', desc: 'The first mark of a true Djinn. Awarded for early participation.', img: '/genesis-medal-v2.png' },
+        'GOLD_TROPHY': { title: 'The Champion', desc: 'The highest honor. Awarded for dominating the leaderboard.', img: '/gold-trophy.png' },
+        'LEGENDARY_TRADER': { title: 'Legendary Trader', desc: 'A master of the bonding curve. 100k+ XP earned.', img: '/gems-trophy.png' },
+        'ORACLE': { title: 'Grand Oracle', desc: 'Your predictions shape reality. Proven accuracy over time.', img: '/orange-crystal-v2.png' },
+        'MARKET_MAKER': { title: 'Market Maker', desc: 'Provided liquidity to the trenches when others feared to tread.', img: '/blue-crystal-v2.png' },
+        'DIAMOND_HANDS': { title: 'Diamond Hands', desc: 'Held through the volatility without flinching.', img: '/diamond-crystal.png' },
+        'PINK_CRYSTAL': { title: 'Mystic Rose', desc: 'A rare aura of intuition and luck.', img: '/pink-crystal.png' },
+        'EMERALD_SAGE': { title: 'Emerald Sage', desc: 'Deep knowledge of market dynamics.', img: '/green-crystal.png' },
+        'MOON_DANCER': { title: 'Moon Dancer', desc: 'Caught the peak of multiple moon missions.', img: '/moon-crystal.png' },
+        'MARKET_SNIPER': { title: 'Market Sniper', desc: 'Precision trades with minimal slippage.', img: '/emerald-sniper.png' },
+        'APEX_PREDATOR': { title: 'Apex Predator', desc: 'Feasted on the losses of the weak. Ruthless efficiency.', img: '/apex-skull.png' },
+        'MYSTIC_CRYSTAL': { title: 'Mystic Crystal', desc: 'A mysterious artifact powered by your Gem hoard.', img: '🔮' }
+    };
+
+    const toggleMedal = (code: string) => {
+        if (selectedMedals.includes(code)) {
+            setSelectedMedals(selectedMedals.filter((m: string) => m !== code));
+        } else if (selectedMedals.length < 9) {
+            setSelectedMedals([...selectedMedals, code]);
+        }
+    };
+
+    // All available medals for this user
+    // ensure Genesis is ALWAYS available (FIRST_MARKET)
+    const availableCodes = earnedAchievements.map((a: any) => a.code);
+    if (!availableCodes.includes('FIRST_MARKET')) {
+        availableCodes.unshift('FIRST_MARKET');
+    }
+
+    // Always available "Gem" medal if they have any gems
+    if (profile.gems > 0 && !availableCodes.includes('MYSTIC_CRYSTAL')) {
+        availableCodes.push('MYSTIC_CRYSTAL');
+    }
+
+    const hoverInfo = hovered ? (MEDAL_DETAILS[hovered] || { title: hovered, desc: 'A rare achievement earned in the trenches.', img: '' }) : null;
+
+    return (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-6 bg-black/98 backdrop-blur-3xl">
+            <div className="relative bg-[#080808] border border-white/10 w-full max-w-2xl h-[90vh] flex flex-col rounded-[3rem] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
+
+                {/* VAULT HEADER */}
+                <div className="px-12 pt-12 pb-8 flex items-center justify-between border-b border-white/5">
+                    <div>
+                        <h2 className="text-4xl font-black uppercase tracking-tighter text-[#F492B7]">Gems Vault</h2>
+                        <div className="flex items-center gap-2 mt-1">
+                            <p className="text-gray-500 text-[10px] font-bold uppercase tracking-[0.2em]">Select gems to feature on your profile</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* SPLIT CONTENT */}
+                <div className="flex-1 flex flex-col overflow-hidden">
+
+                    {/* TOP: AVAILABLE (VERTICAL SPLIT) */}
+                    <div className="flex-1 overflow-y-auto px-12 py-8 custom-scrollbar border-b border-white/5 bg-white/[0.02]">
+                        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500 mb-6">Available Gems</p>
+                        <div className="grid grid-cols-5 gap-3">
+                            {availableCodes.map((code: string, i: number) => {
+                                const details = MEDAL_DETAILS[code];
+                                const isSelected = selectedMedals.includes(code);
+                                if (!details) return null;
+                                return (
+                                    <button
+                                        key={i}
+                                        onMouseEnter={() => setHovered(code)}
+                                        onMouseLeave={() => setHovered(null)}
+                                        onClick={() => toggleMedal(code)}
+                                        className={`relative aspect-square rounded-2xl border transition-all flex items-center justify-center ${isSelected ? 'bg-white/5 border-white/10 opacity-30 brightness-50' : 'bg-white/5 border-white/10 hover:border-[#F492B7]/50 hover:bg-white/10 hover:scale-105'}`}
+                                    >
+                                        {details?.img?.length === 1 ? (
+                                            <span className="text-3xl">{details.img}</span>
+                                        ) : (
+                                            <img src={details?.img || '/pink-pfp.png'} className="w-full h-full object-contain p-3" />
+                                        )}
+                                        {isSelected && (
+                                            <div className="absolute inset-0 flex items-center justify-center">
+                                                <span className="text-[10px] font-black text-[#F492B7] uppercase tracking-widest">Active</span>
+                                            </div>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* BOTTOM: ACTIVE */}
+                    <div className="flex-1 overflow-y-auto px-12 py-8 custom-scrollbar">
+                        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500 mb-6">Featured on Profile ({selectedMedals.length}/9)</p>
+                        <div className="flex flex-wrap gap-3 min-h-[80px]">
+                            {selectedMedals.map((code: string, i: number) => {
+                                const details = MEDAL_DETAILS[code];
+                                return (
+                                    <button
+                                        key={i}
+                                        onClick={() => toggleMedal(code)}
+                                        className="relative w-24 h-24 rounded-2xl bg-[#F492B7]/20 border border-[#F492B7]/40 flex items-center justify-center hover:bg-red-500/20 hover:border-red-500/50 group transition-all"
+                                    >
+                                        {details?.img?.length === 1 ? (
+                                            <span className="text-4xl group-hover:opacity-0">{details.img}</span>
+                                        ) : (
+                                            <img src={details?.img || '/pink-pfp.png'} className="w-16 h-16 object-contain group-hover:opacity-0" />
+                                        )}
+                                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                            <span className="text-red-500 font-black text-[10px] uppercase tracking-widest">Remove</span>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                            {selectedMedals.length === 0 && (
+                                <div className="w-full flex items-center justify-center h-24 border border-dashed border-white/10 rounded-2xl">
+                                    <p className="text-gray-600 font-bold uppercase text-[10px] tracking-widest">Click gems above to activate</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* HOVER INFO SECTION - Smaller in this layout */}
+                        {hoverInfo && (
+                            <div className="mt-8 bg-white/5 rounded-2xl border border-white/10 p-4 flex items-center gap-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                                {hoverInfo.img?.length === 1 ? <span className="text-2xl">{hoverInfo.img}</span> : <img src={hoverInfo.img || '/pink-pfp.png'} className="w-10 h-10 object-contain" />}
+                                <div>
+                                    <p className="font-black text-white text-sm uppercase tracking-tighter leading-none mb-0.5">{hoverInfo.title}</p>
+                                    <p className="text-gray-500 text-[10px] leading-relaxed max-w-sm">{hoverInfo.desc}</p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* VAULT FOOTER */}
+                <div className="px-12 py-8 border-t border-white/5 bg-black/50">
+                    <button
+                        onClick={onClose}
+                        className="w-full bg-[#F492B7] text-black py-5 rounded-2xl font-black uppercase text-sm shadow-xl hover:brightness-110 transition-all active:scale-95"
+                    >
+                        Apply
+                    </button>
+                    <p className="text-[9px] text-center text-gray-600 uppercase font-bold tracking-[0.2em] mt-4 italic">
+                        The order of gems below is how they will appear on your profile.
+                    </p>
+                </div>
+
+            </div>
+        </div>
+    );
+}
+

@@ -186,22 +186,20 @@ function NavbarContent() {
                     bio: dbProfile.bio || ''
                 };
 
-                // Actualizar state
-                setUsername(profileData.username);
-                setUserPfp(profileData.avatar_url);
-
-                // Actualizar cache con optimización para no guardar base64 pesados que saturan localStorage
-                try {
-                    const storageCopy = { ...profileData };
-                    if (storageCopy.avatar_url?.startsWith('data:image')) {
-                        storageCopy.avatar_url = null; // No guardar la imagen pesada en localStorage
+                // Actualizar cache y state SOLO si no tenemos cache previo
+                // Esto previene que datos viejos de la DB sobrescriban cambios locales recientes
+                const hasCache = !!localStorage.getItem(`djinn_profile_${walletAddress}`);
+                if (!hasCache) {
+                    setUsername(profileData.username);
+                    setUserPfp(profileData.avatar_url);
+                    try {
+                        localStorage.setItem(
+                            `djinn_profile_${walletAddress}`,
+                            JSON.stringify(profileData)
+                        );
+                    } catch (quotaErr) {
+                        console.warn('⚠️ LocalStorage full, skipped profile cache update');
                     }
-                    localStorage.setItem(
-                        `djinn_profile_${walletAddress}`,
-                        JSON.stringify(storageCopy)
-                    );
-                } catch (quotaErr) {
-                    console.warn('⚠️ LocalStorage full, skipped profile cache update');
                 }
 
                 console.log('✅ Profile synced from database');
