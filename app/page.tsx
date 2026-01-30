@@ -8,7 +8,10 @@ import { Loader2 } from 'lucide-react';
 import { getWhitelistStatus } from '@/lib/whitelist';
 import CustomWalletModal from '@/components/CustomWalletModal';
 
+import { useRouter } from 'next/navigation';
+
 export default function GenesisPage() {
+    const router = useRouter();
     const { publicKey, connected } = useWallet();
     const [status, setStatus] = useState({
         count: 0,
@@ -39,6 +42,13 @@ export default function GenesisPage() {
         const interval = setInterval(refreshStatus, 30000);
         return () => clearInterval(interval);
     }, [refreshStatus]);
+
+    // AUTO-REDIRECT: If connected and authorized, go to markets immediately
+    useEffect(() => {
+        if (connected && !loading && (status.isAdmin || status.isRegistered)) {
+            router.push('/markets');
+        }
+    }, [connected, loading, status, router]);
 
     // Force autoplay on mobile
     useEffect(() => {

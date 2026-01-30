@@ -11,51 +11,96 @@ interface CustomWalletModalProps {
 }
 
 export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModalProps) {
-    const { wallets, select, connecting, connected, wallet } = useWallet();
+    const { wallets, select, connect, connecting, connected, wallet } = useWallet();
     const [isConnecting, setIsConnecting] = React.useState(false);
 
     // Sync local connecting state with wallet adapter
-    // ARTIFICIAL DELAY: Keep 'Connecting' state visible longer (1.5s) for a smoother feel
     React.useEffect(() => {
         if (connecting) setIsConnecting(true);
         else {
-            const t = setTimeout(() => setIsConnecting(false), 1500);
+            const t = setTimeout(() => setIsConnecting(false), 500); // Shorter timeout
             return () => clearTimeout(t);
         }
     }, [connecting]);
 
-    // PREVENT DUPLICATE MODAL: Auto-close when connected
+
+
+    // TRIGGER CONNECT AFTER SELECTION
+    // Removed to prevent race conditions. We connect directly in handleConnect.
+
+    const [selectedWallet, setSelectedWallet] = React.useState<string | null>(null);
+
+    // 1. Handle Selection Only
+    const handleWalletSelect = React.useCallback((walletName: string) => {
+        if (walletName === wallet?.adapter.name && connected) return;
+        setIsConnecting(true);
+        setSelectedWallet(walletName);
+        select(walletName);
+    }, [select, wallet, connected]);
+
+    // 2. Trigger Connection with Delay (The Fix)
     React.useEffect(() => {
-        if (connected && isOpen) {
-            onClose();
+        let timer: NodeJS.Timeout;
+
+        if (selectedWallet && !connecting && !connected) {
+            const attemptConnect = async () => {
+                try {
+                    await connect();
+                } catch (error: any) {
+                    console.error('[CustomWalletModal] Connection failed:', error);
+                    // Standardize error alerting
+                    if (error.name === 'WalletConnectionError') {
+                        alert(`Connection Failed: ${error.message}\n\nPlease try again.`);
+                    } else {
+                        alert(`Error: ${error.message}`);
+                    }
+                    setSelectedWallet(null); // Reset on error
+                } finally {
+                    setIsConnecting(false);
+                }
+            };
+
+            // 100ms delay to ensure context updates
+            timer = setTimeout(attemptConnect, 100);
+        }
+
+        return () => {
+            if (timer) clearTimeout(timer);
+        };
+    }, [selectedWallet, connect, connecting, connected]);
+
+    // Cleanup when connected
+    React.useEffect(() => {
+        if (connected) {
+            setSelectedWallet(null);
+            if (isOpen) onClose();
         }
     }, [connected, isOpen, onClose]);
 
-    const handleConnect = (walletName: any) => {
-        select(walletName);
-    };
-
     // Filter and deduplicate wallets
     const uniqueWallets = useMemo(() => {
-        const walletMap = new Map();
-        const allowedWallets = ['Phantom', 'Solflare', 'Backpack', 'MetaMask', 'Jupiter'];
+        // Dedup by name
+        const seen = new Set();
+        const list = [];
+        const preferredOrder = ['Phantom', 'Solflare', 'Backpack', 'MetaMask', 'Jupiter'];
 
-        wallets.forEach(wallet => {
-            const name = wallet.adapter.name;
-            const readyState = wallet.adapter.readyState;
+        for (const w of wallets) {
+            if (seen.has(w.adapter.name)) continue;
 
-            if (allowedWallets.includes(name)) {
-                // Solo si está instalada o cargable
-                const isReady = readyState === WalletReadyState.Installed ||
-                    readyState === WalletReadyState.Loadable;
-
-                if (isReady && !walletMap.has(name)) {
-                    walletMap.set(name, wallet);
-                }
+            // Filter out those not ready (unless it's a standard one which is usually 'Installed')
+            if (w.readyState === 'Installed' || w.readyState === 'Loadable') {
+                seen.add(w.adapter.name);
+                list.push(w);
             }
-        });
+        }
 
-        return Array.from(walletMap.values());
+        return list.sort((a, b) => {
+            const idxA = preferredOrder.indexOf(a.adapter.name);
+            const idxB = preferredOrder.indexOf(b.adapter.name);
+            const posA = idxA === -1 ? 999 : idxA;
+            const posB = idxB === -1 ? 999 : idxB;
+            return posA - posB;
+        });
     }, [wallets]);
 
     if (!isOpen) return null;
@@ -73,7 +118,7 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
             {/* MODAL CONTAINER */}
             <div className="relative w-full max-w-sm bg-[#1A1A1A] border border-white/10 rounded-[2rem] shadow-2xl flex flex-col max-h-[90vh] z-10 animate-in zoom-in-95 slide-in-from-bottom-5 duration-500 overflow-hidden">
 
-                {isConnecting ? (
+                {(isConnecting || connecting) ? (
                     // CONNECTING STATE (Pink Djinn Style)
                     <div className="flex flex-col items-center justify-center py-16 px-8 text-center space-y-8 animate-in fade-in duration-500">
                         {/* Pink Spinner Wrapper */}
@@ -122,8 +167,8 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
                             {uniqueWallets.map((wallet: any) => (
                                 <button
                                     key={wallet.adapter.name}
-                                    onClick={() => handleConnect(wallet.adapter.name)}
-                                    className="w-full bg-[#252525] hover:bg-[#333] border border-white/5 hover:border-white/20 rounded-xl p-4 flex items-center justify-between transition-all group shrink-0 active:scale-[0.98] duration-200"
+                                    onClick={() => handleWalletSelect(wallet.adapter.name)}
+                                    className={`w-full bg-[#252525] hover:bg-[#333] border border-white/5 hover:border-white/20 rounded-xl p-4 flex items-center justify-between transition-all group shrink-0 active:scale-[0.98] duration-200`}
                                 >
                                     <div className="flex items-center gap-4">
                                         <div className="w-10 h-10 rounded-lg overflow-hidden bg-black/20 flex items-center justify-center border border-white/5">

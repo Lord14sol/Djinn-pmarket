@@ -74,8 +74,9 @@ const HeroContent = ({ onMarketCreated }: { onMarketCreated: (m: any) => void })
                     <div className="flex justify-center mt-1">
                         <button
                             onClick={openCreateMarket}
-                            className="bg-[#F492B7] text-black text-xl font-black py-4 px-12 rounded-xl shadow-[0_0_10px_rgba(244,146,183,0.1)] hover:scale-105 active:scale-95 transition-all uppercase"
+                            className="bg-[#F492B7] text-black text-xl font-black py-4 px-12 rounded-xl shadow-[0_0_10px_rgba(244,146,183,0.1)] hover:scale-105 active:scale-95 transition-all uppercase relative overflow-hidden group"
                         >
+                            <div className="absolute inset-0 animate-shimmer pointer-events-none" />
                             Create a Market
                         </button>
                     </div>

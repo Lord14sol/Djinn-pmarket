@@ -540,65 +540,101 @@ export default function Page() {
 
             // Generate Initial "Inception" History if empty
             // This mocks a "Launch Day" history: Flat candles at 0.000001 SOL, 50/50 probability
-            setHistoryState(prev => {
-                if (prev.probability.length > 0) return prev;
+            if (effectiveSlug) {
+                // Reconstruct History from Activity Log ("Memory")
+                const reconstructHistory = async () => {
+                    const activities = await supabaseDb.getAllMarketActivity(effectiveSlug);
 
-                const outcomes = initialOutcomes.map(o => o.title);
-                const count = 360; // 6 Hours of history (in minutes)
-                const now = Math.floor(Date.now() / 1000);
-                const probData = [];
-                const candleData: Record<string, any[]> = {};
+                    if (!activities || activities.length === 0) {
+                        // Fallback: If no activity, use CURRENT live price to seed history
+                        // This prevents "reset to 50%" if market has moved but logs are missing
+                        let seedYes = 50;
 
-                // Use Real Price if available to seed history (Flat Line at Current Price)
-                let seedPriceYes = 0.00000001;
-                let seedPriceNo = 0.00000001;
+                        // 1. Try Market Data (Live Price)
+                        if (marketData?.live_price) {
+                            seedYes = marketData.live_price;
+                        }
+                        // 2. Try On-Chain/DB Supplies
+                        else if (marketAccount?.outcome_supplies && marketAccount.outcome_supplies.length >= 2) {
+                            const sYes = Number(marketAccount.outcome_supplies[0]);
+                            const sNo = Number(marketAccount.outcome_supplies[1]);
+                            if (sYes > 0 || sNo > 0) {
+                                seedYes = calculateImpliedProbability(sYes, sNo);
+                            }
+                        }
 
-                if (marketAccount?.outcome_supplies && marketAccount.outcome_supplies.length >= 2) {
-                    const sYes = Number(marketAccount.outcome_supplies[0]) / 1e9;
-                    const sNo = Number(marketAccount.outcome_supplies[1]) / 1e9;
-                    seedPriceYes = getSpotPrice(sYes);
-                    seedPriceNo = getSpotPrice(sNo);
-                }
+                        setHistoryState(prev => {
+                            if (prev.probability.length > 0 && Math.abs(prev.probability[prev.probability.length - 1].YES - seedYes) < 0.1) return prev;
 
-                const seedPrices: Record<string, number> = {
-                    [(marketOutcomes[0]?.title || 'YES')]: seedPriceYes,
-                    [(marketOutcomes[1]?.title || 'NO')]: seedPriceNo
-                };
+                            const now = Math.floor(Date.now() / 1000);
+                            // Generate a flat line at the current SEED price
+                            return {
+                                probability: [{
+                                    time: now - 3600, // 1 hour ago
+                                    dateStr: new Date((now - 3600) * 1000).toLocaleTimeString(),
+                                    YES: seedYes,
+                                    NO: 100 - seedYes
+                                }, {
+                                    time: now,
+                                    dateStr: new Date(now * 1000).toLocaleTimeString(),
+                                    YES: seedYes,
+                                    NO: 100 - seedYes
+                                }],
+                                candles: {}
+                            };
+                        });
+                        return;
+                    }
 
-                outcomes.forEach(o => candleData[o] = []);
+                    // Replay Logic
+                    // We assume simple binary for now or reconstruct based on outcome names
+                    // For Binary: YES/NO.
+                    let sYes = 0;
+                    let sNo = 0;
 
-                for (let i = count; i > 0; i--) {
-                    const time = now - (i * 60); // 1 minute intervals
-
-                    // 1. Probability Point (Flat 50/50 or derived from initial)
-                    const point: any = {
-                        time: time,
-                        dateStr: new Date(time * 1000).toLocaleTimeString()
-                    };
-                    outcomes.forEach((o, idx) => {
-                        let ch = initialOutcomes[idx]?.chance || (100 / outcomes.length);
-                        if (ch <= 1) ch *= 100; // Force 0-100 scale
-                        point[o] = ch;
+                    const probData: any[] = [];
+                    // Initialize with inception point
+                    const firstTime = new Date(activities[0].created_at!).getTime() / 1000;
+                    probData.push({
+                        time: firstTime - 60,
+                        dateStr: new Date((firstTime - 60) * 1000).toLocaleTimeString(),
+                        YES: 50,
+                        NO: 50
                     });
-                    probData.push(point);
 
-                    // 2. Candle Point (Hydrated with Seed Price)
-                    outcomes.forEach(o => {
-                        const base = seedPrices[o] || 0.00000001; // Use Real Price
-                        const noise = (Math.random() - 0.5) * (base * 0.02); // 2% noise for "Live" feel
-                        const price = base + noise;
-                        candleData[o].push({
-                            time: time as any, // Cast for Lightweight Charts
-                            open: price,
-                            high: price * 1.01,
-                            low: price * 0.99,
-                            close: price
+                    activities.forEach(act => {
+                        const shares = Number(act.shares);
+                        const isYes = act.action === 'YES';
+                        const isBuy = act.order_type === 'BUY' || !act.order_type;
+
+                        if (isBuy) {
+                            if (isYes) sYes += shares; else sNo += shares;
+                        } else {
+                            // Sell
+                            if (isYes) sYes = Math.max(0, sYes - shares);
+                            else sNo = Math.max(0, sNo - shares);
+                        }
+
+                        // Convert to atomic units for calc logic if needed. 
+                        // Assuming shares from DB are human readable, we multiply by 1e9 to match virtual floor logic in core-amm
+                        // calculateImpliedProbability uses VIRTUAL_FLOOR = 15_000_000.
+                        // If we pass 10 (human), we get 10 / (10 + 15M) ~ 0.
+                        // So we MUST pass atomic.
+                        const prob = calculateImpliedProbability(sYes * 1e9, sNo * 1e9);
+
+                        probData.push({
+                            time: new Date(act.created_at!).getTime() / 1000,
+                            dateStr: new Date(act.created_at!).toLocaleTimeString(),
+                            YES: prob,
+                            NO: 100 - prob
                         });
                     });
-                }
 
-                return { probability: probData, candles: candleData };
-            });
+                    setHistoryState({ probability: probData, candles: {} });
+                };
+
+                reconstructHistory();
+            }
         }
     }, [slug, marketAccount?.outcome_supplies]); // Re-run when supplies load to fix "Dark Chart"
 
@@ -1160,6 +1196,8 @@ export default function Page() {
                     shares: sim.sharesReceived,
                     market_title: staticMarketInfo.title,
                     market_slug: effectiveSlug,
+                    market_icon: staticMarketInfo.icon,
+                    outcome_name: activityAction, // Already resolved to Uppercase Outcome or YES
                     created_at: new Date().toISOString()
                 };
                 // @ts-ignore
@@ -1186,6 +1224,9 @@ export default function Page() {
 
             // 5. Update UI State
             setSolBalance(prev => prev - amountNum);
+
+            // REFRESH USER HOLDINGS (Critical for UI update)
+            window.dispatchEvent(new Event('bet-updated'));
 
             refreshAll();
             // Delay to allow RPC to propagate changes
@@ -1822,6 +1863,8 @@ export default function Page() {
                     shares: finalSharesToSell,
                     market_title: staticMarketInfo.title,
                     market_slug: effectiveSlug,
+                    market_icon: staticMarketInfo.icon,
+                    outcome_name: activityAction,
                     created_at: new Date().toISOString()
                 };
                 // 4. Update Last Trade Event (for Chart Bubbles)

@@ -398,30 +398,39 @@ export default function Home() {
               transition={{ duration: 0.3 }}
               className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-[1px] bg-white/10 overflow-hidden"
             >
-              {sortedMarkets.map((market, index) => {
-                const isPumping = (market as any).justArrived;
+              {sortedMarkets
+                // NEW: If Trending, Top 3 are in the Pyramid, allow grid to show filtered list starting from #4
+                .filter(market => {
+                  if (activeCategory === 'Trending' && top3Markets && top3Markets.length >= 3) {
+                    const isTop3 = top3Markets.some(top => top.slug === market.slug);
+                    return !isTop3;
+                  }
+                  return true;
+                })
+                .map((market, index) => {
+                  const isPumping = (market as any).justArrived;
 
-                return (
-                  <motion.div
-                    key={`${market.slug}-${index}`}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    transition={{
-                      duration: 0.2,
-                      delay: index * 0.03 // Stagger animation
-                    }}
-                    className="h-full"
-                  >
-                    <PumpEffect isActive={isPumping}>
-                      <MarketCard
-                        {...market}
-                        isNew={market.createdAt && market.createdAt > oneDayAgo}
-                      />
-                    </PumpEffect>
-                  </motion.div>
-                );
-              })}
+                  return (
+                    <motion.div
+                      key={`${market.slug}-${index}`}
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.9 }}
+                      transition={{
+                        duration: 0.2,
+                        delay: index * 0.03 // Stagger animation
+                      }}
+                      className="h-full"
+                    >
+                      <PumpEffect isActive={isPumping}>
+                        <MarketCard
+                          {...market}
+                          isNew={market.createdAt && market.createdAt > oneDayAgo}
+                        />
+                      </PumpEffect>
+                    </motion.div>
+                  );
+                })}
             </motion.div>
           </AnimatePresence>
         )}

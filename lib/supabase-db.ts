@@ -13,6 +13,7 @@ export interface Profile {
     avatar_url: string | null;
     banner_url: string | null;
     created_at?: string;
+    views?: number;
 }
 
 export async function getProfile(walletAddress: string): Promise<Profile | null> {
@@ -42,6 +43,26 @@ export async function upsertProfile(profile: Partial<Profile> & { wallet_address
         return null;
     }
     return data;
+}
+
+export async function incrementProfileViews(walletAddress: string): Promise<number> {
+    // 1. Get current
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('views')
+        .eq('wallet_address', walletAddress)
+        .single();
+
+    const currentViews = profile?.views || 0;
+    const newViews = currentViews + 1;
+
+    // 2. Update
+    await supabase
+        .from('profiles')
+        .update({ views: newViews })
+        .eq('wallet_address', walletAddress);
+
+    return newViews;
 }
 
 
@@ -246,6 +267,8 @@ export interface Activity {
     shares: number;
     market_title: string;
     market_slug: string;
+    market_icon?: string;
+    outcome_name?: string;
     created_at?: string;
     order_type?: 'BUY' | 'SELL';
 }
@@ -277,6 +300,20 @@ export async function getActivity(minAmount: number = 0, limit: number = 50, mar
     return data || [];
 }
 
+export async function getAllMarketActivity(slug: string): Promise<Activity[]> {
+    const { data, error } = await supabase
+        .from('activity')
+        .select('*')
+        .eq('market_slug', slug)
+        .order('created_at', { ascending: true }); // Important: Oldest first for replay
+
+    if (error) {
+        console.error('Error fetching all activity:', error);
+        return [];
+    }
+    return data || [];
+}
+
 export async function createActivity(activity: Omit<Activity, 'id' | 'created_at'>): Promise<{ data: Activity | null, error: any }> {
     const { data, error } = await supabase
         .from('activity')
@@ -289,6 +326,21 @@ export async function createActivity(activity: Omit<Activity, 'id' | 'created_at
         return { data: null, error };
     }
     return { data, error: null };
+}
+
+export async function getUserActivity(walletAddress: string): Promise<Activity[]> {
+    const { data, error } = await supabase
+        .from('activity')
+        .select('*')
+        .eq('wallet_address', walletAddress)
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+    if (error) {
+        console.error('Error fetching user activity:', error);
+        return [];
+    }
+    return data || [];
 }
 
 // --- HOLDERS (Derived from Bets) ---

@@ -22,26 +22,48 @@ export async function getWhitelistStatus(walletAddress?: string): Promise<Whitel
     const isAdmin = walletAddress ? ADMIN_WALLETS.includes(walletAddress) : false;
 
     // Get current count
-    const { count, error: countError } = await supabase
-        .from('genesis_whitelist')
-        .select('*', { count: 'exact', head: true });
+    let currentCount = 0;
+    try {
+        const { count, error: countError } = await supabase
+            .from('genesis_whitelist')
+            .select('*', { count: 'exact', head: true });
 
-    if (countError) {
-        console.error('[Whitelist] Error fetching count:', countError);
+        if (countError) {
+            console.warn('[Whitelist] Supabase Count Error (using fallback):', countError.message);
+        } else {
+            currentCount = count || 0;
+        }
+    } catch (e) {
+        console.warn('[Whitelist] Supabase Exception (using fallback):', e);
     }
 
-    const currentCount = count || 0;
-
-    // Check if user is already registered
+    // Check if user is already registered (fallback: ALLOW IF ERROR)
+    // If we can't check the whitelist, we assume the user is allowed in for Devnet/Test purposes
+    // rather than locking them out.
     let isRegistered = false;
-    if (walletAddress) {
-        const { data, error: regError } = await supabase
-            .from('genesis_whitelist')
-            .select('wallet_address')
-            .eq('wallet_address', walletAddress)
-            .single();
 
-        if (data) isRegistered = true;
+    if (walletAddress) {
+        try {
+            const { data, error: regError } = await supabase
+                .from('genesis_whitelist')
+                .select('wallet_address')
+                .eq('wallet_address', walletAddress)
+                .single();
+
+            if (data) {
+                isRegistered = true;
+            } else if (regError && regError.code === 'PGRST116') {
+                // Not found, correct behavior
+                isRegistered = false;
+            } else if (regError) {
+                console.warn('[Whitelist] Supabase Check Error (Using Fallback True):', regError.message);
+                // FAIL SAFE: Allow entry if DB is broken
+                isRegistered = true;
+            }
+        } catch (e) {
+            console.warn('[Whitelist] Exception (Using Fallback True):', e);
+            isRegistered = true;
+        }
     }
 
     return {

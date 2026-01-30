@@ -145,7 +145,28 @@ export default React.memo(function ProbabilityChart({
     // OPTIMIZATION 3: Memoize base data processing separately
     const baseSortedData = useMemo(() => {
         if (!data || data.length === 0) return null;
-        return [...data].sort((a: any, b: any) => a.time - b.time);
+
+        // 1. Sort by time
+        const sorted = [...data].sort((a: any, b: any) => a.time - b.time);
+
+        // 2. Deduplicate: Remove points with identical timestamps, keeping the last one
+        const uniqueData: any[] = [];
+        let lastTime = -1;
+
+        for (const point of sorted) {
+            // Ensure valid timestamp
+            if (!point.time || isNaN(point.time)) continue;
+
+            if (point.time !== lastTime) {
+                uniqueData.push(point);
+                lastTime = point.time;
+            } else {
+                // Overwrite the last point if timestamp matches (assume newer data comes later or is preferred)
+                uniqueData[uniqueData.length - 1] = point;
+            }
+        }
+
+        return uniqueData;
     }, [data]);
 
     // OPTIMIZATION 4: Smart downsampling BEFORE sync

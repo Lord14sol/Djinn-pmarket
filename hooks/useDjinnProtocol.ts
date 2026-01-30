@@ -410,6 +410,47 @@ export const useDjinnProtocol = () => {
         }
     }, [program, anchorWallet, connection, publicKey]);
 
+    const claimCreatorFees = useCallback(async (
+        marketPda: PublicKey
+    ) => {
+        if (!program || !anchorWallet || !connection || !publicKey) throw new Error("Wallet not connected");
+
+        try {
+            const [marketVaultPda] = await PublicKey.findProgramAddress(
+                [Buffer.from("market_vault"), marketPda.toBuffer()],
+                program.programId
+            );
+
+            const tx = new web3.Transaction();
+
+            // Add Compute Units
+            tx.add(web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }));
+            tx.add(web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50000 }));
+
+            const ix = await program.methods
+                .claimCreatorFees()
+                .accounts({
+                    market: marketPda,
+                    marketVault: marketVaultPda,
+                    creator: publicKey, // The signer must be the creator
+                    protocolTreasury: MASTER_TREASURY,
+                    systemProgram: SystemProgram.programId,
+                })
+                .instruction();
+
+            tx.add(ix);
+
+            const signature = await sendTransaction(tx, connection, { skipPreflight: true });
+            await connection.confirmTransaction(signature, 'confirmed');
+
+            console.log("✅ Creator Fees Claimed:", signature);
+            return signature;
+        } catch (error) {
+            console.error("Error claiming creator fees:", error);
+            throw error;
+        }
+    }, [program, anchorWallet, connection, publicKey]);
+
     return {
         program,
         createMarket,
@@ -417,6 +458,7 @@ export const useDjinnProtocol = () => {
         sellShares,
         resolveMarket,
         claimReward,
+        claimCreatorFees,
         getUserBalance,
         isReady: isContractReady
     };

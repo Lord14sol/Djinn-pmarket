@@ -141,7 +141,9 @@ export default function QuickBetModal({ isOpen, onClose, market, outcome }: Quic
                 sol_amount: amount,
                 shares: sim.sharesReceived,
                 market_title: market.title,
-                market_slug: slug
+                market_slug: slug,
+                market_icon: market.icon,
+                outcome_name: outcome.toUpperCase()
             });
 
             // C. Create/Update Bet Position (For Holders List)

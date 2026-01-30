@@ -64,7 +64,9 @@ const MarketCard: React.FC<MarketCardProps> = ({
     const [selectedOption, setSelectedOption] = useState<string | null>(null);
     const [selectedOptionChance, setSelectedOptionChance] = useState<number>(0);
 
-    const isMultiple = !!(options && options.length > 0);
+    // Only treat as multiple (list view) if there are MORE than 2 options.
+    // Binary markets (2 options) should use the side-by-side buttons.
+    const isMultiple = !!(options && options.length > 2);
 
     const handleBetClick = (e: React.MouseEvent, outcome: 'yes' | 'no', optionName?: string, optionChance?: number) => {
         e.preventDefault();
@@ -179,17 +181,17 @@ const MarketCard: React.FC<MarketCardProps> = ({
                         <div className="grid grid-cols-2 gap-3">
                             <button
                                 onClick={(e) => handleBetClick(e, 'yes')}
-                                className="flex flex-col items-center justify-center py-2 bg-[#0E2825] border border-emerald-500/20 hover:bg-emerald-500 hover:border-emerald-400 rounded-lg group/yes transition-all duration-200 active:scale-95"
+                                className="flex flex-col items-center justify-center py-2 bg-[#10B981] border border-[#10B981] shadow-[0_0_20px_rgba(16,185,129,0.4)] rounded-lg group/yes transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
                             >
-                                <span className="text-[10px] font-bold text-emerald-400 group-hover/yes:text-white uppercase tracking-wider mb-0.5">Yes</span>
-                                <span className="text-lg font-black text-emerald-400 group-hover/yes:text-white">{chance || 50}%</span>
+                                <span className="text-[10px] font-black text-white uppercase tracking-wider mb-0.5">Yes</span>
+                                <span className="text-lg font-black text-white">{chance || 50}%</span>
                             </button>
                             <button
                                 onClick={(e) => handleBetClick(e, 'no')}
-                                className="flex flex-col items-center justify-center py-2 bg-[#2B1616] border border-rose-500/20 hover:bg-rose-500 hover:border-rose-400 rounded-lg group/no transition-all duration-200 active:scale-95"
+                                className="flex flex-col items-center justify-center py-2 bg-[#EF4444] border border-[#EF4444] shadow-[0_0_20px_rgba(239,68,68,0.4)] rounded-lg group/no transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
                             >
-                                <span className="text-[10px] font-bold text-rose-400 group-hover/no:text-white uppercase tracking-wider mb-0.5">No</span>
-                                <span className="text-lg font-black text-rose-400 group-hover/no:text-white">{100 - (chance || 50)}%</span>
+                                <span className="text-[10px] font-black text-white uppercase tracking-wider mb-0.5">No</span>
+                                <span className="text-lg font-black text-white">{100 - (chance || 50)}%</span>
                             </button>
                         </div>
                     )}
@@ -198,8 +200,8 @@ const MarketCard: React.FC<MarketCardProps> = ({
                 {/* Footer: Volume, Time & STAR */}
                 <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 uppercase tracking-wider border-t border-white/5 pt-3 mt-1 pointer-events-auto">
                     <div className="flex items-center gap-3">
-                        <span className="text-gray-400">{volume} Vol</span>
-                        {timeLeft && <span className="text-gray-600">{timeLeft}</span>}
+                        <span className="text-white">{volume} Vol</span>
+                        {timeLeft && <span className="text-white">{timeLeft}</span>}
                     </div>
 
                     {/* Star Moved to Bottom - Pink on Active */}
