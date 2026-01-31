@@ -48,7 +48,7 @@ export default function PumpEffect({
 
   return (
     <motion.div
-      className="relative"
+      className="relative h-full"
       initial={isActive ? { scale: 0.8, opacity: 0 } : false}
       animate={{ scale: 1, opacity: 1 }}
       transition={{

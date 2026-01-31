@@ -719,7 +719,7 @@ export default function Page() {
 
                         activities.forEach((act, idx) => {
                             // DEBUG: Ensure 'shares' exists and is a number. 
-                            let shares = Number(act.shares);
+                            let shares = Number(act.shares) * 1_000_000;
 
                             if (isNaN(shares) || shares === 0) {
                                 // if (idx < 5) console.warn(`📜 Activity [${idx}] has invalid shares:`, act.shares, act);
@@ -795,7 +795,8 @@ export default function Page() {
 
                 // NEW: Load history function logic (Self-contained)
                 const loadHistory = async () => {
-                    if (!marketPubkey) return;
+                    if (!marketAccount?.market_pda) return;
+                    const marketPubkey = new PublicKey(marketAccount.market_pda);
 
                     try {
                         // Dynamic import or assume imported
@@ -1063,8 +1064,8 @@ export default function Page() {
 
                     if (marketAccInfo) {
                         const decodedMarket = program.coder.accounts.decode('Market', marketAccInfo.data);
-                        const sYes = Number(decodedMarket.outcomeSupplies[0]) / 1e9;
-                        const sNo = Number(decodedMarket.outcomeSupplies[1]) / 1e9;
+                        const sYes = Number(decodedMarket.outcomeSupplies[0]);
+                        const sNo = Number(decodedMarket.outcomeSupplies[1]);
 
                         // GUARD: Prevent stale data from overwriting optimistic updates
                         if (!priceLockoutRef.current) {
@@ -2266,184 +2267,356 @@ export default function Page() {
                 {/* HEADER (Restored to Top) */}
                 <div className="flex flex-col lg:flex-row gap-12 items-start relative">
                     {/* LEFT COLUMN: Header + Chart + Info */}
-                    {/* Constrained width on desktop to leave space for fixed trade panel */}
-                    <div className="flex-1 min-w-0 flex flex-col gap-6 w-full lg:max-w-[calc(100%-400px)]">
+                    <div className="flex-1 min-w-0 flex flex-col gap-8 w-full">
 
-
-                        {/* HEADER (Moved Inside Left Column) */}
-                        <div className="flex items-center gap-6 mb-4 mt-1 relative">
-                            {/* Action Row (Top Right Corner) */}
-                            <div className="absolute top-0 right-0 flex items-center gap-2 z-10">
-                                {/* Save (Star) Button */}
-                                <button
-                                    onClick={() => setIsStarred(!isStarred)}
-                                    className="p-3 rounded-full bg-white/5 border border-white/10 hover:bg-white/15 transition-all group"
-                                >
-                                    <Star
-                                        size={18}
-                                        className={cn("transition-colors", isStarred ? "text-yellow-400 fill-yellow-400" : "text-gray-400 group-hover:text-white")}
+                        {/* PREMIUM HEADER - MATCHING SCREENSHOT */}
+                        <div className="flex flex-col md:flex-row items-start gap-8 relative">
+                            {/* 1. LEFT: Banner Image */}
+                            <div className="w-48 h-48 md:w-64 md:h-64 bg-[#1A1A1A] rounded-[2.5rem] border border-white/10 shadow-2xl overflow-hidden shrink-0 group relative mt-4">
+                                {(marketAccount?.banner_url || (typeof staticMarketInfo.icon === 'string' && (staticMarketInfo.icon.startsWith('http') || staticMarketInfo.icon.startsWith('data:')))) ?
+                                    <img
+                                        src={marketAccount?.banner_url || staticMarketInfo.icon}
+                                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                                        alt="Market banner"
                                     />
-                                </button>
-                                {/* Share Button */}
-                                <button
-                                    onClick={() => setShowShareModal(true)}
-                                    className="p-3 rounded-full bg-white/5 border border-white/10 hover:bg-white/15 transition-all group"
-                                >
-                                    <Share2 size={16} className="text-gray-400 group-hover:text-white" />
-                                </button>
+                                    : <div className="w-full h-full flex items-center justify-center bg-[#1A1A1A] text-7xl">
+                                        {staticMarketInfo.icon}
+                                    </div>}
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent pointer-events-none" />
                             </div>
-                            {/* LEFT: Image + Title */}
-                            <div className="flex items-start gap-5 flex-1">
-                                <div className="w-48 h-48 bg-[#1A1A1A] rounded-3xl border border-white/10 flex items-center justify-center text-6xl shadow-2xl overflow-hidden shrink-0 mt-12">
-                                    {(marketAccount?.banner_url || (typeof staticMarketInfo.icon === 'string' && (staticMarketInfo.icon.startsWith('http') || staticMarketInfo.icon.startsWith('data:')))) ?
-                                        <img
-                                            src={marketAccount?.banner_url || staticMarketInfo.icon}
-                                            className="w-full h-full object-cover"
-                                            alt="Market banner"
-                                            onError={(e) => {
-                                                console.error('Banner image failed to load:', marketAccount?.banner_url);
-                                                // Fallback to placeholder image instead of hiding
-                                                e.currentTarget.src = 'https://placehold.co/400x400/1a1a1a/F492B7?text=Djinn';
-                                            }}
-                                        />
-                                        : <div className="w-full h-full flex items-center justify-center bg-[#1A1A1A] text-6xl">
-                                            {staticMarketInfo.icon}
-                                        </div>}
+
+                            {/* 2. RIGHT: MCAPS + TITLE + CREATOR */}
+                            <div className="flex-1 flex flex-col gap-6 pt-6">
+                                {/* Action Row (Float Top Right) */}
+                                <div className="absolute top-0 right-0 flex items-center gap-2">
+                                    <button onClick={() => setIsStarred(!isStarred)} className="p-3 rounded-full bg-white/5 border border-white/10 hover:bg-white/15 transition-all">
+                                        <Star size={18} className={isStarred ? "text-yellow-400 fill-yellow-400" : "text-gray-400"} />
+                                    </button>
+                                    <button onClick={() => setShowShareModal(true)} className="p-3 rounded-full bg-white/5 border border-white/10 hover:bg-white/15 transition-all">
+                                        <Share2 size={16} className="text-gray-400" />
+                                    </button>
                                 </div>
-                                <div className="flex-1 flex flex-col justify-between h-48 py-1 mt-12">
-                                    <h1 className="text-4xl lg:text-[2.5rem] font-black text-white tracking-tighter leading-tight whitespace-normal max-w-[800px]">
-                                        {(marketAccount?.title || staticMarketInfo.title)}
+
+                                {/* TITLE & CREATOR */}
+                                <div className="space-y-4">
+                                    <h1 className="text-4xl lg:text-5xl font-black text-white tracking-tighter leading-[0.95] max-w-[900px]">
+                                        {marketAccount?.title || staticMarketInfo.title}
                                     </h1>
 
+                                    <Link href={`/profile/${marketAccount.creator_wallet}`} className="flex items-center gap-3 group w-fit">
+                                        <div className="w-10 h-10 rounded-full overflow-hidden border border-[#F492B7]/30">
+                                            <img src={creatorDisplay.avatar} className="w-full h-full object-cover" />
+                                        </div>
+                                        <span className="text-sm font-bold text-gray-400">
+                                            by <span className="text-[#F492B7] font-black group-hover:underline">{creatorDisplay.username}</span>
+                                        </span>
+                                    </Link>
+                                </div>
 
-                                    {/* Creator Metadata - Clean Minimal Style */}
-                                    <div className="flex items-start gap-12">
-                                        {/* Creator Info (No border/bg) - FIXED: Use creatorDisplay for live updates */}
-                                        <Link
-                                            href={`/profile/${marketAccount.creator_username || marketAccount.creator_wallet}`}
-                                            className="flex items-center gap-2 cursor-pointer group"
-                                        >
-                                            <div className="w-8 h-8 rounded-full overflow-hidden bg-zinc-800 shrink-0">
-                                                {creatorDisplay.avatar ? (
-                                                    <img
-                                                        src={creatorDisplay.avatar}
-                                                        className="w-full h-full object-cover"
-                                                        alt="avatar"
-                                                        onError={(e) => {
-                                                            e.currentTarget.style.display = 'none';
-                                                            if (e.currentTarget.parentElement) {
-                                                                e.currentTarget.parentElement.innerText = '👤';
-                                                                e.currentTarget.parentElement.classList.add('flex', 'items-center', 'justify-center', 'text-gray-500');
-                                                            }
-                                                        }}
-                                                    />
-                                                ) : (
-                                                    <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-500 font-bold bg-[#1A1A1A]">
-                                                        {creatorDisplay.username ? creatorDisplay.username.charAt(0).toUpperCase() : '👤'}
-                                                    </div>
-                                                )}
+                                {/* MCAPS SUB-HEADER (Now Below Title) */}
+                                <div className="flex flex-wrap gap-4 w-full">
+                                    {marketOutcomes.slice(0, 2).map((outcome, idx) => {
+                                        const color = getOutcomeColor(outcome.title, idx);
+                                        const mcapUSD = (outcome.mcapSOL || 0) * (solPrice || 0);
+                                        return (
+                                            <div key={idx} className="flex-1 min-w-[180px] bg-[#0B0E14]/40 backdrop-blur-3xl border border-white/10 px-8 py-5 rounded-[2rem] flex flex-col items-center group/mcap hover:bg-white/[0.03] transition-all duration-500 shadow-2xl">
+                                                <div className="flex items-center gap-3 mb-2">
+                                                    <div className="w-2.5 h-2.5 rounded-full animate-pulse" style={{ backgroundColor: color, boxShadow: `0 0 15px ${color}` }} />
+                                                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40 group-hover/mcap:text-white/60 transition-colors">{outcome.title} MCAP</span>
+                                                </div>
+                                                <div className="flex flex-col items-center gap-1">
+                                                    <span className="text-3xl font-black text-white tabular-nums tracking-tighter transition-transform group-hover/mcap:scale-105 duration-500">
+                                                        <AnimatedNumber value={mcapUSD} decimals={1} prefix="$" />
+                                                    </span>
+                                                    <span className="text-[11px] font-bold text-gray-500 uppercase tracking-widest tabular-nums font-mono">
+                                                        {formatCompact(outcome.mcapSOL || 0)} <span className="opacity-50">SOL</span>
+                                                    </span>
+                                                </div>
                                             </div>
-                                            <span className="text-sm font-bold text-gray-400 group-hover:text-gray-200 transition-colors">
-                                                by <span className="text-[#F492B7] font-black">{creatorDisplay.username}</span>
-                                            </span>
-                                        </Link>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+
+
+
+
+                        <div className="bg-[#0E0E0E]/40 rounded-[2.5rem] border border-white/5 overflow-hidden min-h-[850px] relative shadow-2xl">
+
+
+
+
+                            {/* Dual-line Chart (Bazaar of Answers Style) */}
+                            <TheDjinnChart
+                                outcomes={marketOutcomes.map(o => o.title)}
+                                probabilityData={historyState.probability}
+                                outcomeSupplies={outcomeSuppliesMap}
+                                volume={marketAccount?.volumeTotal ? formatCompact(Number(marketAccount.volumeTotal) / 1e9) + " SOL" : (marketAccount?.volume_usd || "$0")}
+                                resolutionDate={marketAccount?.market_resolution_date ? new Date(marketAccount.market_resolution_date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : (marketAccount?.end_date || "Unknown")}
+                                tradeEvent={lastTradeEvent ? {
+                                    id: lastTradeEvent.id,
+                                    outcome: lastTradeEvent.title || lastTradeEvent.side,
+                                    amount: lastTradeEvent.amount,
+                                    color: lastTradeEvent.color || (lastTradeEvent.side === 'YES' ? '#10B981' : '#EF4444')
+                                } : null}
+                                selectedOutcome={selectedOutcomeName || (selectedSide === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO'))}
+                                onOutcomeChange={(name: string) => {
+                                    setSelectedOutcomeName(name);
+                                    // Also find the ID and Side to keep everything in sync
+                                    const outcome = marketOutcomes.find(o => o.title === name);
+                                    if (outcome) {
+                                        setSelectedOutcomeId(outcome.id);
+                                        // For binary markets, map to YES/NO sides
+                                        if (marketOutcomes.length === 2) {
+                                            setSelectedSide(outcome.title === marketOutcomes[0].title ? 'YES' : 'NO');
+                                        }
+                                    }
+                                }}
+                            />
+
+                            {/* HOLDINGS SECTION REMOVED FROM HERE (Relocated Below) */}
+
+                            {/* Multi-outcome Selector (if applicable) */}
+                            {isMultiOutcome && (
+                                <div className="px-6 mt-4 mb-4">
+                                    <div className="pt-6 border-t border-white/10">
+                                        <h3 className="text-sm font-black uppercase text-gray-500 mb-4 tracking-wider">Select an outcome to trade</h3>
+                                        <OutcomeList
+                                            outcomes={marketOutcomes}
+                                            selectedId={selectedOutcomeId}
+                                            onSelect={setSelectedOutcomeId}
+                                            onBuyClick={handleOutcomeBuyClick}
+                                        />
                                     </div>
+                                </div>
+                            )}
+
+                            {/* CERBERUS AI - Clickable Panel (Relocated Here) */}
+                            <div className="px-6 mt-4 mb-2 group cursor-pointer" onClick={() => console.log('Cerberus AI clicked')}>
+                                <div className="relative overflow-hidden rounded-xl border border-white/10 bg-white/5 p-3 flex items-center justify-between hover:bg-white/10 transition-colors">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
+                                            <Bot size={18} className="text-blue-400" />
+                                        </div>
+                                        <span className="text-sm font-medium text-white group-hover:text-blue-200 transition-colors">
+                                            Click <span className="font-bold text-blue-400">Cerberus AI</span> to find info about the market
+                                        </span>
+                                    </div>
+                                    <ChevronRight size={16} className="text-white/30 group-hover:text-white/60" />
                                 </div>
                             </div>
 
-
-                        </div>
-                    </div>
-
-                    {/* MCAPS - DYNAMIC GRID (Premium 'Agent Skills' UI) */}
-                    <div className={`grid gap-4 mb-4 ${marketOutcomes.length > 2 ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-2'}`}>
-                        {marketOutcomes.map((outcome, idx) => {
-                            const color = getOutcomeColor(outcome.title, idx);
-                            const mcapUSD = (outcome.mcapSOL || 0) * (solPrice || 0);
-                            return (
-                                <div
-                                    key={outcome.title || idx}
-                                    className="relative overflow-hidden flex flex-col items-center justify-center px-4 py-4 rounded-2xl bg-[#0B0E14]/60 backdrop-blur-xl border border-white/10 group transition-all hover:bg-[#0B0E14]/80"
-                                    style={{
-                                        boxShadow: `0 0 20px ${color}0D, inset 0 0 10px ${color}05`
-                                    }}
-                                >
-                                    {/* Relief inner glow/border inspired by 'Agent Skills' */}
-                                    <div className="absolute inset-0 rounded-2xl border border-white/5 pointer-events-none" />
-                                    <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-
-                                    {/* Dynamic outcome aura */}
-                                    <div className="absolute -bottom-10 -right-10 w-20 h-20 blur-3xl rounded-full opacity-10 pointer-events-none" style={{ backgroundColor: color }} />
-
-                                    <span
-                                        className="text-[10px] font-black uppercase tracking-[0.2em] mb-1.5 flex items-center gap-2 text-white/50"
-                                    >
-                                        <div
-                                            className="w-2 h-2 rounded-full"
-                                            style={{
-                                                backgroundColor: color,
-                                                boxShadow: `0 0 10px ${color}`
-                                            }}
-                                        />
-                                        {outcome.title} MCAP
-                                    </span>
-                                    <div className="flex flex-col items-center">
-                                        <span
-                                            className="text-2xl font-black text-white tabular-nums tracking-tight leading-none mb-1"
-                                            style={{ filter: `drop-shadow(0 0 8px ${color}44)` }}
-                                        >
-                                            ${formatCompact(mcapUSD)}
-                                        </span>
-                                        <span className="text-[10px] font-bold text-gray-500 tabular-nums uppercase tracking-widest">
-                                            {formatCompact(outcome.mcapSOL || 0)} SOL
-                                        </span>
+                            {/* RESOLUTION CRITERIA (Relocated Here) */}
+                            <div className="px-6 mb-6">
+                                <div className="bg-[#0E0E0E] rounded-xl border border-white/5 p-6">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="text-sm font-bold text-white uppercase tracking-wider">Resolution Criteria</h3>
+                                        {/* Oracle Source Badge */}
+                                        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/5">
+                                            <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest mr-1">Oracle</span>
+                                            {marketAccount?.resolution_source ? (
+                                                <a href={marketAccount.resolution_source} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[#10B981] hover:underline font-mono text-xs">
+                                                    <span>{marketAccount.resolution_source.slice(0, 15)}...</span> <ExternalLink size={10} />
+                                                </a>
+                                            ) : (
+                                                <div className="flex items-center gap-1 text-white">
+                                                    <img src="/pyth-logo.png" className="w-3 h-3 rounded-full" onError={(e) => e.currentTarget.style.display = 'none'} />
+                                                    <span className="font-bold text-xs">Pyth</span>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
+
+                                    <p className="text-gray-400 text-sm leading-relaxed mb-0 font-light">
+                                        This market will resolve to "YES" if the specific outcome defined in the title occurs by the resolution date.
+                                        The resolution is decentralized and verified by the oracle.
+                                    </p>
                                 </div>
-                            );
-                        })}
-                    </div>
+                            </div>
 
+                            {/* TABS (Relocated UP - as requested) */}
+                            <div className="px-6 mb-8 mt-2">
+                                {/* ✅ HOLDINGS - ALWAYS VISIBLE ABOVE TABS */}
+                                <HoldingsSection
+                                    bets={userBets}
+                                    outcomeSupplies={marketOutcomes.map(o => o.supply)}
+                                    marketOutcomes={marketOutcomes}
+                                />
 
+                                <div className="flex items-center gap-6 mb-6 border-b border-white/5 pb-2">
+                                    <TabButton label="Activity" icon={<Activity size={14} />} active={bottomTab === 'ACTIVITY'} onClick={() => setBottomTab('ACTIVITY')} />
+                                    <TabButton label="Comments" icon={<MessageCircle size={14} />} active={bottomTab === 'COMMENTS'} onClick={() => setBottomTab('COMMENTS')} />
+                                    <TabButton label="Top Holders" icon={<Users size={14} />} active={bottomTab === 'HOLDERS'} onClick={() => setBottomTab('HOLDERS')} />
+                                </div>
 
-                    <div className="bg-transparent rounded-2xl border border-white/5 overflow-hidden min-h-[850px] relative">
+                                {/* TAB CONTENT */}
+                                {bottomTab === 'COMMENTS' && (
+                                    <CommentsSection
+                                        marketSlug={effectiveSlug}
+                                        publicKey={publicKey ? publicKey.toBase58() : null}
+                                        userProfile={userProfile}
+                                        marketOutcomes={marketOutcomes}
+                                        myHeldPosition={null} // Pass null or actual position if available
+                                        myHeldAmount={0}
+                                    />
+                                )}
 
+                                {bottomTab === 'ACTIVITY' && (
+                                    <div className="bg-[#0E0E0E] rounded-xl border border-white/5 overflow-hidden">
+                                        <div className="grid grid-cols-5 px-6 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500 border-b border-white/5">
+                                            <span className="col-span-1">Trader</span>
+                                            <span className="text-center col-span-1">Side</span>
+                                            <span className="text-center col-span-1">Shares</span>
+                                            <span className="text-right col-span-1">Value</span>
+                                            <span className="text-right col-span-1">Time</span>
+                                        </div>
+                                        <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
+                                            {activityList.length === 0 ? (
+                                                <div className="p-8 text-center text-gray-600 italic">No orders yet</div>
+                                            ) : (
+                                                activityList.map((act, i) => {
+                                                    const isBuy = act.order_type === 'BUY' || !act.order_type;
 
+                                                    // FIX: Resolve "YES"/"NO" to Outcome Titles
+                                                    let displayAction = act.action;
+                                                    let actionColor = '#808080';
 
+                                                    // Helper to find outcome index safely
+                                                    const findOutcomeIndex = (name: string) => marketOutcomes.findIndex(o => o.title === name);
 
-                        {/* Dual-line Chart (Bazaar of Answers Style) */}
-                        <TheDjinnChart
-                            outcomes={marketOutcomes.map(o => o.title)}
-                            probabilityData={historyState.probability}
-                            outcomeSupplies={outcomeSuppliesMap}
-                            volume={marketAccount?.volumeTotal ? formatCompact(Number(marketAccount.volumeTotal) / 1e9) + " SOL" : (marketAccount?.volume_usd || "$0")}
-                            resolutionDate={marketAccount?.market_resolution_date ? new Date(marketAccount.market_resolution_date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : (marketAccount?.end_date || "Unknown")}
-                            tradeEvent={lastTradeEvent ? {
-                                id: lastTradeEvent.id,
-                                outcome: lastTradeEvent.title || lastTradeEvent.side,
-                                amount: lastTradeEvent.amount,
-                                color: lastTradeEvent.color || (lastTradeEvent.side === 'YES' ? '#10B981' : '#EF4444')
-                            } : null}
-                            selectedOutcome={selectedOutcomeName || (selectedSide === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO'))}
-                            onOutcomeChange={(name: string) => {
-                                setSelectedOutcomeName(name);
-                                // Also find the ID and Side to keep everything in sync
-                                const outcome = marketOutcomes.find(o => o.title === name);
-                                if (outcome) {
-                                    setSelectedOutcomeId(outcome.id);
-                                    // For binary markets, map to YES/NO sides
-                                    if (marketOutcomes.length === 2) {
-                                        setSelectedSide(outcome.title === marketOutcomes[0].title ? 'YES' : 'NO');
-                                    }
-                                }
-                            }}
-                        />
+                                                    if (act.action === 'YES' || act.action === 'NO') {
+                                                        const outcomeIdx = act.action === 'YES' ? 0 : 1;
+                                                        if (marketOutcomes[outcomeIdx]) {
+                                                            displayAction = marketOutcomes[outcomeIdx].title;
+                                                            actionColor = getOutcomeColor(displayAction, outcomeIdx);
+                                                        } else {
+                                                            actionColor = getOutcomeColor(act.action, outcomeIdx);
+                                                        }
+                                                    } else {
+                                                        // It's already an outcome name
+                                                        const outcomeIdx = findOutcomeIndex(act.action);
+                                                        actionColor = getOutcomeColor(act.action, outcomeIdx !== -1 ? outcomeIdx : undefined);
+                                                    }
 
-                        {/* HOLDINGS SECTION REMOVED FROM HERE (Relocated Below) */}
+                                                    return (
+                                                        <div key={i} className="grid grid-cols-5 items-center px-6 py-4 border-b border-white/5 hover:bg-white/5 transition-colors group">
+                                                            <div className="flex items-center gap-3 col-span-1">
+                                                                <Link
+                                                                    href={`/profile/${act.username || act.wallet_address}`}
+                                                                    className="w-8 h-8 rounded-full bg-[#1A1A1A] flex items-center justify-center border border-white/10 overflow-hidden shrink-0 hover:opacity-80 transition-opacity"
+                                                                >
+                                                                    <img
+                                                                        src={act.avatar_url || '/pink-pfp.png'}
+                                                                        className="w-full h-full object-cover"
+                                                                        onError={(e) => {
+                                                                            e.currentTarget.src = '/pink-pfp.png';
+                                                                        }}
+                                                                    />
+                                                                </Link>
+                                                                <div className="flex flex-col overflow-hidden">
+                                                                    <Link href={`/profile/${act.username || act.wallet_address}`} className="flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity">
+                                                                        <span className="text-xs font-bold text-white group-hover:text-[#F492B7] transition-colors font-mono truncate">
+                                                                            {act.username || `${act.wallet_address.slice(0, 4)}...`}
+                                                                        </span>
+                                                                    </Link>
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-center col-span-1">
+                                                                <span
+                                                                    className={`text-[9px] font-black uppercase px-2 py-1 rounded whitespace-nowrap`}
+                                                                    style={{
+                                                                        backgroundColor: `${actionColor}20`,
+                                                                        color: actionColor,
+                                                                        border: `1px solid ${actionColor}40`
+                                                                    }}
+                                                                >
+                                                                    {act.order_type || 'BUY'} {displayAction}
+                                                                </span>
+                                                            </div>
+                                                            <div className="text-center col-span-1">
+                                                                <span className="text-xs font-mono text-gray-300">{formatCompact(act.shares || 0)}</span>
+                                                            </div>
+                                                            <div className="text-right col-span-1">
+                                                                <div className="text-sm font-black text-white">${act.amount?.toFixed(2)}</div>
+                                                                <div className="text-[10px] font-mono text-gray-600">{act.sol_amount?.toFixed(3)} SOL</div>
+                                                            </div>
+                                                            <div className="text-right text-[10px] font-mono text-gray-500 col-span-1">
+                                                                {timeAgo(act.created_at)}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
 
-                        {/* Multi-outcome Selector (if applicable) */}
-                        {isMultiOutcome && (
-                            <div className="px-6 mt-4 mb-4">
-                                <div className="pt-6 border-t border-white/10">
+                                {bottomTab === 'HOLDERS' && (
+                                    <div className={`grid gap-12 ${marketOutcomes.length > 2 ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
+                                        {marketOutcomes.map((outcome, idx) => {
+                                            const title = outcome.title;
+                                            const color = getOutcomeColor(title, idx);
+                                            const outcomeHolders = holders
+                                                .filter(h => (h.positions?.[title] || 0) > 0.1)
+                                                .sort((a, b) => (b.positions?.[title] || 0) - (a.positions?.[title] || 0));
+
+                                            return (
+                                                <div key={title}>
+                                                    <div className="mb-4">
+                                                        <h3 className="text-sm font-bold text-white mb-2 uppercase tracking-wider" style={{ color: color }}>
+                                                            {title} Holders
+                                                        </h3>
+                                                        <div className="h-0.5 w-full bg-white/10" style={{ backgroundColor: `${color}20` }} />
+                                                    </div>
+                                                    <div className="space-y-0">
+                                                        {outcomeHolders.length === 0 ? (
+                                                            <div className="py-6 text-gray-500 text-sm italic">No holders</div>
+                                                        ) : (
+                                                            outcomeHolders.map((h: any, i: number) => {
+                                                                const isMe = publicKey && h.wallet_address === publicKey.toBase58();
+                                                                const shares = h.positions[title];
+                                                                return (
+                                                                    <div
+                                                                        key={i}
+                                                                        className={`flex items-center justify-between py-3 border-b border-white/5 group hover:bg-white/5 hover:px-2 rounded transition-all -mx-2 px-2 cursor-pointer ${isMe ? 'bg-white/5' : ''}`}
+                                                                        style={isMe ? { borderLeft: `2px solid ${color}` } : {}}
+                                                                        onClick={() => window.location.href = `/profile/${h.wallet_address}`}
+                                                                    >
+                                                                        <div className="flex items-center gap-3">
+                                                                            <div className="relative">
+                                                                                <div className="w-8 h-8 rounded-full bg-[#1A1A1A] overflow-hidden border border-white/10">
+                                                                                    {h.avatar ? <img src={h.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full opacity-80" style={{ background: `linear-gradient(135deg, ${color}, #000)` }} />}
+                                                                                </div>
+                                                                                <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold border border-[#0B0E14] ${i === 0 ? 'bg-gradient-to-br from-yellow-300 to-amber-500 text-black' : i === 1 ? 'bg-gradient-to-br from-gray-300 to-gray-400 text-black' : i === 2 ? 'bg-gradient-to-br from-orange-300 to-amber-700 text-white' : 'bg-gray-800 text-gray-400'}`}>
+                                                                                    {i + 1}
+                                                                                </div>
+                                                                            </div>
+                                                                            <div>
+                                                                                <div className="text-sm font-bold text-white group-hover:text-[#F492B7] transition-colors truncate max-w-[120px]">
+                                                                                    {h.name} {isMe && <span className="text-[9px] px-1 rounded ml-1 text-black" style={{ backgroundColor: color }}>YOU</span>}
+                                                                                </div>
+                                                                                <div className="text-xs font-medium font-mono flex items-center gap-1" style={{ color: color }}>
+                                                                                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
+                                                                                    {formatCompact(shares)} <span className="text-[10px] text-gray-500 uppercase">{title}</span>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* TABS (Relocated Inside Container) */}
+                            {isMultiOutcome && (
+                                <div className="mt-6 pt-6 border-t border-white/10">
                                     <h3 className="text-sm font-black uppercase text-gray-500 mb-4 tracking-wider">Select an outcome to trade</h3>
                                     <OutcomeList
                                         outcomes={marketOutcomes}
@@ -2452,522 +2625,287 @@ export default function Page() {
                                         onBuyClick={handleOutcomeBuyClick}
                                     />
                                 </div>
-                            </div>
-                        )}
-
-                        {/* CERBERUS AI - Clickable Panel (Relocated Here) */}
-                        <div className="px-6 mt-4 mb-2 group cursor-pointer" onClick={() => console.log('Cerberus AI clicked')}>
-                            <div className="relative overflow-hidden rounded-xl border border-white/10 bg-white/5 p-3 flex items-center justify-between hover:bg-white/10 transition-colors">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
-                                        <Bot size={18} className="text-blue-400" />
-                                    </div>
-                                    <span className="text-sm font-medium text-white group-hover:text-blue-200 transition-colors">
-                                        Click <span className="font-bold text-blue-400">Cerberus AI</span> to find info about the market
-                                    </span>
-                                </div>
-                                <ChevronRight size={16} className="text-white/30 group-hover:text-white/60" />
-                            </div>
-                        </div>
-
-                        {/* RESOLUTION CRITERIA (Relocated Here) */}
-                        <div className="px-6 mb-6">
-                            <div className="bg-[#0E0E0E] rounded-xl border border-white/5 p-6">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Resolution Criteria</h3>
-                                    {/* Oracle Source Badge */}
-                                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/5">
-                                        <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest mr-1">Oracle</span>
-                                        {marketAccount?.resolution_source ? (
-                                            <a href={marketAccount.resolution_source} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[#10B981] hover:underline font-mono text-xs">
-                                                <span>{marketAccount.resolution_source.slice(0, 15)}...</span> <ExternalLink size={10} />
-                                            </a>
-                                        ) : (
-                                            <div className="flex items-center gap-1 text-white">
-                                                <img src="/pyth-logo.png" className="w-3 h-3 rounded-full" onError={(e) => e.currentTarget.style.display = 'none'} />
-                                                <span className="font-bold text-xs">Pyth</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                <p className="text-gray-400 text-sm leading-relaxed mb-0 font-light">
-                                    This market will resolve to "YES" if the specific outcome defined in the title occurs by the resolution date.
-                                    The resolution is decentralized and verified by the oracle.
-                                </p>
-                            </div>
-                        </div>
-
-                        {/* TABS (Relocated UP - as requested) */}
-                        <div className="px-6 mb-8 mt-2">
-                            {/* ✅ HOLDINGS - ALWAYS VISIBLE ABOVE TABS */}
-                            <HoldingsSection
-                                bets={userBets}
-                                outcomeSupplies={marketOutcomes.map(o => o.supply)}
-                                marketOutcomes={marketOutcomes}
-                            />
-
-                            <div className="flex items-center gap-6 mb-6 border-b border-white/5 pb-2">
-                                <TabButton label="Activity" icon={<Activity size={14} />} active={bottomTab === 'ACTIVITY'} onClick={() => setBottomTab('ACTIVITY')} />
-                                <TabButton label="Comments" icon={<MessageCircle size={14} />} active={bottomTab === 'COMMENTS'} onClick={() => setBottomTab('COMMENTS')} />
-                                <TabButton label="Top Holders" icon={<Users size={14} />} active={bottomTab === 'HOLDERS'} onClick={() => setBottomTab('HOLDERS')} />
-                            </div>
-
-                            {/* TAB CONTENT */}
-                            {bottomTab === 'COMMENTS' && (
-                                <CommentsSection
-                                    marketSlug={effectiveSlug}
-                                    publicKey={publicKey ? publicKey.toBase58() : null}
-                                    userProfile={userProfile}
-                                    marketOutcomes={marketOutcomes}
-                                    myHeldPosition={null} // Pass null or actual position if available
-                                    myHeldAmount={0}
-                                />
                             )}
 
-                            {bottomTab === 'ACTIVITY' && (
-                                <div className="bg-[#0E0E0E] rounded-xl border border-white/5 overflow-hidden">
-                                    <div className="grid grid-cols-5 px-6 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500 border-b border-white/5">
-                                        <span className="col-span-1">Trader</span>
-                                        <span className="text-center col-span-1">Side</span>
-                                        <span className="text-center col-span-1">Shares</span>
-                                        <span className="text-right col-span-1">Value</span>
-                                        <span className="text-right col-span-1">Time</span>
-                                    </div>
-                                    <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
-                                        {activityList.length === 0 ? (
-                                            <div className="p-8 text-center text-gray-600 italic">No orders yet</div>
-                                        ) : (
-                                            activityList.map((act, i) => {
-                                                const isBuy = act.order_type === 'BUY' || !act.order_type;
+                            {/* TABS (Relocated Inside Container) */}
 
-                                                // FIX: Resolve "YES"/"NO" to Outcome Titles
-                                                let displayAction = act.action;
-                                                let actionColor = '#808080';
+                        </div>
 
-                                                // Helper to find outcome index safely
-                                                const findOutcomeIndex = (name: string) => marketOutcomes.findIndex(o => o.title === name);
 
-                                                if (act.action === 'YES' || act.action === 'NO') {
-                                                    const outcomeIdx = act.action === 'YES' ? 0 : 1;
-                                                    if (marketOutcomes[outcomeIdx]) {
-                                                        displayAction = marketOutcomes[outcomeIdx].title;
-                                                        actionColor = getOutcomeColor(displayAction, outcomeIdx);
-                                                    } else {
-                                                        actionColor = getOutcomeColor(act.action, outcomeIdx);
-                                                    }
-                                                } else {
-                                                    // It's already an outcome name
-                                                    const outcomeIdx = findOutcomeIndex(act.action);
-                                                    actionColor = getOutcomeColor(act.action, outcomeIdx !== -1 ? outcomeIdx : undefined);
-                                                }
 
-                                                return (
-                                                    <div key={i} className="grid grid-cols-5 items-center px-6 py-4 border-b border-white/5 hover:bg-white/5 transition-colors group">
-                                                        <div className="flex items-center gap-3 col-span-1">
-                                                            <Link
-                                                                href={`/profile/${act.username || act.wallet_address}`}
-                                                                className="w-8 h-8 rounded-full bg-[#1A1A1A] flex items-center justify-center border border-white/10 overflow-hidden shrink-0 hover:opacity-80 transition-opacity"
-                                                            >
-                                                                <img
-                                                                    src={act.avatar_url || '/pink-pfp.png'}
-                                                                    className="w-full h-full object-cover"
-                                                                    onError={(e) => {
-                                                                        e.currentTarget.src = '/pink-pfp.png';
-                                                                    }}
-                                                                />
-                                                            </Link>
-                                                            <div className="flex flex-col overflow-hidden">
-                                                                <Link href={`/profile/${act.username || act.wallet_address}`} className="flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity">
-                                                                    <span className="text-xs font-bold text-white group-hover:text-[#F492B7] transition-colors font-mono truncate">
-                                                                        {act.username || `${act.wallet_address.slice(0, 4)}...`}
-                                                                    </span>
-                                                                </Link>
+
+
+
+
+
+                        {/* TABS (Activity, Opinions, Holders) */}
+
+
+                    </div> {/* End of LEFT COLUMN */}
+
+                    {/* RIGHT COLUMN: TRADING (Sticky Sidebar) */}
+                    <div className="hidden lg:block sticky top-24 w-[400px] shrink-0 z-40">
+                        <div className="origin-top scale-[0.95]">
+                            {/* TOTAL POOL - ADDED TO SIDEBAR TOP */}
+                            <div className="mb-6 w-full flex flex-col items-center px-6 py-4 rounded-[1.5rem] bg-[#0E0E0E]/80 backdrop-blur-lg border border-[#F492B7]/30 shadow-2xl shadow-[#F492B7]/10 relative overflow-hidden group/pool">
+                                <span className="text-[10px] font-black uppercase tracking-[0.4em] text-[#F492B7]/60 mb-1">
+                                    Total Pool
+                                </span>
+                                <span className="text-4xl font-black text-white drop-shadow-[0_0_15px_rgba(244,146,183,0.4)] tracking-tighter italic -skew-x-6">
+                                    <AnimatedNumber
+                                        value={totalPoolSol}
+                                        decimals={2}
+                                        className="inline"
+                                    /> <span className="text-[#F492B7]">SOL</span>
+                                </span>
+                            </div>
+
+                            {/* GLASS PANEL WITH ELEVATION */}
+                            <div className="relative rounded-[24px] overflow-visible">
+                                {/* Elevation Shadow - Deep floating effect */}
+                                <div className="absolute -inset-1 rounded-[26px] bg-black/40 blur-2xl translate-y-4 pointer-events-none" />
+                                <div className="absolute -inset-2 rounded-[28px] bg-black/30 blur-3xl translate-y-6 pointer-events-none" />
+
+                                {/* Subtle border glow */}
+                                <div className="absolute -inset-[0.5px] rounded-[25px] bg-gradient-to-b from-white/25 via-white/10 to-white/5 pointer-events-none" />
+
+                                {/* Main glass body - Deep Dark Aesthetic with Relief */}
+                                <div className="relative bg-zinc-900/60 backdrop-blur-3xl rounded-[24px] border border-white/10 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8),inset_0_1px_0_rgba(255,255,255,0.1)] overflow-hidden">
+
+                                    {/* Premium inner glow */}
+                                    <div className="absolute inset-0 bg-gradient-to-tr from-[#F492B7]/5 via-transparent to-white/5 pointer-events-none" />
+                                    <div className="absolute -top-24 -right-24 w-48 h-48 bg-[#F492B7]/10 blur-[60px] rounded-full pointer-events-none" />
+                                    <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-emerald-500/10 blur-[60px] rounded-full pointer-events-none" />
+
+                                    {/* TRADE PANEL CONTENT - Scrollable inner area */}
+                                    <div className="p-4 max-h-[calc(100vh-14rem)] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+
+                                        {/* BUY/SELL TOGGLE - At top now */}
+                                        <div className="mb-4 p-1 bg-white/5 rounded-xl flex">
+                                            <button
+                                                onClick={() => setTradeMode('BUY')}
+                                                className={`flex-1 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${tradeMode === 'BUY' ? 'bg-[#10B981] text-white' : 'text-gray-500 hover:text-white'}`}
+                                            >
+                                                Buy
+                                            </button>
+                                            <button
+                                                onClick={() => setTradeMode('SELL')}
+                                                className={`flex-1 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${tradeMode === 'SELL' ? 'bg-[#EF4444] text-white' : 'text-gray-500 hover:text-white'}`}
+                                            >
+                                                Sell
+                                            </button>
+                                        </div>
+
+
+
+                                        {/* INPUT Section */}
+                                        <div className="bg-[#0A0A0A] rounded-xl border border-white/5 p-4 mb-4">
+                                            <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-2 block">
+                                                {tradeMode === 'BUY' ? 'You Pay' : 'Shares to Sell'}
+                                            </label>
+                                            <div className="flex items-center gap-3">
+                                                <input
+                                                    type="text"
+                                                    inputMode="decimal"
+                                                    value={betAmount || ''}
+                                                    onChange={(e) => {
+                                                        // Allow free typing, parseCompactNumber handles the value extraction logic
+                                                        setBetAmount(e.target.value);
+                                                        setIsMaxSell(false);
+                                                    }}
+                                                    className="bg-transparent text-5xl font-extralight text-white w-full outline-none placeholder-white/30 tracking-tighter"
+                                                    placeholder="0"
+                                                />
+                                                {/* SOL ICON */}
+                                                <div className="flex items-center gap-2 bg-[#1A1A1A] px-3 py-2 rounded-xl border border-white/10 shrink-0">
+                                                    <img
+                                                        src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
+                                                        className="w-5 h-5"
+                                                        alt="SOL"
+                                                    />
+                                                    <span className="text-sm font-bold text-white">{tradeMode === 'BUY' ? 'SOL' : 'SHARES'}</span>
+                                                </div>
+                                            </div>
+                                            {/* Percentage Buttons (SELL MODE ONLY) */}
+                                            {tradeMode === 'SELL' && (
+                                                <div className="flex gap-2 mt-4 pt-4 border-t border-white/5">
+                                                    {[25, 50, 75, 100].map((pct) => (
+                                                        <button
+                                                            key={pct}
+                                                            onClick={() => {
+                                                                const sharesOwned = isMultiOutcome
+                                                                    ? (myShares[marketOutcomes.findIndex(o => o.id === selectedOutcomeId)] || 0)
+                                                                    : (selectedSide === 'YES' ? (myShares[0] || 0) : (myShares[1] || 0));
+                                                                if (sharesOwned <= 0) return;
+
+                                                                if (pct === 100) {
+                                                                    setIsMaxSell(true);
+                                                                } else {
+                                                                    setIsMaxSell(false);
+                                                                }
+
+                                                                // Share Input Logic: 100% means 100% of SHARES.
+                                                                const sharesToSell = sharesOwned * (pct / 100);
+
+                                                                // Enable COMPACT FORMAT (e.g. 1M) since we switched to text input
+                                                                const formattedShares = sharesToSell >= 100_000
+                                                                    ? formatCompact(sharesToSell)
+                                                                    : sharesToSell.toFixed(2);
+
+                                                                setBetAmount(formattedShares);
+                                                            }}
+                                                            className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${(pct === 100 && isMaxSell)
+                                                                ? 'bg-white/20 text-white border-white/20'
+                                                                : 'bg-white/5 text-gray-400 border-white/5 hover:bg-white/10 hover:text-white'
+                                                                }`}
+                                                        >
+                                                            {pct}%
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* 2. PROBABILITY BAR & OUTCOMES */}
+                                        <div className="mb-6 space-y-3">
+                                            <div className="flex items-center justify-between px-2">
+                                                <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Prediction</span>
+                                                {/* Slippage (Pencil Edit) */}
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[10px] font-bold text-gray-500 bg-white/5 px-2 py-1 rounded border border-white/5">{slippageTolerance}% SLIP</span>
+                                                    <button onClick={() => {
+                                                        const newSlippage = prompt("Enter new slippage %:", slippageTolerance.toString());
+                                                        if (newSlippage && !isNaN(parseFloat(newSlippage))) setSlippageTolerance(parseFloat(newSlippage));
+                                                    }} className="p-1.5 rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
+                                                        <Edit2 size={12} />
+                                                    </button>
+                                                </div>
+                                            </div>
+
+
+
+                                            {/* LARGE YES/NO BUTTONS (Limitless Style) */}
+                                            <div className="flex gap-3 h-36">
+                                                {isMultiOutcome ? (
+                                                    <div className="flex-1 bg-[#1A1A1A] rounded-2xl border border-white/10 p-4 flex flex-col justify-center items-center hover:border-[#F492B7]/50 transition-colors cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+                                                        <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-1">Target Outcome</span>
+                                                        <span className="font-bold text-white text-lg truncate max-w-full">{selectedOutcomeName || 'Select First'}</span>
+                                                        <span className="text-sm font-mono text-[#10B981] mt-1">{(livePrice ?? 0).toFixed(0)}%</span>
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <button
+                                                            onClick={() => setSelectedSide('YES')}
+                                                            className={`flex-1 rounded-xl flex flex-col items-center justify-center transition-all duration-200 border-2 ${selectedSide === 'YES'
+                                                                ? 'bg-[#10B981] border-[#10B981] text-white shadow-[0_0_20px_rgba(16,185,129,0.4)] scale-[1.02]'
+                                                                : 'bg-[#1A1A1A] border-white/5 text-gray-500 hover:border-[#10B981]/50 hover:bg-[#10B981]/10'}`}
+                                                        >
+                                                            <span className="text-xs font-black uppercase tracking-widest mb-0.5">{marketOutcomes[0]?.title || 'YES'}</span>
+                                                            <span className={`text-2xl font-bold ${selectedSide === 'YES' ? 'text-white' : 'text-[#10B981]'}`}>
+                                                                {yesPercent.toFixed(0)}%
+                                                            </span>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setSelectedSide('NO')}
+                                                            className={`flex-1 rounded-xl flex flex-col items-center justify-center transition-all duration-200 border-2 ${selectedSide === 'NO'
+                                                                ? 'bg-[#EF4444] border-[#EF4444] text-white shadow-[0_0_20px_rgba(239,68,68,0.4)] scale-[1.02]'
+                                                                : 'bg-[#1A1A1A] border-white/5 text-gray-500 hover:border-[#EF4444]/50 hover:bg-[#EF4444]/10'}`}
+                                                        >
+                                                            <span className="text-xs font-black uppercase tracking-widest mb-0.5">{marketOutcomes[1]?.title || 'NO'}</span>
+                                                            <span className={`text-2xl font-bold ${selectedSide === 'NO' ? 'text-white' : 'text-[#EF4444]'}`}>
+                                                                {noPercent.toFixed(0)}%
+                                                            </span>
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
+
+                                            {/* 3. TRANSACTION SUMMARY */}
+                                            <div className="bg-gradient-to-br from-white/[0.03] to-white/[0.01] rounded-[2rem] border border-white/10 p-6 space-y-5">
+                                                {/* BUY MODE SUMMARY */}
+                                                {tradeMode === 'BUY' && (
+                                                    <>
+                                                        <div className="flex justify-between items-center text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em]">
+                                                            <span>Rate</span>
+                                                            <span className="font-mono text-xs lowercase text-gray-300">
+                                                                1 SOL ≈ {amountNum > 0 ? formatCompact(estimatedShares / amountNum) : formatCompact(1 / getSpotPrice(estimatedSupply))} shares
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex justify-between items-center text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em]">
+                                                            <span>Impact</span>
+                                                            <span className={`font-mono text-xs ${previewSim.priceImpact > 5 ? 'text-amber-400' : 'text-gray-300'}`}>
+                                                                {previewSim.priceImpact.toFixed(2)}%
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex justify-between items-end border-t border-white/10 pt-5">
+                                                            <div>
+                                                                <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">Shares to Receive</span>
+                                                                <span className="text-4xl font-extralight text-white leading-none tracking-tight">
+                                                                    {formatCompact(estimatedShares)}
+                                                                </span>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">Cost</span>
+                                                                <span className="text-base font-bold text-[#10B981] font-mono">
+                                                                    ${(parseFloat(betAmount || '0') * solPrice).toFixed(2)}
+                                                                </span>
                                                             </div>
                                                         </div>
-                                                        <div className="text-center col-span-1">
-                                                            <span
-                                                                className={`text-[9px] font-black uppercase px-2 py-1 rounded whitespace-nowrap`}
-                                                                style={{
-                                                                    backgroundColor: `${actionColor}20`,
-                                                                    color: actionColor,
-                                                                    border: `1px solid ${actionColor}40`
-                                                                }}
-                                                            >
-                                                                {act.order_type || 'BUY'} {displayAction}
+                                                    </>
+                                                )}
+
+                                                {/* SELL MODE SUMMARY */}
+                                                {tradeMode === 'SELL' && (
+                                                    <>
+                                                        <div className="flex justify-between items-center text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em]">
+                                                            <span>Exit Price</span>
+                                                            <span className="font-mono text-xs text-gray-300">
+                                                                {currentPriceForSide.toFixed(1)}%
                                                             </span>
                                                         </div>
-                                                        <div className="text-center col-span-1">
-                                                            <span className="text-xs font-mono text-gray-300">{formatCompact(act.shares || 0)}</span>
-                                                        </div>
-                                                        <div className="text-right col-span-1">
-                                                            <div className="text-sm font-black text-white">${act.amount?.toFixed(2)}</div>
-                                                            <div className="text-[10px] font-mono text-gray-600">{act.sol_amount?.toFixed(3)} SOL</div>
-                                                        </div>
-                                                        <div className="text-right text-[10px] font-mono text-gray-500 col-span-1">
-                                                            {timeAgo(act.created_at)}
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })
-                                        )}
-                                    </div>
-                                </div>
-                            )}
+                                                        <div className="flex justify-between items-end border-t border-white/10 pt-5 mt-4">
+                                                            <div>
+                                                                <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">Shares to Sell</span>
+                                                                <span className="text-4xl font-extralight text-white leading-none tracking-tight">
+                                                                    {(() => {
+                                                                        const sharesOwned = isMultiOutcome
+                                                                            ? (myShares[marketOutcomes.findIndex(o => o.id === selectedOutcomeId)] || 0)
+                                                                            : (selectedSide === 'YES' ? (myShares[0] || 0) : (myShares[1] || 0));
+                                                                        const price = currentPriceForSide / 100;
 
-                            {bottomTab === 'HOLDERS' && (
-                                <div className={`grid gap-12 ${marketOutcomes.length > 2 ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
-                                    {marketOutcomes.map((outcome, idx) => {
-                                        const title = outcome.title;
-                                        const color = getOutcomeColor(title, idx);
-                                        const outcomeHolders = holders
-                                            .filter(h => (h.positions?.[title] || 0) > 0.1)
-                                            .sort((a, b) => (b.positions?.[title] || 0) - (a.positions?.[title] || 0));
+                                                                        if (isMaxSell) return formatCompact(sharesOwned);
+                                                                        if (!betAmount || price <= 0) return '0';
 
-                                        return (
-                                            <div key={title}>
-                                                <div className="mb-4">
-                                                    <h3 className="text-sm font-bold text-white mb-2 uppercase tracking-wider" style={{ color: color }}>
-                                                        {title} Holders
-                                                    </h3>
-                                                    <div className="h-0.5 w-full bg-white/10" style={{ backgroundColor: `${color}20` }} />
-                                                </div>
-                                                <div className="space-y-0">
-                                                    {outcomeHolders.length === 0 ? (
-                                                        <div className="py-6 text-gray-500 text-sm italic">No holders</div>
-                                                    ) : (
-                                                        outcomeHolders.map((h: any, i: number) => {
-                                                            const isMe = publicKey && h.wallet_address === publicKey.toBase58();
-                                                            const shares = h.positions[title];
-                                                            return (
-                                                                <div
-                                                                    key={i}
-                                                                    className={`flex items-center justify-between py-3 border-b border-white/5 group hover:bg-white/5 hover:px-2 rounded transition-all -mx-2 px-2 cursor-pointer ${isMe ? 'bg-white/5' : ''}`}
-                                                                    style={isMe ? { borderLeft: `2px solid ${color}` } : {}}
-                                                                    onClick={() => window.location.href = `/profile/${h.wallet_address}`}
-                                                                >
-                                                                    <div className="flex items-center gap-3">
-                                                                        <div className="relative">
-                                                                            <div className="w-8 h-8 rounded-full bg-[#1A1A1A] overflow-hidden border border-white/10">
-                                                                                {h.avatar ? <img src={h.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full opacity-80" style={{ background: `linear-gradient(135deg, ${color}, #000)` }} />}
-                                                                            </div>
-                                                                            <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold border border-[#0B0E14] ${i === 0 ? 'bg-gradient-to-br from-yellow-300 to-amber-500 text-black' : i === 1 ? 'bg-gradient-to-br from-gray-300 to-gray-400 text-black' : i === 2 ? 'bg-gradient-to-br from-orange-300 to-amber-700 text-white' : 'bg-gray-800 text-gray-400'}`}>
-                                                                                {i + 1}
-                                                                            </div>
-                                                                        </div>
-                                                                        <div>
-                                                                            <div className="text-sm font-bold text-white group-hover:text-[#F492B7] transition-colors truncate max-w-[120px]">
-                                                                                {h.name} {isMe && <span className="text-[9px] px-1 rounded ml-1 text-black" style={{ backgroundColor: color }}>YOU</span>}
-                                                                            </div>
-                                                                            <div className="text-xs font-medium font-mono flex items-center gap-1" style={{ color: color }}>
-                                                                                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
-                                                                                {formatCompact(shares)} <span className="text-[10px] text-gray-500 uppercase">{title}</span>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            );
-                                                        })
-                                                    )}
-                                                </div>
+                                                                        const shares = parseCompactNumber(betAmount) / price;
+                                                                        const capped = Math.min(shares, sharesOwned);
+                                                                        return formatCompact(capped);
+                                                                    })()}
+                                                                </span>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">You Get</span>
+                                                                <span className="text-xl font-bold text-[#10B981] font-mono">
+                                                                    ◎{(() => {
+                                                                        // SELL LOGIC DISPLAY
+                                                                        // Use same safe logic as handleTrade
+                                                                        const spotPrice = getSpotPrice(estimatedSupply);
+                                                                        const safePrice = spotPrice > 0 ? spotPrice : 0.0000001;
+                                                                        // If Max Sell, use sharesOwned directly
+                                                                        // If input amount is SOL, we reverse it? 
+                                                                        // Wait, the input is SOL value user wants to extract?
+                                                                        // OR is the input always SOL? 
+                                                                        // "You Receive (Est)" -> 0.9405 SOL.
+                                                                        // So betAmount IS SOL.
+                                                                        // So "You Get" should be betAmount - fee?
+
+                                                                        return (parseFloat(betAmount || '0') * 0.99).toFixed(4);
+                                                                    })()} SOL
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </>
+                                                )}
                                             </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* TABS (Relocated Inside Container) */}
-                        {isMultiOutcome && (
-                            <div className="mt-6 pt-6 border-t border-white/10">
-                                <h3 className="text-sm font-black uppercase text-gray-500 mb-4 tracking-wider">Select an outcome to trade</h3>
-                                <OutcomeList
-                                    outcomes={marketOutcomes}
-                                    selectedId={selectedOutcomeId}
-                                    onSelect={setSelectedOutcomeId}
-                                    onBuyClick={handleOutcomeBuyClick}
-                                />
-                            </div>
-                        )}
-
-                        {/* TABS (Relocated Inside Container) */}
-
-                    </div>
-
-
-
-
-
-
-
-
-                    {/* TABS (Activity, Opinions, Holders) */}
-
-
-                </div> {/* End of LEFT COLUMN (col-span-8) */}
-
-                {/* RIGHT COLUMN: TRADING (Fixed Sidebar) - Glass Panel with Elevation */}
-                <div className="hidden lg:block fixed right-8 xl:right-[8%] top-48 w-[360px] z-40 max-h-[calc(100vh-14rem)] overflow-visible scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-                    <div className="origin-top scale-[0.92]">
-                        {/* TOTAL POOL - ADDED TO SIDEBAR TOP */}
-                        <div className="mb-6 w-full flex flex-col items-center px-6 py-4 rounded-[1.5rem] bg-[#0E0E0E]/80 backdrop-blur-lg border border-[#F492B7]/30 shadow-2xl shadow-[#F492B7]/10 relative overflow-hidden group/pool">
-                            <span className="text-[10px] font-black uppercase tracking-[0.4em] text-[#F492B7]/60 mb-1">
-                                Total Pool
-                            </span>
-                            <span className="text-4xl font-black text-white drop-shadow-[0_0_15px_rgba(244,146,183,0.4)] tracking-tighter italic -skew-x-6">
-                                <AnimatedNumber
-                                    value={totalPoolSol}
-                                    decimals={2}
-                                    className="inline"
-                                /> <span className="text-[#F492B7]">SOL</span>
-                            </span>
-                        </div>
-
-                        {/* GLASS PANEL WITH ELEVATION */}
-                        <div className="relative rounded-[24px] overflow-visible">
-                            {/* Elevation Shadow - Deep floating effect */}
-                            <div className="absolute -inset-1 rounded-[26px] bg-black/40 blur-2xl translate-y-4 pointer-events-none" />
-                            <div className="absolute -inset-2 rounded-[28px] bg-black/30 blur-3xl translate-y-6 pointer-events-none" />
-
-                            {/* Subtle border glow */}
-                            <div className="absolute -inset-[0.5px] rounded-[25px] bg-gradient-to-b from-white/25 via-white/10 to-white/5 pointer-events-none" />
-
-                            {/* Main glass body - Deep Dark Aesthetic with Relief */}
-                            <div className="relative bg-zinc-900/60 backdrop-blur-3xl rounded-[24px] border border-white/10 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8),inset_0_1px_0_rgba(255,255,255,0.1)] overflow-hidden">
-
-                                {/* Premium inner glow */}
-                                <div className="absolute inset-0 bg-gradient-to-tr from-[#F492B7]/5 via-transparent to-white/5 pointer-events-none" />
-                                <div className="absolute -top-24 -right-24 w-48 h-48 bg-[#F492B7]/10 blur-[60px] rounded-full pointer-events-none" />
-                                <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-emerald-500/10 blur-[60px] rounded-full pointer-events-none" />
-
-                                {/* TRADE PANEL CONTENT - Scrollable inner area */}
-                                <div className="p-4 max-h-[calc(100vh-14rem)] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-
-                                    {/* BUY/SELL TOGGLE - At top now */}
-                                    <div className="mb-4 p-1 bg-white/5 rounded-xl flex">
-                                        <button
-                                            onClick={() => setTradeMode('BUY')}
-                                            className={`flex-1 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${tradeMode === 'BUY' ? 'bg-[#10B981] text-white' : 'text-gray-500 hover:text-white'}`}
-                                        >
-                                            Buy
-                                        </button>
-                                        <button
-                                            onClick={() => setTradeMode('SELL')}
-                                            className={`flex-1 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${tradeMode === 'SELL' ? 'bg-[#EF4444] text-white' : 'text-gray-500 hover:text-white'}`}
-                                        >
-                                            Sell
-                                        </button>
-                                    </div>
-
-
-
-                                    {/* INPUT Section */}
-                                    <div className="bg-[#0A0A0A] rounded-xl border border-white/5 p-4 mb-4">
-                                        <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-2 block">
-                                            {tradeMode === 'BUY' ? 'You Pay' : 'Shares to Sell'}
-                                        </label>
-                                        <div className="flex items-center gap-3">
-                                            <input
-                                                type="text"
-                                                inputMode="decimal"
-                                                value={betAmount || ''}
-                                                onChange={(e) => {
-                                                    // Allow free typing, parseCompactNumber handles the value extraction logic
-                                                    setBetAmount(e.target.value);
-                                                    setIsMaxSell(false);
-                                                }}
-                                                className="bg-transparent text-5xl font-extralight text-white w-full outline-none placeholder-white/30 tracking-tighter"
-                                                placeholder="0"
-                                            />
-                                            {/* SOL ICON */}
-                                            <div className="flex items-center gap-2 bg-[#1A1A1A] px-3 py-2 rounded-xl border border-white/10 shrink-0">
-                                                <img
-                                                    src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
-                                                    className="w-5 h-5"
-                                                    alt="SOL"
-                                                />
-                                                <span className="text-sm font-bold text-white">{tradeMode === 'BUY' ? 'SOL' : 'SHARES'}</span>
-                                            </div>
-                                        </div>
-                                        {/* Percentage Buttons (SELL MODE ONLY) */}
-                                        {tradeMode === 'SELL' && (
-                                            <div className="flex gap-2 mt-4 pt-4 border-t border-white/5">
-                                                {[25, 50, 75, 100].map((pct) => (
-                                                    <button
-                                                        key={pct}
-                                                        onClick={() => {
-                                                            const sharesOwned = isMultiOutcome
-                                                                ? (myShares[marketOutcomes.findIndex(o => o.id === selectedOutcomeId)] || 0)
-                                                                : (selectedSide === 'YES' ? (myShares[0] || 0) : (myShares[1] || 0));
-                                                            if (sharesOwned <= 0) return;
-
-                                                            if (pct === 100) {
-                                                                setIsMaxSell(true);
-                                                            } else {
-                                                                setIsMaxSell(false);
-                                                            }
-
-                                                            // Share Input Logic: 100% means 100% of SHARES.
-                                                            const sharesToSell = sharesOwned * (pct / 100);
-
-                                                            // Enable COMPACT FORMAT (e.g. 1M) since we switched to text input
-                                                            const formattedShares = sharesToSell >= 100_000
-                                                                ? formatCompact(sharesToSell)
-                                                                : sharesToSell.toFixed(2);
-
-                                                            setBetAmount(formattedShares);
-                                                        }}
-                                                        className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${(pct === 100 && isMaxSell)
-                                                            ? 'bg-white/20 text-white border-white/20'
-                                                            : 'bg-white/5 text-gray-400 border-white/5 hover:bg-white/10 hover:text-white'
-                                                            }`}
-                                                    >
-                                                        {pct}%
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* 2. PROBABILITY BAR & OUTCOMES */}
-                                    <div className="mb-6 space-y-3">
-                                        <div className="flex items-center justify-between px-2">
-                                            <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Prediction</span>
-                                            {/* Slippage (Pencil Edit) */}
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-[10px] font-bold text-gray-500 bg-white/5 px-2 py-1 rounded border border-white/5">{slippageTolerance}% SLIP</span>
-                                                <button onClick={() => {
-                                                    const newSlippage = prompt("Enter new slippage %:", slippageTolerance.toString());
-                                                    if (newSlippage && !isNaN(parseFloat(newSlippage))) setSlippageTolerance(parseFloat(newSlippage));
-                                                }} className="p-1.5 rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
-                                                    <Edit2 size={12} />
-                                                </button>
-                                            </div>
-                                        </div>
-
-
-
-                                        {/* LARGE YES/NO BUTTONS (Limitless Style) */}
-                                        <div className="flex gap-3 h-36">
-                                            {isMultiOutcome ? (
-                                                <div className="flex-1 bg-[#1A1A1A] rounded-2xl border border-white/10 p-4 flex flex-col justify-center items-center hover:border-[#F492B7]/50 transition-colors cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-                                                    <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-1">Target Outcome</span>
-                                                    <span className="font-bold text-white text-lg truncate max-w-full">{selectedOutcomeName || 'Select First'}</span>
-                                                    <span className="text-sm font-mono text-[#10B981] mt-1">{(livePrice ?? 0).toFixed(0)}%</span>
-                                                </div>
-                                            ) : (
-                                                <>
-                                                    <button
-                                                        onClick={() => setSelectedSide('YES')}
-                                                        className={`flex-1 rounded-xl flex flex-col items-center justify-center transition-all duration-200 border-2 ${selectedSide === 'YES'
-                                                            ? 'bg-[#10B981] border-[#10B981] text-white shadow-[0_0_20px_rgba(16,185,129,0.4)] scale-[1.02]'
-                                                            : 'bg-[#1A1A1A] border-white/5 text-gray-500 hover:border-[#10B981]/50 hover:bg-[#10B981]/10'}`}
-                                                    >
-                                                        <span className="text-xs font-black uppercase tracking-widest mb-0.5">{marketOutcomes[0]?.title || 'YES'}</span>
-                                                        <span className={`text-2xl font-bold ${selectedSide === 'YES' ? 'text-white' : 'text-[#10B981]'}`}>
-                                                            {yesPercent.toFixed(0)}%
-                                                        </span>
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setSelectedSide('NO')}
-                                                        className={`flex-1 rounded-xl flex flex-col items-center justify-center transition-all duration-200 border-2 ${selectedSide === 'NO'
-                                                            ? 'bg-[#EF4444] border-[#EF4444] text-white shadow-[0_0_20px_rgba(239,68,68,0.4)] scale-[1.02]'
-                                                            : 'bg-[#1A1A1A] border-white/5 text-gray-500 hover:border-[#EF4444]/50 hover:bg-[#EF4444]/10'}`}
-                                                    >
-                                                        <span className="text-xs font-black uppercase tracking-widest mb-0.5">{marketOutcomes[1]?.title || 'NO'}</span>
-                                                        <span className={`text-2xl font-bold ${selectedSide === 'NO' ? 'text-white' : 'text-[#EF4444]'}`}>
-                                                            {noPercent.toFixed(0)}%
-                                                        </span>
-                                                    </button>
-                                                </>
-                                            )}
-                                        </div>
-
-                                        {/* 3. TRANSACTION SUMMARY */}
-                                        <div className="bg-gradient-to-br from-white/[0.03] to-white/[0.01] rounded-[2rem] border border-white/10 p-6 space-y-5">
-                                            {/* BUY MODE SUMMARY */}
-                                            {tradeMode === 'BUY' && (
-                                                <>
-                                                    <div className="flex justify-between items-center text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em]">
-                                                        <span>Rate</span>
-                                                        <span className="font-mono text-xs lowercase text-gray-300">
-                                                            1 SOL ≈ {amountNum > 0 ? formatCompact(estimatedShares / amountNum) : formatCompact(1 / getSpotPrice(estimatedSupply))} shares
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em]">
-                                                        <span>Impact</span>
-                                                        <span className={`font-mono text-xs ${previewSim.priceImpact > 5 ? 'text-amber-400' : 'text-gray-300'}`}>
-                                                            {previewSim.priceImpact.toFixed(2)}%
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex justify-between items-end border-t border-white/10 pt-5">
-                                                        <div>
-                                                            <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">Shares to Receive</span>
-                                                            <span className="text-4xl font-extralight text-white leading-none tracking-tight">
-                                                                {formatCompact(estimatedShares)}
-                                                            </span>
-                                                        </div>
-                                                        <div className="text-right">
-                                                            <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">Cost</span>
-                                                            <span className="text-base font-bold text-[#10B981] font-mono">
-                                                                ${(parseFloat(betAmount || '0') * solPrice).toFixed(2)}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                </>
-                                            )}
-
-                                            {/* SELL MODE SUMMARY */}
-                                            {tradeMode === 'SELL' && (
-                                                <>
-                                                    <div className="flex justify-between items-center text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em]">
-                                                        <span>Exit Price</span>
-                                                        <span className="font-mono text-xs text-gray-300">
-                                                            {currentPriceForSide.toFixed(1)}%
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex justify-between items-end border-t border-white/10 pt-5 mt-4">
-                                                        <div>
-                                                            <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">Shares to Sell</span>
-                                                            <span className="text-4xl font-extralight text-white leading-none tracking-tight">
-                                                                {(() => {
-                                                                    const sharesOwned = isMultiOutcome
-                                                                        ? (myShares[marketOutcomes.findIndex(o => o.id === selectedOutcomeId)] || 0)
-                                                                        : (selectedSide === 'YES' ? (myShares[0] || 0) : (myShares[1] || 0));
-                                                                    const price = currentPriceForSide / 100;
-
-                                                                    if (isMaxSell) return formatCompact(sharesOwned);
-                                                                    if (!betAmount || price <= 0) return '0';
-
-                                                                    const shares = parseCompactNumber(betAmount) / price;
-                                                                    const capped = Math.min(shares, sharesOwned);
-                                                                    return formatCompact(capped);
-                                                                })()}
-                                                            </span>
-                                                        </div>
-                                                        <div className="text-right">
-                                                            <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">You Get</span>
-                                                            <span className="text-xl font-bold text-[#10B981] font-mono">
-                                                                ◎{(() => {
-                                                                    // SELL LOGIC DISPLAY
-                                                                    // Use same safe logic as handleTrade
-                                                                    const spotPrice = getSpotPrice(estimatedSupply);
-                                                                    const safePrice = spotPrice > 0 ? spotPrice : 0.0000001;
-                                                                    // If Max Sell, use sharesOwned directly
-                                                                    // If input amount is SOL, we reverse it? 
-                                                                    // Wait, the input is SOL value user wants to extract?
-                                                                    // OR is the input always SOL? 
-                                                                    // "You Receive (Est)" -> 0.9405 SOL.
-                                                                    // So betAmount IS SOL.
-                                                                    // So "You Get" should be betAmount - fee?
-
-                                                                    return (parseFloat(betAmount || '0') * 0.99).toFixed(4);
-                                                                })()} SOL
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                </>
-                                            )}
                                         </div>
 
 

@@ -350,7 +350,7 @@ export default React.memo(function ProbabilityChart({
 
         return {
             filteredData: filtered,
-            domainMin: windowStart,
+            domainMin: timeframe === 'ALL' && syncedData.length > 0 ? syncedData[0].time : windowStart,
             domainMax: now
         };
     }, [syncedData, timeframe, now]);
@@ -550,7 +550,7 @@ export default React.memo(function ProbabilityChart({
                             dataKey="time"
                             type="number"
                             scale="time"
-                            domain={['dataMin', 'dataMax']}
+                            domain={[domainMin || 'dataMin', domainMax || 'dataMax']}
                             axisLine={false}
                             tickLine={false}
                             tickFormatter={(timestamp) => formatTimeLabel(timestamp, timeframe)}

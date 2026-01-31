@@ -419,14 +419,6 @@ export default function Home() {
               className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-[1px] bg-white/10 overflow-hidden"
             >
               {sortedMarkets
-                // NEW: If Trending, Top 3 are in the Pyramid, allow grid to show filtered list starting from #4
-                .filter(market => {
-                  if (activeCategory === 'Trending' && top3Markets && top3Markets.length >= 3) {
-                    const isTop3 = top3Markets.some(top => top.slug === market.slug);
-                    return !isTop3;
-                  }
-                  return true;
-                })
                 .map((market, index) => {
                   const isPumping = (market as any).justArrived;
 
