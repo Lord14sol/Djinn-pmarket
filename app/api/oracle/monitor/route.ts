@@ -16,15 +16,14 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Market slug required' }, { status: 400 });
         }
 
-        // Enable monitoring for this market
+        // Enable monitoring for this market (Optional, ignore if column missing)
         const { error } = await supabase
             .from('markets')
             .update({ monitoring_enabled: true })
             .eq('slug', slug);
 
         if (error) {
-            console.error('Error enabling monitoring:', error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            console.warn('[Monitor] Supabase update failed (might be missing column), proceeding to AI:', error.message);
         }
 
         // Log the event
@@ -46,7 +45,19 @@ export async function POST(request: Request) {
             const bot = new OracleBot();
 
             // Fetch market title to use as question
-            const { data: market } = await supabase.from('markets').select('title').eq('slug', slug).single();
+            let { data: market } = await supabase.from('markets').select('title').eq('slug', slug).single();
+
+            // Fallback to local API (for test markets)
+            if (!market?.title) {
+                try {
+                    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://127.0.0.1:3002';
+                    const localRes = await fetch(`${baseUrl}/api/markets`);
+                    const localMarkets = await localRes.json();
+                    const localM = localMarkets.find((m: any) => m.id === slug);
+                    if (localM) market = { title: localM.title } as any;
+                } catch (e) { }
+            }
+
             const question = market?.title || slug;
 
             // Run analysis

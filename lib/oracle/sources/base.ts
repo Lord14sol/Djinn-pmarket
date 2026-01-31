@@ -18,13 +18,14 @@ export interface SourceConfig {
 export abstract class BaseSource {
     protected name: string;
     protected displayName: string;
-    protected config: SourceConfig;
+    protected config: any;
 
-    constructor(name: string, displayName: string, config: SourceConfig) {
+    constructor(name: string, displayName: string, config: any) {
         this.name = name;
         this.displayName = displayName;
         this.config = config;
     }
+
 
     abstract search(query: string, keywords: string[]): Promise<SourceResult>;
 

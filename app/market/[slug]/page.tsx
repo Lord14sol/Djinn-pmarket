@@ -2392,20 +2392,35 @@ export default function Page() {
                                 </div>
                             )}
 
-                            {/* CERBERUS AI - Clickable Panel (Relocated Here) */}
-                            <div className="px-6 mt-4 mb-2 group cursor-pointer" onClick={() => console.log('Cerberus AI clicked')}>
-                                <div className="relative overflow-hidden rounded-xl border border-white/10 bg-white/5 p-3 flex items-center justify-between hover:bg-white/10 transition-colors">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
-                                            <Bot size={18} className="text-blue-400" />
+                            {/* CERBERUS AI - Only available for VERIFIED markets */}
+                            {marketAccount?.status === 'VERIFIED' ? (
+                                <div className="px-6 mt-4 mb-2 group cursor-pointer" onClick={() => console.log('Cerberus AI clicked - Market is verified')}>
+                                    <div className="relative overflow-hidden rounded-xl border border-[#F492B7]/30 bg-[#F492B7]/5 p-3 flex items-center justify-between hover:bg-[#F492B7]/10 transition-colors">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-full bg-[#F492B7]/20 flex items-center justify-center">
+                                                <Bot size={18} className="text-[#F492B7]" />
+                                            </div>
+                                            <span className="text-sm font-medium text-white group-hover:text-[#F492B7] transition-colors">
+                                                Click <span className="font-bold text-[#F492B7]">Cerberus AI</span> to find resolution info
+                                            </span>
                                         </div>
-                                        <span className="text-sm font-medium text-white group-hover:text-blue-200 transition-colors">
-                                            Click <span className="font-bold text-blue-400">Cerberus AI</span> to find info about the market
-                                        </span>
+                                        <ChevronRight size={16} className="text-[#F492B7]/50 group-hover:text-[#F492B7]" />
                                     </div>
-                                    <ChevronRight size={16} className="text-white/30 group-hover:text-white/60" />
                                 </div>
-                            </div>
+                            ) : (
+                                <div className="px-6 mt-4 mb-2">
+                                    <div className="relative overflow-hidden rounded-xl border border-white/5 bg-white/[0.02] p-3 flex items-center justify-between opacity-50 cursor-not-allowed">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-full bg-gray-500/10 flex items-center justify-center">
+                                                <Bot size={18} className="text-gray-600" />
+                                            </div>
+                                            <span className="text-sm font-medium text-gray-500">
+                                                Cerberus AI <span className="text-xs text-gray-600">(Available after verification)</span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* RESOLUTION CRITERIA (Relocated Here) */}
                             <div className="px-6 mb-6">

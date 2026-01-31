@@ -17,10 +17,8 @@ const PROGRAM_PUBKEY = new PublicKey(PROGRAM_ID);
 export const useDjinnProtocol = () => {
     const { connection } = useConnection();
     const anchorWallet = useAnchorWallet();
-    const { sendTransaction, publicKey } = useWallet();
+    const { sendTransaction, signTransaction, publicKey } = useWallet();
 
-    // 1. Stable Provider (Rule 5.4/5.5)
-    // Only recreate if connection or wallet *identity* changes, not on every render.
     const provider = useMemo(() => {
         if (!anchorWallet) return null;
         return new AnchorProvider(connection, anchorWallet, {
@@ -28,12 +26,9 @@ export const useDjinnProtocol = () => {
         });
     }, [connection, anchorWallet]);
 
-    // 2. Stable Program Instance
-    // This is the critical fix. Previously checking 'provider' in dependency could loop if provider wasn't stable.
     const program = useMemo(() => {
         if (!provider) return null;
         try {
-            // Cast to Idl type - Anchor 0.28 expects address at root level
             return new Program(idlJson as Idl, PROGRAM_PUBKEY, provider);
         } catch (e) {
             console.error('[Djinn] Failed to initialize program:', e);
@@ -45,106 +40,119 @@ export const useDjinnProtocol = () => {
         return !!(program && provider && anchorWallet && anchorWallet.publicKey);
     }, [program, provider, anchorWallet]);
 
-    // Cleanup: Removed noisy useEffect logging loop
-
     const createMarket = useCallback(async (
         title: string,
         description: string,
         endDate: Date,
         sourceUrl: string = '',
-        metadataUri: string, // Kept for API compatibility, stored in DB only
-        numOutcomes: number = 2, // 2-6 outcomes
+        metadataUri: string,
+        numOutcomes: number = 2,
         initialBuyAmount: number = 0,
-        initialBuySide: number = 0 // 0-based index
+        initialBuySide: number = 0
     ) => {
         if (!isContractReady || !program || !anchorWallet || !provider || !publicKey) {
-            console.warn('⚠️ Contract not ready - falling back to local mode');
             throw new Error("Wallet not connected or contract not ready");
         }
 
         try {
-            console.log('[Djinn] Starting on-chain creation...', { title, initialBuyAmount });
+            console.log('[Djinn] 🚀 ENTERING NUCLEAR MODE (Rebroadcast + High Priority)');
 
-            // Pre-flight checks
-            const balance = await provider.connection.getBalance(anchorWallet.publicKey);
+            // 1. Fetch Blockhash (Finalized is safer for congestion)
+            const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized');
 
-            if (balance < 0.05 * 1e9) {
-                throw new Error('Insufficient SOL balance (need ~0.05 SOL for market creation fee + gas)');
-            }
-
-            // Generate unique nonce for duplicate title support
+            // 2. Generate Nonce & PDA
             const nonce = Date.now() * 1000 + Math.floor(Math.random() * 1000);
-
-            // Convert nonce to little-endian i64 bytes
             const nonceBuffer = new Uint8Array(8);
             let n = BigInt(nonce);
             for (let i = 0; i < 8; i++) {
                 nonceBuffer[i] = Number(n & BigInt(0xff));
                 n >>= BigInt(8);
             }
-
-            // Market PDA with nonce in seeds (allows duplicate titles)
             const [marketPda] = await PublicKey.findProgramAddress(
-                [
-                    Buffer.from("market"),
-                    anchorWallet.publicKey.toBuffer(),
-                    Buffer.from(utils.sha256.hash(title), "hex"),
-                    Buffer.from(nonceBuffer)
-                ],
+                [Buffer.from("market"), publicKey.toBuffer(), Buffer.from(utils.sha256.hash(title), "hex"), Buffer.from(nonceBuffer)],
                 program.programId
             );
-
-            // CHECK: Does this market PDA already exist on-chain?
-            const existingAccount = await provider.connection.getAccountInfo(marketPda);
-
-            if (existingAccount !== null) {
-                console.warn("[Djinn] ⚠️ Market already exists! Returning existing PDA.");
-                return { tx: 'existing_market', marketPda, yesMintPda: marketPda, noMintPda: marketPda };
-            }
-
             const [marketVaultPda] = await PublicKey.findProgramAddress(
                 [Buffer.from("market_vault"), marketPda.toBuffer()],
                 program.programId
             );
 
-            // MANUAL TRANSACTION CONSTRUCTION
+            // 3. Construct Transaction
             const tx = new web3.Transaction();
+            tx.recentBlockhash = blockhash;
+            tx.feePayer = publicKey;
 
-            // Add Compute Budget
-            tx.add(web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }));
-            tx.add(web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50000 }));
+            // ULTRA PRIORITY: 0.05 SOL (For serious congestion)
+            tx.add(web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 600_000 }));
+            tx.add(web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 85_000_000 }));
 
-            // Get Instruction
             const ix = await program.methods
-                .initializeMarket(
-                    title,
-                    new BN(Math.floor(endDate.getTime() / 1000)),
-                    new BN(nonce),
-                    numOutcomes
-                )
+                .initializeMarket(title, new BN(Math.floor(endDate.getTime() / 1000)), new BN(nonce), Number(numOutcomes))
                 .accounts({
                     market: marketPda,
                     marketVault: marketVaultPda,
-                    creator: anchorWallet.publicKey,
+                    creator: publicKey,
                     protocolTreasury: MASTER_TREASURY,
                     systemProgram: SystemProgram.programId,
                 })
                 .instruction();
-
             tx.add(ix);
 
-            // Use sendTransaction from wallet adapter (handles signing + sending)
-            const signature = await sendTransaction(tx, connection, { skipPreflight: true });
+            let signature: string;
 
-            console.log("[Djinn] ✅ Transaction sent:", signature);
-            await connection.confirmTransaction(signature, 'confirmed');
+            // 4. SIGN & BROADCAST LOOP (Nuclear Option)
+            if (signTransaction) {
+                console.log("[Djinn] 🖊️ Requesting wallet signature once...");
+                const signedTx = await signTransaction(tx);
+                const rawTx = signedTx.serialize();
+
+                signature = await connection.sendRawTransaction(rawTx, { skipPreflight: true, maxRetries: 0 });
+                console.log("[Djinn] 📡 Initial broadcast success. Sig:", signature);
+
+                const startTime = Date.now();
+                let confirmed = false;
+                let lastResend = Date.now();
+
+                // Poll for 100 seconds
+                while (Date.now() - startTime < 100000) {
+                    const status = await connection.getSignatureStatus(signature, { searchTransactionHistory: true });
+                    const val = status?.value;
+
+                    if (val?.err) throw new Error(`TX Failed: ${JSON.stringify(val.err)}`);
+                    if (val?.confirmationStatus === 'confirmed' || val?.confirmationStatus === 'finalized') {
+                        confirmed = true;
+                        console.log(`[Djinn] 🎊 MISSION ACCOMPLISHED! (${val.confirmationStatus})`);
+                        break;
+                    }
+
+                    // Rebroadcast every 4 seconds
+                    if (Date.now() - lastResend > 4000) {
+                        connection.sendRawTransaction(rawTx, { skipPreflight: true, maxRetries: 0 }).catch(() => { });
+                        lastResend = Date.now();
+                        console.log("[Djinn] 🔄 Rebroadcast...");
+                    }
+
+                    // Expiry check
+                    const currentHeight = await connection.getBlockHeight('processed');
+                    if (currentHeight > lastValidBlockHeight) throw new Error("TX Expired. Devnet is extremely slow right now.");
+
+                    await new Promise(r => setTimeout(r, 2000));
+                }
+                if (!confirmed) throw new Error("Timeout: Transaction stuck in blocks.");
+            } else {
+                // Fallback
+                console.log("[Djinn] ⚠️ Fallback send...");
+                signature = await sendTransaction(tx, connection, { skipPreflight: true, maxRetries: 5 });
+                const confirmation = await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
+                if (confirmation.value.err) throw new Error(`TX Failed: ${JSON.stringify(confirmation.value.err)}`);
+            }
 
             return { tx: signature, marketPda, yesMintPda: marketPda, noMintPda: marketPda, numOutcomes };
         } catch (error) {
             console.error("Error creating market:", error);
             throw error;
         }
-    }, [program, anchorWallet, isContractReady, provider, connection, publicKey]);
+    }, [program, anchorWallet, isContractReady, provider, connection, publicKey, signTransaction]);
 
     const buyShares = useCallback(async (
         marketPda: PublicKey,
@@ -159,7 +167,6 @@ export const useDjinnProtocol = () => {
             const amountLamports = new BN(Math.round(amountSol * web3.LAMPORTS_PER_SOL));
             const minSharesBN = new BN(Math.floor(minSharesOut)).mul(new BN(1_000_000_000));
 
-            // V2: PDA now includes outcome_index
             const userPositionPda = PublicKey.findProgramAddressSync(
                 [Buffer.from("user_pos"), marketPda.toBuffer(), publicKey.toBuffer(), Buffer.from([outcomeIndex])],
                 program.programId
@@ -170,22 +177,12 @@ export const useDjinnProtocol = () => {
                 program.programId
             )[0];
 
-            if (!program.methods || !program.methods.buyShares) {
-                throw new Error('buyShares method not available in program');
-            }
-
             const tx = new web3.Transaction();
-
-            // Add Compute Units
             tx.add(web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }));
-            tx.add(web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1_000_000 })); // Turbo Fee (0.001 SOL per tx approx)
+            tx.add(web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 10_000_000 }));
 
             const ix = await program.methods
-                .buyShares(
-                    outcomeIndex,
-                    amountLamports,
-                    minSharesBN
-                )
+                .buyShares(outcomeIndex, amountLamports, minSharesBN)
                 .accounts({
                     market: marketPda,
                     marketVault: marketVaultPda,
@@ -198,14 +195,10 @@ export const useDjinnProtocol = () => {
                 .instruction();
 
             tx.add(ix);
-
             const signature = await sendTransaction(tx, connection, { skipPreflight: true });
-
             console.log("✅ Buy TX Sent Sig:", signature);
             await connection.confirmTransaction(signature, 'confirmed');
-
             return signature;
-
         } catch (error) {
             console.error("Error buying shares:", error);
             throw error;
@@ -216,7 +209,7 @@ export const useDjinnProtocol = () => {
         marketPda: PublicKey,
         outcome: 'yes' | 'no' | 'void'
     ) => {
-        if (!program || !wallet || !connection) throw new Error("Wallet not connected");
+        if (!program || !anchorWallet || !connection || !publicKey) throw new Error("Wallet not connected");
 
         try {
             const [marketVaultPda] = await PublicKey.findProgramAddress(
@@ -225,7 +218,6 @@ export const useDjinnProtocol = () => {
             );
 
             const winningOutcome = outcome === 'yes' ? 0 : 1;
-
             const tx = new web3.Transaction();
             const ix = await program.methods
                 .resolveMarket(winningOutcome)
@@ -240,12 +232,8 @@ export const useDjinnProtocol = () => {
 
             tx.add(ix);
             const signature = await sendTransaction(tx, connection);
-
-            await connection.confirmTransaction(
-                { signature, ...latestBlockhash },
-                'confirmed'
-            );
-
+            const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+            await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
             return signature;
         } catch (error) {
             console.error("Error resolving market:", error);
@@ -259,7 +247,7 @@ export const useDjinnProtocol = () => {
         noMint: PublicKey,
         side: 'yes' | 'no' = 'yes'
     ) => {
-        if (!program || !wallet || !connection) throw new Error("Wallet not connected");
+        if (!program || !anchorWallet || !connection || !publicKey) throw new Error("Wallet not connected");
 
         try {
             const outcomeIndex = side.toLowerCase() === 'yes' ? 0 : 1;
@@ -287,10 +275,7 @@ export const useDjinnProtocol = () => {
                 .instruction();
 
             tx.add(ix);
-
-            // Use sendTransaction
             const signature = await sendTransaction(tx, connection, { skipPreflight: true });
-
             await connection.confirmTransaction(signature, 'confirmed');
             return signature;
         } catch (error) {
@@ -320,14 +305,13 @@ export const useDjinnProtocol = () => {
         sharesAmount: number,
         yesMint: PublicKey,
         noMint: PublicKey,
-        marketCreator: PublicKey, // Added
+        marketCreator: PublicKey,
         minSolOut: number = 0,
         sellMax: boolean = false
     ) => {
         if (!program || !anchorWallet || !publicKey) throw new Error("Wallet not connected");
 
         try {
-
             const userPositionPda = PublicKey.findProgramAddressSync(
                 [Buffer.from("user_pos"), marketPda.toBuffer(), publicKey.toBuffer(), Buffer.from([outcomeIndex])],
                 program.programId
@@ -341,112 +325,63 @@ export const useDjinnProtocol = () => {
                     // @ts-ignore
                     onChainSharesRaw = BigInt(posAccount.shares.toString());
                 }
-            } catch (e) {
-                console.error("Failed to get on-chain position:", e);
-            }
+            } catch (e) { console.error(e); }
 
             let sharesToBurnBN: BN;
             if (sellMax || sharesAmount >= Number(onChainSharesRaw) / 1e9 * 0.99) {
                 sharesToBurnBN = new BN(onChainSharesRaw.toString());
             } else {
-                const rawStr = Math.floor(sharesAmount * 1e9).toString();
-                sharesToBurnBN = new BN(rawStr);
+                sharesToBurnBN = new BN(Math.floor(sharesAmount * 1e9).toString());
             }
 
-            if (sharesToBurnBN.isZero() || sharesToBurnBN.isNeg()) {
-                throw new Error("No shares to sell.");
-            }
+            if (sharesToBurnBN.isZero()) throw new Error("No shares to sell.");
 
-            // MANUAL TRANSACTION CONSTRUCTION TO BYPASS ANCHOR RPC BUG
             const tx = new web3.Transaction();
-
-            // Add Compute Units
             tx.add(web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }));
-            tx.add(web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50000 }));
+            tx.add(web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 10_000_000 }));
 
-            // @ts-ignore
-            const sellInstruction = program.idl.instructions.find(i => i.name === 'sellShares');
-            const argCount = sellInstruction?.args?.length || 0;
-
-            let ix;
-            if (argCount >= 3) {
-                const minSolBN = new BN(minSolOut);
-                ix = await program.methods.sellShares(outcomeIndex, sharesToBurnBN, minSolBN)
-                    .accounts({
-                        market: marketPda,
-                        marketVault: PublicKey.findProgramAddressSync([Buffer.from("market_vault"), marketPda.toBuffer()], program.programId)[0],
-                        userPosition: userPositionPda,
-                        user: publicKey,
-                        protocolTreasury: MASTER_TREASURY,
-
-                        systemProgram: SystemProgram.programId,
-                        marketCreator: marketCreator || MASTER_TREASURY,
-                    })
-                    .instruction();
-            } else {
-                ix = await program.methods.sellShares(outcomeIndex, sharesToBurnBN)
-                    .accounts({
-                        market: marketPda,
-                        marketVault: PublicKey.findProgramAddressSync([Buffer.from("market_vault"), marketPda.toBuffer()], program.programId)[0],
-                        userPosition: userPositionPda,
-                        user: publicKey,
-                        protocolTreasury: MASTER_TREASURY,
-
-                        systemProgram: SystemProgram.programId,
-                        marketCreator: marketCreator || MASTER_TREASURY,
-                    })
-                    .instruction();
-            }
-
-            tx.add(ix);
-
-            const signature = await sendTransaction(tx, connection, { skipPreflight: true });
-
-            await connection.confirmTransaction(signature, 'confirmed');
-            return signature;
-        } catch (error: any) {
-            console.error("❌ Error selling shares:", error);
-            throw error;
-        }
-    }, [program, anchorWallet, connection, publicKey]);
-
-    const claimCreatorFees = useCallback(async (
-        marketPda: PublicKey
-    ) => {
-        if (!program || !anchorWallet || !connection || !publicKey) throw new Error("Wallet not connected");
-
-        try {
-            const [marketVaultPda] = await PublicKey.findProgramAddress(
-                [Buffer.from("market_vault"), marketPda.toBuffer()],
-                program.programId
-            );
-
-            const tx = new web3.Transaction();
-
-            // Add Compute Units
-            tx.add(web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }));
-            tx.add(web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50000 }));
-
-            const ix = await program.methods
-                .claimCreatorFees()
+            const ix = await program.methods.sellShares(outcomeIndex, sharesToBurnBN, new BN(minSolOut))
                 .accounts({
                     market: marketPda,
-                    marketVault: marketVaultPda,
-                    creator: publicKey, // The signer must be the creator
+                    marketVault: PublicKey.findProgramAddressSync([Buffer.from("market_vault"), marketPda.toBuffer()], program.programId)[0],
+                    userPosition: userPositionPda,
+                    user: publicKey,
                     protocolTreasury: MASTER_TREASURY,
                     systemProgram: SystemProgram.programId,
+                    marketCreator: marketCreator || MASTER_TREASURY,
                 })
                 .instruction();
 
             tx.add(ix);
-
             const signature = await sendTransaction(tx, connection, { skipPreflight: true });
             await connection.confirmTransaction(signature, 'confirmed');
-
-            console.log("✅ Creator Fees Claimed:", signature);
             return signature;
         } catch (error) {
-            console.error("Error claiming creator fees:", error);
+            console.error("Error selling shares:", error);
+            throw error;
+        }
+    }, [program, anchorWallet, connection, publicKey]);
+
+    const claimCreatorFees = useCallback(async (marketPda: PublicKey) => {
+        if (!program || !anchorWallet || !connection || !publicKey) throw new Error("Wallet not connected");
+        try {
+            const [marketVaultPda] = await PublicKey.findProgramAddress([Buffer.from("market_vault"), marketPda.toBuffer()], program.programId);
+            const tx = new web3.Transaction();
+            tx.add(web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }));
+            tx.add(web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 10_000_000 }));
+            const ix = await program.methods.claimCreatorFees().accounts({
+                market: marketPda,
+                marketVault: marketVaultPda,
+                creator: publicKey,
+                protocolTreasury: MASTER_TREASURY,
+                systemProgram: SystemProgram.programId,
+            }).instruction();
+            tx.add(ix);
+            const signature = await sendTransaction(tx, connection, { skipPreflight: true });
+            await connection.confirmTransaction(signature, 'confirmed');
+            return signature;
+        } catch (error) {
+            console.error(error);
             throw error;
         }
     }, [program, anchorWallet, connection, publicKey]);

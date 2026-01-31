@@ -116,7 +116,8 @@ export class AIAnalyzer {
     }
 
     private async analyzeWithGemini(prompt: string, apiKey: string, model: string): Promise<AnalysisResult> {
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        // Use v1 API (not v1beta) for newer Gemini models
+        const endpoint = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`;
 
         const response = await fetch(endpoint, {
             method: 'POST',

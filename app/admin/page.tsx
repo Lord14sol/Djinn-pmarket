@@ -1,159 +1,413 @@
 'use client';
-export const dynamic = "force-dynamic";
-
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { useDjinnProtocol } from '../../hooks/useDjinnProtocol';
-import { supabase } from '../../lib/supabase';
-import { PublicKey } from '@solana/web3.js';
-import { resolveMarket as resolveMarketInDb } from '../../lib/supabase-db'; // Import DB function
-import { PROTOCOL_AUTHORITY } from '@/lib/program-config';
+import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Check, AlertTriangle, X, ExternalLink, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 
-// Hardcoded Protocol Authority for simplicity (You can make this dynamic later)
+const ADMIN_WALLET = "C31JQfZBVRsnvFqiNptD95rvbEx8fsuPwdZn62yEWx9X";
 
-// Separate component for content that uses hooks
-function AdminContent() {
-    const { publicKey } = useWallet();
-    const { resolveMarket } = useDjinnProtocol();
+// Premium Status Badge with Pink Check for Verified
+const MarketStatusBadge = ({ status }: { status: string }) => {
+    const s = status ? status.toUpperCase() : 'PENDING';
+
+    if (s === 'VERIFIED') return (
+        <span className="inline-flex items-center gap-1.5 bg-[#F492B7]/10 border border-[#F492B7]/50 px-3 py-1 rounded-full text-xs font-black text-[#F492B7] shadow-[0_0_15px_rgba(244,146,183,0.3)]">
+            <Check size={14} strokeWidth={3} />
+            VERIFIED
+        </span>
+    );
+    if (s === 'REJECTED') return (
+        <span className="inline-flex items-center gap-1.5 bg-red-500/10 border border-red-500/50 px-3 py-1 rounded-full text-xs font-black text-red-500">
+            <X size={14} strokeWidth={3} />
+            REJECTED
+        </span>
+    );
+    if (s === 'UNCERTAIN' || s === 'MANUAL_REQUIRED') return (
+        <span className="inline-flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/50 px-3 py-1 rounded-full text-xs font-black text-amber-500 animate-pulse">
+            <AlertTriangle size={14} strokeWidth={3} />
+            NEEDS REVIEW
+        </span>
+    );
+    if (s === 'ANALYZING' || s === 'PENDING') return (
+        <span className="inline-flex items-center gap-1.5 bg-blue-500/10 border border-blue-500/50 px-3 py-1 rounded-full text-xs font-black text-blue-500">
+            <Loader2 size={14} className="animate-spin" />
+            ANALYZING...
+        </span>
+    );
+    return <span className="text-gray-500 text-xs font-mono">{s}</span>;
+};
+
+export default function DracoDashboard() {
+    const { publicKey, connected } = useWallet();
+    const [isLogged, setIsLogged] = useState(false);
+    const [user, setUser] = useState('');
+    const [pwd, setPwd] = useState('');
     const [markets, setMarkets] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [resolvingId, setResolvingId] = useState<string | null>(null);
+    const [expandedLogs, setExpandedLogs] = useState<string | null>(null);
+    const [processingQueue, setProcessingQueue] = useState<string[]>([]);
 
-    // Fetch unresolved markets
-    useEffect(() => {
-        const fetchMarkets = async () => {
-            const { data, error } = await supabase
-                .from('markets')
-                .select('*')
-                .eq('resolved', false)
-                .order('created_at', { ascending: false });
-
-            if (data) setMarkets(data);
-            setLoading(false);
-        };
-        fetchMarkets();
-    }, []);
-
-    const handleResolve = async (market: any, outcome: 'yes' | 'no' | 'void') => {
-        if (!publicKey) return alert("Connect wallet");
-        if (publicKey.toString() !== PROTOCOL_AUTHORITY) return alert("Unauthorized: You are not the Protocol Authority");
-
-        if (!market.market_pda || market.market_pda.startsWith('local_')) {
-            return alert("Cannot resolve local/mock markets on-chain");
-        }
-
-        if (!confirm(`Are you sure you want to resolve "${market.title}" as ${outcome.toUpperCase()}?`)) return;
-
-        setResolvingId(market.id);
-
+    const fetchMarkets = async () => {
         try {
-            console.log(`Resolving market ${market.market_pda} as ${outcome.toUpperCase()}`);
+            const res = await fetch('/api/markets');
+            const data = await res.json();
+            // Sort: PENDING/ANALYZING first, then UNCERTAIN, then others
+            const sorted = data.sort((a: any, b: any) => {
+                const priority: Record<string, number> = { 'PENDING': 0, 'ANALYZING': 1, 'UNCERTAIN': 2, 'MANUAL_REQUIRED': 2, 'VERIFIED': 3, 'REJECTED': 4 };
+                return (priority[a.status] ?? 5) - (priority[b.status] ?? 5);
+            });
+            setMarkets(sorted);
+        } catch (e) { }
+    };
 
-            // 1. Resolve on Blockchain
-            const tx = await resolveMarket(new PublicKey(market.market_pda), outcome);
-            console.log("Blockchain resolution tx:", tx);
+    useEffect(() => {
+        if (isLogged && connected && publicKey?.toString() === ADMIN_WALLET) {
+            fetchMarkets();
+            const interval = setInterval(fetchMarkets, 3000);
+            return () => clearInterval(interval);
+        }
+    }, [isLogged, connected, publicKey]);
 
-            // 2. Resolve in Database & Calculate Payouts
-            const outcomeString = outcome.toUpperCase() as 'YES' | 'NO' | 'VOID';
-            const dbResult = await resolveMarketInDb(market.slug, outcomeString);
-
-            if (dbResult.error) {
-                console.error("DB Error:", dbResult.error);
-                alert("Blockchain Resolved, but DB update failed. Check console.");
-            } else {
-                alert(`✅ Market Resolved Successfully!\n\nBlockchain TX: ${tx.slice(0, 10)}...\n\nPayouts Calculated:\nPool: ${dbResult.totalPool || 0} SOL\nWinning Bets: ${dbResult.winningBets || 0}`);
-
-                // Remove from list
-                setMarkets(markets.filter(m => m.id !== market.id));
-            }
-
-        } catch (error: any) {
-            console.error("Resolution Error:", error);
-            alert(`Failed: ${error.message}`);
-        } finally {
-            setResolvingId(null);
+    const handleLogin = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (user === 'lord' && pwd === 'batman') {
+            setIsLogged(true);
+        } else {
+            alert("ACCESS DENIED: Invalid credentials.");
         }
     };
 
-    if (loading) return <div className="p-20 text-center text-white">Loading admin panel...</div>;
+    const updateStatus = async (id: string, status: string) => {
+        setProcessingQueue(prev => [...prev, id]);
+        await fetch('/api/markets', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, status }),
+        });
+        setProcessingQueue(prev => prev.filter(p => p !== id));
+        fetchMarkets();
+    };
 
-    if (!publicKey || publicKey.toString() !== PROTOCOL_AUTHORITY) {
+    // 🟢 PANTALLA 1: LOGIN MATRIX
+    if (!isLogged) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-[60vh] text-white">
-                <h1 className="text-4xl font-bold mb-4 text-red-500">ACCESS DENIED</h1>
-                <p>You are not the Protocol Authority.</p>
-                <div className="mt-8 p-4 bg-white/5 rounded-xl text-xs font-mono">
-                    Your Wallet: {publicKey?.toString() || "Not Connected"}
-                    <br />
-                    Required: {PROTOCOL_AUTHORITY}
+            <div className="min-h-screen bg-black flex flex-col items-center justify-center font-mono overflow-hidden relative">
+                <div className="absolute inset-0 opacity-20 pointer-events-none">
+                    <div className="h-full w-full bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-green-900 via-black to-black animate-pulse" />
+                </div>
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="z-10 bg-black/80 border border-green-500/50 p-10 rounded-lg shadow-[0_0_50px_rgba(0,255,0,0.1)] max-w-md w-full"
+                >
+                    <div className="text-center mb-8">
+                        <h1 className="text-5xl font-black text-green-500 tracking-[0.2em] mb-2 drop-shadow-[0_0_10px_rgba(34,197,94,0.5)]">DRACO</h1>
+                        <p className="text-green-800 text-xs">// COMMAND_CENTER_V2.0</p>
+                    </div>
+                    <form onSubmit={handleLogin} className="space-y-6">
+                        <div>
+                            <label className="block text-green-500 text-xs mb-2 uppercase tracking-widest">Identifier</label>
+                            <input
+                                type="text" value={user} onChange={(e) => setUser(e.target.value)}
+                                className="w-full bg-black border border-green-900 p-3 text-green-400 focus:outline-none focus:border-green-500 transition-colors"
+                                placeholder="USER"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-green-500 text-xs mb-2 uppercase tracking-widest">Access Code</label>
+                            <input
+                                type="password" value={pwd} onChange={(e) => setPwd(e.target.value)}
+                                className="w-full bg-black border border-green-900 p-3 text-green-400 focus:outline-none focus:border-green-500 transition-colors"
+                                placeholder="PASSWORD"
+                            />
+                        </div>
+                        <button type="submit" className="w-full bg-green-500 text-black font-black p-4 rounded hover:bg-green-400 transition-all uppercase tracking-widest">
+                            Unlock System
+                        </button>
+                    </form>
+                    <div className="mt-8 text-[10px] text-green-900 text-center uppercase tracking-tighter">
+                        Warning: Unauthorized access will be detected and neutralized by Cerberus.
+                    </div>
+                </motion.div>
+            </div>
+        );
+    }
+
+    // 🟠 PANTALLA 2: WALLET CHECK
+    if (!connected || publicKey?.toString() !== ADMIN_WALLET) {
+        return (
+            <div className="min-h-screen bg-black flex flex-col items-center justify-center font-mono p-8 animate-in fade-in duration-700">
+                <div className="text-center max-w-lg">
+                    <h2 className="text-3xl font-bold text-red-500 mb-6 tracking-tighter">SECURITY PROTOCOL ACTIVE</h2>
+                    <p className="text-gray-400 mb-10 text-sm leading-relaxed">
+                        Credentials valid, but the Master Wallet signature is required. Connect your device.
+                    </p>
+                    <div className="inline-block p-1 bg-gradient-to-r from-green-500 to-emerald-900 rounded-lg">
+                        <div className="bg-black rounded-md p-4">
+                            <WalletMultiButton />
+                        </div>
+                    </div>
+                    <p className="mt-10 text-[10px] text-green-900">EXPECTED IDENTITY: {ADMIN_WALLET.slice(0, 10)}...</p>
                 </div>
             </div>
         );
     }
 
+    // 🐉 PANTALLA 3: DASHBOARD PRINCIPAL - HORIZONTAL LAYOUT
+    const activeMarkets = markets.filter(m => m.status === 'PENDING' || m.status === 'ANALYZING').slice(0, 2);
+    const queuedMarkets = markets.filter(m => m.status !== 'PENDING' && m.status !== 'ANALYZING' && m.status !== 'VERIFIED' && m.status !== 'REJECTED');
+    const completedMarkets = markets.filter(m => m.status === 'VERIFIED' || m.status === 'REJECTED');
+
     return (
-        <div className="container mx-auto px-4 py-12 text-white">
-            <h1 className="text-3xl font-black mb-8 flex items-center gap-3">
-                <span className="text-[#F492B7]">⚡</span> Admin Console
-            </h1>
-
-            <div className="space-y-6">
-                <h2 className="text-xl font-bold text-gray-400">Unresolved Markets ({markets.length})</h2>
-
-                {markets.map((market) => (
-                    <div key={market.id} className="bg-white/5 border border-white/10 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-6">
-                        <div className="flex-1">
-                            <h3 className="text-xl font-bold mb-2">{market.title}</h3>
-                            <div className="flex gap-4 text-sm text-gray-400 font-mono">
-                                <span>Slug: {market.slug}</span>
-                                <span>PDA: {market.market_pda?.slice(0, 8)}...</span>
-                            </div>
-                        </div>
-
-                        <div className="flex gap-4">
-                            <button
-                                onClick={() => handleResolve(market, 'yes')}
-                                disabled={!!resolvingId}
-                                className="px-6 py-3 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 hover:bg-emerald-500/30 font-bold transition-all disabled:opacity-50"
-                            >
-                                {resolvingId === market.id ? 'Resolving... ' : 'Resolve YES'}
-                            </button>
-
-                            <button
-                                onClick={() => handleResolve(market, 'no')}
-                                disabled={!!resolvingId}
-                                className="px-6 py-3 rounded-xl bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/30 font-bold transition-all disabled:opacity-50"
-                            >
-                                {resolvingId === market.id ? 'Resolving... ' : 'Resolve NO'}
-                            </button>
-
-                            <button
-                                onClick={() => handleResolve(market, 'void')}
-                                disabled={!!resolvingId}
-                                className="px-6 py-3 rounded-xl bg-gray-500/20 text-gray-400 border border-gray-500/50 hover:bg-gray-500/30 font-bold transition-all disabled:opacity-50"
-                            >
-                                {resolvingId === market.id ? 'Resolving... ' : 'Resolve VOID'}
-                            </button>
-                        </div>
+        <div className="min-h-screen bg-[#030303] text-white font-sans pt-28 px-6 pb-12 selection:bg-green-500/30">
+            {/* HEADER */}
+            <header className="max-w-7xl mx-auto flex justify-between items-center mb-10 border-b border-white/5 pb-6">
+                <div>
+                    <h1 className="text-3xl font-black text-white italic tracking-tighter">
+                        DRACO <span className="text-green-500">//</span> COMMAND CENTER
+                    </h1>
+                    <p className="text-xs text-green-500 font-mono mt-1 uppercase tracking-widest">
+                        🐕 CERBERUS AI MONITORING SYSTEM
+                    </p>
+                </div>
+                <div className="flex items-center gap-6">
+                    <div className="text-right font-mono">
+                        <p className="text-[10px] text-gray-500 uppercase">Markets in Queue</p>
+                        <p className="text-lg text-green-500 tabular-nums font-black">{markets.length}</p>
                     </div>
-                ))}
+                    <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.5)]" />
+                </div>
+            </header>
 
-                {markets.length === 0 && (
-                    <div className="text-center py-20 bg-white/5 rounded-3xl border border-white/10 text-gray-500">
-                        No unresolved markets found. Good job! 🎉
+            {/* ACTIVE PROCESSING SECTION */}
+            <section className="max-w-7xl mx-auto mb-10">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                    <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest">Active Processing</h2>
+                </div>
+                {activeMarkets.length === 0 ? (
+                    <div className="border border-dashed border-green-900/30 rounded-xl p-8 text-center text-green-900 font-mono text-sm">
+                        No markets currently being analyzed. Awaiting submissions...
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        {activeMarkets.map((m) => (
+                            <MarketRow key={m.id} market={m} expandedLogs={expandedLogs} setExpandedLogs={setExpandedLogs} updateStatus={updateStatus} processingQueue={processingQueue} />
+                        ))}
                     </div>
                 )}
-            </div>
+            </section>
+
+            {/* NEEDS REVIEW */}
+            {queuedMarkets.length > 0 && (
+                <section className="max-w-7xl mx-auto mb-10">
+                    <div className="flex items-center gap-3 mb-4">
+                        <AlertTriangle size={14} className="text-amber-500" />
+                        <h2 className="text-sm font-black text-amber-500 uppercase tracking-widest">Needs Human Review</h2>
+                    </div>
+                    <div className="space-y-4">
+                        {queuedMarkets.map((m) => (
+                            <MarketRow key={m.id} market={m} expandedLogs={expandedLogs} setExpandedLogs={setExpandedLogs} updateStatus={updateStatus} processingQueue={processingQueue} />
+                        ))}
+                    </div>
+                </section>
+            )}
+
+            {/* COMPLETED */}
+            {completedMarkets.length > 0 && (
+                <section className="max-w-7xl mx-auto">
+                    <div className="flex items-center gap-3 mb-4">
+                        <Check size={14} className="text-[#F492B7]" />
+                        <h2 className="text-sm font-black text-gray-500 uppercase tracking-widest">Completed</h2>
+                    </div>
+                    <div className="space-y-3 opacity-60">
+                        {completedMarkets.slice(0, 10).map((m) => (
+                            <MarketRow key={m.id} market={m} expandedLogs={expandedLogs} setExpandedLogs={setExpandedLogs} updateStatus={updateStatus} processingQueue={processingQueue} isCompact />
+                        ))}
+                    </div>
+                </section>
+            )}
+
+            {markets.length === 0 && (
+                <div className="h-[50vh] flex flex-col items-center justify-center opacity-30 grayscale saturate-0">
+                    <div className="w-20 h-20 border-4 border-dashed border-green-500 rounded-full animate-spin mb-6" />
+                    <p className="text-green-500 font-mono text-sm animate-pulse tracking-widest uppercase">Scanning empty sectors...</p>
+                </div>
+            )}
         </div>
     );
 }
 
-import React, { Suspense } from 'react';
+// HORIZONTAL MARKET ROW COMPONENT
+function MarketRow({ market: m, expandedLogs, setExpandedLogs, updateStatus, processingQueue, isCompact = false }: any) {
+    const isExpanded = expandedLogs === m.id;
+    const isProcessing = processingQueue.includes(m.id);
 
-export default function AdminPage() {
+    // Show buttons if: requiresHuman is true OR verdict is UNCERTAIN OR status is UNCERTAIN/PENDING
+    const dog3Score = m.dog3Score || 0;
+    const needsManualAction = m.requiresHuman === true || m.verdict === 'UNCERTAIN' || m.status === 'UNCERTAIN' || m.status === 'PENDING';
+    const buttonsEnabled = needsManualAction && m.status !== 'VERIFIED' && m.status !== 'REJECTED';
+    const needsReview = m.status === 'UNCERTAIN' || m.status === 'MANUAL_REQUIRED' || (m.status === 'PENDING' && m.requiresHuman);
+
+    // Handle LORD Override
+    const handleLordOverride = async (decision: 'VERIFIED' | 'REJECTED') => {
+        await fetch('/api/markets', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                id: m.id,
+                status: decision,
+                lordOverride: {
+                    decision,
+                    timestamp: Date.now(),
+                    reason: 'Manual override by LORD'
+                }
+            }),
+        });
+    };
+
     return (
-        <Suspense fallback={<div className="p-20 text-center text-white">Loading Admin...</div>}>
-            <AdminContent />
-        </Suspense>
+        <div className={`flex flex-col border rounded-xl overflow-hidden transition-all duration-300 ${m.status === 'VERIFIED' ? 'border-[#F492B7]/30 bg-[#F492B7]/5' : m.status === 'REJECTED' ? 'border-red-500/30 bg-red-500/5' : 'border-green-900/40 bg-black/50 hover:border-green-500/50'}`}>
+            {/* MAIN ROW */}
+            <div className={`flex items-center gap-6 ${isCompact ? 'p-3' : 'p-4'}`}>
+                {/* 1. MARKET IMAGE */}
+                <div className={`shrink-0 border border-green-500/20 rounded-lg overflow-hidden ${isCompact ? 'w-12 h-12' : 'w-16 h-16'}`}>
+                    <img
+                        src={m.imageUrl || '/placeholder-market.png'}
+                        className="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-500"
+                        onError={(e) => { e.currentTarget.src = 'https://via.placeholder.com/64'; }}
+                    />
+                </div>
+
+                {/* 2. INFO CENTRAL */}
+                <div className="flex-1 min-w-0">
+                    <h3 className={`text-white font-bold leading-tight truncate ${isCompact ? 'text-sm' : 'text-lg'}`}>{m.title}</h3>
+                    <div className="flex flex-wrap gap-4 text-[10px] text-green-700 mt-1 font-mono">
+                        <span className="cursor-pointer hover:text-green-400">BY: {m.creator || 'Unknown'}</span>
+                        {m.sourceUrl && (
+                            <a href={m.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline flex items-center gap-1">
+                                <ExternalLink size={10} /> SOURCE
+                            </a>
+                        )}
+                        <span className="text-gray-600">ID: {m.id?.slice(-8)}</span>
+                    </div>
+
+                    {/* DOG SCORES BAR */}
+                    {!isCompact && (m.dog1Score > 0 || m.dog2Score > 0 || m.dog3Score > 0) && (
+                        <div className="flex items-center gap-4 mt-2 font-mono text-[10px]">
+                            <span className="text-green-600">
+                                🐕₁ <span className={`font-bold ${m.dog1Score >= 70 ? 'text-green-400' : m.dog1Score >= 40 ? 'text-amber-400' : 'text-red-400'}`}>{m.dog1Score}</span>/100
+                            </span>
+                            <span className="text-green-600">
+                                🐕₂ <span className={`font-bold ${m.dog2Score >= 70 ? 'text-green-400' : m.dog2Score >= 40 ? 'text-amber-400' : 'text-red-400'}`}>{m.dog2Score}</span>/100
+                            </span>
+                            <span className="text-green-600">
+                                🐕₃ <span className={`font-bold ${dog3Score >= 90 ? 'text-[#F492B7]' : dog3Score >= 70 ? 'text-green-400' : dog3Score >= 40 ? 'text-amber-400' : 'text-red-400'}`}>{dog3Score}</span>/100
+                            </span>
+                            {dog3Score >= 90 && <span className="text-[#F492B7] text-[9px]">✓ AUTO-VERIFIED</span>}
+                        </div>
+                    )}
+                </div>
+
+                {/* 3. STATUS & ACTIONS */}
+                <div className="flex items-center gap-4">
+                    <MarketStatusBadge status={m.status} />
+
+                    {/* Manual Buttons (Show when action needed) */}
+                    {buttonsEnabled && !isCompact && (
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => handleLordOverride('VERIFIED')}
+                                disabled={isProcessing}
+                                className="flex items-center gap-1.5 bg-[#F492B7]/10 border border-[#F492B7]/50 px-4 py-2 text-[#F492B7] text-xs font-black hover:bg-[#F492B7] hover:text-black transition-all rounded-lg disabled:opacity-50 animate-pulse"
+                            >
+                                <Check size={14} /> APPROVE
+                            </button>
+                            <button
+                                onClick={() => handleLordOverride('REJECTED')}
+                                disabled={isProcessing}
+                                className="flex items-center gap-1.5 bg-red-500/10 border border-red-500/50 px-4 py-2 text-red-500 text-xs font-black hover:bg-red-500 hover:text-white transition-all rounded-lg disabled:opacity-50"
+                            >
+                                <X size={14} /> REJECT
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Already verified/rejected - no buttons needed */}
+
+                    {/* Log Toggle */}
+                    <button
+                        onClick={() => setExpandedLogs(isExpanded ? null : m.id)}
+                        className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-500 hover:text-white transition-colors"
+                    >
+                        {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </button>
+                </div>
+            </div>
+
+            {/* 4. CERBERUS DOGS CONSOLE (Expandable) */}
+            <AnimatePresence>
+                {isExpanded && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="bg-green-900/5 border-t border-green-900/20 overflow-hidden"
+                    >
+                        <div className="p-4 font-mono text-[11px]">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {/* DOG 1: HUNTER */}
+                                <div className="border-r-0 md:border-r border-green-900/20 pr-0 md:pr-4">
+                                    <div className="text-green-500 font-bold mb-2 flex items-center gap-2">
+                                        🐕 <span className="tracking-widest">DOG_1: HUNTER</span>
+                                    </div>
+                                    <div className="text-green-800 space-y-1 max-h-32 overflow-y-auto custom-scrollbar">
+                                        {m.logsDog1 ? (
+                                            m.logsDog1.split('\n').map((line: string, i: number) => (
+                                                <p key={i} className={line.includes('[OK]') ? 'text-green-500' : line.includes('[ERR]') ? 'text-red-500' : ''}>{line}</p>
+                                            ))
+                                        ) : (
+                                            <p className="animate-pulse">Searching for sources...</p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* DOG 2: ANALYST */}
+                                <div className="border-r-0 md:border-r border-green-900/20 pr-0 md:pr-4">
+                                    <div className="text-green-500 font-bold mb-2 flex items-center gap-2">
+                                        🐕 <span className="tracking-widest">DOG_2: ANALYST</span>
+                                    </div>
+                                    <div className="text-green-800 space-y-1 max-h-32 overflow-y-auto custom-scrollbar">
+                                        {m.logsDog2 ? (
+                                            m.logsDog2.split('\n').map((line: string, i: number) => (
+                                                <p key={i}>{line}</p>
+                                            ))
+                                        ) : (
+                                            <p className="text-gray-600">Awaiting data from DOG_1...</p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* DOG 3: JUDGE */}
+                                <div>
+                                    <div className="text-green-500 font-bold mb-2 flex items-center gap-2">
+                                        🐕 <span className="tracking-widest">DOG_3: JUDGE</span>
+                                    </div>
+                                    <div className="text-green-800 space-y-1 max-h-32 overflow-y-auto custom-scrollbar">
+                                        {m.logsDog3 ? (
+                                            m.logsDog3.split('\n').map((line: string, i: number) => (
+                                                <p key={i} className={line.includes('VERIFIED') ? 'text-[#F492B7] font-bold' : line.includes('REJECTED') ? 'text-red-500 font-bold' : line.includes('UNCERTAIN') ? 'text-amber-500 font-bold' : ''}>{line}</p>
+                                            ))
+                                        ) : (
+                                            <p className="text-gray-600">Awaiting analysis from DOG_2...</p>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
     );
 }

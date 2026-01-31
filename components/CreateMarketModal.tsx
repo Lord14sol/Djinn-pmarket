@@ -188,7 +188,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
 
                     // Add timeout wrapper to prevent indefinite hanging
                     const timeoutPromise = new Promise((_, reject) =>
-                        setTimeout(() => reject(new Error('Transaction timeout - Devnet may be congested')), 60000)
+                        setTimeout(() => reject(new Error('Transaction timeout - Devnet is extremely congested. Please wait 1-2 mins and try again.')), 120000)
                     );
 
                     const buyAmount = parseFloat(initialBuyAmount) || 0;
@@ -298,8 +298,18 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
             try {
                 const currentLocal = JSON.parse(localStorage.getItem('djinn_created_markets') || '[]');
                 localStorage.setItem('djinn_created_markets', JSON.stringify([optimisticMarket, ...currentLocal]));
+
+                // NEW INTEGRATION: Send to Next.js API for Cerberus to see
+                await fetch('/api/markets', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: poolName,
+                        sourceUrl: sourceUrl
+                    })
+                });
             } catch (e) {
-                console.warn("Local storage save failed", e);
+                console.warn("API/Local storage save failed", e);
             }
 
             // DISPARAR EL EVENTO CON DATA

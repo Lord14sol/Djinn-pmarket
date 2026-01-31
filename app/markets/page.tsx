@@ -57,13 +57,16 @@ export default function Home() {
             const liveData = marketDataMap[m.slug];
             const liveChance = liveData ? Math.round(liveData.live_price) : null;
             const liveVolume = liveData ? `$${formatCompact(liveData.volume)}` : null;
+            const poolValue = Number(m.total_yes_pool || 0) + Number(m.total_no_pool || 0);
 
             return {
               id: m.id || `sb-${index}`,
               title: m.title,
               icon: m.banner_url || '🔮', // Use uploaded image as icon
               chance: liveChance ?? (Math.round((m.total_yes_pool / (m.total_yes_pool + m.total_no_pool + 1)) * 100) || 50),
-              volume: liveVolume ?? `$${formatCompact(Math.abs(Number(m.total_yes_pool || 0) + Number(m.total_no_pool || 0)))}`,
+              volume: liveVolume ?? `$${formatCompact(Math.abs(poolValue))}`,
+              totalPool: poolValue,
+              mcap: liveData ? liveData.volume : poolValue, // Use volume as proxy for mcap or pool
               type: 'binary',
               category: (m as any).category || 'Trending',
               endDate: m.end_date ? new Date(m.end_date) : new Date('2026-12-31'),
@@ -77,7 +80,21 @@ export default function Home() {
           });
         }
 
-        // 3. MERGE LOCAL STORAGE (Always check for pending markets)
+        // 3. MERGE NEXT.JS API MARKETS (New real-time memory API)
+        let apiMarkets = [];
+        try {
+          const apiRes = await fetch('/api/markets');
+          if (apiRes.ok) {
+            apiMarkets = await apiRes.json();
+          }
+        } catch (e) { console.error("Error fetching API markets", e); }
+
+        // Dedupe and merge: Priority API > Supabase > Local
+        const apiIds = new Set(apiMarkets.map((m: any) => m.id));
+        const pdaSet = new Set([...apiMarkets.map((m: any) => m.marketPDA), ...finalMarkets.map((m: any) => m.marketPDA)]);
+        const slugSet = new Set([...apiMarkets.map((m: any) => m.slug), ...finalMarkets.map((m: any) => m.slug)]);
+
+        // 4. MERGE LOCAL STORAGE (Always check for pending markets)
         const createdMarkets = localStorage.getItem('djinn_created_markets');
         let localMarkets = [];
         if (createdMarkets) {
@@ -86,17 +103,13 @@ export default function Home() {
           } catch (e) { console.error("Error parsing local markets", e); }
         }
 
-        // Dedupe: If local market slug/pda exists in Supabase, ignore local
-        const pdaSet = new Set(finalMarkets.map(m => m.marketPDA));
-        const slugSet = new Set(finalMarkets.map(m => m.slug));
-
         const uniqueLocal = localMarkets.filter((m: any) =>
           !pdaSet.has(m.marketPDA) && !slugSet.has(m.slug)
         );
 
-        finalMarkets = [...uniqueLocal, ...finalMarkets];
+        finalMarkets = [...apiMarkets, ...uniqueLocal, ...finalMarkets.filter(m => !apiIds.has(m.id))];
 
-        // 4. Fallback/Static if empty
+        // 5. Fallback/Static if empty
         if (finalMarkets.length === 0) {
           console.log('ℹ️ No markets found, using defaults');
           finalMarkets = [...initialStaticMarkets];
@@ -109,7 +122,7 @@ export default function Home() {
         }
 
         setMarkets(finalMarkets);
-        console.log(`✅ Loaded ${finalMarkets.length} markets (Supabase + Local + Static)`);
+        console.log(`✅ Loaded ${finalMarkets.length} markets (API + Supabase + Local + Static)`);
       } catch (e) {
         console.error("Error loading markets from Supabase:", e);
         // Fallback to static + localStorage
@@ -259,7 +272,7 @@ export default function Home() {
 
       if (activeCategory === 'Trending') return true; // Show mix
 
-      // NEW: Real-time feed (Everything sorted by newest)
+      // NEW: Real-time feed (Chronological)
       if (activeCategory === 'New') {
         return true;
       }
@@ -285,11 +298,12 @@ export default function Home() {
   // Sorting Logic helpers
   const parseVolume = (volStr: string) => {
     if (!volStr) return 0;
-    const clean = volStr.replace(/[$,]/g, '');
+    const clean = volStr.replace(/[$,]/g, '').toUpperCase();
     const val = parseFloat(clean);
-    if (clean.endsWith('K') || clean.endsWith('k')) return val * 1000;
-    if (clean.endsWith('M') || clean.endsWith('m')) return val * 1000000;
-    if (clean.endsWith('B') || clean.endsWith('b')) return val * 1000000000;
+    if (isNaN(val)) return 0;
+    if (clean.endsWith('K')) return val * 1000;
+    if (clean.endsWith('M')) return val * 1000000;
+    if (clean.endsWith('B')) return val * 1000000000;
     return val;
   };
 
@@ -300,14 +314,19 @@ export default function Home() {
         return (b.createdAt || 0) - (a.createdAt || 0);
       }
 
-      // HOT & TRENDING: Volume * Velocity (Pyramid Algorithm)
-      // Primary Sort: Total Volume (Descending)
+      // TRENDING ALGORITHM: Volume > Total Pool > MCAP > Velocity
       const volA = parseVolume(a.volume);
       const volB = parseVolume(b.volume);
 
-      if (volB !== volA) {
-        return volB - volA; // Higher volume first
-      }
+      if (volB !== volA) return volB - volA;
+
+      const poolA = a.totalPool || 0;
+      const poolB = b.totalPool || 0;
+      if (poolB !== poolA) return poolB - poolA;
+
+      const mcapA = a.mcap || 0;
+      const mcapB = b.mcap || 0;
+      if (mcapB !== mcapA) return mcapB - mcapA;
 
       // Secondary Sort: Newest First
       return (b.createdAt || 0) - (a.createdAt || 0);
@@ -333,11 +352,8 @@ export default function Home() {
       case 'Finance': return 'Finance';
       case 'Culture': return 'Culture';
       case 'Climate': return 'Climate';
-      case 'Space': return 'Space';
       case 'Movies': return 'Movies';
       case 'Music': return 'Music';
-      case 'Social Media': return 'Social Media';
-      case 'History': return 'History';
       case 'Mentions': return 'Mentions';
       default: return activeCategory;
     }
@@ -347,9 +363,20 @@ export default function Home() {
   const top3Markets = useMemo(() => {
     if (markets.length === 0) return null;
     const sorted = [...markets].sort((a, b) => {
+      // Same algorithm as main list
       const volA = parseVolume(a.volume);
       const volB = parseVolume(b.volume);
-      return volB - volA;
+      if (volB !== volA) return volB - volA;
+
+      const poolA = a.totalPool || 0;
+      const poolB = b.totalPool || 0;
+      if (poolB !== poolA) return poolB - poolA;
+
+      const mcapA = a.mcap || 0;
+      const mcapB = b.mcap || 0;
+      if (mcapB !== mcapA) return mcapB - mcapA;
+
+      return (b.createdAt || 0) - (a.createdAt || 0);
     });
 
     return sorted.slice(0, 3).map(m => ({
@@ -425,6 +452,7 @@ export default function Home() {
                   return (
                     <motion.div
                       key={`${market.slug}-${index}`}
+                      layout // Enable smooth layout transitions
                       initial={{ opacity: 0, scale: 0.9 }}
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.9 }}

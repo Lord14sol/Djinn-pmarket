@@ -7,6 +7,7 @@ import QuickBetModal from './QuickBetModal';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Star } from 'lucide-react';
+import { MarketStatusBadge } from './MarketStatusBadge';
 
 interface MarketCardProps {
     title: string;
@@ -22,6 +23,7 @@ interface MarketCardProps {
     marketPDA?: string;
     category?: string;
     resolved?: boolean;
+    status?: string;
     winningOutcome?: string;
     options?: any[];
     resolutionSource?: string;
@@ -57,7 +59,8 @@ const MarketCard: React.FC<MarketCardProps> = React.memo(({
     winningOutcome,
     options,
     resolutionSource,
-    compact = false
+    compact = false,
+    status = 'PENDING'
 }) => {
     const { publicKey } = useWallet();
     const router = useRouter(); // Using Next.js router
@@ -144,6 +147,11 @@ const MarketCard: React.FC<MarketCardProps> = React.memo(({
                 ) : (
                     <div className="w-full h-full flex items-center justify-center text-6xl opacity-50">{icon || '🔮'}</div>
                 )}
+
+                {/* Status Badge Overlay */}
+                <div className="absolute top-2 left-2 z-20">
+                    <MarketStatusBadge status={status} />
+                </div>
             </div>
 
             {/* 2. Body Content (Bottom) */}

@@ -26,17 +26,13 @@ export function CategoryProvider({ children }: { children: ReactNode }) {
     const setActiveCategory = (category: string) => {
         setActiveCategoryState(category);
 
-        // Update URL params without redirecting to '/'
-        const newUrl = new URL(window.location.href);
-
+        // Always navigate to /markets when a category is selected
+        // This ensures that if the user clicks a category from the home page, they go to markets.
         if (category === "Trending") {
-            newUrl.searchParams.delete('category');
+            router.push('/markets', { scroll: false });
         } else {
-            newUrl.searchParams.set('category', category);
+            router.push(`/markets?category=${encodeURIComponent(category)}`, { scroll: false });
         }
-
-        // Push the new URL state (same path, new params)
-        router.push(newUrl.pathname + newUrl.search, { scroll: false });
     };
 
     // Sync if back button is pressed (optional but good)

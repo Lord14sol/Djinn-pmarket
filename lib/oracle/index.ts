@@ -207,6 +207,29 @@ export async function rejectSuggestion(id: string, reviewerWallet: string, notes
 // LOGGING HELPERS
 // ============================================
 
+/**
+ * Updates the Draco UI (Command Center) in real-time by hitting the local API.
+ * Now supports the new structured dog results (dog1Result, etc.)
+ */
+export async function updateMarketDogLogs(marketId: string, dogNumber: 1 | 2 | 3, data: { logs?: string[]; score?: number; report?: string; verdict?: string; requiresHuman?: boolean }): Promise<void> {
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://127.0.0.1:3002';
+
+    const field = `dog${dogNumber}Result`;
+
+    await fetch(`${baseUrl}/api/markets`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: marketId,
+        [field]: data
+      })
+    });
+  } catch (e) {
+    console.error('[Cerberus] Failed to update live logs:', e);
+  }
+}
+
 export async function logOracleEvent(
   type: OracleLog['type'],
   message: string,

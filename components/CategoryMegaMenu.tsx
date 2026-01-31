@@ -114,11 +114,32 @@ const CATEGORIES: Category[] = [
         glowColor: '#22C55E'
     },
     {
+        id: 'climate',
+        name: 'Climate',
+        slug: 'Climate',
+        image: '/category-climate.png',
+        glowColor: '#10B981'
+    },
+    {
+        id: 'mentions',
+        name: 'Mentions',
+        slug: 'Mentions',
+        image: '/category-mentions.png',
+        glowColor: '#F492B7'
+    },
+    {
         id: 'gaming',
         name: 'Gaming',
         slug: 'Gaming',
         image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=600&q=80',
         glowColor: '#A855F7'
+    },
+    {
+        id: 'music',
+        name: 'Music',
+        slug: 'Music',
+        image: '/category-music.png',
+        glowColor: '#EC4899'
     }
 ];
 
@@ -129,13 +150,11 @@ export default function CategoryMegaMenu() {
     const handleCategoryClick = (category: Category) => {
         setActiveCategory(category.slug);
         setActiveSubcategory('');
-        router.push('/markets');
     };
 
     const handleSubcategoryClick = (categorySlug: string, subcategory: string) => {
         setActiveCategory(categorySlug);
         setActiveSubcategory(subcategory);
-        router.push('/markets');
     };
 
     return (
