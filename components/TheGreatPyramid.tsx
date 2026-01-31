@@ -8,7 +8,7 @@ interface TheGreatPyramidProps {
     topMarkets: any[];
 }
 
-export default function TheGreatPyramid({ topMarkets }: TheGreatPyramidProps) {
+export default React.memo(function TheGreatPyramid({ topMarkets }: TheGreatPyramidProps) {
     if (!topMarkets || topMarkets.length === 0) return null;
 
     // Podium indices: Center (Winner) is index 0. Left is index 1. Right is index 2.
@@ -98,4 +98,4 @@ export default function TheGreatPyramid({ topMarkets }: TheGreatPyramidProps) {
             <div className="absolute bottom-[-50px] left-1/2 -translate-x-1/2 w-[80%] h-[100px] bg-[#F492B7] blur-[150px] opacity-10 pointer-events-none"></div>
         </section>
     );
-}
+});

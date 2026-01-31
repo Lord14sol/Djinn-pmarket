@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -31,6 +31,9 @@ export default function Home() {
 
   const [markets, setMarkets] = useState<any[]>(initialStaticMarkets);
   const [isLoading, setIsLoading] = useState(true);
+
+  // NEW: Batched Real-time updates to prevent render floods
+  const updatesRef = useRef<Record<string, any>>({});
 
   // 2. Cargamos mercados de Supabase + fallback a estáticos
   useEffect(() => {
@@ -162,20 +165,11 @@ export default function Home() {
         }, 10000);
       }
     });
-
     // NEW: Real-time subscription to market_data table (Live Price/Volume)
     const dataChannel = subscribeToAllMarketData((payload) => {
       if (payload.new && payload.new.slug) {
-        console.log("⚡ LIVE: Market Data update!", payload.new.slug, payload.new.live_price);
-        setMarkets(prev => prev.map(m =>
-          m.slug === payload.new.slug
-            ? {
-              ...m,
-              chance: Math.round(payload.new.live_price),
-              volume: `$${formatCompact(Math.abs(payload.new.volume))}`
-            }
-            : m
-        ));
+        // Collect update in batch instead of setting state immediately
+        updatesRef.current[payload.new.slug] = payload.new;
       }
     });
 
@@ -198,6 +192,30 @@ export default function Home() {
       window.removeEventListener('storage', loadMarkets);
       window.removeEventListener('market-created', handleMarketCreated);
     };
+  }, []);
+
+  // NEW: Batched Real-time updates to prevent render floods
+  useEffect(() => {
+    const applyUpdates = () => {
+      if (Object.keys(updatesRef.current).length === 0) return;
+
+      setMarkets(prev => prev.map(m => {
+        const update = updatesRef.current[m.slug];
+        if (update) {
+          return {
+            ...m,
+            chance: Math.round(update.live_price),
+            volume: `$${formatCompact(Math.abs(update.volume))}`
+          };
+        }
+        return m;
+      }));
+
+      updatesRef.current = {}; // Clear batch
+    };
+
+    const interval = setInterval(applyUpdates, 600); // Pulse every 600ms
+    return () => clearInterval(interval);
   }, []);
 
   // 3. FUNCIÓN DE CREACIÓN PROTEGIDA
@@ -224,45 +242,47 @@ export default function Home() {
   const now = Date.now();
   const oneDayAgo = now - 86400000; // 24 horas
 
-  const filteredMarkets = markets.filter(market => {
-    // Hide archived markets
-    if ((market as any).is_archived) return false;
+  const filteredMarkets = useMemo(() => {
+    return markets.filter(market => {
+      // Hide archived markets
+      if ((market as any).is_archived) return false;
 
-    // Hide old markets before fresh start timestamp
-    if (FRESH_START_TIMESTAMP > 0 && (market.createdAt || 0) < FRESH_START_TIMESTAMP) {
-      return false;
-    }
+      // Hide old markets before fresh start timestamp
+      if (FRESH_START_TIMESTAMP > 0 && (market.createdAt || 0) < FRESH_START_TIMESTAMP) {
+        return false;
+      }
 
-    const age = now - (market.createdAt || 0);
-    const oneHour = 3600000;
-    const twelveHours = 43200000;
-    const oneDay = 86400000;
+      const age = now - (market.createdAt || 0);
+      const oneHour = 3600000;
+      const twelveHours = 43200000;
+      const oneDay = 86400000;
 
-    if (activeCategory === 'Trending') return true; // Show mix
+      if (activeCategory === 'Trending') return true; // Show mix
 
-    // NEW: Real-time feed (Everything sorted by newest)
-    if (activeCategory === 'New') {
-      return true;
-    }
+      // NEW: Real-time feed (Everything sorted by newest)
+      if (activeCategory === 'New') {
+        return true;
+      }
 
-    // HOT: 1h - 12h range (High velocity zone)
-    if (activeCategory === 'Hot') {
-      return age > oneHour && age < twelveHours;
-    }
+      // HOT: 1h - 12h range (High velocity zone)
+      if (activeCategory === 'Hot') {
+        return age > oneHour && age < twelveHours;
+      }
 
-    // STABLE: 24h+ (Consolidated markets)
-    if (activeCategory === 'Stable') {
-      return age > oneDay;
-    }
+      // STABLE: 24h+ (Consolidated markets)
+      if (activeCategory === 'Stable') {
+        return age > oneDay;
+      }
 
-    if (activeCategory === 'Earth') {
-      if (activeSubcategory) return (market.region || '').toLowerCase() === activeSubcategory.toLowerCase();
-      return (market.category || '').toLowerCase() === 'earth' || !!market.region;
-    }
-    return (market.category || '').toLowerCase() === activeCategory.toLowerCase();
-  });
+      if (activeCategory === 'Earth') {
+        if (activeSubcategory) return (market.region || '').toLowerCase() === activeSubcategory.toLowerCase();
+        return (market.category || '').toLowerCase() === 'earth' || !!market.region;
+      }
+      return (market.category || '').toLowerCase() === activeCategory.toLowerCase();
+    });
+  }, [markets, activeCategory, activeSubcategory, now]);
 
-  // Sorting Logic
+  // Sorting Logic helpers
   const parseVolume = (volStr: string) => {
     if (!volStr) return 0;
     const clean = volStr.replace(/[$,]/g, '');
@@ -273,24 +293,26 @@ export default function Home() {
     return val;
   };
 
-  const sortedMarkets = [...filteredMarkets].sort((a, b) => {
-    // NEW: Strictly by Time (Newest First)
-    if (activeCategory === 'New') {
+  const sortedMarkets = useMemo(() => {
+    return [...filteredMarkets].sort((a, b) => {
+      // NEW: Strictly by Time (Newest First)
+      if (activeCategory === 'New') {
+        return (b.createdAt || 0) - (a.createdAt || 0);
+      }
+
+      // HOT & TRENDING: Volume * Velocity (Pyramid Algorithm)
+      // Primary Sort: Total Volume (Descending)
+      const volA = parseVolume(a.volume);
+      const volB = parseVolume(b.volume);
+
+      if (volB !== volA) {
+        return volB - volA; // Higher volume first
+      }
+
+      // Secondary Sort: Newest First
       return (b.createdAt || 0) - (a.createdAt || 0);
-    }
-
-    // HOT & TRENDING: Volume * Velocity (Pyramid Algorithm)
-    // Primary Sort: Total Volume (Descending)
-    const volA = parseVolume(a.volume);
-    const volB = parseVolume(b.volume);
-
-    if (volB !== volA) {
-      return volB - volA; // Higher volume first
-    }
-
-    // Secondary Sort: Newest First
-    return (b.createdAt || 0) - (a.createdAt || 0);
-  });
+    });
+  }, [filteredMarkets, activeCategory]);
 
   // Título dinámico según categoría (sin emojis)
   const getCategoryTitle = () => {
@@ -321,17 +343,15 @@ export default function Home() {
     }
   };
 
-  // Calculate top market for The Great Pyramid
   // Calculate top 3 markets for The Great Pyramid Podium
   const top3Markets = useMemo(() => {
     if (markets.length === 0) return null;
     const sorted = [...markets].sort((a, b) => {
-      const volA = parseFloat(a.volume?.replace(/[$,MK]/g, '') || '0');
-      const volB = parseFloat(b.volume?.replace(/[$,MK]/g, '') || '0');
+      const volA = parseVolume(a.volume);
+      const volB = parseVolume(b.volume);
       return volB - volA;
     });
 
-    // Reformular para pasar los objetos completos con el formato esperado
     return sorted.slice(0, 3).map(m => ({
       ...m,
       betsCount: m.betsCount || Math.floor(Math.random() * 5000) + 500 // Mock if missing

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import QuickBetModal from './QuickBetModal';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -39,7 +40,7 @@ const StarIcon = ({ active, onClick }: { active: boolean, onClick: (e: any) => v
     );
 };
 
-const MarketCard: React.FC<MarketCardProps> = ({
+const MarketCard: React.FC<MarketCardProps> = React.memo(({
     title,
     slug,
     icon,
@@ -59,6 +60,7 @@ const MarketCard: React.FC<MarketCardProps> = ({
     compact = false
 }) => {
     const { publicKey } = useWallet();
+    const router = useRouter(); // Using Next.js router
     const [timeLeft, setTimeLeft] = useState('');
     const [isStarred, setIsStarred] = useState(false);
     const [showBetModal, setShowBetModal] = useState(false);
@@ -78,6 +80,11 @@ const MarketCard: React.FC<MarketCardProps> = ({
         if (optionChance) setSelectedOptionChance(optionChance);
         else setSelectedOptionChance(chance || 50);
         setShowBetModal(true);
+    };
+
+    const handleNavigate = (e: React.MouseEvent) => {
+        e.preventDefault();
+        router.push(`/market/${slug}`);
     };
 
     useEffect(() => {
@@ -112,7 +119,7 @@ const MarketCard: React.FC<MarketCardProps> = ({
 
     return (
         <div
-            onClick={() => window.location.href = `/market/${slug}`}
+            onClick={handleNavigate}
             className={`bg-black flex flex-col relative hover:bg-white/[0.02] hover:-translate-y-2 transition-all duration-300 h-full group/card shadow-lg hover:shadow-xl cursor-pointer
                 ${compact ? 'p-3 gap-2 min-h-[200px]' : 'p-4 gap-4 min-h-[380px]'}
             `}
@@ -182,7 +189,7 @@ const MarketCard: React.FC<MarketCardProps> = ({
                                         `}
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            window.location.href = `/market/${slug}`;
+                                            router.push(`/market/${slug}`);
                                         }}
                                     >
                                         <span className="text-gray-300 truncate font-bold max-w-[70%]">{typeof opt === 'string' ? opt : opt.title}</span>
@@ -264,6 +271,6 @@ const MarketCard: React.FC<MarketCardProps> = ({
             />
         </div>
     );
-};
+});
 
 export default MarketCard;

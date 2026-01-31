@@ -32,16 +32,30 @@ export function WalletAuthWrapper({ children }: { children: React.ReactNode }) {
                         try {
                             localStorage.setItem(key, bs58.encode(signature));
                         } catch (quotaError) {
-                            if (quotaError instanceof Error && quotaError.name === 'QuotaExceededError') {
-                                console.warn("⚠️ LocalStorage full, cleaning up old profile caches...");
-                                // Clear only profile caches to make room
+                            if (quotaError instanceof Error && (quotaError.name === 'QuotaExceededError' || quotaError.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
+                                console.warn("⚠️ LocalStorage full! Executing emergency purge of non-essential data...");
+
+                                // 1. Purge high-memory items first (PFPs and custom profiles)
                                 Object.keys(localStorage).forEach(k => {
-                                    if (k.startsWith('djinn_profile_')) {
+                                    if (k.startsWith('djinn_pfp_') ||
+                                        k.startsWith('djinn_profile_') ||
+                                        k.startsWith('djinn_markets') ||
+                                        k.startsWith('djinn_created_markets')) {
                                         localStorage.removeItem(k);
                                     }
                                 });
-                                // Retry saving the signature
-                                localStorage.setItem(key, bs58.encode(signature));
+
+                                // 2. Retry saving the critical signature
+                                try {
+                                    localStorage.setItem(key, bs58.encode(signature));
+                                } catch (retryError) {
+                                    console.error("❌ Critical: Still cannot save auth signature after purge!", retryError);
+                                    // If even after purge it fails, we clear EVERYTHING starting with djinn_
+                                    Object.keys(localStorage).forEach(k => {
+                                        if (k.startsWith('djinn_')) localStorage.removeItem(k);
+                                    });
+                                    localStorage.setItem(key, bs58.encode(signature));
+                                }
                             } else {
                                 throw quotaError;
                             }
