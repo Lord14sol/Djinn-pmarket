@@ -2,7 +2,9 @@ import { AnchorProvider, Program, BN } from '@project-serum/anchor';
 import { WalletContextState } from '@solana/wallet-adapter-react';
 import { Connection, PublicKey, SystemProgram } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
-import { PROGRAM_ID, PROTOCOL_AUTHORITY, RPC_ENDPOINT } from './program-config';
+import { PROGRAM_ID as PROGRAM_ID_STRING, PROTOCOL_AUTHORITY, RPC_ENDPOINT } from './program-config';
+
+const PROGRAM_ID = new PublicKey(PROGRAM_ID_STRING);
 import { IDL, DjinnMarket } from './idl/djinn_market';
 
 /**

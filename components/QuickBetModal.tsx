@@ -107,10 +107,8 @@ export default function QuickBetModal({ isOpen, onClose, market, outcome }: Quic
 
             const tx = await buyShares(
                 new PublicKey(market.marketPDA),
-                outcome,
+                outcome === 'yes' ? 0 : 1, // Convert 'yes'/'no' to outcomeIndex
                 amount,
-                new PublicKey(market.yesTokenMint || "So11111111111111111111111111111111111111112"),
-                new PublicKey(market.noTokenMint || "So11111111111111111111111111111111111111112"),
                 marketCreator,
                 0 // minSharesOut
             );
