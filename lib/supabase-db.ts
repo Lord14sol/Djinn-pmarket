@@ -504,15 +504,25 @@ export function subscribeToComments(marketSlug: string, callback: (payload: any)
         .subscribe();
 }
 
-export function subscribeToActivity(marketSlug: string, callback: (payload: any) => void) {
+export function subscribeToActivity(callbackOrSlug: string | ((payload: any) => void), callback?: (payload: any) => void) {
+    // Support both signatures: (callback) for global, (slug, callback) for filtered
+    const marketSlug = typeof callbackOrSlug === 'string' ? callbackOrSlug : null;
+    const actualCallback = typeof callbackOrSlug === 'function' ? callbackOrSlug : callback!;
+
+    const channelName = marketSlug ? `activity:${marketSlug}` : 'activity:global';
+    const channelConfig: any = {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'activity',
+    };
+
+    if (marketSlug) {
+        channelConfig.filter = `market_slug=eq.${marketSlug}`;
+    }
+
     return supabase
-        .channel(`activity:${marketSlug}`)
-        .on('postgres_changes', {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'activity',
-            filter: `market_slug=eq.${marketSlug}` // ✅ FIX: Only receive events for this market
-        }, callback)
+        .channel(channelName)
+        .on('postgres_changes', channelConfig, actualCallback)
         .subscribe();
 }
 

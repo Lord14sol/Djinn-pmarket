@@ -11,7 +11,7 @@ interface CommentsSectionProps {
     userProfile: { username: string; avatarUrl: string };
     marketOutcomes: any[]; // Passed from parent to determine colors
     myHeldPosition: string | null;
-    myHeldAmount: string | null;
+    myHeldAmount: string | number | null;
 }
 
 // Helper for dynamic colors (replicated from page.tsx for consistency)
@@ -222,7 +222,7 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
                 text: savedText || '', // Asegurar que text nunca sea undefined
                 image_url: savedImage,
                 position: myHeldPosition,
-                position_amount: myHeldAmount,
+                position_amount: myHeldAmount !== null ? String(myHeldAmount) : null,
                 parent_id: null
             });
 
@@ -266,7 +266,7 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
                 text: savedReplyText,
                 image_url: null,
                 position: myHeldPosition,
-                position_amount: myHeldAmount,
+                position_amount: myHeldAmount !== null ? String(myHeldAmount) : null,
                 parent_id: parentId
             });
 

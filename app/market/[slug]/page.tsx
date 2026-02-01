@@ -448,7 +448,7 @@ export default function Page() {
     const [isSuccess, setIsSuccess] = useState(false);
     const [tradeSuccessInfo, setTradeSuccessInfo] = useState<{ shares: number; side: string; txSignature: string } | null>(null);
 
-    const [lastTradeEvent, setLastTradeEvent] = useState<{ id: string; amount: number; side: 'YES' | 'NO' } | null>(null);
+    const [lastTradeEvent, setLastTradeEvent] = useState<{ id: string; amount: number; side: 'YES' | 'NO'; title?: string; color?: string } | null>(null);
     const [tradeMode, setTradeMode] = useState<'BUY' | 'SELL'>('BUY');
     const [isMaxSell, setIsMaxSell] = useState(false);
     const [showPurchaseToast, setShowPurchaseToast] = useState(false);
@@ -2455,7 +2455,7 @@ export default function Page() {
                                 {/* ✅ HOLDINGS - ALWAYS VISIBLE ABOVE TABS */}
                                 <HoldingsSection
                                     bets={userBets}
-                                    outcomeSupplies={marketOutcomes.map(o => o.supply)}
+                                    outcomeSupplies={marketOutcomes.map(o => o.supply ?? 0)}
                                     marketOutcomes={marketOutcomes}
                                 />
 

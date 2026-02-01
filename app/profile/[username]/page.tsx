@@ -167,7 +167,8 @@ export default function ProfilePage() {
                 pfp: "https://api.dicebear.com/7.x/avataaars/svg?seed=default",
                 gems: 0, profit: 0, portfolio: 0, winRate: 0, biggestWin: 0, medals: [],
                 achievements: [],
-                activeBets: [], closedBets: [], createdMarkets: [], showGems: true
+                activeBets: [], closedBets: [], createdMarkets: [], showGems: true,
+                joinedAt: ""
             });
             setIsMyProfile(false);
             setIsLoading(false);

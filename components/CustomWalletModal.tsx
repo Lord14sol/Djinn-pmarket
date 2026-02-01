@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { WalletReadyState } from '@solana/wallet-adapter-base';
+import { WalletReadyState, WalletName } from '@solana/wallet-adapter-base';
 import { ShieldCheck, X } from 'lucide-react';
 
 interface CustomWalletModalProps {
@@ -35,7 +35,7 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
         if (walletName === wallet?.adapter.name && connected) return;
         setIsConnecting(true);
         setSelectedWallet(walletName);
-        select(walletName);
+        select(walletName as WalletName);
     }, [select, wallet, connected]);
 
     // 2. Trigger Connection with Delay (The Fix)

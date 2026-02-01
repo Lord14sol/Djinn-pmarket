@@ -337,9 +337,9 @@ export default function TheDjinnChart({
                             <AreaChart
                                 data={filteredLineData}
                                 margin={{ top: 20, right: 0, left: -20, bottom: 0 }}
-                                onMouseMove={(e) => {
+                                onMouseMove={(e: any) => {
                                     // Dynamic Key Access
-                                    if (e.activePayload && e.activePayload[0]) {
+                                    if (e?.activePayload && e.activePayload[0]) {
                                         const val = e.activePayload[0].payload[outcomes[0]];
                                         onHover?.(val);
                                     }
