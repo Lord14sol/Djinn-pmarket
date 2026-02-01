@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getActivity, subscribeToActivity, Activity } from '@/lib/supabase-db';
+import { getActivity, subscribeToGlobalActivity, Activity } from '@/lib/supabase-db';
 
 // Función para formatear tiempo relativo
 function formatTimeAgo(timestamp: string): string {
@@ -38,7 +38,7 @@ export default function ActivityPage() {
 
     // Suscribirse a actualizaciones en tiempo real
     useEffect(() => {
-        const channel = subscribeToActivity((payload) => {
+        const channel = subscribeToGlobalActivity((payload: any) => {
             if (payload.new) {
                 setTrades(prev => [payload.new as Activity, ...prev].slice(0, 50));
             }

@@ -516,6 +516,17 @@ export function subscribeToActivity(marketSlug: string, callback: (payload: any)
         .subscribe();
 }
 
+export function subscribeToGlobalActivity(callback: (payload: any) => void) {
+    return supabase
+        .channel('activity:global')
+        .on('postgres_changes', {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'activity'
+        }, callback)
+        .subscribe();
+}
+
 export function subscribeToMarketData(slug: string, callback: (payload: any) => void) {
     return supabase
         .channel(`market:${slug}`)

@@ -13,7 +13,7 @@ export default function ActivityPage() {
         supabaseDb.getActivity(0, 50).then(setActivity);
 
         // Subscribe to real-time updates
-        const sub = supabaseDb.subscribeToActivity((payload) => {
+        const sub = supabaseDb.subscribeToGlobalActivity((payload: any) => {
             if (payload.new) {
                 setActivity(prev => [payload.new, ...prev].slice(0, 50));
             }
