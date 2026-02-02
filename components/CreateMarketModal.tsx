@@ -258,6 +258,30 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
             // Let's assume volume is USD.
             // We'll init with 50% price. The on-chain sync will fix the exact price later if it moved.
 
+            // CONSTRUCT MARKET OBJECT FOR OPTIMISTIC UPDATE (BEFORE resetting state!)
+            const savedTitle = poolName; // Save before reset
+            const savedSourceUrl = sourceUrl;
+            const savedBanner = finalBanner;
+            const savedCreator = publicKey.toString();
+
+            const optimisticMarket = {
+                id: `local_${Date.now()}`, // Temporary ID
+                slug,
+                title: savedTitle,
+                volume: "$0", // Initial volume
+                chance: 50,
+                icon: savedBanner,
+                category: finalCategory, // Auto-detected category
+                createdAt: Date.now(),
+                marketPDA,
+                yesTokenMint,
+                noTokenMint,
+                resolved: false,
+                winningOutcome: null,
+                resolutionSource: savedSourceUrl || 'DERIVED',
+                creator_wallet: savedCreator
+            };
+
             // SUCCESS - Store data and show animation
             setSuccessData({
                 txSignature,
@@ -267,49 +291,41 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                 slug
             });
             setIsSuccess(true);
-            // Longer timeout so user can see the success screen and click links
-            // User can also close manually or wait for redirect
 
-            // RESET
+            // RESET FORM (after saving data)
             setPoolName('');
             setMainImage(null);
             setMarketType('binary');
             setOptions([{ id: 1, name: '' }, { id: 2, name: '' }]);
-            // CONSTRUCT MARKET OBJECT FOR OPTIMISTIC UPDATE
-            const optimisticMarket = {
-                id: `local_${Date.now()}`, // Temporary ID
-                slug,
-                title: poolName,
-                volume: "$0", // Initial volume
-                chance: 50,
-                icon: finalBanner,
-                category: finalCategory, // Auto-detected category
-                createdAt: Date.now(),
-                marketPDA,
-                yesTokenMint,
-                noTokenMint,
-                resolved: false,
-                winningOutcome: null,
-                resolutionSource: 'DERIVED',
-                creator_wallet: publicKey.toString()
-            };
 
             // FORCE SAVE TO LOCALSTORAGE (Backup)
             try {
                 const currentLocal = JSON.parse(localStorage.getItem('djinn_created_markets') || '[]');
                 localStorage.setItem('djinn_created_markets', JSON.stringify([optimisticMarket, ...currentLocal]));
+            } catch (e) {
+                console.warn("LocalStorage save failed", e);
+            }
 
-                // NEW INTEGRATION: Send to Next.js API for Cerberus to see
-                await fetch('/api/markets', {
+            // SEND TO DRACO/CERBERUS API (separate try/catch for visibility)
+            try {
+                console.log("🐉 Sending market to DRACO API...", { title: savedTitle, source: savedSourceUrl, image: savedBanner });
+                const dracoRes = await fetch('/api/markets', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        title: poolName,
-                        sourceUrl: sourceUrl
+                        id: optimisticMarket.id,
+                        title: savedTitle,
+                        sourceUrl: savedSourceUrl,
+                        imageUrl: savedBanner,
+                        creator: savedCreator,
+                        marketPda: marketPDA,
+                        slug: slug
                     })
                 });
-            } catch (e) {
-                console.warn("API/Local storage save failed", e);
+                const dracoData = await dracoRes.json();
+                console.log("🐉 DRACO Response:", dracoData);
+            } catch (dracoErr) {
+                console.error("🐉 DRACO API failed:", dracoErr);
             }
 
             // DISPARAR EL EVENTO CON DATA

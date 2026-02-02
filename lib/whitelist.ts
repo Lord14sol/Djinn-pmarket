@@ -5,8 +5,8 @@ export const ADMIN_WALLETS = [
     "G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma"
 ];
 
-// Set to 2 to allow for testing/limited access
-export const GENESIS_LIMIT = 2;
+// Set high for development - adjust for production launch
+export const GENESIS_LIMIT = 10000;
 
 export interface WhitelistStatus {
     count: number;

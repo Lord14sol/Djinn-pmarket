@@ -98,17 +98,29 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
 
     useEffect(() => {
         const checkAccess = async () => {
-            // Only enforce on internal pages
-            if (pathname !== '/' && connected && publicKey) {
+            // Only enforce on internal pages (skip for /markets to allow seamless experience)
+            const protectedPaths = ['/admin', '/bets', '/profile'];
+            const isProtected = protectedPaths.some(p => pathname.startsWith(p));
+
+            if (isProtected && connected && publicKey) {
                 try {
-                    const { getWhitelistStatus } = await import('@/lib/whitelist');
+                    const { getWhitelistStatus, registerForWhitelist } = await import('@/lib/whitelist');
                     const status = await getWhitelistStatus(publicKey.toBase58());
 
                     if (!status.isAdmin && !status.isRegistered) {
+                        // Try auto-registering before redirecting
+                        if (!status.isFull) {
+                            const result = await registerForWhitelist(publicKey.toBase58());
+                            if (result.success) {
+                                console.log('[LayoutWrapper] Auto-registered user');
+                                return; // Stay on page
+                            }
+                        }
                         router.push('/');
                     }
                 } catch (err) {
                     console.error("[LayoutWrapper] Access check failed:", err);
+                    // Fail open - allow access if check fails
                 }
             }
         };

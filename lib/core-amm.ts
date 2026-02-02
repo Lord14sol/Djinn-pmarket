@@ -1,5 +1,3 @@
-import { PublicKey } from "@solana/web3.js";
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // DJINN CURVE V4 AGGRESSIVE: "EARLY BIRD REWARDS"
 // ⚠️ SYNCHRONIZED WITH SMART CONTRACT (programs/djinn-market/src/lib.rs)
@@ -65,16 +63,44 @@ export interface TradeSimulation {
 // --- IGNITION HELPER ---
 export type IgnitionStatus = 'ACCUMULATION' | 'BREAKING' | 'VIRAL';
 
+// 🎯 CERBERUS GRADUATION TARGET: $34,000 USD MCAP
+// At ~$100/SOL, this is approximately 330 SOL in total market value
+export const GRADUATION_MCAP_SOL = 330; // Target MCAP in SOL for 100% progress
+
 export function getIgnitionStatus(supply: number): IgnitionStatus {
     if (supply >= PHASE3_START) return 'VIRAL';
     if (supply >= PHASE1_END) return 'BREAKING'; // In the bridge zone
     return 'ACCUMULATION';
 }
 
+/**
+ * @deprecated Use getIgnitionProgressMcap for MCAP-based graduation
+ * Returns 0-100 representing progress to VIRAL mode based on share supply
+ */
 export function getIgnitionProgress(supply: number): number {
-    // Returns 0-100 representing progress to VIRAL mode (110M threshold)
+    // Returns 0-100 representing progress to VIRAL mode (200M threshold)
     return Math.min(100, (supply / PHASE3_START) * 100);
 }
+
+/**
+ * NEW: MCAP-based progress for Cerberus graduation trigger
+ * Returns 0-100 representing progress towards $34k USD MCAP (~330 SOL)
+ * @param totalMcapSol - Combined MCAP of all outcomes in SOL
+ */
+export function getIgnitionProgressMcap(totalMcapSol: number): number {
+    return Math.min(100, (totalMcapSol / GRADUATION_MCAP_SOL) * 100);
+}
+
+/**
+ * Get ignition status based on MCAP
+ */
+export function getIgnitionStatusMcap(totalMcapSol: number): IgnitionStatus {
+    const progress = getIgnitionProgressMcap(totalMcapSol);
+    if (progress >= 100) return 'VIRAL';
+    if (progress >= 50) return 'BREAKING';
+    return 'ACCUMULATION';
+}
+
 
 // --- LINEAR SLOPE (Phase 1: 0 → 100M) ---
 const LINEAR_SLOPE = (P_50 - P_START) / PHASE1_END;
@@ -250,19 +276,25 @@ export function simulateSell(
 
 // --- UTILITY FUNCTIONS ---
 
-export function calculateImpliedProbability(yesSupply: number, noSupply: number): number {
-    // VIRTUAL_FLOOR prevents probability explosion to 100% on low liquidity
-    // Tuned with VIRTUAL_OFFSET for optimal behavior
+/**
+ * Calculate implied probability based on MCAP (Market Cap)
+ * MCAP = Supply × Price - this gives stable probability that doesn't explode to 100%
+ * @param yesMcap - YES side market cap in SOL
+ * @param noMcap - NO side market cap in SOL
+ */
+export function calculateImpliedProbability(yesMcap: number, noMcap: number): number {
+    const total = yesMcap + noMcap;
+    if (total <= 0) return 50; // No bets yet, 50/50
 
-    const VIRTUAL_FLOOR = PROBABILITY_BUFFER;
+    // Small virtual buffer to prevent extreme 0%/100%
+    const MCAP_BUFFER = 0.001; // 0.001 SOL minimum virtual MCAP per side
+    const adjustedYes = yesMcap + MCAP_BUFFER;
+    const adjustedNo = noMcap + MCAP_BUFFER;
+    const adjustedTotal = adjustedYes + adjustedNo;
 
-    const adjustedYes = yesSupply + VIRTUAL_FLOOR;
-    const adjustedNo = noSupply + VIRTUAL_FLOOR;
-    const totalSupply = adjustedYes + adjustedNo;
+    const probability = (adjustedYes / adjustedTotal) * 100;
 
-    const probability = (adjustedYes / totalSupply) * 100;
-
-    console.log(`🎲 Probability (Buffered): YES ${yesSupply.toFixed(0)} shares (${probability.toFixed(2)}%) | NO ${noSupply.toFixed(0)} shares`);
+    console.log(`🎲 Probability (MCAP): YES ${yesMcap.toFixed(4)} SOL (${probability.toFixed(2)}%) | NO ${noMcap.toFixed(4)} SOL`);
 
     return probability;
 }

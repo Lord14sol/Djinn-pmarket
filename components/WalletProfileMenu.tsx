@@ -4,6 +4,8 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
+import { ADMIN_WALLETS } from '@/lib/whitelist';
+
 interface WalletProfileMenuProps {
     isOpen: boolean;
     onClose: () => void;
@@ -39,6 +41,8 @@ export default function WalletProfileMenu({
         setTimeout(() => setCopied(false), 2000);
     };
 
+    const isAdmin = ADMIN_WALLETS.includes(walletAddress);
+
     return (
         <>
             {/* BACKDROP */}
@@ -68,6 +72,17 @@ export default function WalletProfileMenu({
                 <Link href={`/profile/${username}`} className="text-gray-500 text-xs mb-4 hover:text-[#F492B7] transition-colors">
                     djinn.markets/profile/{username}
                 </Link>
+
+                {/* 2.5 ADMIN LINK (CONDITIONAL) */}
+                {isAdmin && (
+                    <Link
+                        href="/admin"
+                        onClick={onClose}
+                        className="mb-4 text-[#F492B7] text-xs font-black uppercase tracking-widest border border-[#F492B7]/30 bg-[#F492B7]/10 px-4 py-1.5 rounded-full hover:bg-[#F492B7] hover:text-black transition-all shadow-[0_0_15px_rgba(244,146,183,0.2)]"
+                    >
+                        ⚡ Admin Dashboard
+                    </Link>
+                )}
 
                 {/* 3. EDIT PROFILE BUTTON */}
                 <button

@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useCallback, useEffect, useState } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { WalletReadyState } from '@solana/wallet-adapter-base';
+import { WalletReadyState, WalletName } from '@solana/wallet-adapter-base';
 import { ShieldCheck, X } from 'lucide-react';
 
 interface CustomWalletModalProps {
@@ -12,83 +12,19 @@ interface CustomWalletModalProps {
 
 export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModalProps) {
     const { wallets, select, connect, connecting, connected, wallet } = useWallet();
-    const [isConnecting, setIsConnecting] = React.useState(false);
+    const [isConnecting, setIsConnecting] = useState(false);
+    const [selectedWalletName, setSelectedWalletName] = useState<WalletName | null>(null);
 
-    // Sync local connecting state with wallet adapter
-    React.useEffect(() => {
-        if (connecting) setIsConnecting(true);
-        else {
-            const t = setTimeout(() => setIsConnecting(false), 500); // Shorter timeout
-            return () => clearTimeout(t);
-        }
-    }, [connecting]);
-
-
-
-    // TRIGGER CONNECT AFTER SELECTION
-    // Removed to prevent race conditions. We connect directly in handleConnect.
-
-    const [selectedWallet, setSelectedWallet] = React.useState<string | null>(null);
-
-    // 1. Handle Selection Only
-    const handleWalletSelect = React.useCallback((walletName: string) => {
-        if (walletName === wallet?.adapter.name && connected) return;
-        setIsConnecting(true);
-        setSelectedWallet(walletName);
-        select(walletName);
-    }, [select, wallet, connected]);
-
-    // 2. Trigger Connection with Delay (The Fix)
-    React.useEffect(() => {
-        let timer: NodeJS.Timeout;
-
-        if (selectedWallet && !connecting && !connected) {
-            const attemptConnect = async () => {
-                try {
-                    await connect();
-                } catch (error: any) {
-                    console.error('[CustomWalletModal] Connection failed:', error);
-                    // Standardize error alerting
-                    if (error.name === 'WalletConnectionError') {
-                        alert(`Connection Failed: ${error.message}\n\nPlease try again.`);
-                    } else {
-                        alert(`Error: ${error.message}`);
-                    }
-                    setSelectedWallet(null); // Reset on error
-                } finally {
-                    setIsConnecting(false);
-                }
-            };
-
-            // 100ms delay to ensure context updates
-            timer = setTimeout(attemptConnect, 100);
-        }
-
-        return () => {
-            if (timer) clearTimeout(timer);
-        };
-    }, [selectedWallet, connect, connecting, connected]);
-
-    // Cleanup when connected
-    React.useEffect(() => {
-        if (connected) {
-            setSelectedWallet(null);
-            if (isOpen) onClose();
-        }
-    }, [connected, isOpen, onClose]);
-
-    // Filter and deduplicate wallets
+    // Filter valid wallets
     const uniqueWallets = useMemo(() => {
-        // Dedup by name
         const seen = new Set();
         const list = [];
         const preferredOrder = ['Phantom', 'Solflare', 'Backpack', 'MetaMask', 'Jupiter'];
 
         for (const w of wallets) {
             if (seen.has(w.adapter.name)) continue;
-
-            // Filter out those not ready (unless it's a standard one which is usually 'Installed')
-            if (w.readyState === 'Installed' || w.readyState === 'Loadable') {
+            // Include Installed or Loadable wallets
+            if (w.readyState === WalletReadyState.Installed || w.readyState === WalletReadyState.Loadable) {
                 seen.add(w.adapter.name);
                 list.push(w);
             }
@@ -102,6 +38,60 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
             return posA - posB;
         });
     }, [wallets]);
+
+    // Handle Wallet Selection
+    const handleWalletSelect = useCallback((walletName: WalletName) => {
+        if (connected) return;
+
+        console.log('[CustomWalletModal] Selecting wallet:', walletName);
+        select(walletName);
+        setSelectedWalletName(walletName);
+        setIsConnecting(true);
+    }, [connected, select]);
+
+    // Trigger Connection when wallet updates
+    useEffect(() => {
+        if (!selectedWalletName || connected || connecting) return;
+
+        // If the selected wallet matches the current wallet adapter, try connecting
+        if (wallet?.adapter.name === selectedWalletName) {
+            console.log('[CustomWalletModal] Wallet ready, attempting connect...');
+
+            const connectWallet = async () => {
+                try {
+                    await connect();
+                } catch (error: any) {
+                    console.error('[CustomWalletModal] Connection failed:', error);
+                    // Only alert if it's not a "User rejected" error which is common
+                    if (error.name !== 'WalletConnectionError' || !error.message.includes('User rejected')) {
+                        alert(`Connection Failed: ${error.message}`);
+                    }
+                    setSelectedWalletName(null);
+                } finally {
+                    setIsConnecting(false);
+                }
+            };
+
+            connectWallet();
+        }
+    }, [wallet, selectedWalletName, connected, connecting, connect]);
+
+    // Cleanup on Close/Connect
+    useEffect(() => {
+        if (connected) {
+            setSelectedWalletName(null);
+            setIsConnecting(false);
+            if (isOpen) onClose();
+        }
+    }, [connected, isOpen, onClose]);
+
+    // Reset state when modal opens/closes
+    useEffect(() => {
+        if (!isOpen) {
+            setIsConnecting(false);
+            setSelectedWalletName(null);
+        }
+    }, [isOpen]);
 
     if (!isOpen) return null;
 

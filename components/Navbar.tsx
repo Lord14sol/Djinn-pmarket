@@ -454,6 +454,12 @@ function NavbarContent() {
                 connected={connected}
                 publicKey={publicKey}
             />
+
+            {/* Custom Wallet Modal */}
+            <CustomWalletModal
+                isOpen={isWalletModalOpen}
+                onClose={() => setIsWalletModalOpen(false)}
+            />
         </>
     );
 }

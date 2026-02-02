@@ -48,7 +48,7 @@ export async function POST(req: Request) {
             createdAt: new Date().toISOString()
         };
         markets.push(newMarket);
-        console.log('[API] New market registered for Cerberus analysis:', newMarket.id);
+        console.log('[API] New market registered:', newMarket.id);
         return NextResponse.json(newMarket);
     } catch (e) {
         console.error('[API] Error creating market:', e);

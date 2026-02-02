@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
-import { getWhitelistStatus } from '@/lib/whitelist';
+import { getWhitelistStatus, registerForWhitelist } from '@/lib/whitelist';
 import CustomWalletModal from '@/components/CustomWalletModal';
 
 import { useRouter } from 'next/navigation';
@@ -43,12 +43,30 @@ export default function GenesisPage() {
         return () => clearInterval(interval);
     }, [refreshStatus]);
 
-    // AUTO-REDIRECT: If connected and authorized, go to markets immediately
+    // AUTO-REGISTER & REDIRECT: When wallet connects, auto-register if spots available
     useEffect(() => {
-        if (connected && !loading && (status.isAdmin || status.isRegistered)) {
-            router.push('/markets');
-        }
-    }, [connected, loading, status, router]);
+        const autoRegisterAndRedirect = async () => {
+            if (!connected || loading || !publicKey) return;
+
+            // Already authorized? Go to markets
+            if (status.isAdmin || status.isRegistered) {
+                router.push('/markets');
+                return;
+            }
+
+            // Not registered but spots available? Auto-register
+            if (!status.isFull) {
+                console.log('[Genesis] Auto-registering wallet...');
+                const result = await registerForWhitelist(publicKey.toBase58());
+                if (result.success) {
+                    console.log('[Genesis] Auto-registration successful!');
+                    router.push('/markets');
+                }
+            }
+        };
+
+        autoRegisterAndRedirect();
+    }, [connected, loading, status, router, publicKey]);
 
     // Force autoplay on mobile
     useEffect(() => {
