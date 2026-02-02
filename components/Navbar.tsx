@@ -267,12 +267,23 @@ function NavbarContent() {
     }, [connected, publicKey]);
 
     // AUTO-OPEN MENU ON CONNECTION
+    // AUTO-OPEN MENU ON CONNECTION (ONCE PER SESSION)
     useEffect(() => {
         if (connected) {
-            // Short delay to allow UI to settle
-            setTimeout(() => setIsOpen(true), 500);
+            // Check if we already auto-opened the menu in this session
+            const hasAutoOpened = sessionStorage.getItem('djinn_menu_auto_opened');
+
+            if (!hasAutoOpened) {
+                // Short delay to allow UI to settle
+                setTimeout(() => {
+                    setIsOpen(true);
+                    sessionStorage.setItem('djinn_menu_auto_opened', 'true');
+                }, 500);
+            }
         } else {
             setIsOpen(false);
+            // Reset flag on disconnect so it opens again next time
+            sessionStorage.removeItem('djinn_menu_auto_opened');
         }
     }, [connected]);
 

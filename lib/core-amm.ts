@@ -277,24 +277,24 @@ export function simulateSell(
 // --- UTILITY FUNCTIONS ---
 
 /**
- * Calculate implied probability based on MCAP (Market Cap)
- * MCAP = Supply × Price - this gives stable probability that doesn't explode to 100%
- * @param yesMcap - YES side market cap in SOL
- * @param noMcap - NO side market cap in SOL
+ * Calculate implied probability based on Supply with Virtual Floor
+ * RESTORED: Original logic that prevents probability explosion to 100%
+ * Virtual floor of 15M shares per side ensures max ~78-80% even with 5 SOL buy
+ * @param yesSupply - YES side share supply
+ * @param noSupply - NO side share supply
  */
-export function calculateImpliedProbability(yesMcap: number, noMcap: number): number {
-    const total = yesMcap + noMcap;
-    if (total <= 0) return 50; // No bets yet, 50/50
+export function calculateImpliedProbability(yesSupply: number, noSupply: number): number {
+    // VIRTUAL_FLOOR prevents probability explosion to 100% on low liquidity
+    // 15M shares per side = probability starts at 50% and maxes around 78-80%
+    const VIRTUAL_FLOOR = PROBABILITY_BUFFER; // 15_000_000
 
-    // Small virtual buffer to prevent extreme 0%/100%
-    const MCAP_BUFFER = 0.001; // 0.001 SOL minimum virtual MCAP per side
-    const adjustedYes = yesMcap + MCAP_BUFFER;
-    const adjustedNo = noMcap + MCAP_BUFFER;
-    const adjustedTotal = adjustedYes + adjustedNo;
+    const adjustedYes = yesSupply + VIRTUAL_FLOOR;
+    const adjustedNo = noSupply + VIRTUAL_FLOOR;
+    const totalSupply = adjustedYes + adjustedNo;
 
-    const probability = (adjustedYes / adjustedTotal) * 100;
+    const probability = (adjustedYes / totalSupply) * 100;
 
-    console.log(`🎲 Probability (MCAP): YES ${yesMcap.toFixed(4)} SOL (${probability.toFixed(2)}%) | NO ${noMcap.toFixed(4)} SOL`);
+    console.log(`🎲 Probability (Buffered): YES ${yesSupply.toFixed(0)} shares (${probability.toFixed(2)}%) | NO ${noSupply.toFixed(0)} shares`);
 
     return probability;
 }

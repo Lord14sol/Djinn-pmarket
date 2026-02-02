@@ -23,8 +23,13 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
 
         for (const w of wallets) {
             if (seen.has(w.adapter.name)) continue;
-            // Include Installed or Loadable wallets
-            if (w.readyState === WalletReadyState.Installed || w.readyState === WalletReadyState.Loadable) {
+
+            // ALWAYS show Phantom and Solflare if present (Crucial for user visibility)
+            // For others, check if installed/loadable to avoid spamming 50+ wallets
+            const isImportant = ['Phantom', 'Solflare'].includes(w.adapter.name);
+            const isReady = w.readyState === WalletReadyState.Installed || w.readyState === WalletReadyState.Loadable;
+
+            if (isImportant || isReady) {
                 seen.add(w.adapter.name);
                 list.push(w);
             }

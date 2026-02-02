@@ -219,10 +219,10 @@ export default function Page() {
         const mYes = sYes * currentSpotYes; // SOL Value (MCAP)
         const mNo = sNo * currentSpotNo;    // SOL Value (MCAP)
 
-        // ✅ FIX: Use MCAP for probability, not raw supply (prevents 100% explosion)
-        const yP = calculateImpliedProbability(mYes, mNo);
+        // ✅ RESTORED: Use Supply with 15M buffer for stable probability (max ~78-80%)
+        const yP = calculateImpliedProbability(sYes, sNo);
 
-        console.log(`📊 MCAP Update - YES: ${mYes.toFixed(4)} SOL (${yP.toFixed(1)}%), NO: ${mNo.toFixed(4)} SOL (${(100 - yP).toFixed(1)}%)`);
+        console.log(`📊 Supply Update - YES: ${sYes.toFixed(0)} shares (${yP.toFixed(1)}%), NO: ${sNo.toFixed(0)} shares (${(100 - yP).toFixed(1)}%)`);
 
         return {
             yesMcap: mYes,
@@ -673,14 +673,10 @@ useEffect(() => {
                             const sYes = Number(marketAccount.outcome_supplies[0]);
                             const sNo = Number(marketAccount.outcome_supplies[1]);
                             if (sYes > 0 || sNo > 0) {
-                                // ✅ FIX: Use MCAP (supply × price) for stable probability
-                                const mYes = sYes * getSpotPrice(sYes);
-                                const mNo = sNo * getSpotPrice(sNo);
-                                seedYes = calculateImpliedProbability(mYes, mNo);
+                                // ✅ RESTORED: Use Supply with 15M buffer for stable probability
+                                seedYes = calculateImpliedProbability(sYes, sNo);
                             }
                         }
-
-                        console.log("📜 Seeding Chart with Price:", seedYes);
 
                         console.log("📜 Seeding Chart with Price:", seedYes);
 
@@ -778,10 +774,8 @@ useEffect(() => {
                             else sNo = Math.max(0, sNo - shares);
                         }
 
-                        // ✅ FIX: Use MCAP for stable probability calculation
-                        const mYes = sYes * getSpotPrice(sYes);
-                        const mNo = sNo * getSpotPrice(sNo);
-                        const prob = calculateImpliedProbability(mYes, mNo);
+                        // ✅ RESTORED: Use Supply with 15M buffer for stable probability
+                        const prob = calculateImpliedProbability(sYes, sNo);
 
                         // Log unexpected jumps
                         // if (idx % 100 === 0) console.log(`📜 Replay [${idx}] - Shares: ${sYes.toFixed(0)}/${sNo.toFixed(0)} -> Prob: ${prob.toFixed(2)}%`);
@@ -1093,10 +1087,8 @@ const loadOnChainData = useCallback(async () => {
                     // GUARD: Prevent stale data from overwriting optimistic updates
                     if (!priceLockoutRef.current) {
                         if (sYes + sNo >= 0) {
-                            // ✅ FIX: Use MCAP for stable probability
-                            const mYes = sYes * getSpotPrice(sYes);
-                            const mNo = sNo * getSpotPrice(sNo);
-                            const newPrice = calculateImpliedProbability(mYes, mNo);
+                            // ✅ RESTORED: Use Supply with 15M buffer for stable probability
+                            const newPrice = calculateImpliedProbability(sYes, sNo);
                             // Optimistically update live price from on-chain truth
                             setLivePrice(newPrice);
 
@@ -1590,12 +1582,10 @@ const handlePlaceBet = async () => {
 
             console.log("🚀 Optimistic Supply Update (BUY):", newSupplies);
 
-            // ✅ FIX: Calculate and update probability immediately using MCAP
+            // ✅ RESTORED: Calculate and update probability using Supply with 15M buffer
             const yesSupply = Number(newSupplies[0]) / 1e9;
             const noSupply = Number(newSupplies[1]) / 1e9;
-            const yesMcap = yesSupply * getSpotPrice(yesSupply);
-            const noMcap = noSupply * getSpotPrice(noSupply);
-            const newProbability = calculateImpliedProbability(yesMcap, noMcap);
+            const newProbability = calculateImpliedProbability(yesSupply, noSupply);
 
             // Update live price immediately
             setLivePrice(newProbability);
@@ -1738,12 +1728,10 @@ const handlePlaceBet = async () => {
 
                     console.log(`✅ Real supplies from contract - YES: ${yesSupply}, NO: ${noSupply}`);
 
-                    // ✅ FIX: Calculate actual price using MCAP
+                    // ✅ RESTORED: Calculate actual price using Supply with 15M buffer
                     const totalSupply = yesSupply + noSupply;
                     if (totalSupply > 0) {
-                        const yesMcap = yesSupply * getSpotPrice(yesSupply);
-                        const noMcap = noSupply * getSpotPrice(noSupply);
-                        const actualPrice = calculateImpliedProbability(yesMcap, noMcap);
+                        const actualPrice = calculateImpliedProbability(yesSupply, noSupply);
                         setLivePrice(actualPrice);
                         // Update History State (Charts)
                         setHistoryState(prev => {
@@ -2004,17 +1992,14 @@ const handleTrade = async (e?: any) => {
                             newSupplies[outcomeIdx] = newVal.toString();
                             console.log("🔥 Optimistic Supply Update (SELL):", newSupplies);
 
-                            // ✅ FIX: Calculate and update probability immediately using MCAP
+                            // ✅ RESTORED: Calculate and update probability using Supply with 15M buffer
                             const yesSupply = Number(newSupplies[0]) / 1e9;
                             const noSupply = Number(newSupplies[1]) / 1e9;
-                            const yesMcap = yesSupply * getSpotPrice(yesSupply);
-                            const noMcap = noSupply * getSpotPrice(noSupply);
-                            const newProbability = calculateImpliedProbability(yesMcap, noMcap);
+                            const newProbability = calculateImpliedProbability(yesSupply, noSupply);
 
                             // Update live price immediately
                             setLivePrice(newProbability);
 
-                            // Update history state immediately for chart
                             // Update history state immediately for chart
                             setHistoryState(prevHistory => {
                                 const now = Math.floor(Date.now() / 1000);

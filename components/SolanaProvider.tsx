@@ -2,6 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
+import { PhantomWalletAdapter, SolflareWalletAdapter } from '@solana/wallet-adapter-wallets';
 import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
 import { clusterApiUrl } from '@solana/web3.js';
 import { WalletAuthWrapper } from './WalletAuthWrapper';
@@ -16,10 +17,12 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
         return clusterApiUrl(network);
     }, [network]);
 
-    // Standard Wallet Adapters are automatically detected by the WalletProvider.
-    // We do NOT instantiate legacy adapters like PhantomWalletAdapter manually to avoid conflicts.
+    // Explicitly add adapters to ensure detection
     const wallets = useMemo(
-        () => [],
+        () => [
+            new PhantomWalletAdapter(),
+            new SolflareWalletAdapter(),
+        ],
         []
     );
 

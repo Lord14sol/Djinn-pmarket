@@ -335,7 +335,7 @@ export default function LeaderboardPage() {
                                         <span className="font-black text-[#10B981] italic tracking-tight text-lg">
                                             +${trader.currentProfit.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                         </span>
-                                        <span className="font-black text-white text-sm w-24 hidden sm:block">
+                                        <span className="font-black text-white italic tracking-tight text-lg w-24 hidden sm:block drop-shadow-sm">
                                             ${trader.currentVolume.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                         </span>
                                     </div>
@@ -371,32 +371,41 @@ export default function LeaderboardPage() {
 
                 {/* RIGHT COLUMN: BIGGEST WINS SIDEBAR - LARGER & FLOATY */}
                 <div className="lg:col-span-5 transition-all duration-300">
-                    <div className="bg-[#0A0A0A]/80 border border-white/10 rounded-3xl p-8 sticky top-32 shadow-[0_20px_60px_-10px_rgba(0,0,0,0.8)] backdrop-blur-xl relative overflow-hidden group/sidebar hover:-translate-y-2 hover:shadow-[0_30px_80px_rgba(244,146,183,0.1)] transition-all duration-500">
+                    <div className="bg-[#050505] border border-white/15 rounded-3xl p-10 sticky top-32 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.9),inset_0_1px_0_0_rgba(255,255,255,0.1)] backdrop-blur-3xl relative overflow-hidden group/sidebar">
 
                         {/* Subtle Top Glow */}
-                        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
+                        <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
 
                         <div className="flex items-center justify-between mb-8">
                             <h2 className="text-3xl font-black tracking-tighter text-white drop-shadow-md italic">Biggest Wins</h2>
-                            <span className="text-xs font-black text-white italic uppercase tracking-widest bg-gradient-to-r from-[#F492B7] to-purple-600 px-4 py-1.5 rounded-full shadow-[0_0_15px_rgba(244,146,183,0.5)] transform -rotate-2">
-                                🔥 All Time
-                            </span>
+
+                            {/* ALL TIME STAMP (Reverted to Seal/Stamp Look) */}
+                            <div className="relative border-4 border-[#F492B7]/50 text-[#F492B7] px-4 py-1 rounded-lg transform -rotate-12 opacity-90 mix-blend-screen shadow-[0_0_15px_rgba(244,146,183,0.3)]">
+                                <span className="text-sm font-black italic uppercase tracking-[0.3em]">ALL TIME</span>
+                            </div>
                         </div>
 
                         <div className="space-y-5">
-                            {biggestWinsAllTime.map((win, i) => (
-                                <div key={i} className="flex gap-4 group items-start p-4 mb-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.08] transition-all cursor-default border border-white/5 hover:border-[#F492B7]/30 shadow-lg hover:shadow-[#F492B7]/10 hover:-translate-y-1 duration-300">
+                            {biggestWinsAllTime.slice(0, 5).map((win, i) => (
+                                <div key={i} className="flex gap-4 group items-start p-4 mb-4 rounded-2xl border border-transparent hover:bg-white/5 hover:border-white/5 transition-all cursor-default">
                                     <span className={`text-xl font-black pt-1 w-6 ${i < 3 ? 'text-[#F492B7]' : 'text-gray-600'}`}>{win.rank}</span>
 
                                     <div className="flex-1 min-w-0">
                                         {/* Row 1: User */}
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <Link href={`/profile/${win.slug}`} className="block shrink-0 group-hover:scale-110 transition-transform">
-                                                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 border border-white/10 flex items-center justify-center text-[10px] overflow-hidden">
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <Link href={`/profile/${win.slug}`} className="relative block shrink-0 group-hover:scale-110 transition-transform">
+                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 border border-white/10 flex items-center justify-center text-base overflow-hidden">
                                                     <span className="opacity-50">👤</span>
                                                 </div>
+
+                                                {/* GEMS TROPHY (Overlay on PFP) */}
+                                                {win.rank === 1 && (
+                                                    <div className="absolute -bottom-2 -right-2 w-7 h-7 filter drop-shadow-md z-10">
+                                                        <img src="/gems-trophy.png" className="w-full h-full object-contain" alt="Trophy" />
+                                                    </div>
+                                                )}
                                             </Link>
-                                            <Link href={`/profile/${win.slug}`} className="font-bold text-sm text-gray-300 hover:text-white transition-colors truncate">
+                                            <Link href={`/profile/${win.slug}`} className="font-bold text-base text-gray-200 hover:text-white transition-colors truncate">
                                                 {win.user ? win.user : win.wallet}
                                             </Link>
                                         </div>
@@ -411,7 +420,8 @@ export default function LeaderboardPage() {
 
                                             <div className="flex flex-col gap-1 relative z-10 pl-2">
                                                 <span className="text-[9px] text-gray-500 font-black uppercase tracking-widest">Initial</span>
-                                                <span className="text-white font-bold font-mono tracking-tight text-lg">${win.bet.toLocaleString()}</span>
+                                                {/* MATCH GREEN STYLE BUT WHITE */}
+                                                <span className="text-white font-black italic text-2xl tracking-tighter drop-shadow-sm">${win.bet.toLocaleString()}</span>
                                             </div>
 
                                             <div className="flex flex-col items-end gap-1 relative z-10">
@@ -419,13 +429,6 @@ export default function LeaderboardPage() {
                                                 <span className="text-[#10B981] font-black italic text-2xl tracking-tighter drop-shadow-sm">+${(win.payout - win.bet).toLocaleString()}</span>
                                             </div>
                                         </div>
-
-                                        {/* GEMS TROPHY FOR RANK 1 */}
-                                        {win.rank === 1 && (
-                                            <div className="mt-4 flex items-center justify-center bg-gradient-to-r from-transparent via-[#10B981]/10 to-transparent py-2">
-                                                <img src="/gems-trophy.png" className="w-24 h-auto object-contain drop-shadow-[0_0_20px_rgba(16,185,129,0.5)] animate-pulse-slow" alt="Gems Trophy" />
-                                            </div>
-                                        )}
                                     </div>
                                 </div>
                             ))}
