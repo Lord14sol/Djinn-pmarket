@@ -22,6 +22,8 @@ import { PROGRAM_ID } from '@/lib/program-config';
 import ProfitHistoryChart from '@/components/ProfitHistoryChart';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
 import ImageCropper from '@/components/ImageCropper';
+import { usePrice } from '@/lib/PriceContext';
+import { getSpotPrice } from '@/lib/core-amm';
 
 // Helper format function
 function formatCompact(num: number) {
@@ -38,6 +40,21 @@ export default function ProfilePage() {
     // SOLANA HOOKS
     const { connection } = useConnection();
     const { publicKey } = useWallet();
+    const { price: contextSolPrice } = usePrice();
+    const [localSolPrice, setLocalSolPrice] = useState(0);
+    const solPrice = contextSolPrice || localSolPrice; // Prioritize context, fallback to local
+
+    useEffect(() => {
+        // Fallback Price Fetcher if Context is 0
+        if (!contextSolPrice) {
+            fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.solana?.usd) setLocalSolPrice(data.solana.usd);
+                })
+                .catch(err => console.error('Fallback price fetch failed', err));
+        }
+    }, [contextSolPrice]);
 
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isVaultOpen, setIsVaultOpen] = useState(false);
@@ -115,9 +132,9 @@ export default function ProfilePage() {
 
         checkTimeoutRef.current = setTimeout(async () => {
             if (!publicKey) return;
-            console.log("🔍 Checking availability for:", tempName, "Exclude:", publicKey.toBase58());
+            // console.log("🔍 Checking availability for:", tempName, "Exclude:", publicKey.toBase58());
             const available = await supabaseDb.isUsernameAvailable(tempName, publicKey.toBase58());
-            console.log("🔍 Result:", available);
+            // console.log("🔍 Result:", available);
             setNameAvailable(available);
             setIsCheckingName(false);
         }, 500);
@@ -126,6 +143,9 @@ export default function ProfilePage() {
             if (checkTimeoutRef.current) clearTimeout(checkTimeoutRef.current);
         };
     }, [tempName, isEditModalOpen, profile.username, publicKey]);
+
+
+
 
 
     // --- 1. OBTENER SALDO REAL DE SOLANA (ONLY USER CLAIMS) ---
@@ -154,6 +174,15 @@ export default function ProfilePage() {
     const [isFollowingUser, setIsFollowingUser] = useState(false);
     const [isFollowLoading, setIsFollowLoading] = useState(false);
 
+    // --- CREATOR STATS (NEW) ---
+    const [creatorStats, setCreatorStats] = useState<{ totalVolume: number, estimatedFees: number, totalMarkets: number } | null>(null);
+
+    useEffect(() => {
+        if (targetWalletAddress) {
+            supabaseDb.getCreatorStats(targetWalletAddress).then(setCreatorStats);
+        }
+    }, [targetWalletAddress]);
+
     // ... rest of existing state
 
     // 2. CARGA DE PERFIL ROBUSTA (Separation of Concern: Viewer vs Subject)
@@ -177,6 +206,8 @@ export default function ProfilePage() {
             setIsLoading(true);
             let targetAddress: string | null = null;
             let isMeCheck = false;
+
+            // ... (rest of function)
 
             try {
                 // A. RESOLVE IDENTITY
@@ -334,7 +365,20 @@ export default function ProfilePage() {
             }
         };
 
+        const handleGlobalUpdate = () => {
+            console.log("🔄 Global profile update received");
+            loadProfile();
+        };
+
+        window.addEventListener('djinn-profile-updated', handleGlobalUpdate);
+        window.addEventListener('market-created', handleGlobalUpdate);
+
         loadProfile();
+
+        return () => {
+            window.removeEventListener('djinn-profile-updated', handleGlobalUpdate);
+            window.removeEventListener('market-created', handleGlobalUpdate);
+        };
     }, [isDefaultProfile, publicKey, profileSlug, connection]);
 
     // 2.2. LOAD FOLLOW DATA
@@ -787,6 +831,8 @@ export default function ProfilePage() {
                                         <span className="text-gray-500 text-[11px]">Following</span>
                                     </button>
                                 </div>
+
+
                             </div>
                             {/* EDIT PROFILE BUTTON */}
                             {isMyProfile && (
@@ -822,7 +868,7 @@ export default function ProfilePage() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
                     <StatCard
                         label="Positions Value"
-                        value={`${(profile.activeBets.reduce((acc: number, bet: any) => acc + (bet.current || 0), 0)).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}`}
+                        value={`${(profile.activeBets.reduce((acc: number, bet: any) => acc + ((bet.shares || 0) * (bet.currentPrice || (bet.current ? bet.current / (bet.shares || 1) : 0))), 0)).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}`}
                     />
                     <StatCard
                         label="Win rate"
@@ -834,14 +880,18 @@ export default function ProfilePage() {
                         value={`+$${profile.biggestWin?.toLocaleString() || '0'}`}
                         color="text-[#10B981]"
                     />
-                    <StatCard label="Markets created" value={profile.createdMarkets?.length || 0} color="text-blue-400" />
+                    <StatCard label="Markets created" value={creatorStats?.totalMarkets || profile.createdMarkets?.length || 0} color="text-blue-400" />
                 </div>
 
                 {/* CHARTS GRID */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
                     <ProfitLossCard profit={profile.profit} activeBets={profile.activeBets.filter((b: any) => !b.market_slug?.includes('mkjm2hmf'))} />
                     {(isMyProfile || profile.username.toLowerCase() === 'lord') && (
-                        <CreatorRewardsCard createdMarkets={profile.createdMarkets.filter((m: any) => !m.slug?.includes('mkjm2hmf'))} isMyProfile={isMyProfile} />
+                        <CreatorRewardsCard
+                            createdMarkets={profile.createdMarkets.filter((m: any) => !m.slug?.includes('mkjm2hmf'))}
+                            isMyProfile={isMyProfile}
+                            creatorStats={creatorStats}
+                        />
                     )}
                 </div>
 
@@ -868,6 +918,7 @@ export default function ProfilePage() {
                             activeBets={profile.activeBets.filter((b: any) => !b.market_slug?.includes('mkjm2hmf'))}
                             closedBets={profile.closedBets.filter((b: any) => !b.market_slug?.includes('mkjm2hmf'))}
                             isMyProfile={isMyProfile}
+                            solPrice={solPrice || 0}
                         />
                     )}
                     {activeTab === 'activity' && (
@@ -1007,7 +1058,7 @@ function MarketCard({ market, router }: any) {
     return (
         <div onClick={() => router.push(`/market/${market.slug}`)} className="group bg-[#0D0D0D] border border-white/5 rounded-[2.5rem] overflow-hidden hover:border-[#F492B7]/40 transition-all cursor-pointer shadow-2xl hover:-translate-y-2 duration-300">
             <div className="h-48 w-full relative overflow-hidden bg-gradient-to-br from-[#F492B7]/20 to-black">
-                {typeof market.icon === 'string' && market.icon.startsWith('data:image') ? (
+                {typeof market.icon === 'string' && (market.icon.startsWith('data:image') || market.icon.startsWith('http')) ? (
                     <img src={market.icon} className="w-full h-full object-cover opacity-60 group-hover:scale-110 transition-transform duration-700" alt="" />
                 ) : (
                     <div className="w-full h-full flex items-center justify-center text-6xl opacity-30">{market.icon || '🔮'}</div>
@@ -1458,7 +1509,7 @@ function ProfitLossCard({ profit, activeBets }: { profit: number; activeBets: an
 
 // --- CREATOR REWARDS CARD - COMPACT BAR STYLE ---
 // --- CREATOR REWARDS CARD - COMPACT BAR STYLE ---
-function CreatorRewardsCard({ createdMarkets, isMyProfile }: { createdMarkets: any[], isMyProfile: boolean }) {
+function CreatorRewardsCard({ createdMarkets, isMyProfile, creatorStats }: { createdMarkets: any[], isMyProfile: boolean, creatorStats: { totalVolume: number, estimatedFees: number, totalMarkets: number } | null }) {
     const { connection } = useConnection();
     const { publicKey } = useWallet();
     const [claimableSol, setClaimableSol] = useState(0);
@@ -1549,37 +1600,54 @@ function CreatorRewardsCard({ createdMarkets, isMyProfile }: { createdMarkets: a
         }
     };
 
-    // Only hide if not the user's own profile
-    if (!isMyProfile) return null;
+    // Only hide if not the user's own profile AND no stats
+    if (!isMyProfile && (!creatorStats || creatorStats.estimatedFees < 0.01)) return null;
 
     // Time period state
-    const [rewardsPeriod, setRewardsPeriod] = useState<'1D' | '3D' | '1W' | '1M' | 'ALL'>('1W');
+    const [rewardsPeriod, setRewardsPeriod] = useState<'1D' | '3D' | '1W' | '1M' | 'ALL'>('ALL');
 
-    // Calculate value based on period (Mock logic for visual effect)
-    const effectiveSol = claimableSol > 0 ? claimableSol : 1.45;
-    const solPrice = 180;
-    const totalUsdValue = effectiveSol * solPrice;
+    // Display Values
+    // Primary: Lifetime Earnings (USD) from creatorStats, or fallback to Claimable
+    // Secondary: Claimable (SOL)
+    const lifetimeFeesUsd = creatorStats?.estimatedFees || 0;
+    const claimableUsd = claimableSol * 180; // Approx SOL price
 
-    // Derived value for animation
+    // If no lifetime stats yet (e.g. data lag), fall back to showing what's claimable now as "earnings"
+    const displayBigNumber = lifetimeFeesUsd > 0 ? lifetimeFeesUsd : claimableUsd;
+
+    // Derived value for animation (Mock distribution for consistency)
     const periodValue = useMemo(() => {
-        if (rewardsPeriod === 'ALL') return totalUsdValue;
-        if (rewardsPeriod === '1M') return totalUsdValue * 0.8;
-        if (rewardsPeriod === '1W') return totalUsdValue * 0.4;
-        if (rewardsPeriod === '3D') return totalUsdValue * 0.2;
-        return totalUsdValue * 0.05; // 1D
-    }, [rewardsPeriod, totalUsdValue]);
+        if (rewardsPeriod === 'ALL') return displayBigNumber;
+        if (rewardsPeriod === '1M') return displayBigNumber * 0.8;
+        if (rewardsPeriod === '1W') return displayBigNumber * 0.4;
+        if (rewardsPeriod === '3D') return displayBigNumber * 0.2;
+        return displayBigNumber * 0.05; // 1D
+    }, [rewardsPeriod, displayBigNumber]);
 
     // Generate chart data based on period
     const dataPoints = rewardsPeriod === '1D' ? 24 : rewardsPeriod === '3D' ? 72 : rewardsPeriod === '1W' ? 7 : rewardsPeriod === '1M' ? 30 : 90;
-    const miniChartData = useMemo(() => Array.from({ length: dataPoints }, (_, i) => {
-        const progress = (i + 1) / dataPoints;
-        const base = 20 + (progress * 60);
-        const randomVal = base + (Math.sin(i * 0.5) * 10) + (Math.random() * 5);
-        return {
-            y: randomVal, // Used for path
-            val: (randomVal / 100) * totalUsdValue // Rough approximation of "value at time"
-        };
-    }), [rewardsPeriod, dataPoints, totalUsdValue]);
+
+    const miniChartData = useMemo(() => {
+        // If no earnings, return flat line
+        if (displayBigNumber <= 0.01) {
+            return Array.from({ length: dataPoints }, (_, i) => ({ y: 50, val: 0 }));
+        }
+
+        // If earnings exist, show upward trend (cumulative growth simulation)
+        return Array.from({ length: dataPoints }, (_, i) => {
+            const progress = i / (dataPoints - 1);
+            // Non-linear growth curve (starts slow, speeds up)
+            const curve = Math.pow(progress, 2);
+            // Add slight noise
+            const noise = (Math.random() * 0.1) - 0.05;
+            const finalProgress = Math.max(0, Math.min(1, curve + noise));
+
+            return {
+                y: 10 + (finalProgress * 80), // Map to 10-90% height
+                val: finalProgress * displayBigNumber // Value at that point
+            };
+        });
+    }, [rewardsPeriod, dataPoints, displayBigNumber]);
 
     const periodLabels = { '1D': 'Today', '3D': '3 Days', '1W': 'This Week', '1M': 'This Month', 'ALL': 'All Time' };
 
@@ -1599,16 +1667,20 @@ function CreatorRewardsCard({ createdMarkets, isMyProfile }: { createdMarkets: a
                             $<AnimatedNumber value={hoverValue !== null ? hoverValue : periodValue} />
                         </h2>
 
-                        <button
-                            onClick={handleClaimAll}
-                            disabled={isLoading || claimableSol <= 0}
-                            className="bg-[#F492B7] hover:bg-[#e07aa3] text-black font-bold text-[10px] px-3 py-1 rounded-full transition-all disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 uppercase tracking-widest"
-                        >
-                            {isLoading ? <Loader2 className="animate-spin w-3 h-3" /> : 'Claim'}
-                        </button>
+                        {isMyProfile && (
+                            <button
+                                onClick={handleClaimAll}
+                                disabled={isLoading || claimableSol <= 0}
+                                className="bg-[#F492B7] hover:bg-[#e07aa3] text-black font-bold text-[10px] px-3 py-1 rounded-full transition-all disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 uppercase tracking-widest flex items-center gap-1"
+                            >
+                                {isLoading ? <Loader2 className="animate-spin w-3 h-3" /> : 'Claim'}
+                            </button>
+                        )}
                     </div>
 
-                    <p className="text-gray-500 text-xs font-medium mt-1">{periodLabels[rewardsPeriod]} • {effectiveSol.toFixed(4)} SOL</p>
+                    <p className="text-gray-500 text-xs font-medium mt-1">
+                        {periodLabels[rewardsPeriod]} • {claimableSol > 0 ? <span className="text-emerald-400 font-bold">{claimableSol.toFixed(4)} SOL Unclaimed</span> : 'All caught up'}
+                    </p>
                 </div>
 
                 {/* Time Tabs (Claim button moved next to number) */}
@@ -1710,7 +1782,7 @@ function UnclaimedWinningsCard({ payouts, onClaim }: { payouts: any[], onClaim: 
 }
 
 // --- POSITIONS TABLE ---
-function PositionsTable({ activeBets, closedBets, isMyProfile }: { activeBets: any[], closedBets: any[], isMyProfile: boolean }) {
+function PositionsTable({ activeBets, closedBets, isMyProfile, solPrice }: { activeBets: any[], closedBets: any[], isMyProfile: boolean, solPrice: number }) {
     const [filter, setFilter] = useState<'active' | 'closed'>('active');
     const router = useRouter();
     const bets = filter === 'active' ? activeBets : closedBets;
@@ -1741,73 +1813,145 @@ function PositionsTable({ activeBets, closedBets, isMyProfile }: { activeBets: a
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="text-gray-500 text-xs font-black uppercase tracking-widest border-b border-white/10">
-                                <th className="pb-4 pl-4">Market</th>
-                                <th className="pb-4 text-center">Outcome</th>
+                                <th className="pb-4 pl-6">Market</th>
                                 <th className="pb-4 text-right">Shares</th>
-                                <th className="pb-4 text-right">Avg Price</th>
-                                <th className="pb-4 text-right">Current</th>
+                                <th className="pb-4 text-right">Avg MCAP</th>
+                                <th className="pb-4 text-right">Curr MCAP</th>
                                 <th className="pb-4 text-right">Value</th>
-                                <th className="pb-4 text-right pr-4">{filter === 'closed' ? 'Status' : 'P/L'}</th>
+                                <th className="pb-4 text-right pr-6">ROI</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white/5">
                             {bets.map((bet: any, i: number) => {
-                                const currentValue = bet.current || (bet.shares * (bet.currentPrice || bet.entry_price || 0));
-                                const pnl = currentValue - (bet.shares * bet.entry_price);
-                                const pnlPercent = (bet.shares * bet.entry_price) > 0 ? (pnl / (bet.shares * bet.entry_price)) * 100 : 0;
-                                const isPositive = pnl >= 0;
-                                const marketName = (bet.market_title || bet.market_slug || '').replace(/-/g, ' ');
+                                // --- ROBUST CALCULATIONS ---
 
-                                // Closed Position Logic - Strick check if resolved
-                                const isResolved = bet.status === 'RESOLVED' || bet.status === 'CLOSED';
+                                // 1. Normalize Atomic Shares (if needed)
+                                // In supabase-db we now divide by 1e9, so bet.current is correct.
+                                // bet.shares from DB might be atomic (large int).
+                                // Let's detect if shares are massive (> 1M and likely atomic).
+                                // Actually, supabase-db returns RAW dB rows often.
+                                // We'll stick to the props passed: assumes bet.shares is raw if we didn't transform it.
+                                // BUT: `getUserBets` in logic NOW returns transformed `current`.
 
-                                if (filter === 'closed' && !isResolved) return null;
+                                // Let's rely on consistent price/mcap logic:
+                                // Price = SOL per 1 whole share.
 
-                                // Color logic based on outcome/side if available
-                                const sideColor = bet.side === 'YES' ? 'text-[#10B981] bg-[#10B981]/20' : bet.side === 'NO' ? 'text-red-500 bg-red-500/20' : 'text-blue-400 bg-blue-400/20';
+                                // MCAP Calculation:
+                                // 1 Billion * Price
+                                // Entry Price might be atomic (e.g. 1e-12).
+                                const isAtomicEntry = (bet.entry_price || 0) < 0.000001;
+                                const entryMcapSol = isAtomicEntry
+                                    ? bet.entry_price * 1_000_000_000_000_000_000
+                                    : bet.entry_price * 1_000_000_000;
+
+                                const currentMcapSol = (bet.currentPrice || 0) * 1_000_000_000;
+
+                                const entryMcapUsd = entryMcapSol * solPrice;
+                                const currentMcapUsd = currentMcapSol * solPrice;
+
+                                // PnL Calculation
+                                // We use the PRE-CALCULATED `bet.current` from backend which is accurate.
+                                // Current Value (USD)
+                                const valUsd = (bet.current || 0) * solPrice;
+
+                                // Entry Value (Cost Basis) - Need to handle atomic shares vs normal price?
+                                // If bet.shares is atomic (e.g. 2,000,000,000 for 2 shares), and entry_price is per atomic (1e-9).
+                                // Then Cost = shares * entry_price.
+                                // If bet.shares is atomic and entry_price is per WHOLE share...
+                                // Let's trust the PnL logic: 
+                                const costSol = bet.shares * (bet.entry_price || 0);
+                                // Only correct if units match.
+
+                                // Let's use specific PnL derived from bet.current (Value) vs Cost.
+                                // Cost is tricky if we don't know if shares are normalized. 
+                                // Let's approximate Cost derived from Roi if available, or just straight math.
+
+                                // Normalized Cost (Estimate):
+                                // If 'current' is (Shares/1e9)*Price, then 'cost' should be (Shares/1e9)*EntryPrice
+                                // ONLY IF shares in DB are 1e9 scaled.
+                                const isAtomicShares = bet.shares > 1_000_000; // heuristic
+                                const normalizedShares = isAtomicShares ? bet.shares / 1_000_000_000 : bet.shares;
+                                const costSolNormalized = normalizedShares * (isAtomicEntry ? bet.entry_price * 1_000_000_000 : bet.entry_price);
+
+                                // Re-do: 
+                                // If entry_price is atomic (1e-12), and shares is atomic (1e9). product = 1e-3.
+                                // If entry_price is normal (1e-3) and shares normal (1). product = 1e-3.
+                                // So raw product `bet.shares * bet.entry_price` is ALWAYS correct SOL Cost 
+                                // (assuming both are atomic OR both are normal).
+
+                                const totalCostSol = bet.shares * bet.entry_price;
+                                const currentValueSol = bet.current || 0;
+
+                                const pnlSol = currentValueSol - totalCostSol;
+                                const pnlUsd = pnlSol * solPrice;
+                                const pnlPercent = totalCostSol > 0 ? (pnlSol / totalCostSol) * 100 : 0;
+
+                                const isPositive = pnlSol >= 0;
 
                                 return (
                                     <tr
                                         key={i}
-                                        onClick={() => router.push(`/market/${bet.market_slug}`)}
-                                        className="group hover:bg-white/5 transition-colors cursor-pointer"
+                                        onClick={(e) => {
+                                            router.push(`/market/${bet.market_slug}`);
+                                        }}
+                                        className="group hover:bg-white/5 transition-colors cursor-pointer border-b border-white/5 last:border-0"
                                     >
-                                        <td className="py-4 pl-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-lg bg-white/10 overflow-hidden flex-shrink-0 relative">
+                                        <td className="py-5 pl-6">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-12 h-12 rounded-xl bg-white/10 overflow-hidden flex-shrink-0 relative shadow-inner">
                                                     {bet.market_icon ? (
                                                         <img src={bet.market_icon} className="w-full h-full object-cover" alt="" />
                                                     ) : (
-                                                        <div className="w-full h-full flex items-center justify-center text-xs text-gray-500">🔮</div>
+                                                        <div className="w-full h-full flex items-center justify-center text-lg text-gray-500">🔮</div>
                                                     )}
                                                 </div>
-                                                <div className="flex flex-col">
-                                                    <span className="font-bold text-white max-w-[200px] truncate capitalize">{marketName}</span>
-                                                    {filter === 'closed' && (
-                                                        <span className="text-[10px] text-gray-500">Ended {new Date().toLocaleDateString()}</span>
-                                                    )}
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span className="font-bold text-white text-base max-w-[200px] truncate capitalize leading-tight group-hover:text-[#F3F4F6] transition-colors">{marketName}</span>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${sideColor} bg-opacity-20`}>
+                                                            {bet.outcome_name || bet.side}
+                                                        </span>
+                                                        {filter === 'closed' && (
+                                                            <span className="text-[10px] text-gray-500">Ended {new Date().toLocaleDateString()}</span>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="py-4 text-center">
-                                            <span className={`px-3 py-1 rounded-full text-xs font-black uppercase ${sideColor}`}>
-                                                {bet.outcome_name || bet.side}
-                                            </span>
+
+                                        {/* Shares */}
+                                        <td className="py-5 text-right font-mono text-gray-500 text-sm">
+                                            {formatCompact(normalizedShares)}
                                         </td>
-                                        <td className="py-4 text-right font-mono text-gray-300">{formatCompact(bet.shares)}</td>
-                                        <td className="py-4 text-right font-mono text-gray-500">{(bet.entry_price * 100).toFixed(0)}¢</td>
-                                        <td className="py-4 text-right font-mono text-gray-300">
-                                            {filter === 'closed' ? <span className="text-gray-600">-</span> : <span>{(bet.currentPrice ? bet.currentPrice * 100 : bet.entry_price * 100).toFixed(0)}¢</span>}
+
+                                        {/* Entry MCAP */}
+                                        <td className="py-5 text-right font-mono text-gray-500 text-xs">
+                                            ${formatCompact(entryMcapUsd)}
                                         </td>
-                                        <td className="py-4 text-right font-black text-white">${formatCompact(currentValue)}</td>
-                                        <td className={`py-4 text-right pr-4 font-bold ${isPositive ? 'text-[#10B981]' : 'text-red-500'}`}>
-                                            {filter === 'closed' ? (
-                                                <div className={`px-2 py-1 rounded inline-block text-xs uppercase ${isPositive ? 'bg-[#10B981]/20' : 'bg-red-500/20'}`}>
-                                                    {isPositive ? 'WIN' : 'LOSS'} {pnlPercent.toFixed(0)}%
+
+                                        {/* Current MCAP */}
+                                        <td className="py-5 text-right font-mono font-medium text-gray-300 text-sm">
+                                            ${formatCompact(currentMcapUsd)}
+                                        </td>
+
+                                        {/* Value (USD) - Prominent */}
+                                        <td className="py-5 text-right">
+                                            <div className="font-black text-white text-lg tracking-tight">
+                                                ${formatCompact(valUsd)}
+                                            </div>
+                                        </td>
+
+                                        {/* ROI / PnL */}
+                                        <td className="py-5 text-right pr-6">
+                                            <div className="flex flex-col items-end gap-0.5">
+                                                <div className={`flex items-center gap-1.5 font-bold text-sm ${isPositive ? 'text-[#10B981]' : 'text-red-500'}`}>
+                                                    {isPositive && <span className="text-base">🚀</span>}
+                                                    <span>{isPositive ? '+' : ''}${formatCompact(pnlUsd)}</span>
                                                 </div>
-                                            ) : (
-                                                <span>{isPositive ? '+' : ''}{pnlPercent.toFixed(2)}%</span>
-                                            )}
+                                                <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${isPositive ? 'bg-[#10B981]/10 text-[#10B981]' : 'bg-red-500/10 text-red-500'}`}>
+                                                    {isPositive ? '+' : ''}{pnlPercent.toFixed(1)}%
+                                                </span>
+                                            </div>
                                         </td>
                                     </tr>
                                 );
@@ -1930,7 +2074,7 @@ function MyMarketsList({ markets }: { markets: any[] }) {
             {markets.map((m: any, i: number) => (
                 <div key={i} className="bg-[#0D0D0D] border border-white/10 p-6 rounded-3xl hover:border-white/20 transition-all group">
                     <div className="flex items-start justify-between mb-4">
-                        <img src={m.icon} className="w-12 h-12 rounded-xl object-contain bg-white/5" />
+                        <img src={m.icon || '/pink-pfp.png'} className="w-12 h-12 rounded-xl object-contain bg-white/5" onError={(e) => { e.currentTarget.src = '/pink-pfp.png'; }} />
                         <span className="bg-white/5 text-gray-500 text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded">
                             {m.volume ? 'Verified' : 'Unverified'}
                         </span>

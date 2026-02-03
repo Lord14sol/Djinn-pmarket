@@ -245,6 +245,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                 resolved: false,
                 resolution_source: sourceUrl || 'DERIVED', // Save actual source URL if provided
                 banner_url: finalBanner,
+                icon: finalBanner, // Save icon as well for lists
                 options: options.map(opt => opt.name || '').filter(name => name.trim() !== '') // Save outcome names
             });
 

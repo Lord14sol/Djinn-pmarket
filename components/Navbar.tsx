@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter, usePathname } from 'next/navigation';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { useCategory } from '@/lib/CategoryContext';
@@ -12,6 +13,7 @@ import CustomWalletModal from './CustomWalletModal';
 import CategoryMegaMenu from './CategoryMegaMenu';
 import WalletProfileMenu from './WalletProfileMenu';
 import GlobalSearch from './GlobalSearch';
+import ClaimUsernameModal from './ClaimUsernameModal';
 
 
 // ... (existing imports)
@@ -19,6 +21,8 @@ import GlobalSearch from './GlobalSearch';
 // ... inside NavbarContent ...
 const MenuIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>);
 const CloseIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>);
+const PodiumIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 18.75h-9m9 0a3 3 0 013 3h-15a3 3 0 013-3m9 0v-3.375c0-.621-.503-1.125-1.125-1.125h-.871M7.5 18.75v-3.375c0-.621.504-1.125 1.125-1.125h.872m5.007 0V9.499a2.25 2.25 0 00-2.25-2.25H11.25a2.25 2.25 0 00-2.25 2.25v5.751m5.007 0H13.5m-2.25 0H9.986" /></svg>);
+const ActivityIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z" /></svg>);
 // Removed unused icons
 
 const mainCategories = ["Trending", "New", "Earth", "Politics", "Crypto", "Sports", "Culture", "Tech", "Science", "Finance", "Climate", "Mentions", "Movies", "AI", "Gaming", "Music"];
@@ -33,6 +37,10 @@ function NavbarContent() {
     const [balance, setBalance] = useState<number>(0);
     const { openCreateMarket, openActivityFeed } = useModal();
     const router = useRouter();
+    const pathname = usePathname();
+
+    // Hide navbar search on home/markets page (has its own big search bar)
+    const isHomePage = pathname === '/' || pathname === '/markets';
 
     // HYDRATION FIX: Prevent SSR/client mismatch for wallet-dependent content
     const [mounted, setMounted] = useState(false);
@@ -42,9 +50,15 @@ function NavbarContent() {
     const { connected, publicKey, disconnect } = useWallet();
     const { connection } = useConnection();
 
-    // State for Onboarding & Custom Wallet Modal
-    // const [showOnboarding, setShowOnboarding] = useState(false); // UNUSED
+
+    // ... (existing imports)
+
+    // ... inside NavbarContent ...
     const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
+
+    // NEW: Claim Username Modal State
+    const [isClaimModalOpen, setIsClaimModalOpen] = useState(false);
+    const [tempConnectedWallet, setTempConnectedWallet] = useState<string | null>(null);
 
     // Cargar perfil (Local + Supabase + Balance)
     // 🔥 FUNCIÓN PARA CARGAR PERFIL (Cache-First Strategy)
@@ -83,37 +97,37 @@ function NavbarContent() {
                 };
 
                 // ALWAYS update state from DB (DB is source of truth)
-                // Cache is only for instant loading, DB data takes precedence
                 setUsername(profileData.username);
                 setUserPfp(profileData.avatar_url);
 
-                // Update cache with fresh DB data
                 try {
-                    localStorage.setItem(
-                        `djinn_profile_${walletAddress}`,
-                        JSON.stringify(profileData)
-                    );
+                    localStorage.setItem(`djinn_profile_${walletAddress}`, JSON.stringify(profileData));
                 } catch (quotaErr) {
                     console.warn('⚠️ LocalStorage full, skipped profile cache update');
                 }
-
-                console.log('✅ Profile synced from database');
             } else {
-                // Auto-create if not found
-                const newProfile = await upsertProfile({
-                    wallet_address: walletAddress,
-                    username: `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}`,
-                    bio: 'New Djinn Trader',
-                    avatar_url: '/pink-pfp.png'
-                });
-                if (newProfile) {
-                    setUsername(newProfile.username);
-                    setUserPfp(newProfile.avatar_url || '/pink-pfp.png');
-                }
+                // DO NOT AUTO-CREATE. OPEN CLAIM MODAL.
+                console.log('✨ New User Detected! Opening Claim Flow...');
+                setTempConnectedWallet(walletAddress);
+                setIsClaimModalOpen(true);
             }
         } catch (err) {
             console.error('Database sync error:', err);
         }
+    };
+
+    // Handler for successful claim
+    const handleClaimSuccess = (newUsername: string) => {
+        setIsClaimModalOpen(false);
+        setUsername(newUsername);
+        setUserPfp('/pink-pfp.png'); // Default pfp
+        console.log('🎉 Profile Created:', newUsername);
+    };
+
+    // Handler for closing claim (disconnect to prevent limbd)
+    const handleClaimClose = () => {
+        setIsClaimModalOpen(false);
+        disconnect();
     };
 
     useEffect(() => {
@@ -224,10 +238,12 @@ function NavbarContent() {
                         </span>
                     </Link>
 
-                    {/* GLOBAL SEARCH */}
-                    <div className="hidden md:flex flex-1 justify-center z-50 px-4">
-                        {mounted && <GlobalSearch />}
-                    </div>
+                    {/* GLOBAL SEARCH - Hidden on home page (has its own big search bar) */}
+                    {!isHomePage && (
+                        <div className="hidden md:flex flex-1 justify-center z-50 px-4">
+                            {mounted && <GlobalSearch />}
+                        </div>
+                    )}
 
                     <div className="flex items-center gap-4">
                         <div className="hidden sm:flex items-center gap-4">
@@ -382,6 +398,14 @@ function NavbarContent() {
             <CustomWalletModal
                 isOpen={isWalletModalOpen}
                 onClose={() => setIsWalletModalOpen(false)}
+            />
+
+            {/* Claim Username Modal (Neo-Brutalism) */}
+            <ClaimUsernameModal
+                isOpen={isClaimModalOpen}
+                walletAddress={tempConnectedWallet || publicKey?.toBase58() || ''}
+                onSuccess={handleClaimSuccess}
+                onClose={handleClaimClose}
             />
         </>
     );

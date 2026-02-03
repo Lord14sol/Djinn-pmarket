@@ -113,7 +113,7 @@ export function useMarketData(slug: string) {
         marketData,
         marketInfo,
         activityList: activityList || [],
-        holders: holders || [],
+        holders: holders || {}, // ✅ Empty object for multi-outcome support (Record<string, Holder[]>)
         isLoading: !marketData && !marketInfo, // Basic loading state
         isError: marketDataError || marketInfoError,
         refreshAll,

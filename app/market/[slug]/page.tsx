@@ -749,7 +749,7 @@ export default function Page() {
 
                         activities.forEach((act, idx) => {
                             // DEBUG: Ensure 'shares' exists and is a number. 
-                            let shares = Number(act.shares) * 1_000_000;
+                            let shares = Number(act.shares);
 
                             if (isNaN(shares) || shares === 0) {
                                 // if (idx < 5) console.warn(`📜 Activity [${idx}] has invalid shares:`, act.shares, act);
@@ -864,22 +864,31 @@ export default function Page() {
                             NO: 50
                         });
 
-                        // Process
-                        let currentYes = 50;
+                        // Process - Track cumulative supplies and use buffered probability
+                        let cumulativeYesSupply = 0;
+                        let cumulativeNoSupply = 0;
+
                         activities.forEach((act: any) => {
                             if (act.type === 'BUY' || act.type === 'SELL') {
                                 const yes_tokens = parseFloat(act.yes_amount || '0');
                                 const no_tokens = parseFloat(act.no_amount || '0');
-                                const total = yes_tokens + no_tokens;
 
-                                if (total > 0) {
-                                    currentYes = (yes_tokens / total) * 100;
+                                // Accumulate supplies (BUY adds, SELL subtracts)
+                                if (act.type === 'BUY') {
+                                    cumulativeYesSupply += yes_tokens;
+                                    cumulativeNoSupply += no_tokens;
+                                } else {
+                                    cumulativeYesSupply = Math.max(0, cumulativeYesSupply - yes_tokens);
+                                    cumulativeNoSupply = Math.max(0, cumulativeNoSupply - no_tokens);
                                 }
+
+                                // ✅ FIX: Use calculateImpliedProbability with 15M buffer
+                                const prob = calculateImpliedProbability(cumulativeYesSupply, cumulativeNoSupply);
 
                                 historyPoints.push({
                                     time: Math.floor(new Date(act.created_at).getTime() / 1000),
-                                    YES: currentYes,
-                                    NO: 100 - currentYes
+                                    YES: prob,
+                                    NO: 100 - prob
                                 });
                             }
                         });
@@ -887,10 +896,14 @@ export default function Page() {
                         // Add current time point
                         const now = Math.floor(Date.now() / 1000);
                         if (historyPoints.length > 0) {
+                            // ✅ FIX: Ensure current point uses BUFFERED probability to prevent 100% spikes
+                            // We re-calculate it here using the LATEST known supplies from the loop above
+                            const finalProb = calculateImpliedProbability(cumulativeYesSupply, cumulativeNoSupply);
+
                             historyPoints.push({
                                 time: now,
-                                YES: currentYes,
-                                NO: 100 - currentYes
+                                YES: finalProb, // Use safe buffered prob
+                                NO: 100 - finalProb
                             });
                         }
 
@@ -1525,11 +1538,12 @@ export default function Page() {
                     amount: usdValueInTrading,
                     sol_amount: amountNum,
                     shares: sim.sharesReceived,
-                    entry_price: safePrice * 100
+                    entry_price: sim.averageEntryPrice // Use actual SOL price per share, not probability
                 });
 
                 // 4b. Update Market Price & Volume in DB for Top Holders/Markets Page Sync
-                await supabaseDb.updateMarketPrice(effectiveSlug, newPrice, usdValueInTrading);
+                // Store SPOT PRICE in SOL (not probability) for holdings calculation
+                await supabaseDb.updateMarketPrice(effectiveSlug, sim.endPrice, usdValueInTrading);
             } catch (dbErr) {
                 console.warn("⚠️ DB Logging failed (non-fatal):", dbErr);
             }
@@ -2151,7 +2165,8 @@ export default function Page() {
                 // 2. Update Price
                 const newPrice = livePrice + probDelta;
                 setLivePrice(newPrice);
-                await supabaseDb.updateMarketPrice(effectiveSlug, newPrice, -usdValue);
+                // Store SPOT PRICE in SOL (not probability) for holdings calculation
+                await supabaseDb.updateMarketPrice(effectiveSlug, sim.endPrice, -usdValue);
 
                 // 2b. Reduce Bet Position in DB (Wait for this!)
                 const dbSide = isMultiOutcome ? (selectedOutcomeName || 'YES') : selectedSide;
@@ -2604,9 +2619,10 @@ export default function Page() {
                                         {marketOutcomes.map((outcome, idx) => {
                                             const title = outcome.title;
                                             const color = getOutcomeColor(title, idx);
-                                            const outcomeHolders = holders
-                                                .filter(h => (h.positions?.[title] || 0) > 0.1)
-                                                .sort((a, b) => (b.positions?.[title] || 0) - (a.positions?.[title] || 0));
+
+                                            // ✅ MULTI-OUTCOME SUPPORT: Use outcome title directly as key
+                                            // holders is now Record<string, Holder[]> where keys are outcome names
+                                            const outcomeHolders = (holders && holders[title]) ? holders[title] : [];
 
                                             return (
                                                 <div key={title}>
@@ -2622,7 +2638,9 @@ export default function Page() {
                                                         ) : (
                                                             outcomeHolders.map((h: any, i: number) => {
                                                                 const isMe = publicKey && h.wallet_address === publicKey.toBase58();
-                                                                const shares = h.positions[title];
+                                                                // Get shares directly from the holder's positions for THIS outcome
+                                                                const shares = h.positions[title] || 0;
+
                                                                 return (
                                                                     <div
                                                                         key={i}

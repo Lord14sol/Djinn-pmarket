@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import StarBackground from '@/components/ui/StarBackground';
 
 // --- MOCK DATA GENERATOR ---
 const generateStats = (baseProfit: number, baseVolume: number) => ({
@@ -154,8 +155,6 @@ export default function LeaderboardPage() {
             if (savedProfile) {
                 try {
                     const profile = JSON.parse(savedProfile);
-                    // Add "You" to the list if likely to rank
-                    // For demo purposes, we will append "You" if meaningful stats exist
                     if (profile.profit > 0 || profile.gems > 0) {
                         const userStats = {
                             daily: { profit: (profile.profit || 0) * 0.1, volume: (profile.profit || 0) * 2 },
@@ -165,7 +164,6 @@ export default function LeaderboardPage() {
                         };
 
                         setLiveTraders(prev => {
-                            // Check if exists
                             const exists = prev.find(p => p.slug === profile.username.toLowerCase() || (publicKey && p.slug === publicKey.toBase58()));
                             if (exists) return prev;
 
@@ -186,7 +184,6 @@ export default function LeaderboardPage() {
         syncLiveTraders();
     }, [publicKey]);
 
-    // Sort Data based on Period
     const sortedTraders = [...liveTraders]
         .map(t => ({
             ...t,
@@ -196,12 +193,10 @@ export default function LeaderboardPage() {
         .sort((a, b) => b.currentProfit - a.currentProfit)
         .map((t, i) => ({ ...t, rank: i + 1 }));
 
-    // Filter by Search
     const filteredTraders = sortedTraders.filter(t =>
         t.user.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    // Find You and Trigger Achievement
     useEffect(() => {
         const you = sortedTraders.find(t => t.isYou);
         const hasSeenAchievement = localStorage.getItem('djinn_trophy_seen');
@@ -216,7 +211,19 @@ export default function LeaderboardPage() {
     }, [sortedTraders, period]);
 
     return (
-        <main className="min-h-screen bg-transparent text-white pb-20 pt-28 px-6 relative">
+        <main className="min-h-screen bg-[#050505] text-white pb-20 pt-28 px-6 relative font-sans overflow-hidden">
+            {/* Animated Stars Background */}
+            <div className="absolute inset-0 z-0 opacity-60 pointer-events-none">
+                <StarBackground />
+            </div>
+
+            <style jsx global>{`
+                ::selection {
+                    background-color: #F492B7;
+                    color: black;
+                }
+            `}</style>
+
             {/* ACHIEVEMENT TOAST */}
             <AnimatePresence>
                 {showAchievement && (
@@ -226,207 +233,172 @@ export default function LeaderboardPage() {
                         exit={{ opacity: 0, y: -50, scale: 0.8 }}
                         transition={{ type: "spring", stiffness: 300, damping: 20 }}
                         onClick={() => setShowAchievement(false)}
-                        className="fixed top-12 left-1/2 -translate-x-1/2 z-[100] bg-[#1a1a1a] border-2 border-[#FFD700] rounded-lg p-4 flex items-center gap-4 shadow-[0_0_30px_rgba(255,215,0,0.3)] min-w-[320px] cursor-pointer hover:scale-[1.02] transition-transform"
+                        className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] bg-white border-4 border-black rounded-2xl p-4 flex items-center gap-4 shadow-[8px_8px_0px_0px_#F492B7] min-w-[340px] cursor-pointer hover:translate-y-1 hover:shadow-[4px_4px_0px_0px_#F492B7] transition-all"
                     >
-                        <div className="w-12 h-12 bg-[#FFD700]/20 rounded-full flex items-center justify-center border border-[#FFD700]">
-                            <img src="/gold-trophy.png" alt="Trophy" className="w-8 h-8 object-contain drop-shadow-md" />
+                        <div className="w-14 h-14 bg-[#FFD700] rounded-xl flex items-center justify-center border-2 border-black shadow-sm">
+                            <span className="text-3xl">🏆</span>
                         </div>
                         <div>
-                            <p className="text-[#FFD700] text-xs font-black uppercase tracking-widest mb-1">UNLOCKED</p>
-                            <p className="text-white font-bold text-lg">The Champion</p>
-                            <p className="text-gray-400 text-xs">Reached Rank #1 on Leaderboard</p>
-                        </div>
-                    </motion.div>
-                )}
-                {/* BIGGEST WIN UNLOCK TOAST */}
-                {true && (
-                    <motion.div
-                        initial={{ opacity: 0, y: -50, scale: 0.8 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -50, scale: 0.8 }}
-                        transition={{ type: "spring", stiffness: 300, damping: 20, delay: 1 }}
-                        onClick={(e) => {
-                            // This is a demo toast in an 'if(true)', but let's make it clickable if it were real
-                            (e.currentTarget as HTMLElement).style.display = 'none';
-                        }}
-                        className="fixed top-28 left-1/2 -translate-x-1/2 z-[100] bg-[#0A0A0A] border border-[#10B981]/50 rounded-2xl p-4 flex items-center gap-4 shadow-[0_0_30px_rgba(16,185,129,0.3)] min-w-[320px] cursor-pointer hover:scale-[1.02] transition-transform"
-                    >
-                        <div className="relative shrink-0 w-12 h-12">
-                            <img src="/gems-trophy.png" className="w-full h-full object-contain drop-shadow-lg" />
-                        </div>
-                        <div>
-                            <p className="text-[#10B981] text-[10px] font-black uppercase tracking-[0.2em] mb-0.5">UNLOCKED</p>
-                            <h4 className="text-xl font-black text-white italic tracking-tighter leading-none mb-0.5">Djinn</h4>
-                            <p className="text-gray-400 text-[10px] uppercase font-bold tracking-wider">Top 1 Biggest Win All Time</p>
+                            <p className="text-black text-xs font-black uppercase tracking-widest bg-[#FFD700] px-2 py-0.5 w-fit border border-black mb-1">UNLOCKED</p>
+                            <p className="text-black font-black text-xl lowercase leading-none">The Champion</p>
+                            <p className="text-gray-500 text-xs font-bold lowercase mt-0.5">Rank #1 achieved</p>
                         </div>
                     </motion.div>
                 )}
             </AnimatePresence>
 
-            <div className="max-w-[1440px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div className="max-w-[1440px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 relative z-10">
 
-                {/* LEFT COLUMN: LEADERBOARD */}
+                {/* LEFT COLUMN: LEADERBOARD Table */}
                 <div className="lg:col-span-7">
-                    <h1 className="text-4xl font-black tracking-tight mb-8">Leaderboard</h1>
 
-                    {/* FILTERS */}
-                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-8">
-                        {/* Time Tabs */}
-                        <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
-                            {(['daily', 'weekly', 'monthly', 'all_time'] as const).map((p) => (
-                                <button
-                                    key={p}
-                                    onClick={() => setPeriod(p)}
-                                    className={`px-4 py-2 rounded-lg text-xs font-bold capitalize transition-all ${period === p
-                                        ? 'bg-white text-black shadow-lg'
-                                        : 'text-gray-500 hover:text-white'
-                                        }`}
-                                >
-                                    {p.replace('_', ' ')}
-                                </button>
-                            ))}
+                    {/* Page Title - FULL BLOCK NEO-BRUTALISM */}
+                    <div className="mb-10 inline-block">
+                        <h1 className="text-6xl font-black tracking-tighter text-black bg-[#F492B7] px-8 py-2 border-4 border-black shadow-[8px_8px_0px_0px_#FFF] cursor-default lowercase select-none">
+                            leaderboard
+                        </h1>
+                    </div>
+
+                    {/* FILTERS CARD - PREMIUM NEO-BRUTALISM */}
+                    <div className="bg-[#121212] border-2 border-white/20 rounded-xl p-3 mb-8 flex flex-wrap gap-3 backdrop-blur-md shadow-lg w-fit">
+                        {(['daily', 'weekly', 'monthly', 'all_time'] as const).map((p) => (
+                            <button
+                                key={p}
+                                onClick={() => setPeriod(p)}
+                                className={`px-6 py-2 rounded-lg text-sm font-black lowercase transition-all border-2 relative overflow-hidden group ${period === p
+                                    ? 'bg-white border-white text-black shadow-[4px_4px_0px_0px_#F492B7] -translate-y-1'
+                                    : 'bg-transparent border-white/30 text-gray-400 hover:text-white hover:border-white hover:bg-white/5'
+                                    }`}
+                            >
+                                <span className="relative z-10">{p.replace('_', ' ')}</span>
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* TABLE CONTAINER */}
+                    <div className="bg-white border-4 border-black rounded-[2.5rem] overflow-hidden shadow-[12px_12px_0px_0px_#F492B7]">
+                        {/* HEADER */}
+                        <div className="flex items-center justify-between px-8 py-4 bg-black text-white border-b-4 border-black">
+                            <span className="text-sm font-black uppercase tracking-widest text-[#F492B7]">Trader</span>
+                            <div className="flex gap-12 text-sm font-black uppercase tracking-widest">
+                                <span>Profit</span>
+                                <span className="w-32 text-right hidden sm:block">Volume</span>
+                            </div>
                         </div>
 
-                    </div>
+                        {/* ROWS */}
+                        <div className="divide-y-2 divide-black">
+                            {filteredTraders.map((trader, i) => (
+                                <Link
+                                    href={`/profile/${trader.slug}`}
+                                    key={trader.slug}
+                                    className={`group flex items-center justify-between py-5 px-6 transition-all hover:bg-[#FFF5F7] ${trader.isYou ? 'bg-[#F492B7]/10' : 'bg-white'}`}
+                                >
+                                    <div className="flex items-center gap-5">
+                                        {/* Rank Badge */}
+                                        <div className={`w-10 h-10 flex items-center justify-center rounded-lg border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] font-black text-sm shrink-0 transform -rotate-2 ${trader.rank === 1 ? 'bg-[#FFD700] text-black' :
+                                            trader.rank === 2 ? 'bg-[#C0C0C0] text-black' :
+                                                trader.rank === 3 ? 'bg-[#CD7F32] text-black' :
+                                                    'bg-white text-black'
+                                            }`}>
+                                            #{trader.rank}
+                                        </div>
 
-                    {/* TABLE HEADERS */}
-                    <div className="flex items-center justify-end gap-12 mb-2 px-4 text-xs font-black text-white uppercase tracking-widest hidden sm:flex">
-                        <span>Profit/Loss</span>
-                        <span className="w-24 text-right">Volume</span>
-                    </div>
-
-                    {/* TABLE */}
-                    <div className="space-y-2">
-                        {filteredTraders.map((trader) => (
-                            <Link
-                                href={`/profile/${trader.slug}`}
-                                key={trader.slug}
-                                className="group block"
-                            >
-                                <div className={`flex items-center justify-between py-4 px-4 rounded-xl transition-all border border-transparent hover:border-white/5 hover:bg-white/5 ${trader.isYou ? 'bg-[#F492B7]/10 border-[#F492B7]/20' : ''}`}>
-                                    <div className="flex items-center gap-4">
-                                        <span className={`w-8 text-lg font-bold ${trader.rank <= 3 ? 'text-[#F492B7]' : 'text-gray-600'}`}>
-                                            {trader.rank}
-                                        </span>
-
+                                        {/* Avatar */}
                                         <div className="relative">
-                                            <div className="w-12 h-12 rounded-full bg-white/10 overflow-hidden border border-white/5">
+                                            <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-black bg-gray-100 shadow-sm">
                                                 {trader.avatar.startsWith('http') ? (
                                                     <img src={trader.avatar} alt="" className="w-full h-full object-cover" />
                                                 ) : (
-                                                    <div className="w-full h-full flex items-center justify-center text-lg">{trader.avatar}</div>
+                                                    <div className="w-full h-full flex items-center justify-center text-xl">{trader.avatar}</div>
                                                 )}
                                             </div>
-                                            {/* GOLD TROPHY FOR RANK 1 */}
                                             {trader.rank === 1 && (
-                                                <div className="absolute -bottom-2 -right-2 w-8 h-8 filter drop-shadow-[0_4px_6px_rgba(0,0,0,0.5)] transform hover:scale-110 transition-transform z-10">
-                                                    <img src="/gold-trophy.png" alt="Gold Trophy" className="w-full h-full object-contain" />
+                                                <div className="absolute -top-3 -right-3 w-8 h-8 z-10 filter drop-shadow-md">
+                                                    <img src="/gold-trophy.png" alt="Champion" className="w-full h-full object-contain" />
                                                 </div>
                                             )}
                                         </div>
 
-                                        <span className="font-bold text-white group-hover:text-[#F492B7] transition-colors text-base ml-2">
-                                            {trader.user}
-                                            {trader.isYou && <span className="ml-2 text-[9px] bg-[#F492B7] text-black px-1.5 rounded font-black uppercase align-middle">You</span>}
-                                        </span>
+                                        {/* Name */}
+                                        <div className="flex flex-col">
+                                            <span className="font-black text-black text-lg group-hover:text-[#F492B7] transition-colors">
+                                                @{trader.user}
+                                                {trader.isYou && <span className="ml-2 text-[10px] bg-black text-white px-2 py-0.5 rounded-full border border-black align-middle uppercase tracking-wider">You</span>}
+                                            </span>
+                                        </div>
                                     </div>
 
+                                    {/* Stats */}
                                     <div className="flex items-center gap-12 text-right">
-                                        <span className="font-black text-[#10B981] italic tracking-tight text-lg">
-                                            +${trader.currentProfit.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                        </span>
-                                        <span className="font-black text-white italic tracking-tight text-lg w-24 hidden sm:block drop-shadow-sm">
+                                        <div className="flex flex-col items-end">
+                                            <span className="font-black text-[#10B981] text-xl leading-none italic drop-shadow-sm">
+                                                +${trader.currentProfit.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                            </span>
+                                        </div>
+                                        <span className="font-bold text-black w-32 hidden sm:block text-xl">
                                             ${trader.currentVolume.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                         </span>
                                     </div>
-                                </div>
-                            </Link>
-                        ))}
-                    </div>
-
-                    {/* STICKY USER FOOTER (If Logged In & Ranked) */}
-                    {true /* Always show for demo if needed, but using live logic */ && filteredTraders.find(t => t.isYou) && (
-                        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-[600px] bg-[#121212] border border-white/10 rounded-full px-6 py-4 shadow-2xl flex items-center justify-between z-50 animate-in slide-in-from-bottom-5">
-                            {(() => {
-                                const navYou = filteredTraders.find(t => t.isYou);
-                                if (!navYou) return null;
-                                return (
-                                    <>
-                                        <div className="flex items-center gap-4">
-                                            <span className="text-sm font-bold text-gray-400">#{navYou.rank}</span>
-                                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#F492B7] to-purple-600 flex items-center justify-center text-sm overflow-hidden">
-                                                {navYou.avatar.startsWith('http') ? <img src={navYou.avatar} className="w-full h-full" /> : navYou.avatar}
-                                            </div>
-                                            <span className="font-black text-white text-base">{navYou.user} (You)</span>
-                                        </div>
-                                        <span className="font-black text-[#10B981] text-lg">
-                                            +${navYou.currentProfit.toLocaleString()}
-                                        </span>
-                                    </>
-                                );
-                            })()}
+                                </Link>
+                            ))}
                         </div>
-                    )}
+                    </div>
                 </div>
 
-                {/* RIGHT COLUMN: BIGGEST WINS SIDEBAR - LARGER & FLOATY */}
-                <div className="lg:col-span-5 transition-all duration-300">
-                    <div className="bg-[#050505] border border-white/15 rounded-3xl p-10 sticky top-32 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.9),inset_0_1px_0_0_rgba(255,255,255,0.1)] backdrop-blur-3xl relative overflow-hidden group/sidebar">
-
-                        {/* Subtle Top Glow */}
-                        <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
-
-                        <div className="flex items-center justify-between mb-8">
-                            <h2 className="text-3xl font-black tracking-tighter text-white drop-shadow-md italic">Biggest Wins</h2>
-
-                            {/* ALL TIME STAMP (Reverted to Seal/Stamp Look) */}
-                            <div className="relative border-4 border-[#F492B7]/50 text-[#F492B7] px-4 py-1 rounded-lg transform -rotate-12 opacity-90 mix-blend-screen shadow-[0_0_15px_rgba(244,146,183,0.3)]">
-                                <span className="text-sm font-black italic uppercase tracking-[0.3em]">ALL TIME</span>
+                {/* RIGHT COLUMN: BIGGEST WINS SIDEBAR */}
+                <div className="lg:col-span-5">
+                    {/* Sticky Container */}
+                    <div className="sticky top-32">
+                        {/* Title Card - PINK and STRAIGHT */}
+                        <div className="bg-[#F492B7] border-4 border-black rounded-3xl p-6 mb-6 shadow-[8px_8px_0px_0px_#FFF] flex justify-between items-center">
+                            <h2 className="text-3xl font-black text-black lowercase tracking-tight">biggest wins</h2>
+                            <div className="bg-white border-2 border-black px-3 py-1 rounded-full text-xs font-black uppercase text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                                All Time
                             </div>
                         </div>
 
-                        <div className="space-y-5">
+                        {/* Wins List */}
+                        <div className="space-y-4">
                             {biggestWinsAllTime.slice(0, 5).map((win, i) => (
-                                <div key={i} className="flex gap-4 group items-start p-4 mb-4 rounded-2xl border border-transparent hover:bg-white/5 hover:border-white/5 transition-all cursor-default">
-                                    <span className={`text-xl font-black pt-1 w-6 ${i < 3 ? 'text-[#F492B7]' : 'text-gray-600'}`}>{win.rank}</span>
+                                <div key={i} className="bg-white border-3 border-black rounded-3xl p-5 shadow-[6px_6px_0px_0px_rgba(255,255,255,0.2)] hover:scale-[1.02] hover:shadow-[8px_8px_0px_0px_#F492B7] transition-all group relative overflow-hidden">
 
-                                    <div className="flex-1 min-w-0">
-                                        {/* Row 1: User */}
-                                        <div className="flex items-center gap-3 mb-2">
-                                            <Link href={`/profile/${win.slug}`} className="relative block shrink-0 group-hover:scale-110 transition-transform">
-                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 border border-white/10 flex items-center justify-center text-base overflow-hidden">
-                                                    <span className="opacity-50">👤</span>
-                                                </div>
+                                    {/* Rank Number BG */}
+                                    <span className="absolute -right-2 top-2 text-7xl font-black text-gray-100 z-0 select-none opacity-50">#{win.rank}</span>
 
-                                                {/* GEMS TROPHY (Overlay on PFP) */}
-                                                {win.rank === 1 && (
-                                                    <div className="absolute -bottom-2 -right-2 w-7 h-7 filter drop-shadow-md z-10">
-                                                        <img src="/gems-trophy.png" className="w-full h-full object-contain" alt="Trophy" />
+                                    <div className="relative z-10">
+                                        {/* User Row */}
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div className="flex items-center gap-2">
+                                                {/* MEDALS / TROPHIES for Top 3 */}
+                                                {i === 0 && <span className="text-3xl drop-shadow-sm filter grayscale-0">🥇</span>}
+                                                {i === 1 && <span className="text-3xl drop-shadow-sm filter grayscale-0">🥈</span>}
+                                                {i === 2 && <span className="text-3xl drop-shadow-sm filter grayscale-0">🥉</span>}
+
+                                                <Link href={`/profile/${win.slug}`} className="flex items-center gap-2 group/user bg-[#F3F4F6] rounded-full pr-3 pl-1 py-1 border border-black hover:bg-[#F492B7] transition-all">
+                                                    <div className="w-6 h-6 rounded-full border border-black bg-white overflow-hidden">
+                                                        <div className="w-full h-full flex items-center justify-center text-[10px]">👤</div>
                                                     </div>
-                                                )}
-                                            </Link>
-                                            <Link href={`/profile/${win.slug}`} className="font-bold text-base text-gray-200 hover:text-white transition-colors truncate">
-                                                {win.user ? win.user : win.wallet}
-                                            </Link>
+                                                    <span className="font-bold text-xs text-black">@{win.user || win.wallet.slice(0, 6)}</span>
+                                                </Link>
+                                            </div>
                                         </div>
 
-                                        {/* Row 2: Market Title (Clickable) */}
-                                        <Link href={`/market/${win.market_slug}`} className="block text-sm font-black text-white hover:text-[#F492B7] transition-colors line-clamp-2 mb-3 leading-snug">
+                                        {/* Market Title */}
+                                        <Link href={`/market/${win.market_slug}`} className="block text-lg font-black text-black leading-tight mb-4 hover:text-[#F492B7] transition-colors line-clamp-2">
                                             {win.market_title}
                                         </Link>
 
-                                        {/* Row 3: Stats Grid */}
-                                        <div className="flex items-end justify-between rounded-lg p-2 relative overflow-hidden">
-
-                                            <div className="flex flex-col gap-1 relative z-10 pl-2">
-                                                <span className="text-[9px] text-gray-500 font-black uppercase tracking-widest">Initial</span>
-                                                {/* MATCH GREEN STYLE BUT WHITE */}
-                                                <span className="text-white font-black italic text-2xl tracking-tighter drop-shadow-sm">${win.bet.toLocaleString()}</span>
+                                        {/* Stats Grid */}
+                                        <div className="flex gap-2">
+                                            <div className="flex-1 bg-black border-2 border-black rounded-xl p-2 flex flex-col justify-center items-center">
+                                                <span className="text-[9px] uppercase font-black text-white/70">Bet</span>
+                                                <span className="font-black text-white text-xl italic">${win.bet.toLocaleString()}</span>
                                             </div>
-
-                                            <div className="flex flex-col items-end gap-1 relative z-10">
-                                                <span className="text-[9px] text-[#10B981] font-black uppercase tracking-widest">Profit</span>
-                                                <span className="text-[#10B981] font-black italic text-2xl tracking-tighter drop-shadow-sm">+${(win.payout - win.bet).toLocaleString()}</span>
+                                            {/* PROFIT BOX: GREEN & TILTED TEXT */}
+                                            <div className="flex-1 bg-[#10B981] border-2 border-black rounded-xl p-2 flex flex-col justify-center items-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                                                <span className="text-[9px] uppercase font-black text-green-900">Profit</span>
+                                                <span className="font-black text-xl text-white italic">+${(win.payout - win.bet).toLocaleString()}</span>
                                             </div>
                                         </div>
                                     </div>

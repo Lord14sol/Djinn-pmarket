@@ -54,22 +54,31 @@ export default function DjinnToast({
     // Styles based on type
     const styles = {
         SUCCESS: {
-            bg: 'bg-[#F492B7]/10',
-            // border (handled by container)
+            // Elegant Pink Glass
+            container: 'bg-gradient-to-br from-[#F492B7]/20 to-[#FFD1DC]/10 border-[#F492B7]/30 shadow-[0_8px_32px_rgba(244,146,183,0.25)]',
+            iconBg: 'bg-white/20',
             iconColor: 'text-[#F492B7]',
-            button: 'bg-[#F492B7] text-black hover:bg-[#ff6fb7] shadow-[0_0_15px_rgba(244,146,183,0.4)]',
+            titleColor: 'text-white',
+            msgColor: 'text-white/80',
+            button: 'bg-white/10 hover:bg-white/20 text-white border border-white/20 shadow-lg backdrop-blur-md',
             icon: CheckCircle2
         },
         ERROR: {
-            bg: 'bg-red-500/10',
+            container: 'bg-gradient-to-br from-red-500/20 to-black/40 border-red-500/30 shadow-[0_8px_32px_rgba(239,68,68,0.25)]',
+            iconBg: 'bg-red-500/10',
             iconColor: 'text-red-500',
-            button: 'bg-gradient-to-r from-red-500 to-rose-600 text-white hover:brightness-110',
+            titleColor: 'text-white',
+            msgColor: 'text-white/80',
+            button: 'bg-red-500/80 hover:bg-red-500 text-white shadow-lg',
             icon: AlertCircle
         },
         INFO: {
-            bg: 'bg-blue-500/10',
+            container: 'bg-gradient-to-br from-blue-500/20 to-black/40 border-blue-500/30 shadow-[0_8px_32px_rgba(59,130,246,0.25)]',
+            iconBg: 'bg-blue-500/10',
             iconColor: 'text-blue-500',
-            button: 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white hover:brightness-110',
+            titleColor: 'text-white',
+            msgColor: 'text-white/80',
+            button: 'bg-blue-500/80 hover:bg-blue-500 text-white shadow-lg',
             icon: Info
         }
     };
@@ -78,48 +87,46 @@ export default function DjinnToast({
     const Icon = currentStyle.icon;
 
     return (
-        <div className={`fixed bottom-6 right-6 z-[100] transition-all duration-500 ease-out ${show ? 'translate-x-0 opacity-100' : 'translate-x-[120%] opacity-0'}`}>
-            <div className={`relative w-96 backdrop-blur-xl bg-[#0E0E0E] bg-opacity-95 border-2 border-[#F492B7] rounded-3xl p-6 shadow-[0_0_30px_-10px_rgba(244,146,183,0.3)] overflow-hidden`}>
+        <div className={`fixed top-24 right-6 z-[100] transition-all duration-700 cubic-bezier(0.34, 1.56, 0.64, 1) ${show ? 'translate-x-0 opacity-100 scale-100' : 'translate-x-[120%] opacity-0 scale-90'}`}>
+            <div className={`relative w-96 backdrop-blur-3xl border rounded-[2rem] p-6 overflow-hidden ${currentStyle.container}`}>
 
-                {/* Glow Effect */}
-                <div className={`absolute -top-20 -right-20 w-40 h-40 rounded-full blur-3xl pointer-events-none bg-[#F492B7]/20`} />
+                {/* Subtle sheen effect */}
+                <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent pointer-events-none" />
 
                 {/* Close Button */}
                 <button
                     onClick={() => { setShow(false); setTimeout(onClose, 300); }}
-                    className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
+                    className="absolute top-5 right-5 text-white/40 hover:text-white transition-colors z-20"
                 >
-                    <X size={16} />
+                    <X size={18} />
                 </button>
 
-                <div className="flex gap-5">
-                    {/* Icon */}
-                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${currentStyle.bg} border border-[#F492B7]/30 shadow-inner`}>
-                        <Icon size={24} className={currentStyle.iconColor} />
+                <div className="flex gap-4 items-start relative z-10">
+                    {/* Icon Bubble */}
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${currentStyle.iconBg} shadow-inner`}>
+                        <Icon size={20} className={currentStyle.iconColor} strokeWidth={3} />
                     </div>
 
                     {/* Content */}
-                    <div className="flex-1">
-                        <h4 className="font-black text-base uppercase tracking-wider mb-1 text-white shadow-black drop-shadow-md">
+                    <div className="flex-1 pt-1">
+                        <h4 className={`font-black text-sm uppercase tracking-widest mb-1 ${currentStyle.titleColor}`}>
                             {title || type}
                         </h4>
-                        <p className="text-gray-200 text-sm leading-relaxed font-bold mb-4">
+                        <p className={`text-xs font-bold leading-relaxed mb-4 ${currentStyle.msgColor}`}>
                             {message}
                         </p>
 
-                        {/* Action Link */}
+                        {/* Action Link (Pill Shape) */}
                         {actionLink && (
                             <a
                                 href={actionLink}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-lg active:scale-[0.98] ${currentStyle.button}`}
+                                className={`inline-flex items-center gap-2 px-5 py-2 rounded-full font-black text-[10px] uppercase tracking-widest transition-all hover:scale-105 active:scale-95 ${currentStyle.button}`}
                             >
-                                {actionLabel} <ExternalLink size={12} />
+                                {actionLabel} <ExternalLink size={10} />
                             </a>
                         )}
-
-                        {/* Branding Removed per request */}
                     </div>
                 </div>
             </div>

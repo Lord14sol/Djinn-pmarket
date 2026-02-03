@@ -60,9 +60,11 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
     const [newCommentText, setNewCommentText] = useState("");
     const [newCommentImage, setNewCommentImage] = useState<string | null>(null);
     const [replyText, setReplyText] = useState("");
+    const [replyImage, setReplyImage] = useState<string | null>(null); // ✅ NEW: Image for replies
     const [activeReplyId, setActiveReplyId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const replyFileInputRef = useRef<HTMLInputElement>(null); // ✅ NEW: Separate ref for reply images
     const isPostingCommentRef = useRef(false);
 
     // 🔥 Estado del perfil del usuario actual
@@ -214,13 +216,24 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
 
         isPostingCommentRef.current = true;
         try {
+            // ✅ UPLOAD IMAGE TO STORAGE (if exists)
+            let imageUrl: string | null = null;
+            if (savedImage) {
+                console.log('📤 Uploading image to Supabase Storage...');
+                imageUrl = await supabaseDb.uploadImage(savedImage);
+                if (!imageUrl) {
+                    console.warn('⚠️ Image upload failed, falling back to base64');
+                    imageUrl = savedImage; // Fallback to base64 if upload fails
+                }
+            }
+
             const { data: result, error } = await supabaseDb.createComment({
                 market_slug: marketSlug,
                 wallet_address: publicKey,
                 username: userProfile.username,
                 avatar_url: userProfile.avatarUrl,
                 text: savedText || '', // Asegurar que text nunca sea undefined
-                image_url: savedImage,
+                image_url: imageUrl, // ✅ Use storage URL or base64 fallback
                 position: myHeldPosition,
                 position_amount: myHeldAmount,
                 parent_id: null
@@ -250,21 +263,34 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
     };
 
     const handlePostReply = async (parentId: string) => {
-        if (!replyText.trim()) return;
+        if (!replyText.trim() && !replyImage) return; // ✅ Allow image-only replies
         if (!publicKey) return alert("Connect wallet to reply");
 
         const savedReplyText = replyText;
+        const savedReplyImage = replyImage;
         setReplyText("");
+        setReplyImage(null); // ✅ Clear image state
 
         isPostingCommentRef.current = true;
         try {
+            // ✅ UPLOAD IMAGE TO STORAGE (if exists)
+            let imageUrl: string | null = null;
+            if (savedReplyImage) {
+                console.log('📤 Uploading reply image to Supabase Storage...');
+                imageUrl = await supabaseDb.uploadImage(savedReplyImage);
+                if (!imageUrl) {
+                    console.warn('⚠️ Reply image upload failed, falling back to base64');
+                    imageUrl = savedReplyImage; // Fallback to base64
+                }
+            }
+
             const { data: result, error } = await supabaseDb.createComment({
                 market_slug: marketSlug,
                 wallet_address: publicKey,
                 username: userProfile.username,
                 avatar_url: userProfile.avatarUrl,
-                text: savedReplyText,
-                image_url: null,
+                text: savedReplyText || '', // ✅ Empty string if no text
+                image_url: imageUrl, // ✅ Use storage URL or base64 fallback
                 position: myHeldPosition,
                 position_amount: myHeldAmount,
                 parent_id: parentId
@@ -275,13 +301,15 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
                 await loadComments();
             } else {
                 console.error("Supabase Reply Error:", error);
-                // Restaurar el texto si falló
+                // Restaurar el texto e imagen si falló
                 setReplyText(savedReplyText);
+                setReplyImage(savedReplyImage);
                 alert(`Error al guardar la respuesta: ${error?.message || JSON.stringify(error)}`);
             }
         } catch (error: any) {
             console.error('Error creating reply:', error);
             setReplyText(savedReplyText);
+            setReplyImage(savedReplyImage);
             alert(`Error al guardar la respuesta: ${error.message || JSON.stringify(error)}`);
         } finally {
             isPostingCommentRef.current = false;
@@ -313,6 +341,16 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
         if (file) {
             const reader = new FileReader();
             reader.onloadend = () => setNewCommentImage(reader.result as string);
+            reader.readAsDataURL(file);
+        }
+    };
+
+    // ✅ NEW: Handler for reply image uploads
+    const handleReplyImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => setReplyImage(reader.result as string);
             reader.readAsDataURL(file);
         }
     };
@@ -427,25 +465,60 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
                                         <button onClick={() => handleLike(comment.id)} className={`flex items-center gap-1.5 text-xs font-bold transition-colors ${comment.liked_by_me ? 'text-pink-500' : 'text-gray-500 hover:text-pink-400'}`}>
                                             <Heart size={14} fill={comment.liked_by_me ? "currentColor" : "none"} /> {comment.likes_count || 0}
                                         </button>
-                                        <button onClick={() => setActiveReplyId(activeReplyId === comment.id ? null : comment.id)} className="text-xs font-bold text-gray-500 hover:text-white transition-colors flex items-center gap-1.5">
+                                        <button
+                                            onClick={() => {
+                                                if (activeReplyId === comment.id) {
+                                                    setActiveReplyId(null);
+                                                    setReplyImage(null); // ✅ Clear image when closing
+                                                    setReplyText(''); // ✅ Clear text too
+                                                } else {
+                                                    setActiveReplyId(comment.id);
+                                                }
+                                            }}
+                                            className="text-xs font-bold text-gray-500 hover:text-white transition-colors flex items-center gap-1.5"
+                                        >
                                             Reply
                                         </button>
                                     </div>
 
-                                    {/* REPLY INPUT */}
+                                    {/* REPLY INPUT - ✅ ENHANCED WITH IMAGE SUPPORT */}
                                     {activeReplyId === comment.id && (
-                                        <div className="mt-4 flex gap-3 animate-in fade-in slide-in-from-top-2">
-                                            <div className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-xs">You</div>
-                                            <div className="flex-1 flex gap-2">
-                                                <input
-                                                    autoFocus
-                                                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:border-[#F492B7] outline-none transition-colors"
-                                                    placeholder="Write a reply..."
-                                                    value={replyText}
-                                                    onChange={(e) => setReplyText(e.target.value)}
-                                                    onKeyDown={(e) => e.key === 'Enter' && handlePostReply(comment.id)}
-                                                />
-                                                <button onClick={() => handlePostReply(comment.id)} className="bg-[#F492B7] text-black p-2 rounded-xl hover:scale-105 active:scale-95 transition-transform"><Send size={16} /></button>
+                                        <div className="mt-4 animate-in fade-in slide-in-from-top-2">
+                                            <div className="flex gap-3">
+                                                <div className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-xs shrink-0">You</div>
+                                                <div className="flex-1">
+                                                    <div className="bg-white/5 border border-white/10 rounded-xl p-3 focus-within:border-[#F492B7] transition-colors">
+                                                        <input
+                                                            autoFocus
+                                                            className="w-full bg-transparent text-sm focus:outline-none"
+                                                            placeholder="Write a reply..."
+                                                            value={replyText}
+                                                            onChange={(e) => setReplyText(e.target.value)}
+                                                            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handlePostReply(comment.id)}
+                                                        />
+                                                        {replyImage && (
+                                                            <div className="relative inline-block mt-2">
+                                                                <img src={replyImage} alt="Reply preview" className="h-16 rounded-lg border border-white/10" />
+                                                                <button onClick={() => setReplyImage(null)} className="absolute -top-2 -right-2 bg-red-500 rounded-full p-1 hover:bg-red-600 transition-colors">
+                                                                    <X size={10} />
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                        <div className="flex justify-between items-center mt-2 pt-2 border-t border-white/5">
+                                                            <button onClick={() => replyFileInputRef.current?.click()} className="text-gray-500 hover:text-white transition-colors">
+                                                                <ImageIcon size={16} />
+                                                            </button>
+                                                            <input type="file" ref={replyFileInputRef} className="hidden" onChange={handleReplyImageUpload} accept="image/*" />
+                                                            <button
+                                                                onClick={() => handlePostReply(comment.id)}
+                                                                disabled={!replyText.trim() && !replyImage}
+                                                                className="bg-[#F492B7] text-black px-4 py-1.5 rounded-lg text-xs font-black uppercase hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                                                            >
+                                                                <Send size={14} /> Send
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     )}
@@ -478,6 +551,10 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
                                                             <span className="text-[9px] text-gray-500">{reply.timeAgo}</span>
                                                         </div>
                                                         <p className="text-gray-400 text-xs leading-relaxed">{reply.text}</p>
+                                                        {/* ✅ NEW: Display reply image if exists */}
+                                                        {reply.image_url && (
+                                                            <img src={reply.image_url} alt="Reply attachment" className="rounded-lg max-h-40 border border-white/10 mt-2" />
+                                                        )}
                                                         <button onClick={() => handleLike(reply.id)} className={`mt-2 flex items-center gap-1 text-[10px] font-bold transition-colors ${reply.liked_by_me ? 'text-pink-500' : 'text-gray-600 hover:text-pink-400'}`}>
                                                             <Heart size={10} fill={reply.liked_by_me ? "currentColor" : "none"} /> {reply.likes_count || 0}
                                                         </button>

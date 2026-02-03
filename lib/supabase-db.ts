@@ -1,5 +1,76 @@
 import { supabase } from './supabase';
 import { withRetry } from './supabase-retry';
+import { getSpotPrice } from './core-amm';
+
+// ============================================
+// STORAGE (Images)
+// ============================================
+
+/**
+ * Upload image to Supabase Storage
+ * @param file - File object or base64 string
+ * @param bucket - Storage bucket name (default: 'comment-images')
+ * @returns Public URL of uploaded image or null if failed
+ */
+export async function uploadImage(
+    file: File | string,
+    bucket: string = 'comment-images'
+): Promise<string | null> {
+    try {
+        let fileToUpload: File;
+        let fileName: string;
+
+        // Handle base64 string input
+        if (typeof file === 'string' && file.startsWith('data:')) {
+            const base64Data = file.split(',')[1];
+            const mimeType = file.match(/data:([^;]+);/)?.[1] || 'image/png';
+            const extension = mimeType.split('/')[1] || 'png';
+
+            // Convert base64 to blob
+            const byteCharacters = atob(base64Data);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            const blob = new Blob([byteArray], { type: mimeType });
+
+            fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${extension}`;
+            fileToUpload = new File([blob], fileName, { type: mimeType });
+        } else if (file instanceof File) {
+            // Handle File object
+            const extension = file.name.split('.').pop() || 'png';
+            fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${extension}`;
+            fileToUpload = file;
+        } else {
+            console.error('Invalid file input:', typeof file);
+            return null;
+        }
+
+        // Upload to Supabase Storage
+        const { data, error } = await supabase.storage
+            .from(bucket)
+            .upload(fileName, fileToUpload, {
+                cacheControl: '3600',
+                upsert: false
+            });
+
+        if (error) {
+            console.error('Supabase Storage Upload Error:', error);
+            return null;
+        }
+
+        // Get public URL
+        const { data: publicUrlData } = supabase.storage
+            .from(bucket)
+            .getPublicUrl(fileName);
+
+        return publicUrlData.publicUrl;
+    } catch (error) {
+        console.error('Image upload failed:', error);
+        return null;
+    }
+}
 
 // ============================================
 // PROFILES
@@ -26,7 +97,6 @@ const MOCK_PROFILE: Profile = {
     bio: 'Local Mode Activado (Supabase Quota Exceeded)',
     avatar_url: '/pink-pfp.png',
     banner_url: '/default-banner-v2.png',
-    created_at: new Date().toISOString(),
     created_at: new Date().toISOString(),
     views: 42,
     gems: 0
@@ -598,6 +668,8 @@ export async function createActivity(activity: Omit<Activity, 'id' | 'created_at
 }
 
 export async function getUserActivity(walletAddress: string): Promise<Activity[]> {
+    // Reverted to simple select to prevent crash if FK is missing.
+    // TODO: Verify FK relationship between activity.market_slug and markets.slug
     const { data, error } = await supabase
         .from('activity')
         .select('*')
@@ -609,7 +681,60 @@ export async function getUserActivity(walletAddress: string): Promise<Activity[]
         console.error('Error fetching user activity:', error);
         return [];
     }
-    return data || [];
+
+    // 2. SOFT JOIN: Fetch Market Icons manually
+    const activities = data || [];
+    if (activities.length === 0) return [];
+
+    const slugs = Array.from(new Set(activities.map(a => a.market_slug)));
+
+    const { data: markets } = await supabase
+        .from('markets')
+        .select('slug, icon, banner_url')
+        .in('slug', slugs);
+
+    const marketMap = new Map();
+    (markets || []).forEach((m: any) => {
+        marketMap.set(m.slug, m.banner_url || m.icon);
+    });
+
+    return activities.map(act => ({
+        ...act,
+        market_icon: marketMap.get(act.market_slug) || act.market_icon
+    }));
+}
+
+/**
+ * Calculate Dynamic Gems based on user activity
+ * - +20 Gems per Market Created
+ * - +5 Gems per Activity Item (Trade/Interaction)
+ */
+export async function calculateUserGems(walletAddress: string): Promise<number> {
+    try {
+        // 1. Count Markets Created
+        const { count: marketCount, error: marketError } = await supabase
+            .from('markets')
+            .select('*', { count: 'exact', head: true })
+            .eq('creator_wallet', walletAddress);
+
+        // 2. Count Activity (Trades)
+        const { count: activityCount, error: activityError } = await supabase
+            .from('activity')
+            .select('*', { count: 'exact', head: true })
+            .eq('wallet_address', walletAddress);
+
+        if (marketError) console.error("Error counting markets for gems:", marketError);
+        if (activityError) console.error("Error counting activity for gems:", activityError);
+
+        const markets = marketCount || 0;
+        const activities = activityCount || 0;
+
+        // Formula: 20 per Market, 5 per Action
+        return (markets * 20) + (activities * 5);
+    } catch (e) {
+        console.error("Error calculating gems:", e);
+        return 0;
+    }
 }
 
 // --- HOLDERS (Derived from Bets) ---
@@ -622,7 +747,11 @@ export interface Holder {
     wallet_address: string;
 }
 
-export async function getTopHolders(slug: string): Promise<Holder[]> {
+/**
+ * Get Top Holders by Outcome - Supports Multi-Outcome Markets
+ * Returns a dynamic object where keys are outcome names (e.g., "YES", "NO", "Argentina", "Brazil")
+ */
+export async function getTopHolders(slug: string): Promise<Record<string, Holder[]>> {
     // Read from bets table - only active (unclaimed) positions
     const { data, error } = await supabase
         .from('bets')
@@ -630,57 +759,99 @@ export async function getTopHolders(slug: string): Promise<Holder[]> {
         .eq('market_slug', slug)
         .eq('claimed', false);
 
-    if (error || !data) return [];
+    if (error || !data) return {};
 
-    // Aggregate shares by wallet
-    const agg: Record<string, Holder> = {};
-    const wallets: string[] = [];
+    // Aggregate shares by wallet AND outcome (dynamic)
+    const aggByOutcome: Record<string, Record<string, Holder>> = {};
+    const wallets = new Set<string>();
 
     data.forEach(bet => {
         const key = bet.wallet_address;
-        if (!agg[key]) {
-            agg[key] = {
+        const outcome = bet.side || 'YES'; // Fallback to YES if no side specified
+        const shares = Number(bet.shares || 0);
+
+        wallets.add(key);
+
+        // Initialize outcome aggregation if doesn't exist
+        if (!aggByOutcome[outcome]) {
+            aggByOutcome[outcome] = {};
+        }
+
+        const targetAgg = aggByOutcome[outcome];
+
+        if (!targetAgg[key]) {
+            targetAgg[key] = {
                 rank: 0,
                 name: bet.wallet_address.slice(0, 6) + '...',
                 avatar: null,
-                positions: {},
-                totalShares: 0,
+                positions: { [outcome]: 0 },
+                totalShares: 0, // Total shares for THIS outcome
                 wallet_address: bet.wallet_address
             };
-            wallets.push(bet.wallet_address);
         }
 
-        const shares = Number(bet.shares || 0);
-        const side = bet.side; // Dynamic side string
-
-        if (!agg[key].positions[side]) {
-            agg[key].positions[side] = 0;
-        }
-        agg[key].positions[side] += shares;
-        agg[key].totalShares += shares;
+        targetAgg[key].positions[outcome] = (targetAgg[key].positions[outcome] || 0) + shares;
+        targetAgg[key].totalShares += shares;
     });
 
-    // Fetch profiles for these wallets
-    if (wallets.length > 0) {
+    // Fetch profiles
+    const walletList = Array.from(wallets);
+    if (walletList.length > 0) {
         const { data: profiles } = await supabase
             .from('profiles')
             .select('wallet_address, username, avatar_url')
-            .in('wallet_address', wallets);
+            .in('wallet_address', walletList);
 
         profiles?.forEach(p => {
-            if (agg[p.wallet_address]) {
-                if (p.username) agg[p.wallet_address].name = p.username;
-                if (p.avatar_url) agg[p.wallet_address].avatar = p.avatar_url;
-            }
+            // Update profile info across all outcomes
+            Object.keys(aggByOutcome).forEach(outcome => {
+                if (aggByOutcome[outcome][p.wallet_address]) {
+                    if (p.username) aggByOutcome[outcome][p.wallet_address].name = p.username;
+                    if (p.avatar_url) aggByOutcome[outcome][p.wallet_address].avatar = p.avatar_url;
+                }
+            });
         });
     }
 
-    // Sort by TOTAL shares descending and assign ranks
-    const sorted = Object.values(agg)
+    // Sort and Rank each outcome
+    const sortHolders = (agg: Record<string, Holder>) => Object.values(agg)
         .filter(h => h.totalShares > 0.001)
-        .sort((a, b) => b.totalShares - a.totalShares);
+        .sort((a, b) => b.totalShares - a.totalShares)
+        .map((h, i) => ({ ...h, rank: i + 1 }));
 
-    return sorted.map((h, i) => ({ ...h, rank: i + 1 }));
+    const result: Record<string, Holder[]> = {};
+    Object.keys(aggByOutcome).forEach(outcome => {
+        result[outcome] = sortHolders(aggByOutcome[outcome]).slice(0, 10); // Top 10 per outcome
+    });
+
+    return result;
+}
+
+/**
+ * Get Creator Stats (Accumulated Fees)
+ */
+export async function getCreatorStats(walletAddress: string): Promise<{ totalVolume: number, estimatedFees: number, totalMarkets: number }> {
+    const { data: markets, error } = await supabase
+        .from('markets')
+        .select('volume, id')
+        .eq('creator_wallet', walletAddress);
+
+    if (error || !markets) return { totalVolume: 0, estimatedFees: 0, totalMarkets: 0 };
+
+    let totalVolume = 0;
+    markets.forEach(m => {
+        totalVolume += (m.volume || 0);
+    });
+
+    // Creator gets 0.5% of Volume (1% Total Fee, 50% split)
+    // Assuming Volume is in USD, fees are USD equivalent
+    const estimatedFees = totalVolume * 0.005;
+
+    return {
+        totalVolume,
+        estimatedFees,
+        totalMarkets: markets.length
+    };
 }
 
 // ============================================
@@ -1119,7 +1290,7 @@ export async function reduceBetPosition(wallet: string, marketSlug: string, side
 }
 
 export async function getUserBets(walletAddress: string): Promise<Bet[]> {
-    const { data, error } = await supabase
+    const { data: bets, error } = await supabase
         .from('bets')
         .select('*')
         .eq('wallet_address', walletAddress)
@@ -1128,8 +1299,69 @@ export async function getUserBets(walletAddress: string): Promise<Bet[]> {
 
     if (error) {
         console.error('Error fetching user bets:', typeof error === 'object' ? JSON.stringify(error, null, 2) : error);
+        return [];
     }
-    return data || [];
+
+    if (!bets || bets.length === 0) return [];
+
+    // SOFT JOIN: Fetch latest market data (Live Price & Supplies)
+    const slugs = Array.from(new Set(bets.map(b => b.market_slug)));
+    const { data: markets } = await supabase
+        .from('markets')
+        .select('slug, live_price, yes_supply, no_supply, outcome_supplies')
+        .in('slug', slugs);
+
+    const marketMap = new Map();
+    (markets || []).forEach((m: any) => {
+        marketMap.set(m.slug, m);
+    });
+
+    // Merge and Calculate Current Price
+    return bets.map(bet => {
+        const market = marketMap.get(bet.market_slug);
+        let currentPrice = bet.entry_price; // Fallback
+
+        if (market) {
+            // Dynamic Price Calculation via Bonding Curve (getSpotPrice)
+            // Matches Market Page MCAP logic
+            let supply = 0;
+
+            if (bet.side === 'YES') {
+                if (market.yes_supply) supply = Number(market.yes_supply);
+                else if (market.outcome_supplies?.[0]) supply = Number(market.outcome_supplies[0]);
+            } else {
+                if (market.no_supply) supply = Number(market.no_supply);
+                else if (market.outcome_supplies?.[1]) supply = Number(market.outcome_supplies[1]);
+            }
+
+            // core-amm expects Raw Supply (not scaled down yet? Wait, getSpotPrice expects shares count)
+            // In MarketPage: sYes = Number(supply) / 1e9;
+            // Then getSpotPrice(sYes).
+            // So we must divide by 1e9 here too.
+            const supplyShares = supply / 1_000_000_000;
+
+            if (supplyShares > 0) {
+                currentPrice = getSpotPrice(supplyShares);
+            } else {
+                // Fallback to probability if supply missing (unlikely if active)
+                if (bet.side === 'YES') currentPrice = (market.live_price || 50) / 100;
+                else currentPrice = (100 - (market.live_price || 50)) / 100;
+            }
+        }
+
+        // Calculate current value based on ATOMIC shares scaling calculation
+        // bet.shares is stored as atomic units on-chain (1e9 per share) but seemingly saved as such or needing normalization.
+        // If user sees 255M USD, it means we are off by 1e9.
+        // currentPrice is SOL per WHOLE SHARE.
+        // So Value = (bet.shares / 1e9) * currentPrice * solPrice
+
+        return {
+            ...bet,
+            currentPrice,
+            // Normalizing shares for value calculation
+            current: (bet.shares / 1_000_000_000) * currentPrice
+        };
+    });
 }
 
 export async function getUserMarketBets(walletAddress: string, marketSlug: string): Promise<Bet[]> {
@@ -1469,4 +1701,215 @@ export async function searchGlobal(queryText: string) {
         console.error("Global search error:", e);
         return { profiles: [], markets: [] };
     }
+}
+
+// ============================================
+// CERBERUS ORACLE SYSTEM
+// ============================================
+
+export type VerificationStatus =
+    | 'none'           // Not yet triggered
+    | 'pending'        // In queue for verification
+    | 'pending_manual' // Bot disabled, needs manual trigger
+    | 'verifying'      // Currently being verified by Cerberus
+    | 'verified'       // Cerberus approved (3-dog passed)
+    | 'flagged'        // Cerberus flagged for review
+    | 'rejected';      // Cerberus rejected
+
+export type ResolutionStatus =
+    | 'active'         // Market is live and trading
+    | 'pending_resolution' // Expired, waiting for oracle verdict
+    | 'resolving'      // Resolution in progress
+    | 'resolved'       // Fully resolved with winner
+    | 'voided';        // Market cancelled/refunded
+
+/**
+ * Get market by slug with extended oracle fields
+ */
+export async function getMarketBySlug(slug: string) {
+    const { data, error } = await supabase
+        .from('markets')
+        .select('*')
+        .eq('slug', slug)
+        .single();
+
+    if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching market:', error);
+        return null;
+    }
+    return data;
+}
+
+/**
+ * Update market verification status (Cerberus pre-resolution)
+ */
+export async function updateMarketVerificationStatus(
+    slug: string,
+    status: VerificationStatus,
+    details?: {
+        cerberus_verdict?: string;
+        cerberus_confidence?: number;
+        cerberus_analysis?: string;
+    }
+) {
+    const updatePayload: any = {
+        verification_status: status,
+        verification_updated_at: new Date().toISOString()
+    };
+
+    if (details) {
+        if (details.cerberus_verdict) updatePayload.cerberus_verdict = details.cerberus_verdict;
+        if (details.cerberus_confidence) updatePayload.cerberus_confidence = details.cerberus_confidence;
+        if (details.cerberus_analysis) updatePayload.cerberus_analysis = details.cerberus_analysis;
+    }
+
+    const { error } = await supabase
+        .from('markets')
+        .update(updatePayload)
+        .eq('slug', slug);
+
+    if (error) {
+        console.error('Error updating verification status:', error);
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Get markets ready for Cerberus verification (reached MCAP trigger)
+ */
+export async function getMarketsReadyForVerification() {
+    const { data, error } = await supabase
+        .from('markets')
+        .select('*')
+        .eq('resolved', false)
+        .or('verification_status.is.null,verification_status.eq.none')
+        .order('created_at', { ascending: true });
+
+    if (error) {
+        console.error('Error fetching markets for verification:', error);
+        return [];
+    }
+    return data || [];
+}
+
+/**
+ * Get markets pending resolution (expired + verified)
+ */
+export async function getMarketsPendingResolution() {
+    const now = new Date().toISOString();
+
+    const { data, error } = await supabase
+        .from('markets')
+        .select('*')
+        .eq('resolved', false)
+        .eq('verification_status', 'verified')
+        .lt('end_date', now) // Market has expired
+        .order('end_date', { ascending: true });
+
+    if (error) {
+        console.error('Error fetching markets pending resolution:', error);
+        return [];
+    }
+    return data || [];
+}
+
+/**
+ * Get approved resolution suggestions
+ */
+export async function getApprovedSuggestions() {
+    const { data, error } = await supabase
+        .from('resolution_suggestions')
+        .select('*')
+        .eq('status', 'approved')
+        .order('created_at', { ascending: true });
+
+    if (error) {
+        console.error('Error fetching approved suggestions:', error);
+        return [];
+    }
+    return data || [];
+}
+
+/**
+ * Auto-resolve market based on Cerberus verdict
+ */
+export async function autoResolveMarket(
+    slug: string,
+    verdict: 'YES' | 'NO',
+    cerberusData: {
+        confidence: number;
+        analysis: string;
+        sources: string[];
+    }
+) {
+    // 1. Update market status
+    const { error: marketError } = await supabase
+        .from('markets')
+        .update({
+            resolved: true,
+            winning_outcome: verdict,
+            resolution_date: new Date().toISOString(),
+            resolution_method: 'cerberus_auto',
+            cerberus_confidence: cerberusData.confidence,
+            cerberus_analysis: cerberusData.analysis,
+            cerberus_sources: cerberusData.sources
+        })
+        .eq('slug', slug);
+
+    if (marketError) {
+        console.error('Error auto-resolving market:', marketError);
+        return { error: marketError };
+    }
+
+    // 2. Calculate payouts (same as manual resolution)
+    return resolveMarket(slug, verdict);
+}
+
+/**
+ * Get market MCAP data for trigger checking
+ */
+export async function getMarketMcapData(slug: string) {
+    const { data, error } = await supabase
+        .from('markets')
+        .select('slug, title, total_yes_pool, total_no_pool, verification_status, resolved')
+        .eq('slug', slug)
+        .single();
+
+    if (error) {
+        console.error('Error fetching market MCAP:', error);
+        return null;
+    }
+
+    // Calculate combined MCAP in SOL
+    const totalPoolSol = (data.total_yes_pool || 0) + (data.total_no_pool || 0);
+
+    return {
+        ...data,
+        total_pool_sol: totalPoolSol,
+        // Rough MCAP estimate (pool value * multiplier based on bonding curve position)
+        estimated_mcap_sol: totalPoolSol * 1.5 // Conservative estimate
+    };
+}
+
+/**
+ * Get all active markets with their pool data for MCAP monitoring
+ */
+export async function getActiveMarketsForMcapMonitoring() {
+    const { data, error } = await supabase
+        .from('markets')
+        .select('slug, title, total_yes_pool, total_no_pool, verification_status, created_at')
+        .eq('resolved', false)
+        .or('verification_status.is.null,verification_status.eq.none')
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching active markets:', error);
+        return [];
+    }
+
+    return (data || []).map(m => ({
+        ...m,
+        total_pool_sol: (m.total_yes_pool || 0) + (m.total_no_pool || 0)
+    }));
 }
