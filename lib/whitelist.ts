@@ -5,8 +5,8 @@ export const ADMIN_WALLETS = [
     "G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma"
 ];
 
-// Set high for development - adjust for production launch
-export const GENESIS_LIMIT = 10000;
+// Límite de Genesis: Solo los primeros 1000 usuarios reciben la medalla
+export const GENESIS_LIMIT = 1000;
 
 export interface WhitelistStatus {
     count: number;

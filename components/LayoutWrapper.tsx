@@ -19,67 +19,69 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
     // Track if we've already triggered the genesis sequence for the current session/wallet
     const genesisTriggeredRef = React.useRef<string | null>(null);
 
-    // Achievement Trigger: Genesis Medal on first connection
+    // Achievement Trigger: Genesis Medal ONLY for first 1000 users
     useEffect(() => {
         if (connected && publicKey) {
             const walletAddr = publicKey.toBase58();
-            const flagKey = `djinn_genesis_notified_v15_${walletAddr}`;
+            const flagKey = `djinn_genesis_notified_v16_${walletAddr}`;
 
-            // Track if checking DB to avoid duplicate async calls
             const checkAndNotify = async () => {
-                // 1. Double check localStorage AND current session ref (fast)
+                // 1. Check localStorage AND session ref (fast skip)
                 if (localStorage.getItem(flagKey) || genesisTriggeredRef.current === walletAddr) return;
 
-                // Mark as triggered EARLY to prevent race conditions during async check
+                // Mark as triggered EARLY to prevent race conditions
                 genesisTriggeredRef.current = walletAddr;
 
-                // 2. Check Supabase (once per lifetime)
+                // 2. Check if user is in Genesis whitelist (primeros 1000)
                 try {
+                    const { getWhitelistStatus } = await import('@/lib/whitelist');
+                    const status = await getWhitelistStatus(walletAddr);
+
+                    // Solo mostrar Genesis si está registrado en whitelist O es admin
+                    if (!status.isRegistered && !status.isAdmin) {
+                        // No está en los primeros 1000, no mostrar nada
+                        try { localStorage.setItem(flagKey, 'true'); } catch (e) { }
+                        return;
+                    }
+
+                    // 3. Check if already has the achievement
                     const achievements = await supabaseDb.getUserAchievements(walletAddr);
-                    if (achievements.some(a => a.code === 'FIRST_MARKET')) {
-                        // Mark as notified in LS silently and stop
+                    if (achievements.some(a => a.code === 'GENESIS_MEMBER')) {
                         try { localStorage.setItem(flagKey, 'true'); } catch (e) { }
                         return;
                     }
                 } catch (err) {
-                    console.error("Error checking achievements:", err);
-                    // On error, we reset the ref so it can try again next mount if needed,
-                    // but usually we want to be safe.
+                    console.error("Error checking Genesis status:", err);
                     genesisTriggeredRef.current = null;
                     return;
                 }
 
-                // 3. Initiate Notification
-                console.log(`🚀 Genesis trigger initiated for ${walletAddr}`);
+                // 4. Show Genesis notification (solo para primeros 1000)
+                console.log(`🚀 Genesis trigger for WHITELISTED user: ${walletAddr}`);
 
                 const timer = setTimeout(() => {
                     unlockAchievement({
-                        name: "Genesis Creator",
-                        description: "First time connecting to Djinn",
+                        name: "Genesis Member",
+                        description: "One of the first 1000 Djinn users",
                         image_url: "/genesis-medal-v2.png"
                     });
 
-                    supabaseDb.grantAchievement(walletAddr, 'FIRST_MARKET').then(res => {
+                    supabaseDb.grantAchievement(walletAddr, 'GENESIS_MEMBER').then(res => {
                         if (res) console.log("✅ GENESIS Medal permanently unlocked in DB");
                     });
 
                     try {
                         localStorage.setItem(flagKey, 'true');
                     } catch (e) {
-                        // SILENT FAIL - Never red-screen the user for a flag
                         if (e instanceof Error && e.name === 'QuotaExceededError') {
                             try {
-                                // Aggressive cleanup: remove all djinn_profile_ caches to make room
                                 Object.keys(localStorage).forEach(k => {
                                     if (k.startsWith('djinn_profile_')) {
                                         localStorage.removeItem(k);
                                     }
                                 });
-                                // Try one last time
                                 localStorage.setItem(flagKey, 'true');
-                            } catch (retryErr) {
-                                // Ignore retry failure
-                            }
+                            } catch (retryErr) { }
                         }
                     }
                 }, 3000);

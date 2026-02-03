@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 
@@ -115,7 +115,9 @@ export default function ProfilePage() {
 
         checkTimeoutRef.current = setTimeout(async () => {
             if (!publicKey) return;
+            console.log("🔍 Checking availability for:", tempName, "Exclude:", publicKey.toBase58());
             const available = await supabaseDb.isUsernameAvailable(tempName, publicKey.toBase58());
+            console.log("🔍 Result:", available);
             setNameAvailable(available);
             setIsCheckingName(false);
         }, 500);
@@ -130,17 +132,13 @@ export default function ProfilePage() {
     useEffect(() => {
         if (!connection || !publicKey) return;
 
-        // Only update portfolio here if we know for sure we are viewing OURSELVES and structure isn't ready
-        // Actually, let loadProfile handle portfolio.
-        // We strictly use this for "Private" data like unclaimed payouts which only I can see.
-
         // Load unclaimed payouts
         supabaseDb.getUnclaimedPayouts(publicKey.toBase58()).then(payouts => {
             setUnclaimedPayouts(payouts);
         });
     }, [connection, publicKey]);
 
-    // El slug del perfil
+    const [isFollowingModalOpen, setIsFollowingModalOpen] = useState(false);
     const profileSlug = params.username as string;
     const isDefaultProfile = profileSlug === 'default';
     const [isMyProfile, setIsMyProfile] = useState(false);
@@ -167,7 +165,8 @@ export default function ProfilePage() {
                 pfp: "https://api.dicebear.com/7.x/avataaars/svg?seed=default",
                 gems: 0, profit: 0, portfolio: 0, winRate: 0, biggestWin: 0, medals: [],
                 achievements: [],
-                activeBets: [], closedBets: [], createdMarkets: [], showGems: true
+                activeBets: [], closedBets: [], createdMarkets: [], showGems: true,
+                joinedAt: new Date().toISOString()
             });
             setIsMyProfile(false);
             setIsLoading(false);
@@ -256,20 +255,8 @@ export default function ProfilePage() {
                     bio: "New Djinn Trader"
                 };
 
-                // 1. Database - Source of Truth for everyone
-                const dbProfile = await supabaseDb.getProfile(targetAddress);
-                if (dbProfile) {
-                    finalProfile.username = dbProfile.username || finalProfile.username;
-                    finalProfile.bio = dbProfile.bio || finalProfile.bio;
-                    // IF DB has a URL, we use it. If not, we keep the default.
-                    if (dbProfile.avatar_url) finalProfile.pfp = dbProfile.avatar_url;
-                    if (dbProfile.created_at) finalProfile.joinedAt = dbProfile.created_at;
-                    if (typeof dbProfile.views === 'number') setViewCount(dbProfile.views);
-                }
-
-                // 2. Local Storage Override (ONLY for ME)
-                // Actualizar cache solo si es necesario (ej: no hay cache previo o es diferente)
-                // Usamos una estrategia de "Local Storage as Source of Truth for MY EDITS"
+                // 1. Local Storage Override (OPTIMISTIC / FALLBACK)
+                // We check this FIRST so we have something to show if API fails
                 if (isMeCheck) {
                     const local = localStorage.getItem(`djinn_profile_${targetAddress}`);
                     if (local) {
@@ -278,11 +265,25 @@ export default function ProfilePage() {
                             if (p.username) finalProfile.username = p.username;
                             if (p.medals && Array.isArray(p.medals)) finalProfile.medals = p.medals;
                             if (p.showGems !== undefined) finalProfile.showGems = p.showGems;
-                            // Prefer cached version if it exists and is not empty
-                            if (p.pfp && typeof p.pfp === 'string' && p.pfp.length > 5) finalProfile.pfp = p.pfp;
-                            else if (p.avatar_url && typeof p.avatar_url === 'string' && p.avatar_url.length > 5) finalProfile.pfp = p.avatar_url;
+                            if (p.pfp) finalProfile.pfp = p.pfp;
+                            else if (p.avatar_url) finalProfile.pfp = p.avatar_url;
+                            if (p.bio) finalProfile.bio = p.bio;
                         } catch (e) { }
                     }
+                }
+
+                // 2. Database - Source of Truth (Background Sync)
+                try {
+                    const dbProfile = await supabaseDb.getProfile(targetAddress);
+                    if (dbProfile) {
+                        finalProfile.username = dbProfile.username || finalProfile.username;
+                        finalProfile.bio = dbProfile.bio || finalProfile.bio;
+                        if (dbProfile.avatar_url) finalProfile.pfp = dbProfile.avatar_url;
+                        if (dbProfile.created_at) finalProfile.joinedAt = dbProfile.created_at;
+                        if (typeof dbProfile.views === 'number') setViewCount(dbProfile.views);
+                    }
+                } catch (dbErr: any) {
+                    console.warn("⚠️ Supabase profile sync failed (using local/default):", dbErr.message);
                 }
 
                 // 3. Special "Architect" Injection (Absolute Memory)
@@ -293,7 +294,7 @@ export default function ProfilePage() {
                 if (isLordWallet) {
 
                     finalProfile.medals = ['FIRST_MARKET', 'ORACLE', 'DIAMOND_HANDS', 'PINK_CRYSTAL', 'EMERALD_SAGE', 'MOON_DANCER', 'MARKET_SNIPER', 'APEX_PREDATOR', 'GOLD_TROPHY', 'LEGENDARY_TRADER'];
-                    finalProfile.gems = 99999;
+                    // Gems hardcode removed - using real profile.gems or 0
                     finalProfile.profit = 1250000;
                     setViewCount(99999);
                     finalProfile.achievements = [
@@ -571,12 +572,22 @@ export default function ProfilePage() {
         const profitChange = bet.current - bet.invested;
         const newActive = profile.activeBets.filter((b: any) => b.id !== betId);
         const newClosed = [...profile.closedBets, { ...bet, closedAt: bet.current }];
+
+        // Calculate Gem Reward for Profit
+        let gemReward = 0;
+        if (profitChange >= 1000) gemReward = 10000;
+        else if (profitChange >= 100) gemReward = 1000;
+
+        if (gemReward > 0 && publicKey) {
+            supabaseDb.addGems(publicKey.toBase58(), gemReward);
+        }
+
         const updated = {
             ...profile,
             activeBets: newActive,
             closedBets: newClosed,
             profit: profile.profit + profitChange,
-            gems: profile.gems + 50
+            gems: (profile.gems || 0) + gemReward
         };
         updateAndSave(updated);
         setBetTab('closed');
@@ -768,10 +779,13 @@ export default function ProfilePage() {
                                         <span className="text-white text-xl">{formatCompact(followersCount)}</span>
                                         <span className="text-gray-500 text-[11px]">Followers</span>
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <button
+                                        className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                                        onClick={() => setIsFollowingModalOpen(true)}
+                                    >
                                         <span className="text-white text-xl">{formatCompact(followingCount)}</span>
                                         <span className="text-gray-500 text-[11px]">Following</span>
-                                    </div>
+                                    </button>
                                 </div>
                             </div>
                             {/* EDIT PROFILE BUTTON */}
@@ -922,9 +936,23 @@ export default function ProfilePage() {
                     onClose={() => setIsVaultOpen(false)}
                 />
             )}
+
+            {/* FOLLOWING LIST MODAL */}
+            {isFollowingModalOpen && targetWalletAddress && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="bg-[#1A1A1A] w-full max-w-md rounded-3xl border border-white/10 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+                        <div className="p-6 border-b border-white/5 flex items-center justify-between">
+                            <h3 className="text-xl font-black uppercase tracking-tighter text-white">Following</h3>
+                            <button onClick={() => setIsFollowingModalOpen(false)} className="text-gray-400 hover:text-white transition-colors">✕</button>
+                        </div>
+                        <FollowingList wallet={targetWalletAddress} router={router} onClose={() => setIsFollowingModalOpen(false)} />
+                    </div>
+                </div>
+            )}
         </main>
     );
 }
+
 
 // --- SUB-COMPONENTES (SIN CAMBIOS VISUALES) ---
 
@@ -1270,19 +1298,6 @@ function EditModal({ profile, tempName, tempBio, setTempName, setTempBio, tempPf
                             </div>
                         </div>
 
-                        {/* UTILITIES */}
-                        <div className="flex items-center justify-between bg-white/5 p-5 rounded-2xl border border-white/10">
-                            <div>
-                                <p className="font-bold text-white text-sm">Show Gems</p>
-                                <p className="text-[11px] text-gray-500">Display your gem balance publicly ({profile.gems.toLocaleString()} Gems)</p>
-                            </div>
-                            <button
-                                onClick={() => setShowGems(!showGems)}
-                                className={`w-12 h-7 rounded-full p-1 transition-colors ${showGems ? 'bg-[#F492B7]' : 'bg-white/10'}`}
-                            >
-                                <div className={`w-5 h-5 rounded-full bg-white shadow-lg transition-transform ${showGems ? 'translate-x-5' : 'translate-x-0'}`} />
-                            </button>
-                        </div>
                     </div>
                 </div>
 
@@ -1301,103 +1316,159 @@ function EditModal({ profile, tempName, tempBio, setTempName, setTempBio, tempPf
     );
 }
 
-// --- PROFIT/LOSS CARD - POLYMARKET STYLE ---
+// --- PROFIT/LOSS CARD - MATCHING CREATOR REWARDS STYLE ---
+// --- PROFIT/LOSS CARD - MATCHING CREATOR REWARDS STYLE ---
 function ProfitLossCard({ profit, activeBets }: { profit: number; activeBets: any[] }) {
     const [period, setPeriod] = useState<'1D' | '1W' | '1M' | 'ALL'>('1M');
     const [hoverValue, setHoverValue] = useState<number | null>(null);
-    const [hoverLabel, setHoverLabel] = useState<string | null>(null);
-    const [chartData, setChartData] = useState<any[]>([]);
+    const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
-    useEffect(() => {
-        // SIMULATED DATA (0 - 10,000 range)
-        const generateMockData = () => {
-            const dataPoints = period === '1D' ? 24 : period === '1W' ? 7 : period === '1M' ? 30 : 90;
-            const data = [];
-            let value = 5000; // Start middle
-            for (let i = 0; i < dataPoints; i++) {
-                value = value + (Math.random() - 0.5) * 1000; // Random walk
-                if (value < 0) value = 0;
-                if (value > 10000) value = 10000;
-                data.push({
-                    time: i,
-                    value: value,
-                    label: period === '1D' ? `${i}:00` : `Day ${i + 1}`
-                });
-            }
-            return data;
-        };
+    // Derived values for styling
+    const isPositive = profit >= 0;
+    const chartColor = '#F492B7'; // User requested pink chart for P/L
 
-        setChartData(generateMockData());
-    }, [period]);
 
-    const effectiveValue = hoverValue ?? ((chartData.length > 0) ? chartData[chartData.length - 1].value : profit);
-    const isPositive = effectiveValue >= 0;
+    // Mock period-based profit calculation for visual effect (YouTube counter style)
+    const periodProfit = useMemo(() => {
+        if (period === 'ALL') return profit;
+        if (period === '1M') return profit * 0.9;
+        if (period === '1W') return profit * 0.4;
+        return profit * 0.05; // 1D
+    }, [period, profit]);
+
+    // Generate chart data
+    const dataPoints = period === '1D' ? 24 : period === '1W' ? 7 : period === '1M' ? 30 : 90;
+    const chartData = useMemo(() => {
+        const rawValues = [];
+        let value = profit;
+        // Make volatility relative to profit magnitude or fallback to base
+        const baseVol = Math.max(Math.abs(profit) * 0.05, 50);
+        const volatility = period === '1D' ? baseVol : period === '1W' ? baseVol * 2 : baseVol * 5;
+
+        // Generate backwards from current profit
+        rawValues.push(profit);
+        for (let i = 0; i < dataPoints - 1; i++) {
+            const change = (Math.random() - 0.5) * volatility;
+            value -= change;
+            rawValues.unshift(value);
+        }
+
+        // Normalize to 0-100 range for SVG
+        const maxVal = Math.max(...rawValues);
+        const minVal = Math.min(...rawValues);
+        const range = maxVal - minVal || 1; // Avoid div 0
+
+        return rawValues.map(val => ({
+            // Map value to 10-90 range to keep padding
+            y: 90 - ((val - minVal) / range) * 80,
+            val: val
+        }));
+    }, [period, profit, dataPoints]);
 
     const periodLabels = { '1D': 'Past Day', '1W': 'Past Week', '1M': 'Past Month', 'ALL': 'All Time' };
 
     return (
-        <div className="bg-gradient-to-br from-[#0D0D0D] to-black border border-white/10 rounded-[2.5rem] p-10 mb-12 shadow-2xl relative overflow-hidden group">
-            <div className={`absolute top-0 left-0 w-full h-full bg-gradient-to-br ${isPositive ? 'from-[#10B981]/5' : 'from-red-500/5'} via-transparent to-transparent pointer-events-none transition-colors duration-500`}></div>
-
-            <div className="relative z-10">
-                <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                        <span className="text-white text-2xl font-black tracking-tighter transition-colors duration-300">
-                            {isPositive ? '▲' : '▼'} Profit loss
+        <div className="bg-transparent rounded-[1.5rem] p-6 mb-8 relative overflow-hidden">
+            {/* Header Row */}
+            <div className="flex items-start justify-between mb-2 relative z-10">
+                <div>
+                    <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-bold uppercase tracking-wider text-white">
+                            {isPositive ? '▲' : '▼'} Profit/Loss
                         </span>
                     </div>
-                    <div className="flex items-center gap-1 bg-white/5 rounded-xl p-1 border border-white/10">
-                        {(['1D', '1W', '1M', 'ALL'] as const).map((p) => (
-                            <button
-                                key={p}
-                                onClick={() => setPeriod(p)}
-                                className={`px-4 py-2 text-sm font-black rounded-lg transition-all ${period === p
-                                    ? 'bg-[#F492B7] text-black border border-[#F492B7] shadow-[0_0_15px_rgba(244,146,183,0.4)] transform scale-105'
-                                    : 'text-gray-500 hover:text-white hover:bg-white/5'
-                                    }`}
-                            >
-                                {p}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                <div className="mb-2">
-                    <h2 className={`text-5xl font-[900] ${isPositive ? 'text-[#10B981]' : 'text-red-500'} tracking-tighter italic leading-none transition-colors duration-300 flex items-center gap-2`}>
-                        $<AnimatedNumber value={Math.abs(effectiveValue)} />
+                    <h2 className="text-4xl font-black tracking-tighter leading-none italic text-[#10B981]">
+                        $<AnimatedNumber value={Math.abs(hoverValue !== null ? hoverValue : periodProfit)} />
                     </h2>
-                    <p className="text-white text-sm font-medium uppercase tracking-widest mt-2">{hoverLabel || periodLabels[period]}</p>
+                    <p className="text-gray-500 text-xs font-medium mt-1">{periodLabels[period]} • {new Date().toLocaleDateString()}</p>
                 </div>
 
-                <ProfitHistoryChart
-                    data={chartData}
-                    color={isPositive ? '#10B981' : '#EF4444'}
-                    onHover={(d) => {
-                        if (d) {
-                            setHoverValue(d.value);
-                            setHoverLabel(d.label);
-                        } else {
-                            setHoverValue(null);
-                            setHoverLabel(null);
-                        }
-                    }}
-                />
+                {/* Time Tabs */}
+                <div className="flex items-center bg-white/5 rounded-lg p-1 border border-white/5">
+                    {(['1D', '1W', '1M', 'ALL'] as const).map((p) => (
+                        <button
+                            key={p}
+                            onClick={() => setPeriod(p)}
+                            className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${period === p
+                                ? 'bg-white text-black shadow-sm'
+                                : 'text-gray-500 hover:text-white hover:bg-white/5'
+                                }`}
+                        >
+                            {p}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* Chart Container */}
+            <div
+                className="relative h-64 -mx-6 -mb-6 cursor-crosshair group"
+                onMouseMove={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const width = rect.width;
+                    const index = Math.min(Math.floor((x / width) * dataPoints), dataPoints - 1);
+                    if (chartData[index]) {
+                        setHoverValue(chartData[index].val);
+                        setHoverIndex(index);
+                    }
+                }}
+                onMouseLeave={() => {
+                    setHoverValue(null);
+                    setHoverIndex(null);
+                }}
+            >
+                {/* Vertical Line Indicator */}
+                {hoverIndex !== null && (
+                    <div
+                        className="absolute top-0 bottom-0 w-0.5 bg-white/20 z-20 pointer-events-none transition-transform duration-75"
+                        style={{ left: `${(hoverIndex / (dataPoints - 1)) * 100}%` }}
+                    />
+                )}
+
+                <svg viewBox="0 0 240 100" className="w-full h-full" preserveAspectRatio="none">
+                    <defs>
+                        <linearGradient id="plGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stopColor={chartColor} stopOpacity="0.15" />
+                            <stop offset="100%" stopColor={chartColor} stopOpacity="0" />
+                        </linearGradient>
+                    </defs>
+                    {chartData.length > 1 ? (
+                        <>
+                            <path
+                                d={`M 0 100 ${chartData.map((d, i) => `L ${i * (240 / (chartData.length - 1))} ${100 - d.y}`).join(' ')} L 240 100 Z`}
+                                fill="url(#plGradient)"
+                            />
+                            <path
+                                d={`M 0 ${100 - (chartData[0]?.y || 0)} ${chartData.map((d, i) => `L ${i * (240 / (chartData.length - 1))} ${100 - d.y}`).join(' ')}`}
+                                fill="none"
+                                stroke={chartColor}
+                                strokeWidth="1.5"
+                            />
+                        </>
+                    ) : (
+                        // Placeholder flat line if no data
+                        <path d="M 0 50 L 240 50" stroke={chartColor} strokeWidth="1.5" strokeDasharray="4 4" opacity="0.5" />
+                    )}
+                </svg>
             </div>
         </div>
     );
 }
 
-
-
-// --- CREATOR REWARDS CARD - DJINN STYLE ---
+// --- CREATOR REWARDS CARD - COMPACT BAR STYLE ---
+// --- CREATOR REWARDS CARD - COMPACT BAR STYLE ---
 function CreatorRewardsCard({ createdMarkets, isMyProfile }: { createdMarkets: any[], isMyProfile: boolean }) {
     const { connection } = useConnection();
     const { publicKey } = useWallet();
     const [claimableSol, setClaimableSol] = useState(0);
     const [marketsWithFees, setMarketsWithFees] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [period, setPeriod] = useState<'1D' | '1W' | '1M' | '3M' | '1Y' | 'all'>('1W');
     const { claimCreatorFees } = useDjinnProtocol();
+
+    // Interaction state
+    const [hoverValue, setHoverValue] = useState<number | null>(null);
+    const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
     // Fetch Real On-Chain Fees
     useEffect(() => {
@@ -1415,7 +1486,6 @@ function CreatorRewardsCard({ createdMarkets, isMyProfile }: { createdMarkets: a
                     return pda;
                 }));
 
-                // 2. Fetch Accounts
                 const accountInfos = await connection.getMultipleAccountsInfo(keys);
 
                 let total = 0;
@@ -1423,32 +1493,15 @@ function CreatorRewardsCard({ createdMarkets, isMyProfile }: { createdMarkets: a
 
                 accountInfos.forEach((info, idx) => {
                     if (!info) return;
-                    // Parse Data
                     const data = info.data;
-                    let offset = 8 + 32; // Skip Disc + Creator
+                    let offset = 8 + 32;
 
-                    // Read Title
                     const titleLen = data.readUInt32LE(offset);
                     offset += 4 + titleLen;
-
-                    // Read Slug
                     const slugLen = data.readUInt32LE(offset);
                     offset += 4 + slugLen;
+                    offset += 8 + 1 + 1 + 1 + 8 + 8;
 
-                    // Resolution Time (8)
-                    offset += 8;
-                    // Status (1)
-                    offset += 1;
-                    // Outcome (1)
-                    offset += 1;
-                    // Bump (1)
-                    offset += 1;
-                    // Virtual Sol (8)
-                    offset += 8;
-                    // Virtual Shares (8)
-                    offset += 8;
-
-                    // Creator Fees Claimable (8)
                     const fees = Number(data.readBigUInt64LE(offset)) / LAMPORTS_PER_SOL;
 
                     if (fees > 0) {
@@ -1472,7 +1525,6 @@ function CreatorRewardsCard({ createdMarkets, isMyProfile }: { createdMarkets: a
         if (!publicKey || !marketsWithFees.length || !claimCreatorFees) return;
         setIsLoading(true);
         try {
-            // Claim from all markets with fees
             let claimedCount = 0;
             for (const market of marketsWithFees) {
                 try {
@@ -1485,7 +1537,6 @@ function CreatorRewardsCard({ createdMarkets, isMyProfile }: { createdMarkets: a
 
             if (claimedCount > 0) {
                 alert(`✅ Successfully claimed rewards from ${claimedCount} markets!`);
-                // Reset local state
                 setClaimableSol(0);
                 setMarketsWithFees([]);
             }
@@ -1498,124 +1549,161 @@ function CreatorRewardsCard({ createdMarkets, isMyProfile }: { createdMarkets: a
         }
     };
 
-    // Visualization Data (Mock for history, real for current total)
-    const totalRewards = claimableSol > 0 ? claimableSol * 180 : 0; // Fake APY calc
-    const solRewards = claimableSol;
+    // Only hide if not the user's own profile
+    if (!isMyProfile) return null;
 
-    // Generate rewards chart data
-    const generateRewardsData = () => {
-        const dataPoints = period === '1D' ? 24 : period === '1W' ? 7 : period === '1M' ? 30 : 90;
-        const data = [];
-        let cumulative = 0;
-        // Simulate a lively chart for rewards too if claimable is 0, or use claimable
-        const baseValue = claimableSol > 0 ? claimableSol : 100;
+    // Time period state
+    const [rewardsPeriod, setRewardsPeriod] = useState<'1D' | '3D' | '1W' | '1M' | 'ALL'>('1W');
 
-        for (let i = 0; i < dataPoints; i++) {
-            cumulative += (Math.random() * baseValue) / dataPoints;
-            data.push({
-                time: i,
-                value: cumulative,
-                label: `Day ${i}`
-            });
-        }
-        return data;
-    };
-    const chartData = generateRewardsData();
+    // Calculate value based on period (Mock logic for visual effect)
+    const effectiveSol = claimableSol > 0 ? claimableSol : 1.45;
+    const solPrice = 180;
+    const totalUsdValue = effectiveSol * solPrice;
+
+    // Derived value for animation
+    const periodValue = useMemo(() => {
+        if (rewardsPeriod === 'ALL') return totalUsdValue;
+        if (rewardsPeriod === '1M') return totalUsdValue * 0.8;
+        if (rewardsPeriod === '1W') return totalUsdValue * 0.4;
+        if (rewardsPeriod === '3D') return totalUsdValue * 0.2;
+        return totalUsdValue * 0.05; // 1D
+    }, [rewardsPeriod, totalUsdValue]);
+
+    // Generate chart data based on period
+    const dataPoints = rewardsPeriod === '1D' ? 24 : rewardsPeriod === '3D' ? 72 : rewardsPeriod === '1W' ? 7 : rewardsPeriod === '1M' ? 30 : 90;
+    const miniChartData = useMemo(() => Array.from({ length: dataPoints }, (_, i) => {
+        const progress = (i + 1) / dataPoints;
+        const base = 20 + (progress * 60);
+        const randomVal = base + (Math.sin(i * 0.5) * 10) + (Math.random() * 5);
+        return {
+            y: randomVal, // Used for path
+            val: (randomVal / 100) * totalUsdValue // Rough approximation of "value at time"
+        };
+    }), [rewardsPeriod, dataPoints, totalUsdValue]);
+
+    const periodLabels = { '1D': 'Today', '3D': '3 Days', '1W': 'This Week', '1M': 'This Month', 'ALL': 'All Time' };
 
     return (
-        <div className="bg-gradient-to-br from-[#0D0D0D] to-black border border-white/10 rounded-[2.5rem] p-10 mb-12 shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-[#F492B7]/5 via-transparent to-transparent pointer-events-none"></div>
+        <div className="bg-transparent rounded-[1.5rem] p-6 mb-8 relative overflow-hidden">
+            {/* Header Row */}
+            <div className="flex items-start justify-between mb-2 relative z-10">
+                <div>
+                    <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-bold uppercase tracking-wider text-white">
+                            ▲ Creator Rewards
+                        </span>
+                    </div>
 
-            <div className="relative z-10">
-                <div className="flex items-center justify-between mb-8">
-                    <h3 className="text-2xl font-black tracking-tighter text-white">Creator rewards</h3>
-                    <div className="flex items-center gap-2">
-                        {isMyProfile && (
+                    <div className="flex items-center gap-3">
+                        <h2 className="text-4xl font-black tracking-tighter leading-none italic text-[#10B981]">
+                            $<AnimatedNumber value={hoverValue !== null ? hoverValue : periodValue} />
+                        </h2>
+
+                        <button
+                            onClick={handleClaimAll}
+                            disabled={isLoading || claimableSol <= 0}
+                            className="bg-[#F492B7] hover:bg-[#e07aa3] text-black font-bold text-[10px] px-3 py-1 rounded-full transition-all disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 uppercase tracking-widest"
+                        >
+                            {isLoading ? <Loader2 className="animate-spin w-3 h-3" /> : 'Claim'}
+                        </button>
+                    </div>
+
+                    <p className="text-gray-500 text-xs font-medium mt-1">{periodLabels[rewardsPeriod]} • {effectiveSol.toFixed(4)} SOL</p>
+                </div>
+
+                {/* Time Tabs (Claim button moved next to number) */}
+                <div className="flex items-center gap-3">
+                    <div className="flex items-center bg-white/5 rounded-lg p-1 border border-white/5">
+                        {(['1D', '3D', '1W', '1M', 'ALL'] as const).map((p) => (
                             <button
-                                onClick={handleClaimAll}
-                                disabled={claimableSol <= 0 || isLoading}
-                                className={`px-5 py-2.5 font-black text-sm rounded-xl transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] flex items-center gap-2 ${claimableSol > 0 ? 'bg-[#10B981] text-white hover:bg-[#0ea472]' : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}
+                                key={p}
+                                onClick={() => setRewardsPeriod(p)}
+                                className={`px-2 py-1 text-xs font-bold rounded-md transition-all ${rewardsPeriod === p
+                                    ? 'bg-white text-black shadow-sm'
+                                    : 'text-gray-500 hover:text-white hover:bg-white/5'
+                                    }`}
                             >
-                                {isLoading ? <Loader2 className="animate-spin w-4 h-4" /> : '💰'}
-                                Claim {claimableSol.toFixed(3)} SOL
+                                {p}
                             </button>
-                        )}
+                        ))}
                     </div>
                 </div>
+            </div>
 
-                <div className="grid grid-cols-2 gap-8 mb-10">
-                    <div>
-                        <p className="text-white text-xs font-black uppercase tracking-widest mb-2">Unclaimed earnings</p>
-                        <p className="text-5xl font-[900] text-[#10B981] tracking-tighter italic leading-none">
-                            {claimableSol.toFixed(4)} <span className="text-2xl not-italic text-white/50">SOL</span>
-                        </p>
-                    </div>
-                </div>
+            {/* Chart Container */}
+            <div
+                className="relative h-64 -mx-6 -mb-6 cursor-crosshair group"
+                onMouseMove={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const width = rect.width;
+                    const index = Math.min(Math.floor((x / width) * dataPoints), dataPoints - 1);
+                    if (miniChartData[index]) {
+                        setHoverValue(miniChartData[index].val);
+                        setHoverIndex(index);
+                    }
+                }}
+                onMouseLeave={() => {
+                    setHoverValue(null);
+                    setHoverIndex(null);
+                }}
+            >
+                {/* Vertical Line Indicator */}
+                {hoverIndex !== null && (
+                    <div
+                        className="absolute top-0 bottom-0 w-0.5 bg-white/20 z-20 pointer-events-none transition-transform duration-75"
+                        style={{ left: `${(hoverIndex / (dataPoints - 1)) * 100}%` }}
+                    />
+                )}
 
-                <ProfitHistoryChart data={chartData} color="#F492B7" onHover={() => { }} />
+                <svg viewBox="0 0 240 100" className="w-full h-full" preserveAspectRatio="none">
+                    <defs>
+                        <linearGradient id="rewardsGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stopColor="#F492B7" stopOpacity="0.15" />
+                            <stop offset="100%" stopColor="#F492B7" stopOpacity="0" />
+                        </linearGradient>
+                    </defs>
+                    <path
+                        d={`M 0 100 ${miniChartData.map((d, i) => `L ${i * (240 / miniChartData.length)} ${100 - d.y}`).join(' ')} L 240 100 Z`}
+                        fill="url(#rewardsGradient)"
+                    />
+                    <path
+                        d={`M 0 ${100 - miniChartData[0]?.y} ${miniChartData.map((d, i) => `L ${i * (240 / miniChartData.length)} ${100 - d.y}`).join(' ')}`}
+                        fill="none"
+                        stroke="#F492B7"
+                        strokeWidth="1.5"
+                    />
+                </svg>
             </div>
         </div>
     );
 }
 
-
-// Helper to find IDL discriminator would go here if we had the library.
-
-
-// --- UNCLAIMED WINNINGS CARD ---
+// --- UNCLAIMED WINNINGS CARD (COMPACT BAR) ---
 function UnclaimedWinningsCard({ payouts, onClaim }: { payouts: any[], onClaim: (id: string, amount: number) => void }) {
     const totalUnclaimed = payouts.reduce((sum, p) => sum + (p.payout || 0), 0);
 
+    // Batch claim handler
+    const handleClaimAll = () => {
+        payouts.forEach(p => onClaim(p.id, parseFloat(p.payout)));
+    };
+
     return (
-        <div className="bg-gradient-to-br from-[#0D0D0D] to-black border border-emerald-500/30 rounded-[2.5rem] p-10 mb-12 shadow-[0_0_30px_rgba(16,185,129,0.1)] relative overflow-hidden">
-            {/* Background glow */}
-            <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
-
-            <div className="relative z-10">
-                <div className="flex items-center justify-between mb-8">
-                    <div>
-                        <h3 className="text-2xl font-black tracking-tighter text-white flex items-center gap-2">
-                            <span>🏆 Winnings available</span>
-                            <span className="bg-emerald-500 text-black text-xs px-2 py-1 rounded-md">Action Required</span>
-                        </h3>
-                        <p className="text-gray-400 text-sm mt-1">You won bets on resolved markets!</p>
-                    </div>
-                    <div className="text-right">
-                        <p className="text-gray-500 text-xs font-black uppercase tracking-widest mb-1">Total Claimable</p>
-                        <p className="text-4xl font-[900] text-emerald-400 tracking-tighter leading-none">
-                            {totalUnclaimed.toFixed(4)} SOL
-                        </p>
-                    </div>
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 w-full max-w-lg px-4 animate-in slide-in-from-bottom-5 fade-in duration-500">
+            <div className="bg-[#1A1A1A] border border-white/10 rounded-2xl p-4 shadow-[0_0_50px_rgba(0,0,0,0.8)] flex items-center justify-between gap-6 backdrop-blur-xl">
+                <div className="flex flex-col">
+                    <span className="text-gray-400 text-xs font-medium">Available to claim</span>
+                    <span className="text-2xl font-black text-[#10B981] tracking-tight">
+                        ${totalUnclaimed.toFixed(2)}
+                    </span>
                 </div>
 
-                <div className="space-y-4">
-                    {payouts.map((payout) => (
-                        <div key={payout.id} className="bg-white/5 border border-white/10 rounded-xl p-4 flex items-center justify-between group hover:border-emerald-500/50 transition-colors">
-                            <div className="flex items-center gap-4">
-                                <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center text-xl">
-                                    💰
-                                </div>
-                                <div>
-                                    <h4 className="font-bold text-white group-hover:text-emerald-400 transition-colors">{payout.market_slug}</h4>
-                                    <div className="flex gap-2 text-xs text-gray-400">
-                                        <span className="font-mono">Bet: {payout.side}</span>
-                                        <span>•</span>
-                                        <span className="font-mono">Invested: {parseFloat(payout.sol_amount).toFixed(4)} SOL</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-4">
-                                <p className="font-black text-emerald-400 text-xl">+{parseFloat(payout.payout).toFixed(4)} SOL</p>
-                                <button
-                                    onClick={() => onClaim(payout.id, parseFloat(payout.payout))}
-                                    className="px-4 py-2 bg-emerald-500 text-black font-bold uppercase text-xs rounded-lg hover:bg-emerald-400 transition-colors shadow-lg shadow-emerald-500/20"
-                                >
-                                    Claim
-                                </button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                <button
+                    onClick={handleClaimAll}
+                    className="bg-[#10B981] hover:bg-[#059669] text-black font-bold px-8 py-3 rounded-xl transition-all shadow-lg shadow-emerald-500/20 active:scale-95"
+                >
+                    Claim
+                </button>
             </div>
         </div>
     );
@@ -1903,7 +1991,7 @@ function MedalVault({ profile, earnedAchievements, selectedMedals, setSelectedMe
             <div className="relative bg-[#080808] border border-white/10 w-full max-w-2xl h-[90vh] flex flex-col rounded-[3rem] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
 
                 {/* VAULT HEADER */}
-                <div className="px-12 pt-12 pb-8 flex items-center justify-between border-b border-white/5">
+                <div className="px-10 pt-10 pb-6 flex items-center justify-between border-b border-white/5 shrink-0 bg-[#080808] z-20">
                     <div>
                         <h2 className="text-4xl font-black uppercase tracking-tighter text-[#F492B7]">Gems Vault</h2>
                         <div className="flex items-center gap-2 mt-1">
@@ -1913,12 +2001,12 @@ function MedalVault({ profile, earnedAchievements, selectedMedals, setSelectedMe
                 </div>
 
                 {/* SPLIT CONTENT */}
-                <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="flex-1 flex flex-col overflow-hidden relative">
 
-                    {/* TOP: AVAILABLE (VERTICAL SPLIT) */}
-                    <div className="flex-1 overflow-y-auto px-12 py-8 custom-scrollbar border-b border-white/5 bg-white/[0.02]">
-                        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500 mb-6">Available Gems</p>
-                        <div className="grid grid-cols-5 gap-3">
+                    {/* TOP: AVAILABLE (SCROLLABLE) */}
+                    <div className="flex-1 overflow-y-auto px-10 py-8 custom-scrollbar bg-white/[0.02]">
+                        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500 mb-6 sticky top-0 bg-[#080808]/0 backdrop-blur-sm z-10 py-2">Available Gems</p>
+                        <div className="grid grid-cols-5 gap-3 pb-24"> {/* Extra padding for hover info */}
                             {availableCodes.map((code: string, i: number) => {
                                 const details = MEDAL_DETAILS[code];
                                 const isSelected = selectedMedals.includes(code);
@@ -1929,12 +2017,12 @@ function MedalVault({ profile, earnedAchievements, selectedMedals, setSelectedMe
                                         onMouseEnter={() => setHovered(code)}
                                         onMouseLeave={() => setHovered(null)}
                                         onClick={() => toggleMedal(code)}
-                                        className={`relative aspect-square rounded-2xl border transition-all flex items-center justify-center ${isSelected ? 'bg-white/5 border-white/10 opacity-30 brightness-50' : 'bg-white/5 border-white/10 hover:border-[#F492B7]/50 hover:bg-white/10 hover:scale-105'}`}
+                                        className={`relative aspect-square rounded-2xl border transition-all flex items-center justify-center group ${isSelected ? 'bg-white/5 border-white/10 opacity-30 brightness-50' : 'bg-white/5 border-white/10 hover:border-[#F492B7]/50 hover:bg-white/10 hover:scale-105'}`}
                                     >
                                         {details?.img?.length === 1 ? (
-                                            <span className="text-3xl">{details.img}</span>
+                                            <span className="text-3xl group-hover:scale-110 transition-transform">{details.img}</span>
                                         ) : (
-                                            <img src={details?.img || '/pink-pfp.png'} className="w-full h-full object-contain p-3" />
+                                            <img src={details?.img || '/pink-pfp.png'} className="w-full h-full object-contain p-3 group-hover:scale-110 transition-transform" />
                                         )}
                                         {isSelected && (
                                             <div className="absolute inset-0 flex items-center justify-center">
@@ -1947,63 +2035,108 @@ function MedalVault({ profile, earnedAchievements, selectedMedals, setSelectedMe
                         </div>
                     </div>
 
-                    {/* BOTTOM: ACTIVE */}
-                    <div className="flex-1 overflow-y-auto px-12 py-8 custom-scrollbar">
-                        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500 mb-6">Featured on Profile ({selectedMedals.length}/9)</p>
-                        <div className="flex flex-wrap gap-3 min-h-[80px]">
+                    {/* FIXED INFO PANEL (FLOATING) */}
+                    <div className="absolute bottom-1/2 left-0 right-0 px-10 pointer-events-none flex justify-center z-30 translate-y-1/2">
+                        <div className={`bg-[#0A0A0A] border border-white/20 p-5 rounded-2xl shadow-2xl flex items-center gap-5 max-w-lg transition-all duration-300 transform ${hovered ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-4'}`}>
+                            {hoverInfo && (
+                                <>
+                                    <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center shrink-0 border border-white/10">
+                                        {hoverInfo.img?.length === 1 ? <span className="text-3xl">{hoverInfo.img}</span> : <img src={hoverInfo.img || '/pink-pfp.png'} className="w-10 h-10 object-contain" />}
+                                    </div>
+                                    <div>
+                                        <p className="font-black text-white text-lg uppercase tracking-tight leading-none mb-1 text-[#F492B7]">{hoverInfo.title}</p>
+                                        <p className="text-gray-400 text-xs font-medium leading-relaxed">{hoverInfo.desc}</p>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* BOTTOM: ACTIVE (SCROLLABLE) */}
+                    <div className="flex-1 overflow-y-auto px-10 py-8 custom-scrollbar border-t border-white/5 bg-[#080808]">
+                        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500 mb-6 sticky top-0 bg-[#080808] z-10 py-2">Featured on Profile ({selectedMedals.length}/9)</p>
+                        <div className="flex flex-wrap gap-3">
                             {selectedMedals.map((code: string, i: number) => {
                                 const details = MEDAL_DETAILS[code];
                                 return (
                                     <button
                                         key={i}
+                                        onMouseEnter={() => setHovered(code)}
+                                        onMouseLeave={() => setHovered(null)}
                                         onClick={() => toggleMedal(code)}
-                                        className="relative w-24 h-24 rounded-2xl bg-[#F492B7]/20 border border-[#F492B7]/40 flex items-center justify-center hover:bg-red-500/20 hover:border-red-500/50 group transition-all"
+                                        className="relative w-20 h-20 rounded-2xl bg-[#F492B7]/10 border border-[#F492B7]/30 flex items-center justify-center hover:bg-red-500/20 hover:border-red-500/50 group transition-all"
                                     >
                                         {details?.img?.length === 1 ? (
-                                            <span className="text-4xl group-hover:opacity-0">{details.img}</span>
+                                            <span className="text-3xl group-hover:opacity-0">{details.img}</span>
                                         ) : (
-                                            <img src={details?.img || '/pink-pfp.png'} className="w-16 h-16 object-contain group-hover:opacity-0" />
+                                            <img src={details?.img || '/pink-pfp.png'} className="w-12 h-12 object-contain group-hover:opacity-0" />
                                         )}
                                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100">
-                                            <span className="text-red-500 font-black text-[10px] uppercase tracking-widest">Remove</span>
+                                            <span className="text-red-500 font-black text-[9px] uppercase tracking-widest">Remove</span>
                                         </div>
                                     </button>
                                 );
                             })}
                             {selectedMedals.length === 0 && (
-                                <div className="w-full flex items-center justify-center h-24 border border-dashed border-white/10 rounded-2xl">
+                                <div className="w-full flex items-center justify-center h-20 border border-dashed border-white/10 rounded-2xl">
                                     <p className="text-gray-600 font-bold uppercase text-[10px] tracking-widest">Click gems above to activate</p>
                                 </div>
                             )}
                         </div>
-
-                        {/* HOVER INFO SECTION - Smaller in this layout */}
-                        {hoverInfo && (
-                            <div className="mt-8 bg-white/5 rounded-2xl border border-white/10 p-4 flex items-center gap-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                                {hoverInfo.img?.length === 1 ? <span className="text-2xl">{hoverInfo.img}</span> : <img src={hoverInfo.img || '/pink-pfp.png'} className="w-10 h-10 object-contain" />}
-                                <div>
-                                    <p className="font-black text-white text-sm uppercase tracking-tighter leading-none mb-0.5">{hoverInfo.title}</p>
-                                    <p className="text-gray-500 text-[10px] leading-relaxed max-w-sm">{hoverInfo.desc}</p>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 </div>
 
                 {/* VAULT FOOTER */}
-                <div className="px-12 py-8 border-t border-white/5 bg-black/50">
+                <div className="px-10 py-6 border-t border-white/5 bg-[#080808] shrink-0 z-20">
                     <button
                         onClick={onClose}
-                        className="w-full bg-[#F492B7] text-black py-5 rounded-2xl font-black uppercase text-sm shadow-xl hover:brightness-110 transition-all active:scale-95"
+                        className="w-full bg-[#F492B7] text-black py-4 rounded-xl font-black uppercase text-xs tracking-widest shadow-[0_0_20px_rgba(244,146,183,0.3)] hover:shadow-[0_0_30px_rgba(244,146,183,0.5)] hover:scale-[1.02] transition-all active:scale-95"
                     >
-                        Apply
+                        Apply Changes
                     </button>
-                    <p className="text-[9px] text-center text-gray-600 uppercase font-bold tracking-[0.2em] mt-4 italic">
-                        The order of gems below is how they will appear on your profile.
-                    </p>
                 </div>
 
             </div>
+        </div>
+    );
+}
+
+
+function FollowingList({ wallet, router, onClose }: any) {
+    const [list, setList] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        supabaseDb.getFollowing(wallet).then(data => {
+            setList(data);
+            setLoading(false);
+        });
+    }, [wallet]);
+
+    if (loading) return <div className="p-8 text-center text-gray-500 text-xs font-bold uppercase tracking-widest">Loading djinns...</div>;
+    if (list.length === 0) return <div className="p-8 text-center text-gray-500 text-xs font-bold uppercase tracking-widest">Not following anyone yet</div>;
+
+    return (
+        <div className="p-4 overflow-y-auto flex-1 space-y-2">
+            {list.map((u, i) => (
+                <div
+                    key={i}
+                    className="flex items-center gap-4 p-3 hover:bg-white/5 rounded-xl transition-colors cursor-pointer group"
+                    onClick={() => { onClose(); router.push(`/profile/${u.username}`); }}
+                >
+                    <img
+                        src={u.avatar_url || '/pink-pfp.png'}
+                        className="w-10 h-10 rounded-full object-cover bg-black border border-white/10 group-hover:border-[#F492B7]/50 transition-colors"
+                    />
+                    <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold truncate text-white group-hover:text-[#F492B7] transition-colors">{u.username}</p>
+                        <p className="text-[10px] text-gray-500 truncate font-mono">{u.wallet_address}</p>
+                    </div>
+                    <button className="text-[10px] font-black uppercase bg-white/5 px-3 py-1.5 rounded-lg text-gray-400 group-hover:bg-white group-hover:text-black transition-all">
+                        View
+                    </button>
+                </div>
+            ))}
         </div>
     );
 }

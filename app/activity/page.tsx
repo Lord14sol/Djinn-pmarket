@@ -32,28 +32,39 @@ export default function ActivityPage() {
     const [typeFilter, setTypeFilter] = useState('All');
 
     useEffect(() => {
+        let profilesFetched = false; // Only fetch profiles once
+
         const fetchActivities = async () => {
-            const data = await getGlobalActivities(500); // Fetch more for filtering
-            setActivities(data);
-            setLoading(false);
+            try {
+                const data = await getGlobalActivities(100); // Reduced from 500
+                setActivities(data);
+                setLoading(false);
 
-            // Fetch profiles for unique users
-            const uniqueUsers = [...new Set(data.map((a: any) => a.user).filter(Boolean))];
-            const profileMap: Record<string, any> = {};
+                // Fetch profiles ONLY ONCE (not on every poll)
+                if (!profilesFetched && data.length > 0) {
+                    profilesFetched = true;
+                    const uniqueUsers = [...new Set(data.map((a: any) => a.user).filter(Boolean))];
+                    const profileMap: Record<string, any> = {};
 
-            await Promise.all(
-                uniqueUsers.slice(0, 50).map(async (wallet: string) => {
-                    try {
-                        const profile = await getProfile(wallet);
-                        if (profile) profileMap[wallet] = profile;
-                    } catch (e) { /* ignore */ }
-                })
-            );
-            setProfiles(profileMap);
+                    // Limit to 20 profiles max to reduce API calls
+                    await Promise.all(
+                        uniqueUsers.slice(0, 20).map(async (wallet: string) => {
+                            try {
+                                const profile = await getProfile(wallet);
+                                if (profile) profileMap[wallet] = profile;
+                            } catch (e) { /* ignore */ }
+                        })
+                    );
+                    setProfiles(profileMap);
+                }
+            } catch (e) {
+                console.warn('Activity fetch failed:', e);
+                setLoading(false);
+            }
         };
 
         fetchActivities();
-        const interval = setInterval(fetchActivities, 8000);
+        const interval = setInterval(fetchActivities, 60000); // Changed from 8s to 60s
         return () => clearInterval(interval);
     }, []);
 

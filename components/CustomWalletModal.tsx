@@ -64,6 +64,8 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
 
             const connectWallet = async () => {
                 try {
+                    // Small delay to ensure adapter state is propagated
+                    await new Promise(resolve => setTimeout(resolve, 100));
                     await connect();
                 } catch (error: any) {
                     console.error('[CustomWalletModal] Connection failed:', error);

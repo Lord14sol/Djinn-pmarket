@@ -162,14 +162,7 @@ const ChartContent = ({
 
 export default function ProfitHistoryChart(props: ProfitHistoryChartProps) {
     return (
-        <div className="h-64 w-full bg-black/40 rounded-2xl p-4 border border-white/5 relative overflow-hidden backdrop-blur-sm">
-            {/* Grid Lines */}
-            <div className="absolute inset-0 z-0 pointer-events-none opacity-20 flex flex-col justify-between py-6 px-4">
-                {[...Array(5)].map((_, i) => (
-                    <div key={i} className="w-full h-px bg-white/10 border-t border-dashed border-white/20" />
-                ))}
-            </div>
-
+        <div className="h-64 w-full relative overflow-visible">
             <div className="relative z-10 w-full h-full">
                 <ParentSize>
                     {({ width, height }) => (

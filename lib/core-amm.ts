@@ -65,7 +65,7 @@ export type IgnitionStatus = 'ACCUMULATION' | 'BREAKING' | 'VIRAL';
 
 // 🎯 CERBERUS GRADUATION TARGET: $34,000 USD MCAP
 // At ~$100/SOL, this is approximately 330 SOL in total market value
-export const GRADUATION_MCAP_SOL = 330; // Target MCAP in SOL for 100% progress
+export const GRADUATION_MCAP_SOL = 240; // ~$24k USD at $100/SOL
 
 export function getIgnitionStatus(supply: number): IgnitionStatus {
     if (supply >= PHASE3_START) return 'VIRAL';

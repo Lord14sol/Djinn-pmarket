@@ -15,13 +15,20 @@ export async function withRetry<T>(
             return await operation();
         } catch (err: any) {
             lastError = err;
-            const isConnectionError = err.message?.includes('fetch') || err.message?.includes('network');
+            const msg = err.message || '';
 
-            console.warn(`[Supabase] Attempt ${i + 1} failed (${operationName}):`, err.message);
+            // FATAL ERRORS: Do not retry
+            if (msg.includes('egress_quota') || msg.includes('Too many requests') || msg.includes('429')) {
+                console.error(`[Supabase] Fatal error (${operationName}), aborting retries:`, msg);
+                throw err; // Re-throw immediately
+            }
+
+            const isConnectionError = msg.includes('fetch') || msg.includes('network');
+
+            console.warn(`[Supabase] Attempt ${i + 1} failed (${operationName}):`, msg);
 
             // Only wait if we are going to retry
             if (i < MAX_RETRIES - 1) {
-                // Fast fail if not a network error? No, let's retry anyway just in case it's a transient DB error
                 await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (i + 1)));
             }
         }

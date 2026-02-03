@@ -14,9 +14,30 @@ export interface Profile {
     banner_url: string | null;
     created_at?: string;
     views?: number;
+    gems?: number;
 }
 
+// Local Mode: Desactivado para producción
+const LOCAL_MODE = false;
+
+const MOCK_PROFILE: Profile = {
+    wallet_address: '',
+    username: 'GhostTrader',
+    bio: 'Local Mode Activado (Supabase Quota Exceeded)',
+    avatar_url: '/pink-pfp.png',
+    banner_url: '/default-banner-v2.png',
+    created_at: new Date().toISOString(),
+    created_at: new Date().toISOString(),
+    views: 42,
+    gems: 0
+};
+
 export async function getProfile(walletAddress: string): Promise<Profile | null> {
+    if (LOCAL_MODE) {
+        console.warn(`[Local Mode] Returning mock profile for ${walletAddress}`);
+        return { ...MOCK_PROFILE, wallet_address: walletAddress, username: `LocalUser-${walletAddress.slice(0, 4)}` };
+    }
+
     return withRetry(async () => {
         const { data, error } = await supabase
             .from('profiles')
@@ -48,20 +69,38 @@ export async function getProfileByUsername(username: string): Promise<Profile | 
     }, `getProfileByUsername(${username})`);
 }
 
-export async function isUsernameAvailable(username: string, excludeWallet: string): Promise<boolean> {
-    const { data, error } = await supabase
-        .from('profiles')
-        .select('wallet_address')
-        .ilike('username', username)
-        .neq('wallet_address', excludeWallet)
-        .maybeSingle();
+export async function isUsernameAvailable(username: string, excludeWallet?: string): Promise<boolean> {
+    if (!username || username.length < 3) return false;
 
-    if (error) {
-        console.error('Error checking username availability:', error);
+    try {
+        // 1. Find who has this username (if anyone)
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('wallet_address')
+            .ilike('username', username)
+            .maybeSingle();
+
+        if (error) {
+            console.error('Error checking username availability:', error);
+            // En caso de error de conexión, permitir (optimista)
+            return true;
+        }
+
+        // 2. If no one has it, it's available
+        if (!data) return true;
+
+        // 3. If someone has it, check if it's ME (Case Insensitive for safety)
+        if (excludeWallet && data.wallet_address.toLowerCase() === excludeWallet.toLowerCase()) {
+            return true; // It's mine, so I can "keep" it
+        }
+
+        // 4. Taken by someone else
         return false;
+    } catch (e) {
+        console.error('Exception checking username:', e);
+        // En caso de excepción, permitir
+        return true;
     }
-
-    return !data;
 }
 
 export async function upsertProfile(profile: Partial<Profile> & { wallet_address: string }): Promise<Profile | null> {
@@ -129,7 +168,30 @@ export async function getMarketActivities(marketPubkey: string) {
 }
 
 // NEW: Global Activity Fetcher
+// NEW: Global Activity Fetcher
 export async function getGlobalActivities(limit = 50) {
+    if (LOCAL_MODE) {
+        console.warn(`[Local Mode] Returning ${limit} mock activities`);
+        return Array(Math.min(limit, 20)).fill(0).map((_, i) => ({
+            id: `mock-activity-${i}`,
+            user: '8xK...9zLq',
+            type: Math.random() > 0.5 ? 'buy' : 'sell',
+            side: Math.random() > 0.5 ? 'YES' : 'NO',
+            amount: (Math.random() * 5 + 0.1),
+            outcome_index: 0,
+            market_slug: 'mock-market',
+            tx_signature: 'mock-tx-signature',
+            created_at: new Date(Date.now() - i * 60000).toISOString(),
+            markets: {
+                title: 'Local Mock Market',
+                banner_url: null,
+                total_yes_pool: 1000,
+                total_no_pool: 1000,
+                slug: 'mock-market'
+            }
+        }));
+    }
+
     try {
         const { data, error } = await supabase
             .from('activities')
@@ -245,6 +307,8 @@ export async function createComment(comment: Omit<Comment, 'id' | 'created_at' |
     // Achievement: COMMENTATOR (first comment)
     if (data) {
         grantAchievement(data.wallet_address, 'COMMENTATOR');
+        // Award Gems for Comment (+2)
+        await addGems(data.wallet_address, 2);
     }
 
     return { data, error: null };
@@ -286,6 +350,111 @@ export async function toggleLike(commentId: string, walletAddress: string): Prom
         const { data } = await supabase.from('comments').select('likes_count').eq('id', commentId).single();
         return { liked: true, newCount: data?.likes_count || 0 };
     }
+}
+
+// ============================================
+// GEMS SYSTEM
+// ============================================
+
+export async function addGems(walletAddress: string, amount: number) {
+    if (LOCAL_MODE) {
+        console.log(`[Local Mode] Adding ${amount} gems to ${walletAddress}`);
+        // Store in localStorage if client-side, otherwise just log
+        if (typeof window !== 'undefined') {
+            const current = parseInt(localStorage.getItem(`gems_${walletAddress}`) || '0');
+            localStorage.setItem(`gems_${walletAddress}`, (current + amount).toString());
+        }
+        return true;
+    }
+
+    // Real DB implementation
+    const { error } = await supabase.rpc('add_gems', {
+        user_wallet: walletAddress,
+        amount_to_add: amount
+    });
+
+    if (error) {
+        console.error('Error adding gems:', error);
+        // Fallback: update directly if RPC missing
+        const { data: profile } = await supabase.from('profiles').select('gems').eq('wallet_address', walletAddress).single();
+        if (profile) {
+            await supabase.from('profiles').update({ gems: (profile.gems || 0) + amount }).eq('wallet_address', walletAddress);
+        }
+    }
+    return !error;
+}
+
+export async function getGems(walletAddress: string): Promise<number> {
+    if (LOCAL_MODE) {
+        if (typeof window !== 'undefined') {
+            return parseInt(localStorage.getItem(`gems_${walletAddress}`) || '0');
+        }
+        return 0;
+    }
+    const { data } = await supabase.from('profiles').select('gems').eq('wallet_address', walletAddress).single();
+    return data?.gems || 0;
+}
+
+// ============================================
+// SOCIAL (FOLLOWS)
+// ============================================
+
+export async function followUser(follower: string, target: string) {
+    if (LOCAL_MODE) {
+        if (typeof window === 'undefined') return;
+        const following = JSON.parse(localStorage.getItem(`following_${follower}`) || '[]');
+        if (!following.includes(target)) {
+            following.push(target);
+            localStorage.setItem(`following_${follower}`, JSON.stringify(following));
+        }
+        return true;
+    }
+
+    const { error } = await supabase.from('follows').insert({ follower, target });
+    return !error;
+}
+
+export async function unfollowUser(follower: string, target: string) {
+    if (LOCAL_MODE) {
+        if (typeof window === 'undefined') return;
+        let following = JSON.parse(localStorage.getItem(`following_${follower}`) || '[]');
+        following = following.filter((w: string) => w !== target);
+        localStorage.setItem(`following_${follower}`, JSON.stringify(following));
+        return true;
+    }
+
+    const { error } = await supabase.from('follows').delete().eq('follower', follower).eq('target', target);
+    return !error;
+}
+
+export async function getFollowing(wallet: string): Promise<Profile[]> {
+    if (LOCAL_MODE) {
+        if (typeof window === 'undefined') return [];
+        const followingWallets = JSON.parse(localStorage.getItem(`following_${wallet}`) || '[]');
+        return followingWallets.map((w: string) => ({
+            ...MOCK_PROFILE,
+            wallet_address: w,
+            username: `User ${w.slice(0, 4)}`
+        }));
+    }
+
+    const { data } = await supabase.from('follows').select('target').eq('follower', wallet);
+    if (!data || data.length === 0) return [];
+
+    const targets = data.map(d => d.target);
+    const { data: profiles } = await supabase.from('profiles').select('*').in('wallet_address', targets);
+    return profiles || [];
+}
+
+export async function isFollowing(follower: string, target: string): Promise<boolean> {
+    if (LOCAL_MODE) {
+        if (typeof window === 'undefined') return false;
+        const following = JSON.parse(localStorage.getItem(`following_${follower}`) || '[]');
+        return following.includes(target);
+    }
+
+    const { data } = await supabase.from('follows').select('id').eq('follower', follower).eq('target', target).single();
+    return !!data;
 }
 
 // ============================================
@@ -628,11 +797,40 @@ export async function createMarket(market: Partial<Market> & {
             .single();
 
         if (error) throw error;
+
+        // Award Gems for Market Creation (+2000)
+        await addGems(market.creator_wallet, 2000);
+
         return { data, error: null };
     }, 'createMarket');
 }
 
+// MOCK MARKETS (Bypass Supabase)
+const MOCK_MARKETS = [
+    {
+        id: 'mock-1',
+        slug: 'mock-btc-100k',
+        title: 'Bitcoin > $100k by EOY',
+        description: 'Will Bitcoin reach $100,000 USD before Dec 31st?',
+        banner_url: null,
+        icon: '💰',
+        category: 'Crypto',
+        options: ['Yes', 'No'],
+        creator_wallet: '8xK...9zLq',
+        created_at: new Date().toISOString(),
+        verified: true,
+        volume_usd: 50000,
+        total_yes_pool: 300,
+        total_no_pool: 200,
+        monitoring_enabled: false
+    }
+];
+
 export async function getMarkets(): Promise<Market[]> {
+    if (LOCAL_MODE) {
+        return MOCK_MARKETS as any;
+    }
+
     return withRetry(async () => {
         const { data, error } = await supabase
             .from('markets')
@@ -1222,50 +1420,11 @@ export async function searchProfiles(query: string) {
     return data || [];
 }
 
-// ============================================
-// FOLLOW SYSTEM
-// ============================================
-
-export async function followUser(followerWallet: string, followingWallet: string): Promise<boolean> {
-    const { error } = await supabase
-        .from('follows')
-        .insert({ follower_wallet: followerWallet, following_wallet: followingWallet });
-
-    if (error) {
-        if (error.code === '23505') return true; // Already following
-        console.error('Error following user:', error);
-        return false;
-    }
-    return true;
-}
-
-export async function unfollowUser(followerWallet: string, followingWallet: string): Promise<boolean> {
-    const { error } = await supabase
-        .from('follows')
-        .delete()
-        .eq('follower_wallet', followerWallet)
-        .eq('following_wallet', followingWallet);
-
-    if (error) {
-        console.error('Error unfollowing user:', error);
-        return false;
-    }
-    return true;
-}
-
-export async function isFollowing(followerWallet: string, followingWallet: string): Promise<boolean> {
-    if (!followerWallet || !followingWallet) return false;
-    const { data, error } = await supabase
-        .from('follows')
-        .select('id')
-        .eq('follower_wallet', followerWallet)
-        .eq('following_wallet', followingWallet)
-        .single();
-
-    return !!data;
-}
-
 export async function getFollowCounts(walletAddress: string): Promise<{ followers: number, following: number }> {
+    if (LOCAL_MODE) {
+        // Mock counts
+        return { followers: 0, following: 0 };
+    }
     const [followersRes, followingRes] = await Promise.all([
         supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_wallet', walletAddress),
         supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_wallet', walletAddress)
@@ -1275,4 +1434,39 @@ export async function getFollowCounts(walletAddress: string): Promise<{ follower
         followers: followersRes.count || 0,
         following: followingRes.count || 0
     };
+}
+
+
+// ============================================
+// GLOBAL SEARCH
+// ============================================
+
+export async function searchGlobal(queryText: string) {
+    if (!queryText || queryText.length < 2) return { profiles: [], markets: [] };
+
+    try {
+        // 1. Search Profiles (Username OR Wallet)
+        const profilesPromise = supabase
+            .from('profiles')
+            .select('username, wallet_address, avatar_url')
+            .or(`username.ilike.%${queryText}%,wallet_address.ilike.%${queryText}%`)
+            .limit(5);
+
+        // 2. Search Markets (Title OR Slug)
+        const marketsPromise = supabase
+            .from('markets')
+            .select('title, slug, banner_url, creator_wallet')
+            .or(`title.ilike.%${queryText}%,slug.ilike.%${queryText}%`)
+            .limit(5);
+
+        const [profilesResult, marketsResult] = await Promise.all([profilesPromise, marketsPromise]);
+
+        return {
+            profiles: profilesResult.data || [],
+            markets: marketsResult.data || []
+        };
+    } catch (e) {
+        console.error("Global search error:", e);
+        return { profiles: [], markets: [] };
+    }
 }

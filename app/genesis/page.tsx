@@ -145,7 +145,7 @@ export default function GenesisPage() {
                         GENESIS <br /> DJINN
                     </h1>
                     <p className="mx-auto mt-6 max-w-2xl text-lg text-gray-400 font-light leading-relaxed">
-                        The first 100 architects of the prophecy. <br />
+                        The first 1000 architects of the prophecy. <br />
                         Access is limited. Conviction is required.
                     </p>
                 </motion.div>
@@ -264,7 +264,7 @@ export default function GenesisPage() {
                     className="mt-16 grid grid-cols-1 gap-8 md:grid-cols-3"
                 >
                     {[
-                        { title: "Exclusive", desc: "Limited to first 100 unique wallets" },
+                        { title: "Exclusive", desc: "Limited to first 1000 unique wallets" },
                         { title: "Verifiable", desc: "Genesis Badge minted on launch" },
                         { title: "Early Bird", desc: "Priority access to all futures" }
                     ].map((item, i) => (

@@ -1396,6 +1396,11 @@ export default function Page() {
                     );
                     console.log("✅ Buy TX:", buyTxSignature);
 
+                    // Award Gem for Trade (+1)
+                    if (publicKey) {
+                        supabaseDb.addGems(publicKey.toBase58(), 1);
+                    }
+
                     // LOCK CHART: Determine to use optimistic price for 10s
                     // This prevents background polling from overwriting the new price with old on-chain data
                     lockWithTimeout();
