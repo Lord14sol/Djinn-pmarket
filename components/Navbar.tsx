@@ -186,20 +186,19 @@ function NavbarContent() {
                     bio: dbProfile.bio || ''
                 };
 
-                // Actualizar cache y state SOLO si no tenemos cache previo
-                // Esto previene que datos viejos de la DB sobrescriban cambios locales recientes
-                const hasCache = !!localStorage.getItem(`djinn_profile_${walletAddress}`);
-                if (!hasCache) {
-                    setUsername(profileData.username);
-                    setUserPfp(profileData.avatar_url);
-                    try {
-                        localStorage.setItem(
-                            `djinn_profile_${walletAddress}`,
-                            JSON.stringify(profileData)
-                        );
-                    } catch (quotaErr) {
-                        console.warn('⚠️ LocalStorage full, skipped profile cache update');
-                    }
+                // ALWAYS update state from DB (DB is source of truth)
+                // Cache is only for instant loading, DB data takes precedence
+                setUsername(profileData.username);
+                setUserPfp(profileData.avatar_url);
+
+                // Update cache with fresh DB data
+                try {
+                    localStorage.setItem(
+                        `djinn_profile_${walletAddress}`,
+                        JSON.stringify(profileData)
+                    );
+                } catch (quotaErr) {
+                    console.warn('⚠️ LocalStorage full, skipped profile cache update');
                 }
 
                 console.log('✅ Profile synced from database');
@@ -412,16 +411,14 @@ function NavbarContent() {
                                                         <PodiumIcon />
                                                         <span>Leaderboard</span>
                                                     </Link>
-                                                    <button
-                                                        onClick={() => {
-                                                            setIsNavMenuOpen(false);
-                                                            openActivityFeed();
-                                                        }}
+                                                    <Link
+                                                        href="/activity"
+                                                        onClick={() => setIsNavMenuOpen(false)}
                                                         className="w-full flex items-center gap-3 px-5 py-3 text-gray-300 hover:text-[#F492B7] hover:bg-white/5 transition-all text-sm font-bold group text-left"
                                                     >
                                                         <ActivityIcon />
-                                                        <span>Activity</span>
-                                                    </button>
+                                                        <span>Activity Feed</span>
+                                                    </Link>
 
                                                     <div className="border-t border-white/5 my-1" />
 

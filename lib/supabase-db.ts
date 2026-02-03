@@ -128,6 +128,32 @@ export async function getMarketActivities(marketPubkey: string) {
     }
 }
 
+// NEW: Global Activity Fetcher
+export async function getGlobalActivities(limit = 50) {
+    try {
+        const { data, error } = await supabase
+            .from('activities')
+            .select(`
+                *,
+                markets (
+                    title,
+                    slug,
+                    banner_url,
+                    total_yes_pool,
+                    total_no_pool
+                )
+            `)
+            .order('created_at', { ascending: false })
+            .limit(limit);
+
+        if (error) throw error;
+        return data || [];
+    } catch (err) {
+        console.error('Error fetching global activities:', err);
+        return [];
+    }
+}
+
 // ============================================
 // COMMENTS
 // ============================================
@@ -1173,11 +1199,13 @@ export async function checkBetMilestones(walletAddress: string, betAmount: numbe
 // ============================================
 
 export async function searchMarkets(query: string) {
+    // Search in markets table by title (primary) and slug
     const { data, error } = await supabase
-        .from('market_data')
-        .select('*')
-        .ilike('slug', `%${query}%`)
-        .limit(5);
+        .from('markets')
+        .select('id, title, slug, banner_url, category, created_at, resolved')
+        .or(`title.ilike.%${query}%,slug.ilike.%${query}%`)
+        .order('created_at', { ascending: false })
+        .limit(8);
 
     if (error) console.error('Error searching markets:', error);
     return data || [];
@@ -1186,9 +1214,9 @@ export async function searchMarkets(query: string) {
 export async function searchProfiles(query: string) {
     const { data, error } = await supabase
         .from('profiles')
-        .select('*')
-        .or(`username.ilike.%${query}%,wallet_address.eq.${query}`)
-        .limit(5);
+        .select('wallet_address, username, avatar_url, bio')
+        .or(`username.ilike.%${query}%,wallet_address.ilike.%${query}%`)
+        .limit(8);
 
     if (error) console.error('Error searching profiles:', error);
     return data || [];

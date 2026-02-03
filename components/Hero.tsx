@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useWallet } from '@solana/wallet-adapter-react';
@@ -10,6 +10,8 @@ import { useDjinnProtocol } from '@/hooks/useDjinnProtocol';
 import { supabase } from '@/lib/supabase';
 import { useModal } from '@/lib/ModalContext';
 import Link from 'next/link';
+import { searchMarkets, searchProfiles } from '@/lib/supabase-db';
+import { AnimatePresence, motion } from 'framer-motion';
 
 // --- ICONOS ---
 const SearchIcon = () => (
@@ -19,27 +21,10 @@ const SearchIcon = () => (
 );
 
 const CloseIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
     </svg>
 );
-
-// Mock markets for search
-const MOCK_MARKETS = [
-    { id: 'argentina-world-cup-2026', title: 'Will Argentina be finalist on the FIFA World Cup 2026?', icon: '🇦🇷', category: 'Sports' },
-    { id: 'btc-hit-150k', title: 'Will Bitcoin reach ATH on 2026?', icon: '₿', category: 'Crypto' },
-    { id: 'us-strike-mexico', title: 'US strike on Mexico by...?', icon: '🇺🇸', category: 'Politics' },
-    { id: 'world-cup-winner-multiple', title: 'Who will win the World Cup 2026?', icon: '🏆', category: 'Sports' },
-];
-
-interface SearchResult {
-    type: 'market' | 'profile';
-    id: string;
-    title: string;
-    subtitle?: string;
-    icon?: string;
-    url: string;
-}
 
 // Search Component that uses searchParams
 const HeroContent = ({ onMarketCreated }: { onMarketCreated: (m: any) => void }) => {
@@ -47,27 +32,214 @@ const HeroContent = ({ onMarketCreated }: { onMarketCreated: (m: any) => void })
     const { publicKey } = wallet;
     const { setVisible } = useWalletModal();
     const router = useRouter();
-    const searchParams = useSearchParams(); // This is the cause of the build error if not suspended
+    const searchParams = useSearchParams();
     const { openCreateMarket } = useModal();
 
     const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false);
+
+    // Search State
+    const [query, setQuery] = useState('');
+    const [isSearchOpen, setIsSearchOpen] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+    const [markets, setMarkets] = useState<any[]>([]);
+    const [profiles, setProfiles] = useState<any[]>([]);
+    const searchRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
+    const searchTimeout = useRef<NodeJS.Timeout>();
+
+    const performSearch = useCallback(async (searchQuery: string) => {
+        if (searchQuery.length < 2) {
+            setMarkets([]);
+            setProfiles([]);
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            const [marketResults, profileResults] = await Promise.all([
+                searchMarkets(searchQuery),
+                searchProfiles(searchQuery)
+            ]);
+            setMarkets(marketResults || []);
+            setProfiles(profileResults || []);
+        } catch (error) {
+            console.error('Search error:', error);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (searchTimeout.current) clearTimeout(searchTimeout.current);
+
+        if (query.length >= 2) {
+            searchTimeout.current = setTimeout(() => performSearch(query), 300);
+        } else {
+            setMarkets([]);
+            setProfiles([]);
+        }
+
+        return () => {
+            if (searchTimeout.current) clearTimeout(searchTimeout.current);
+        };
+    }, [query, performSearch]);
+
+    // Close on click outside
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+                setIsSearchOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    // Keyboard shortcut
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+                e.preventDefault();
+                inputRef.current?.focus();
+                setIsSearchOpen(true);
+            }
+            if (e.key === 'Escape') {
+                setIsSearchOpen(false);
+                inputRef.current?.blur();
+            }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, []);
+
+    const handleMarketClick = (slug: string) => {
+        setIsSearchOpen(false);
+        setQuery('');
+        router.push(`/market/${slug}`);
+    };
+
+    const handleProfileClick = (username: string) => {
+        setIsSearchOpen(false);
+        setQuery('');
+        router.push(`/profile/${username}`);
+    };
+
+    const hasResults = markets.length > 0 || profiles.length > 0;
+    const showDropdown = isSearchOpen && (query.length >= 2 || hasResults);
 
     return (
         <>
             <section className="relative w-full min-h-[40vh] flex flex-col items-center justify-center px-4 pt-24 pb-6">
                 <div className="w-full max-w-3xl flex flex-col items-center gap-5">
                     {/* BARRA DE BÚSQUEDA FUNCIONAL */}
-                    <div className="relative group w-full">
-                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <div ref={searchRef} className="relative w-full">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
                             <SearchIcon />
                         </div>
                         <input
+                            ref={inputRef}
                             type="text"
-                            className="block w-full pl-12 pr-4 py-4 bg-[#1C1D25] border border-gray-800 rounded-2xl text-lg text-white outline-none focus:ring-2 focus:ring-[#F492B7]"
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            onFocus={() => setIsSearchOpen(true)}
+                            className="block w-full pl-12 pr-16 py-4 bg-[#1C1D25] border border-gray-800 rounded-2xl text-lg text-white outline-none focus:ring-2 focus:ring-[#F492B7] transition-all"
                             placeholder="Search for markets or profiles..."
-                            readOnly
-                            onClick={() => alert("Search functionality coming in Phase 3!")}
                         />
+                        <div className="absolute inset-y-0 right-0 pr-4 flex items-center gap-2">
+                            {query && (
+                                <button
+                                    onClick={() => { setQuery(''); inputRef.current?.focus(); }}
+                                    className="p-1 text-gray-500 hover:text-white transition-colors"
+                                >
+                                    <CloseIcon />
+                                </button>
+                            )}
+                            <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-1 text-[10px] text-gray-500 bg-white/5 rounded-lg border border-white/10">
+                                <span className="text-xs">⌘</span>K
+                            </kbd>
+                        </div>
+
+                        {/* Search Results Dropdown */}
+                        <AnimatePresence>
+                            {showDropdown && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -10, scale: 0.98 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: -10, scale: 0.98 }}
+                                    transition={{ duration: 0.15 }}
+                                    className="absolute top-full left-0 right-0 mt-2 bg-[#0A0A0A]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50 max-h-[60vh] overflow-y-auto"
+                                >
+                                    {isLoading ? (
+                                        <div className="p-6 text-center">
+                                            <div className="inline-block w-5 h-5 border-2 border-[#F492B7] border-t-transparent rounded-full animate-spin" />
+                                            <p className="text-gray-500 text-sm mt-2">Searching...</p>
+                                        </div>
+                                    ) : !hasResults && query.length >= 2 ? (
+                                        <div className="p-6 text-center">
+                                            <p className="text-gray-400 text-sm">No results for "{query}"</p>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {/* Markets */}
+                                            {markets.length > 0 && (
+                                                <div>
+                                                    <div className="px-4 py-2 border-b border-white/5">
+                                                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Markets</span>
+                                                    </div>
+                                                    {markets.map((market) => (
+                                                        <button
+                                                            key={market.slug}
+                                                            onClick={() => handleMarketClick(market.slug)}
+                                                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left group"
+                                                        >
+                                                            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#F492B7]/20 to-[#FF007A]/20 flex items-center justify-center overflow-hidden flex-shrink-0">
+                                                                {market.banner_url ? (
+                                                                    <img src={market.banner_url} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                                                ) : (
+                                                                    <span className="text-base">🔮</span>
+                                                                )}
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-white text-sm font-medium truncate group-hover:text-[#F492B7] transition-colors">{market.title}</p>
+                                                                {market.category && <span className="text-[10px] text-gray-500 uppercase">{market.category}</span>}
+                                                            </div>
+                                                            <span className="text-gray-600 group-hover:text-[#F492B7]">→</span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            {/* Profiles */}
+                                            {profiles.length > 0 && (
+                                                <div>
+                                                    <div className="px-4 py-2 border-b border-white/5 border-t border-white/5">
+                                                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Profiles</span>
+                                                    </div>
+                                                    {profiles.map((profile) => (
+                                                        <button
+                                                            key={profile.wallet_address}
+                                                            onClick={() => handleProfileClick(profile.username || profile.wallet_address)}
+                                                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left group"
+                                                        >
+                                                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#F492B7]/20 to-[#FF007A]/20 overflow-hidden flex-shrink-0 border border-white/10">
+                                                                <img src={profile.avatar_url || '/pink-pfp.png'} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).src = '/pink-pfp.png'; }} />
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-white text-sm font-medium truncate group-hover:text-[#F492B7] transition-colors">
+                                                                    {profile.username || `${profile.wallet_address.slice(0, 6)}...${profile.wallet_address.slice(-4)}`}
+                                                                </p>
+                                                                {profile.bio && <p className="text-gray-500 text-xs truncate">{profile.bio}</p>}
+                                                            </div>
+                                                            <span className="text-gray-600 group-hover:text-[#F492B7]">→</span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </div>
 
                     {/* BOTÓN PRINCIPAL */}
