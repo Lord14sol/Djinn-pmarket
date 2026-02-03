@@ -39,8 +39,7 @@ export default function Home() {
   useEffect(() => {
     const loadMarkets = async () => {
       try {
-        // Intentar cargar de Supabase
-        // 1. Fetch Supabase
+        // 1. Fetch Supabase (Primary Source)
         const supabaseMarkets = await getSupabaseMarkets();
         let finalMarkets: any[] = [];
 
@@ -75,26 +74,13 @@ export default function Home() {
               resolved: m.resolved,
               winningOutcome: m.winning_outcome,
               resolutionSource: m.resolution_source,
-              options: m.options // ✅ Pass options for multi-outcome cards
+              options: m.options, // ✅ Pass options for multi-outcome cards
+              marketPDA: m.market_pda
             };
           });
         }
 
-        // 3. MERGE NEXT.JS API MARKETS (New real-time memory API)
-        let apiMarkets = [];
-        try {
-          const apiRes = await fetch('/api/markets');
-          if (apiRes.ok) {
-            apiMarkets = await apiRes.json();
-          }
-        } catch (e) { console.error("Error fetching API markets", e); }
-
-        // Dedupe and merge: Priority API > Supabase > Local
-        const apiIds = new Set(apiMarkets.map((m: any) => m.id));
-        const pdaSet = new Set([...apiMarkets.map((m: any) => m.marketPDA), ...finalMarkets.map((m: any) => m.marketPDA)]);
-        const slugSet = new Set([...apiMarkets.map((m: any) => m.slug), ...finalMarkets.map((m: any) => m.slug)]);
-
-        // 4. MERGE LOCAL STORAGE (Always check for pending markets)
+        // 3. MERGE LOCAL STORAGE (Optimistic updates for just-created markets)
         const createdMarkets = localStorage.getItem('djinn_created_markets');
         let localMarkets = [];
         if (createdMarkets) {
@@ -103,26 +89,20 @@ export default function Home() {
           } catch (e) { console.error("Error parsing local markets", e); }
         }
 
-        const uniqueLocal = localMarkets.filter((m: any) =>
-          !pdaSet.has(m.marketPDA) && !slugSet.has(m.slug)
-        );
+        // Dedupe: Use slug as unique key
+        const slugSet = new Set(finalMarkets.map((m: any) => m.slug));
+        const uniqueLocal = localMarkets.filter((m: any) => !slugSet.has(m.slug));
 
-        finalMarkets = [...apiMarkets, ...uniqueLocal, ...finalMarkets.filter(m => !apiIds.has(m.id))];
+        finalMarkets = [...uniqueLocal, ...finalMarkets];
 
-        // 5. Fallback/Static if empty
+        // 4. Fallback/Static if empty (Only if absolutely no markets)
         if (finalMarkets.length === 0) {
           console.log('ℹ️ No markets found, using defaults');
           finalMarkets = [...initialStaticMarkets];
-        } else {
-          // Append static if not enough? No, just keep static as "Trending" fillers if needed or separate
-          // For now, let's append static to ensure grid isn't empty, but dedupe
-          const existIds = new Set(finalMarkets.map(m => m.id));
-          const uniqueStatic = initialStaticMarkets.filter(m => !existIds.has(m.id));
-          finalMarkets = [...finalMarkets, ...uniqueStatic];
         }
 
         setMarkets(finalMarkets);
-        console.log(`✅ Loaded ${finalMarkets.length} markets (API + Supabase + Local + Static)`);
+        console.log(`✅ Loaded ${finalMarkets.length} markets (Supabase + Local)`);
       } catch (e) {
         console.error("Error loading markets from Supabase:", e);
         // Fallback to static + localStorage
@@ -131,9 +111,7 @@ export default function Home() {
           let customMarkets = [];
           if (createdMarkets) customMarkets = JSON.parse(createdMarkets);
 
-          const staticIds = new Set(initialStaticMarkets.map(m => m.id));
-          const uniqueCustom = customMarkets.filter((m: any) => !staticIds.has(m.id));
-          setMarkets([...uniqueCustom, ...initialStaticMarkets]);
+          setMarkets([...customMarkets, ...initialStaticMarkets]);
         } catch (localError) {
           console.error("Error with localStorage fallback:", localError);
         }

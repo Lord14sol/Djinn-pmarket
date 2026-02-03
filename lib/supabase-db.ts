@@ -654,6 +654,23 @@ export async function getMarket(slug: string): Promise<Market | null> {
     }, `getMarket(${slug})`);
 }
 
+export async function updateMarket(slug: string, updates: Partial<Market>) {
+    try {
+        const { data, error } = await supabase
+            .from('markets')
+            .update(updates)
+            .eq('slug', slug)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return { data };
+    } catch (e: any) {
+        console.error('Error updating market:', e);
+        return { error: e.message };
+    }
+}
+
 export async function resolveMarket(slug: string, winningOutcome: 'YES' | 'NO' | 'VOID') {
     // 1. Update market as resolved
     const { error: marketError } = await supabase

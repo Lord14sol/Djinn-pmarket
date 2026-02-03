@@ -3,10 +3,13 @@
 import { useState, useEffect } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
+import { useConnection } from '@solana/wallet-adapter-react';
 import { PublicKey } from '@solana/web3.js';
 import { useDjinnProtocol } from '../hooks/useDjinnProtocol';
 import { simulateBuy, estimatePayoutInternal, CURVE_CONSTANT, VIRTUAL_OFFSET } from '../lib/core-amm';
 import * as supabaseDb from '../lib/supabase-db';
+import { TransactionConfirmationService, TxStatus } from '../lib/TransactionConfirmationService';
+import { SyncQueue } from '../lib/SyncQueue';
 
 interface QuickBetModalProps {
     isOpen: boolean;
@@ -27,10 +30,33 @@ interface QuickBetModalProps {
 export default function QuickBetModal({ isOpen, onClose, market, outcome }: QuickBetModalProps) {
     const wallet = useWallet();
     const { setVisible } = useWalletModal();
+    const { connection } = useConnection();
     const { buyShares, program } = useDjinnProtocol();
     const [amount, setAmount] = useState(1);
     const [isLoading, setIsLoading] = useState(false);
+    const [txStatus, setTxStatus] = useState<TxStatus | 'IDLE'>('IDLE');
     const [solPrice, setSolPrice] = useState(0);
+
+    // Initialize TxConfirmationService with connection
+    useEffect(() => {
+        if (connection) {
+            TransactionConfirmationService.init(connection);
+        }
+    }, [connection]);
+
+    // Register SyncQueue handlers on mount
+    useEffect(() => {
+        SyncQueue.registerHandler('ACTIVITY', async (payload) => {
+            await supabaseDb.createActivity(payload as any);
+        });
+        SyncQueue.registerHandler('BET', async (payload) => {
+            await supabaseDb.createBet(payload as any);
+        });
+        SyncQueue.registerHandler('MARKET_UPDATE', async (payload) => {
+            const { slug, price, volume } = payload as any;
+            await supabaseDb.updateMarketPrice(slug, price, volume);
+        });
+    }, []);
 
     useEffect(() => {
         const handleEsc = (e: KeyboardEvent) => {
@@ -88,6 +114,7 @@ export default function QuickBetModal({ isOpen, onClose, market, outcome }: Quic
         }
 
         setIsLoading(true);
+        setTxStatus('PENDING');
 
         try {
             console.log(`🎲 Placing ${outcome.toUpperCase()} bet: ${amount} SOL`);
@@ -96,6 +123,7 @@ export default function QuickBetModal({ isOpen, onClose, market, outcome }: Quic
             if (!market.marketPDA) {
                 alert("This is a demo market (not on-chain). Bet simulated!");
                 setIsLoading(false);
+                setTxStatus('IDLE');
                 onClose();
                 return;
             }
@@ -105,36 +133,50 @@ export default function QuickBetModal({ isOpen, onClose, market, outcome }: Quic
             const marketAccount = await program.account.market.fetch(new PublicKey(market.marketPDA));
             const marketCreator = marketAccount.creator as PublicKey;
 
-            const tx = await buyShares(
+            const outcomeIndex = outcome === 'yes' ? 0 : 1;
+
+            const signature = await buyShares(
                 new PublicKey(market.marketPDA),
-                outcome,
+                outcomeIndex,
                 amount,
-                new PublicKey(market.yesTokenMint || "So11111111111111111111111111111111111111112"),
-                new PublicKey(market.noTokenMint || "So11111111111111111111111111111111111111112"),
                 marketCreator,
                 0 // minSharesOut
             );
 
-            console.log('✅ Trade successful:', tx);
+            console.log('📡 TX Broadcast:', signature);
+            setTxStatus('CONFIRMING');
 
-            // 2. SYNC TO SUPABASE (The Missing Link)
+            // 2. WAIT FOR CHAIN CONFIRMATION (Using the new service)
+            try {
+                const confirmResult = await TransactionConfirmationService.confirm(signature, 60000);
+                console.log('✅ TX Confirmed on-chain:', confirmResult);
+                setTxStatus('CONFIRMED');
+            } catch (confirmError: any) {
+                console.error('❌ TX Failed/Expired:', confirmError);
+                setTxStatus('FAILED');
+                alert(`Transaction failed on-chain: ${confirmError.error || 'Timeout'}\n\nNo changes were made to your account.`);
+                return; // DO NOT sync to DB if chain failed
+            }
+
+            // 3. SYNC TO SUPABASE VIA QUEUE (Guaranteed delivery)
             const slug = market.slug || market.title.toLowerCase().replace(/ /g, '-').replace(/[^\w-]/g, '');
+            const walletAddress = wallet.publicKey!.toBase58();
 
-            // A. Ensure Profile
-            const profile = await supabaseDb.getProfile(wallet.publicKey.toBase58());
+            // A. Ensure Profile (still sync, not critical)
+            const profile = await supabaseDb.getProfile(walletAddress);
             if (!profile) {
                 await supabaseDb.upsertProfile({
-                    wallet_address: wallet.publicKey.toBase58(),
-                    username: `User ${wallet.publicKey.toBase58().slice(0, 4)}`,
+                    wallet_address: walletAddress,
+                    username: `User ${walletAddress.slice(0, 4)}`,
                     bio: 'Crypto trader',
-                    avatar_url: `https://api.dicebear.com/7.x/identicon/svg?seed=${wallet.publicKey.toBase58()}`
+                    avatar_url: `https://api.dicebear.com/7.x/identicon/svg?seed=${walletAddress}`
                 });
             }
 
-            // B. Log Activity
-            await supabaseDb.createActivity({
-                wallet_address: wallet.publicKey.toBase58(),
-                username: profile?.username || `User ${wallet.publicKey.toBase58().slice(0, 4)}`,
+            // B. Queue Activity Log (Guaranteed sync)
+            SyncQueue.add('ACTIVITY', {
+                wallet_address: walletAddress,
+                username: profile?.username || `User ${walletAddress.slice(0, 4)}`,
                 avatar_url: profile?.avatar_url || null,
                 action: outcome === 'yes' ? 'YES' : 'NO',
                 amount: usdValue,
@@ -146,10 +188,10 @@ export default function QuickBetModal({ isOpen, onClose, market, outcome }: Quic
                 outcome_name: outcome.toUpperCase()
             });
 
-            // C. Create/Update Bet Position (For Holders List)
-            await supabaseDb.createBet({
+            // C. Queue Bet Position (Guaranteed sync)
+            SyncQueue.add('BET', {
                 market_slug: slug,
-                wallet_address: wallet.publicKey.toBase58(),
+                wallet_address: walletAddress,
                 side: outcome === 'yes' ? 'YES' : 'NO',
                 amount: usdValue,
                 sol_amount: amount,
@@ -157,27 +199,23 @@ export default function QuickBetModal({ isOpen, onClose, market, outcome }: Quic
                 entry_price: safePrice * 100
             });
 
-            // D. Update Market Stats (Price/Volume) locally
-            // Calculate impact
-            const priceImpact = (usdValue / 1000000) * 50;
-            const newUnknownPrice = sim.endPrice * 100;
-
+            // D. Queue Market Stats Update
             let newYesPrice = market.chance;
             if (outcome === 'yes') {
                 newYesPrice = Math.min(99, market.chance + sim.priceImpact);
             } else {
                 newYesPrice = Math.max(1, market.chance - sim.priceImpact);
             }
+            SyncQueue.add('MARKET_UPDATE', { slug, price: newYesPrice, volume: usdValue });
 
-            await supabaseDb.updateMarketPrice(slug, newYesPrice, usdValue);
-
-            alert(`✅ Bet placed!\n\n${outcome.toUpperCase()}: ${amount} SOL\n\nTX: ${tx.slice(0, 8)}...\n\nActivity synced to Global Feed.`);
+            alert(`✅ Bet confirmed on-chain!\n\n${outcome.toUpperCase()}: ${amount} SOL\n\nTX: ${signature.slice(0, 8)}...\n\nSyncing to Global Feed...`);
             onClose();
             // Trigger refresh
             window.location.reload();
 
         } catch (error: any) {
             console.error('❌ Error:', error);
+            setTxStatus('FAILED');
             alert(`Failed: ${error.message || 'Unknown error'}`);
         } finally {
             setIsLoading(false);
