@@ -277,10 +277,10 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                 slug
             });
 
-            // 🎉 FIRE CONFETTI
-            const duration = 3 * 1000;
+            // 🎉 FIRE CONFETTI - Intense Burst from Center
+            const duration = 1.5 * 1000;
             const animationEnd = Date.now() + duration;
-            const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 9999 };
+            const defaults = { startVelocity: 45, spread: 360, ticks: 100, zIndex: 9999, gravity: 0.8 };
 
             const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
 
@@ -291,10 +291,12 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                     return clearInterval(interval);
                 }
 
-                const particleCount = 50 * (timeLeft / duration);
-                confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } });
-                confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } });
-            }, 250);
+                const particleCount = 80 * (timeLeft / duration);
+
+                // Fire from center (where the modal is)
+                confetti({ ...defaults, particleCount, origin: { x: 0.5, y: 0.55 }, scalar: 1.2 });
+                confetti({ ...defaults, particleCount, origin: { x: 0.5, y: 0.55 }, scalar: 0.8 });
+            }, 200);
 
             setIsSuccess(true);
 
@@ -409,7 +411,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                             onClick={() => { onClose(); router.push(`/market/${successData.slug}`); }}
                             className="w-full py-4 bg-[#F492B7] border-2 border-black rounded-xl font-black text-xl uppercase text-black hover:bg-[#ff85b0] hover:-translate-y-1 hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-0 active:shadow-none transition-all mb-3 flex items-center justify-center gap-2"
                         >
-                            Open Market 🚀
+                            Open Market
                         </button>
                     </div>
                 ) : (
