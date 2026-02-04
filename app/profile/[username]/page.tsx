@@ -743,33 +743,14 @@ export default function ProfilePage() {
             {/* NO BANNER - Space Theme Background from global or main */}
 
             <div className="max-w-[1600px] mx-auto px-14 pt-2">
-                {/* USERNAME + MEDALS - OUTSIDE PANEL */}
-                <div className="flex items-center gap-3 flex-wrap mb-6">
-                    <h1 className="text-7xl font-black tracking-tighter leading-none bg-[#F492B7] border-4 border-black px-8 py-2 shadow-[8px_8px_0px_0px_#000] lowercase">{profile.username}</h1>
-
-                    {/* MEDALS */}
-                    {profile.medals && profile.medals.map((m: string, i: number) => {
-                        if (m === 'GOLD_TROPHY') return <img key={i} src="/gold-trophy.png" className="w-20 h-20 object-contain border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:scale-110 hover:shadow-[6px_6px_0px_0px_#F492B7] transition-all cursor-help rounded-xl" title="Achieved Top 1 Leaderboard" alt="Trophy" />;
-                        if (m === 'LEGENDARY_TRADER') return <img key={i} src="/gems-trophy.png" className="w-16 h-16 object-contain border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:scale-110 hover:shadow-[6px_6px_0px_0px_#F492B7] transition-all cursor-help rounded-xl" title="Biggest Win All Time" alt="Legendary" />;
-                        if (m === 'FIRST_MARKET') return <img key={i} src="/genesis-medal-v2.png" className="w-16 h-16 object-contain border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:scale-110 hover:shadow-[6px_6px_0px_0px_#F492B7] transition-all cursor-help rounded-xl" title="Genesis Creator" alt="Genesis" />;
-                        if (m === 'MARKET_MAKER') return <img key={i} src="/blue-crystal.png" className="w-16 h-16 object-contain border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:scale-110 hover:shadow-[6px_6px_0px_0px_#F492B7] transition-all cursor-help rounded-xl" title="Market Maker" alt="Market Maker" />;
-                        if (m === 'ORACLE') return <img key={i} src="/orange-crystal-v2.png" className="w-16 h-16 object-contain border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:scale-110 hover:shadow-[6px_6px_0px_0px_#F492B7] transition-all cursor-help rounded-xl" title="Grand Oracle" alt="Oracle" />;
-                        if (m === 'DIAMOND_HANDS') return <img key={i} src="/diamond-crystal.png" className="w-16 h-16 object-contain border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:scale-110 hover:shadow-[6px_6px_0px_0px_#F492B7] transition-all cursor-help rounded-xl" title="Diamond Hands" alt="Diamond" />;
-                        if (m === 'PINK_CRYSTAL') return <img key={i} src="/pink-crystal.png" className="w-16 h-16 object-contain border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:scale-110 hover:shadow-[6px_6px_0px_0px_#F492B7] transition-all cursor-help rounded-xl" title="Mystic Rose" alt="Rose" />;
-                        if (m === 'EMERALD_SAGE') return <img key={i} src="/green-crystal.png" className="w-16 h-16 object-contain border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:scale-110 hover:shadow-[6px_6px_0px_0px_#F492B7] transition-all cursor-help rounded-xl" title="Emerald Sage" alt="Emerald" />;
-                        if (m === 'MOON_DANCER') return <img key={i} src="/moon-crystal.png" className="w-16 h-16 object-contain border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:scale-110 hover:shadow-[6px_6px_0px_0px_#F492B7] transition-all cursor-help rounded-xl" title="Moon Dancer" alt="Moon" />;
-                        if (m === 'MARKET_SNIPER') return <img key={i} src="/emerald-sniper.png" className="w-16 h-16 object-contain border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:scale-110 hover:shadow-[6px_6px_0px_0px_#F492B7] transition-all cursor-help rounded-xl" title="Market Sniper" alt="Sniper" />;
-                        if (m === 'APEX_PREDATOR') return <img key={i} src="/apex-skull.png" className="w-16 h-16 object-contain border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:scale-110 hover:shadow-[6px_6px_0px_0px_#F492B7] transition-all cursor-help rounded-xl" title="Apex Predator" alt="Apex" />;
-                        return <span key={i} className="text-5xl animate-pulse cursor-help hover:scale-110 transition-transform" title="Medal">{m}</span>;
-                    })}
-                </div>
-
-                {/* PROFILE INFO PANEL - WHITE CARD */}
-                <div className="bg-white border-4 border-black rounded-3xl p-8 mb-8 shadow-[12px_12px_0px_0px_#F492B7] relative">
-                    <div className="flex items-start gap-8">
-                        {/* AVATAR COLUMN */}
-                        <div className="flex flex-col items-center gap-4">
-                            <div className="w-48 h-48 rounded-full border-4 border-black overflow-hidden bg-black shadow-[6px_6px_0px_0px_rgba(0,0,0,0.3)] group relative hover:shadow-[8px_8px_0px_0px_#F492B7] transition-all">
+                {/* PROFILE INFO - NO BACKGROUND */}
+                <div className="mb-12">
+                    {/* GRID LAYOUT: FOTO (LEFT) | INFO (RIGHT) */}
+                    <div className="grid grid-cols-[auto_1fr] gap-8">
+                        {/* LEFT COLUMN: FOTO + BIO */}
+                        <div className="flex flex-col gap-6">
+                            {/* FOTO */}
+                            <div className="w-52 h-52 rounded-full overflow-hidden border-4 border-black group">
                                 <img
                                     src={(profile.pfp && profile.pfp.trim()) ? profile.pfp : '/pink-pfp.png'}
                                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
@@ -780,7 +761,12 @@ export default function ProfilePage() {
                                 />
                             </div>
 
-                            {/* FOLLOW BUTTON */}
+                            {/* BIO - BELOW FOTO */}
+                            {profile.bio && (
+                                <p className="text-white text-base leading-relaxed font-bold max-w-xs">{profile.bio}</p>
+                            )}
+
+                            {/* FOLLOW BUTTON - BELOW BIO */}
                             {!isMyProfile && (
                                 <button
                                     onClick={handleToggleFollow}
@@ -795,11 +781,32 @@ export default function ProfilePage() {
                             )}
                         </div>
 
-                        {/* INFO COLUMN */}
-                        <div className="flex-1">
-                            {/* EDIT BUTTON (TOP RIGHT) */}
-                            {isMyProfile && (
-                                <div className="flex justify-end mb-4">
+                        {/* RIGHT COLUMN: NOMBRE + MEDALS + FOLLOWERS + GEMAS + STATS */}
+                        <div className="flex flex-col gap-4">
+                            {/* NOMBRE + MEDALS + EDIT BUTTON */}
+                            <div className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-3 flex-wrap">
+                                    <h1 className="text-6xl font-black tracking-tighter leading-none text-white drop-shadow-[0_0_10px_rgba(244,146,183,0.5)]">{profile.username}</h1>
+
+                                    {/* MEDALS */}
+                                    {profile.medals && profile.medals.map((m: string, i: number) => {
+                                        if (m === 'GOLD_TROPHY') return <img key={i} src="/gold-trophy.png" className="w-12 h-12 object-contain border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:scale-110 transition-all cursor-help rounded-lg" title="Achieved Top 1 Leaderboard" alt="Trophy" />;
+                                        if (m === 'LEGENDARY_TRADER') return <img key={i} src="/gems-trophy.png" className="w-10 h-10 object-contain border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:scale-110 transition-all cursor-help rounded-lg" title="Biggest Win All Time" alt="Legendary" />;
+                                        if (m === 'FIRST_MARKET') return <img key={i} src="/genesis-medal-v2.png" className="w-10 h-10 object-contain border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:scale-110 transition-all cursor-help rounded-lg" title="Genesis Creator" alt="Genesis" />;
+                                        if (m === 'MARKET_MAKER') return <img key={i} src="/blue-crystal.png" className="w-10 h-10 object-contain border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:scale-110 transition-all cursor-help rounded-lg" title="Market Maker" alt="Market Maker" />;
+                                        if (m === 'ORACLE') return <img key={i} src="/orange-crystal-v2.png" className="w-10 h-10 object-contain border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:scale-110 transition-all cursor-help rounded-lg" title="Grand Oracle" alt="Oracle" />;
+                                        if (m === 'DIAMOND_HANDS') return <img key={i} src="/diamond-crystal.png" className="w-10 h-10 object-contain border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:scale-110 transition-all cursor-help rounded-lg" title="Diamond Hands" alt="Diamond" />;
+                                        if (m === 'PINK_CRYSTAL') return <img key={i} src="/pink-crystal.png" className="w-10 h-10 object-contain border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:scale-110 transition-all cursor-help rounded-lg" title="Mystic Rose" alt="Rose" />;
+                                        if (m === 'EMERALD_SAGE') return <img key={i} src="/green-crystal.png" className="w-10 h-10 object-contain border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:scale-110 transition-all cursor-help rounded-lg" title="Emerald Sage" alt="Emerald" />;
+                                        if (m === 'MOON_DANCER') return <img key={i} src="/moon-crystal.png" className="w-10 h-10 object-contain border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:scale-110 transition-all cursor-help rounded-lg" title="Moon Dancer" alt="Moon" />;
+                                        if (m === 'MARKET_SNIPER') return <img key={i} src="/emerald-sniper.png" className="w-10 h-10 object-contain border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:scale-110 transition-all cursor-help rounded-lg" title="Market Sniper" alt="Sniper" />;
+                                        if (m === 'APEX_PREDATOR') return <img key={i} src="/apex-skull.png" className="w-10 h-10 object-contain border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:scale-110 transition-all cursor-help rounded-lg" title="Apex Predator" alt="Apex" />;
+                                        return <span key={i} className="text-3xl animate-pulse cursor-help hover:scale-110 transition-transform" title="Medal">{m}</span>;
+                                    })}
+                                </div>
+
+                                {/* EDIT BUTTON */}
+                                {isMyProfile && (
                                     <button
                                         onClick={() => {
                                             setTempName(profile.username);
@@ -807,17 +814,42 @@ export default function ProfilePage() {
                                             setTempPfp(profile.pfp);
                                             setIsEditModalOpen(true);
                                         }}
-                                        className="border-3 border-black bg-[#F492B7] text-black px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest hover:translate-y-1 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center gap-2"
+                                        className="border-3 border-black bg-white text-black px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest hover:translate-y-1 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center gap-2"
                                     >
                                         <span>✎</span> Edit Profile
                                     </button>
+                                )}
+                            </div>
+
+                            {/* FOLLOWERS/FOLLOWING - BELOW NOMBRE */}
+                            <div className="flex items-center gap-3">
+                                <div className="bg-black/5 border-2 border-black rounded-xl px-4 py-2 flex items-center gap-2">
+                                    <span className="text-white text-2xl font-black">{formatCompact(followersCount)}</span>
+                                    <span className="text-white/70 text-xs font-black lowercase">followers</span>
+                                </div>
+                                <button
+                                    className="bg-black/5 border-2 border-black rounded-xl px-4 py-2 flex items-center gap-2 hover:bg-[#F492B7] transition-all"
+                                    onClick={() => setIsFollowingModalOpen(true)}
+                                >
+                                    <span className="text-white text-2xl font-black">{formatCompact(followingCount)}</span>
+                                    <span className="text-white/70 text-xs font-black lowercase">following</span>
+                                </button>
+                            </div>
+
+                            {/* GEMAS - BELOW FOLLOWERS (SMALLER, NO EMOJI) */}
+                            {profile.showGems !== false && (
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xl font-black text-white">
+                                        {profile.gems.toLocaleString('en-US')}
+                                    </span>
+                                    <span className="text-white/70 text-xs font-black uppercase tracking-widest">gems</span>
                                 </div>
                             )}
 
-                            {/* METADATA: JOINED + VIEWS + WALLET */}
-                            <div className="flex items-center gap-2 mb-4 flex-wrap">
-                                <span className="bg-black/5 border-2 border-black rounded-full px-3 py-1 text-black text-xs font-black lowercase">joined {profile.joinedAt ? new Date(profile.joinedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span>
-                                <span className="bg-black/5 border-2 border-black rounded-full px-3 py-1 text-black text-xs font-black lowercase">{viewCount.toLocaleString()} views</span>
+                            {/* METADATA: JOINED + VIEWS + WALLET - BELOW GEMAS */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <span className="bg-black/5 border-2 border-black rounded-full px-3 py-1 text-white text-xs font-black lowercase">joined {profile.joinedAt ? new Date(profile.joinedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span>
+                                <span className="bg-black/5 border-2 border-black rounded-full px-3 py-1 text-white text-xs font-black lowercase">{viewCount.toLocaleString()} views</span>
                                 {targetWalletAddress && (
                                     <button
                                         onClick={() => {
@@ -830,51 +862,19 @@ export default function ProfilePage() {
                                         }}
                                         className="group bg-black/5 border-2 border-black rounded-full px-3 py-1 hover:bg-[#F492B7] transition-all"
                                     >
-                                        <span id="wallet-copy-btn-header" className="text-black text-xs font-black lowercase">{targetWalletAddress.slice(0, 4)}...{targetWalletAddress.slice(-4)}</span>
+                                        <span id="wallet-copy-btn-header" className="text-white text-xs font-black lowercase">{targetWalletAddress.slice(0, 4)}...{targetWalletAddress.slice(-4)}</span>
                                     </button>
                                 )}
                             </div>
-
-                            {/* FOLLOW COUNTS */}
-                            <div className="flex items-center gap-3 mb-6">
-                                <div className="bg-black/5 border-2 border-black rounded-xl px-4 py-2 flex items-center gap-2">
-                                    <span className="text-black text-2xl font-black">{formatCompact(followersCount)}</span>
-                                    <span className="text-black/70 text-xs font-black lowercase">followers</span>
-                                </div>
-                                <button
-                                    className="bg-black/5 border-2 border-black rounded-xl px-4 py-2 flex items-center gap-2 hover:bg-[#F492B7] transition-all"
-                                    onClick={() => setIsFollowingModalOpen(true)}
-                                >
-                                    <span className="text-black text-2xl font-black">{formatCompact(followingCount)}</span>
-                                    <span className="text-black/70 text-xs font-black lowercase">following</span>
-                                </button>
-                            </div>
-
-                            {/* BIO */}
-                            {profile.bio && (
-                                <div className="bg-black/5 border-2 border-black rounded-xl p-4">
-                                    <p className="text-black text-base leading-relaxed font-bold">{profile.bio}</p>
-                                </div>
-                            )}
                         </div>
                     </div>
                 </div>
-
-                {/* GEMS - OUTSIDE PANEL */}
-                {profile.showGems !== false && (
-                    <div className="bg-[#FFD700] border-4 border-black rounded-xl p-4 inline-flex items-center gap-3 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] mb-12">
-                        <span className="text-5xl font-black text-black">
-                            {profile.gems.toLocaleString('en-US')}
-                        </span>
-                        <span className="text-black text-sm font-black uppercase tracking-widest">💎 gems</span>
-                    </div>
-                )}
 
                 {/* STATS GRID - NEO-BRUTALISM */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
                     <StatCard
                         label="Positions Value"
-                        value={`${(profile.activeBets.reduce((acc: number, bet: any) => acc + ((bet.shares || 0) * (bet.currentPrice || (bet.current ? bet.current / (bet.shares || 1) : 0))), 0)).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}`}
+                        value={`${(profile.activeBets.reduce((acc: number, bet: any) => acc + (bet.current || 0), 0)).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}`}
                         color="text-black"
                     />
                     <StatCard
@@ -908,7 +908,7 @@ export default function ProfilePage() {
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
-                            className={`px-6 py-3 rounded-lg text-sm font-black lowercase tracking-tight transition-all ${activeTab === tab ? 'bg-black text-white border-2 border-black shadow-[3px_3px_0px_0px_#F492B7]' : 'bg-transparent text-black border-2 border-transparent hover:bg-black/5 hover:border-black/20'}`}
+                            className={`px-6 py-3 rounded-lg text-sm font-black lowercase tracking-tight transition-all ${activeTab === tab ? 'bg-black text-white border-2 border-black' : 'bg-transparent text-black border-2 border-transparent hover:bg-black/5 hover:border-black/20'}`}
                         >
                             {tab}
                         </button>
@@ -1060,23 +1060,23 @@ function StatCard({ label, value, color = "text-black" }: any) {
 
 function MarketCard({ market, router }: any) {
     return (
-        <div onClick={() => router.push(`/market/${market.slug}`)} className="group bg-[#0D0D0D] border border-white/5 rounded-[2.5rem] overflow-hidden hover:border-[#F492B7]/40 transition-all cursor-pointer shadow-2xl hover:-translate-y-2 duration-300">
-            <div className="h-48 w-full relative overflow-hidden bg-gradient-to-br from-[#F492B7]/20 to-black">
+        <div onClick={() => router.push(`/market/${market.slug}`)} className="group bg-white border-4 border-black rounded-3xl overflow-hidden hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 duration-200">
+            <div className="h-48 w-full relative overflow-hidden bg-gradient-to-br from-[#F492B7] to-[#FFB6C1] border-b-4 border-black">
                 {typeof market.icon === 'string' && (market.icon.startsWith('data:image') || market.icon.startsWith('http')) ? (
-                    <img src={market.icon} className="w-full h-full object-cover opacity-60 group-hover:scale-110 transition-transform duration-700" alt="" />
+                    <img src={market.icon} className="w-full h-full object-cover mix-blend-multiply group-hover:scale-110 transition-transform duration-500" alt="" />
                 ) : (
-                    <div className="w-full h-full flex items-center justify-center text-6xl opacity-30">{market.icon || '🔮'}</div>
+                    <div className="w-full h-full flex items-center justify-center text-6xl">{market.icon || '🔮'}</div>
                 )}
-                <div className="absolute top-5 left-5 bg-black/60 backdrop-blur-md px-3 py-1 rounded-lg border border-white/10 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500">Live</span>
+                <div className="absolute top-4 left-4 bg-emerald-400 border-3 border-black px-3 py-1.5 rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-black animate-pulse" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-black">Live</span>
                 </div>
             </div>
-            <div className="p-8 space-y-4">
-                <h4 className="text-2xl font-black uppercase leading-tight tracking-tighter h-16 overflow-hidden group-hover:text-[#F492B7] transition-colors">{market.title}</h4>
-                <div className="flex justify-between items-center border-t border-white/5 pt-6">
-                    <div><span className="text-[10px] font-black text-gray-600 uppercase tracking-widest block mb-1">Type</span><span className="text-white text-sm font-black uppercase">{market.type || 'Binary'}</span></div>
-                    <div className="text-right"><span className="text-[10px] font-black text-gray-600 uppercase tracking-widest block mb-1">Volume</span><span className="text-white text-sm font-black">{market.volume || '$0'}</span></div>
+            <div className="p-6 space-y-4">
+                <h4 className="text-xl font-black uppercase leading-tight tracking-tighter h-14 overflow-hidden text-black group-hover:text-[#F492B7] transition-colors line-clamp-2">{market.title}</h4>
+                <div className="flex justify-between items-center border-t-4 border-black pt-4">
+                    <div><span className="text-[10px] font-black text-black/60 uppercase tracking-widest block mb-1">Type</span><span className="text-black text-sm font-black uppercase">{market.type || 'Binary'}</span></div>
+                    <div className="text-right"><span className="text-[10px] font-black text-black/60 uppercase tracking-widest block mb-1">Volume</span><span className="text-black text-sm font-black">{market.volume || '$0'}</span></div>
                 </div>
             </div>
         </div>
@@ -1100,78 +1100,77 @@ function BetCard({ bet, onCashOut, router }: any) {
 
     return (
         <>
-            {/* TICKET CARD STYLE */}
+            {/* TICKET CARD STYLE - NEO-BRUTALIST */}
             <div
                 onClick={() => router.push(`/market/${bet.market_slug}`)}
-                className="group relative bg-[#0D0D0D] border border-white/5 rounded-3xl overflow-hidden hover:border-[#F492B7]/30 transition-all cursor-pointer shadow-xl hover:-translate-y-1"
+                className="group relative bg-white border-4 border-black rounded-3xl overflow-hidden hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1"
             >
                 {/* 1. TICKET HEADER (Market Image & Gradient) */}
-                <div className="h-32 w-full relative overflow-hidden">
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#0D0D0D] to-transparent z-10" />
+                <div className="h-32 w-full relative overflow-hidden bg-gradient-to-br from-[#F492B7] to-[#FFB6C1] border-b-4 border-black">
                     {typeof bet.market_icon === 'string' && (bet.market_icon.startsWith('http') || bet.market_icon.startsWith('data:')) ? (
-                        <img src={bet.market_icon} className="w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-700" alt="" />
+                        <img src={bet.market_icon} className="w-full h-full object-cover mix-blend-multiply group-hover:scale-105 transition-transform duration-500" alt="" />
                     ) : (
-                        <div className="w-full h-full bg-[#1A1A1A] flex items-center justify-center text-4xl opacity-20">{bet.market_icon}</div>
+                        <div className="w-full h-full flex items-center justify-center text-4xl text-black/50">{bet.market_icon}</div>
                     )}
 
-                    {/* Floating Badge: SIDE */}
-                    <div className={`absolute top-4 right-4 z-20 px-3 py-1 rounded-lg font-black text-xs uppercase tracking-widest border backdrop-blur-md shadow-lg ${bet.side === 'YES' ? 'bg-[#10B981]/20 border-[#10B981]/40 text-[#10B981]' : 'bg-[#EF4444]/20 border-[#EF4444]/40 text-[#EF4444]'}`}>
+                    {/* Floating Badge: SIDE - NEO-BRUTALIST */}
+                    <div className={`absolute top-4 right-4 z-20 px-3 py-1.5 rounded-lg font-black text-xs uppercase tracking-widest border-3 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${bet.side === 'YES' ? 'bg-emerald-400 text-black' : 'bg-rose-400 text-black'}`}>
                         {bet.side} Position
                     </div>
 
                     {/* MARKET TITLE (Overlaid) */}
                     <div className="absolute bottom-4 left-6 right-6 z-20">
-                        <h4 className="text-xl font-black text-white leading-tight drop-shadow-lg line-clamp-1">{bet.title}</h4>
+                        <h4 className="text-xl font-black text-black leading-tight line-clamp-1 drop-shadow-none">{bet.title}</h4>
                     </div>
                 </div>
 
                 {/* 2. TICKET BODY (Stats) */}
                 <div className="p-6 relative">
-                    {/* Perforation Line Effect */}
-                    <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent border-t border-dashed border-white/10" />
-                    <div className="absolute -top-3 -left-3 w-6 h-6 bg-black rounded-full" />
-                    <div className="absolute -top-3 -right-3 w-6 h-6 bg-black rounded-full" />
+                    {/* Perforation Line Effect - BOLD */}
+                    <div className="absolute top-0 left-0 right-0 h-[2px] bg-black border-t-2 border-dashed border-black" />
+                    <div className="absolute -top-3 -left-3 w-6 h-6 bg-white border-4 border-black rounded-full" />
+                    <div className="absolute -top-3 -right-3 w-6 h-6 bg-white border-4 border-black rounded-full" />
 
                     <div className="grid grid-cols-2 gap-y-6 gap-x-4 mb-6">
                         {/* SHARES */}
                         <div>
-                            <p className="text-[#6B7280] text-[10px] uppercase font-bold tracking-widest mb-1">Shares</p>
-                            <p className="text-white text-lg font-mono font-medium">{formatCompact(bet.shares)}</p>
+                            <p className="text-black/60 text-[10px] uppercase font-black tracking-widest mb-1">Shares</p>
+                            <p className="text-black text-lg font-mono font-black">{formatCompact(bet.shares)}</p>
                         </div>
                         {/* INVESTED SOL */}
                         <div className="text-right">
-                            <p className="text-[#6B7280] text-[10px] uppercase font-bold tracking-widest mb-1">Invested</p>
-                            <p className="text-white text-lg font-mono font-medium">{bet.sol_amount?.toFixed(3)} SOL</p>
+                            <p className="text-black/60 text-[10px] uppercase font-black tracking-widest mb-1">Invested</p>
+                            <p className="text-black text-lg font-mono font-black">{bet.sol_amount?.toFixed(3)} SOL</p>
                         </div>
 
                         {/* MARKET VOLUME */}
                         <div>
-                            <p className="text-[#6B7280] text-[10px] uppercase font-bold tracking-widest mb-1">Vol</p>
-                            <div className="flex items-center gap-1 text-zinc-400 font-mono text-sm">
+                            <p className="text-black/60 text-[10px] uppercase font-black tracking-widest mb-1">Vol</p>
+                            <div className="flex items-center gap-1 text-black font-mono text-sm font-black">
                                 <span>{formatCompact(bet.volume)}</span>
                             </div>
                         </div>
 
                         {/* PROFIT/LOSS */}
                         <div className="text-right">
-                            <p className="text-[#6B7280] text-[10px] uppercase font-bold tracking-widest mb-1">P/L</p>
-                            <p className={`text-lg font-black ${isPositive ? 'text-[#10B981]' : 'text-[#EF4444]'}`}>
+                            <p className="text-black/60 text-[10px] uppercase font-black tracking-widest mb-1">P/L</p>
+                            <p className={`text-lg font-black ${isPositive ? 'text-emerald-600' : 'text-rose-600'}`}>
                                 {isPositive ? '+' : ''}{bet.change}
                             </p>
                         </div>
                     </div>
 
-                    {/* ACTION FOOTER */}
+                    {/* ACTION FOOTER - NEO-BRUTALIST BUTTONS */}
                     <div className="flex gap-3 mt-2">
                         <button
                             onClick={(e) => { e.stopPropagation(); onCashOut(bet.id); }}
-                            className="flex-1 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/20 text-white py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all"
+                            className="flex-1 bg-black hover:bg-[#F492B7] border-3 border-black text-white hover:text-black py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
                         >
                             Sell
                         </button>
                         <button
                             onClick={handleShare}
-                            className="bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/20 text-[#F492B7] w-12 flex items-center justify-center rounded-xl transition-all"
+                            className="bg-[#F492B7] hover:bg-[#FFB6C1] border-3 border-black text-black w-12 flex items-center justify-center rounded-xl transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
                         >
                             📤
                         </button>
@@ -1305,29 +1304,41 @@ function EditModal({ profile, tempName, tempBio, setTempName, setTempBio, tempPf
                     <div className="space-y-8">
                         {/* PFP & DETAILS ROW - NO BANNER */}
                         <div className="flex gap-8">
-                            <div className="shrink-0 space-y-3 pb-8">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-black/70 ml-1">avatar</p>
-                                <button onClick={() => pfpInputRef.current?.click()} className="w-32 h-32 bg-white border-4 border-black rounded-full flex items-center justify-center relative group hover:shadow-[4px_4px_0px_0px_#F492B7] transition-all overflow-hidden mx-auto shadow-[6px_6px_0px_0px_rgba(0,0,0,0.3)]">
-                                    <img src={tempPfp || profile.pfp} className="w-full h-full object-cover object-center opacity-80 group-hover:opacity-100 transition-all" alt="" />
-                                    <span className="absolute inset-x-0 bottom-0 py-1 bg-black text-[9px] font-black uppercase text-white opacity-0 group-hover:opacity-100 transition-opacity text-center">change</span>
+                            {/* AVATAR SECTION */}
+                            <div className="shrink-0 space-y-4 pb-8">
+                                <div className="bg-[#FFD700] border-3 border-black rounded-xl px-3 py-1.5 inline-block">
+                                    <p className="text-xs font-black uppercase tracking-widest text-black">avatar</p>
+                                </div>
+                                <button
+                                    onClick={() => pfpInputRef.current?.click()}
+                                    className="w-32 h-32 bg-gradient-to-br from-[#F492B7] to-[#FFB6C1] border-4 border-black rounded-full flex items-center justify-center relative group hover:scale-105 transition-all overflow-hidden mx-auto shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[8px_8px_0px_0px_#F492B7]"
+                                >
+                                    <img src={tempPfp || profile.pfp} className="w-full h-full object-cover object-center group-hover:scale-110 transition-all" alt="" />
+                                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <span className="text-white text-xs font-black uppercase tracking-widest">📷 change</span>
+                                    </div>
                                 </button>
                             </div>
 
+                            {/* FORM INPUTS */}
                             <div className="flex-1 space-y-6">
+                                {/* USERNAME INPUT */}
                                 <div>
-                                    <div className="flex items-center justify-between mb-2 ml-1">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-black/70">username</p>
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div className="bg-black border-3 border-black rounded-lg px-3 py-1.5">
+                                            <p className="text-xs font-black uppercase tracking-widest text-white">username</p>
+                                        </div>
                                         <div className="flex items-center gap-1.5 transition-all duration-300">
                                             {isCheckingName ? (
                                                 <Loader2 className="w-3 h-3 text-[#F492B7] animate-spin" />
                                             ) : tempName.length >= 3 && tempName !== profile.username ? (
                                                 nameAvailable ? (
-                                                    <div className="flex items-center gap-1 bg-[#10B981] border-2 border-black text-white px-2 py-1 rounded-lg">
+                                                    <div className="flex items-center gap-1 bg-[#10B981] border-2 border-black text-white px-3 py-1.5 rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                                                         <span className="text-[10px] font-black uppercase tracking-widest">available</span>
                                                         <span className="text-sm">✓</span>
                                                     </div>
                                                 ) : (
-                                                    <div className="flex items-center gap-1 bg-red-500 border-2 border-black text-white px-2 py-1 rounded-lg">
+                                                    <div className="flex items-center gap-1 bg-red-500 border-2 border-black text-white px-3 py-1.5 rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                                                         <span className="text-[10px] font-black uppercase tracking-widest">taken</span>
                                                         <span className="text-sm">✕</span>
                                                     </div>
@@ -1335,20 +1346,35 @@ function EditModal({ profile, tempName, tempBio, setTempName, setTempBio, tempPf
                                             ) : null}
                                         </div>
                                     </div>
-                                    <input
-                                        type="text"
-                                        className={`w-full bg-white border-3 ${nameAvailable === false && tempName !== profile.username ? 'border-red-500' : 'border-black'} rounded-xl p-4 text-black font-bold outline-none focus:border-[#F492B7] transition-all placeholder:text-black/40`}
-                                        placeholder="username"
-                                        value={tempName}
-                                        onChange={(e) => setTempName(e.target.value.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 15))}
-                                    />
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            className={`w-full bg-[#FFFEF0] border-4 ${nameAvailable === false && tempName !== profile.username ? 'border-red-500' : 'border-black'} rounded-xl p-4 text-black text-lg font-black outline-none focus:border-[#F492B7] focus:shadow-[4px_4px_0px_0px_#F492B7] transition-all placeholder:text-black/30 placeholder:font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,0.2)]`}
+                                            placeholder="enter your username..."
+                                            value={tempName}
+                                            onChange={(e) => setTempName(e.target.value.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 15))}
+                                        />
+                                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-black text-black/40">{tempName.length}/15</span>
+                                    </div>
                                     {nameAvailable === false && tempName !== profile.username && (
-                                        <p className="text-[9px] text-red-500 font-bold uppercase tracking-widest mt-2 ml-1">this username is already claimed by another djinn.</p>
+                                        <p className="text-xs text-red-500 font-black uppercase tracking-wide mt-2 ml-1 bg-red-50 border-2 border-red-500 rounded-lg px-3 py-2">⚠️ this username is already claimed by another djinn.</p>
                                     )}
                                 </div>
+
+                                {/* BIO TEXTAREA */}
                                 <div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-black/70 mb-2 ml-1">bio</p>
-                                    <textarea className="w-full bg-white border-3 border-black rounded-xl p-4 text-black text-sm outline-none h-24 resize-none focus:border-[#F492B7] transition-all placeholder:text-black/40 font-bold" placeholder="tell us about yourself..." value={tempBio} onChange={(e) => setTempBio(e.target.value)} />
+                                    <div className="bg-black border-3 border-black rounded-lg px-3 py-1.5 inline-block mb-3">
+                                        <p className="text-xs font-black uppercase tracking-widest text-white">bio</p>
+                                    </div>
+                                    <div className="relative">
+                                        <textarea
+                                            className="w-full bg-[#FFFEF0] border-4 border-black rounded-xl p-4 text-black text-base font-bold outline-none h-28 resize-none focus:border-[#F492B7] focus:shadow-[4px_4px_0px_0px_#F492B7] transition-all placeholder:text-black/30 placeholder:font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,0.2)]"
+                                            placeholder="tell us your story..."
+                                            value={tempBio}
+                                            onChange={(e) => setTempBio(e.target.value.slice(0, 200))}
+                                        />
+                                        <span className="absolute right-4 bottom-4 text-xs font-black text-black/40">{tempBio.length}/200</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1789,17 +1815,17 @@ function PositionsTable({ activeBets, closedBets, isMyProfile, solPrice }: { act
     const bets = filter === 'active' ? activeBets : closedBets;
 
     return (
-        <div className="bg-white border-4 border-black rounded-3xl overflow-hidden shadow-[12px_12px_0px_0px_#F492B7]">
+        <div className="bg-white border-4 border-black rounded-3xl overflow-hidden shadow-[12px_12px_0px_0px_rgba(0,0,0,0.3)]">
             <div className="flex items-center gap-4 p-6 border-b-4 border-black bg-white">
                 <button
                     onClick={() => setFilter('active')}
-                    className={`px-6 py-2 rounded-xl text-sm font-black lowercase tracking-tight transition-all border-2 ${filter === 'active' ? 'bg-black text-white border-black shadow-[3px_3px_0px_0px_#F492B7]' : 'bg-white text-black border-black/20 hover:border-black'}`}
+                    className={`px-6 py-2 rounded-xl text-sm font-black lowercase tracking-tight transition-all border-2 ${filter === 'active' ? 'bg-black text-white border-black' : 'bg-white text-black border-black/20 hover:border-black'}`}
                 >
                     active
                 </button>
                 <button
                     onClick={() => setFilter('closed')}
-                    className={`px-6 py-2 rounded-xl text-sm font-black lowercase tracking-tight transition-all border-2 ${filter === 'closed' ? 'bg-black text-white border-black shadow-[3px_3px_0px_0px_#F492B7]' : 'bg-white text-black border-black/20 hover:border-black'}`}
+                    className={`px-6 py-2 rounded-xl text-sm font-black lowercase tracking-tight transition-all border-2 ${filter === 'closed' ? 'bg-black text-white border-black' : 'bg-white text-black border-black/20 hover:border-black'}`}
                 >
                     closed
                 </button>

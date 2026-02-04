@@ -1,53 +1,66 @@
 'use client';
 
 import React, { useState } from 'react';
-// import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useDjinnProtocol } from '@/hooks/useDjinnProtocol';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import { compressImage } from '@/lib/utils';
 import { uploadToIPFS } from '@/lib/ipfs';
 import { checkMarketMilestones, createMarket, updateMarketPrice } from '@/lib/supabase-db';
-import Link from 'next/link';
 import AchievementToast from './AchievementToast';
+import { useRouter } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
 
-// --- ICONOS ---
+// --- ICONS ---
 const CloseIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-6 h-6">
         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
     </svg>
 );
-const SparkleIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" />
+
+const TrashIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
     </svg>
 );
-// Make sure to add CheckCircle import or icon
-import { useRouter } from 'next/navigation';
 
 interface CreateMarketModalProps { isOpen: boolean; onClose: () => void; }
+
+// Default Colors
+const COLORS = [
+    "#10B981", // Green (Yes)
+    "#EF4444", // Red (No)
+    "#3B82F6", // Blue
+    "#F59E0B", // Amber
+    "#8B5CF6", // Purple
+    "#EC4899", // Pink
+    "#06B6D4", // Cyan
+    "#14B8A6", // Teal
+];
 
 export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModalProps) {
     const router = useRouter();
     const wallet = useWallet();
     const { publicKey } = wallet;
-    // const { setVisible } = useWalletModal(); // Removed because context is gone
     const { createMarket: createMarketOnChain, isReady: isContractReady } = useDjinnProtocol();
 
     const [isLoading, setIsLoading] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
-    const [newAchievements, setNewAchievements] = useState<any[]>([]); // New State for Medals
+    const [newAchievements, setNewAchievements] = useState<any[]>([]);
     const [marketType, setMarketType] = useState<'binary' | 'multiple'>('binary');
     const [poolName, setPoolName] = useState('');
     const [mainImage, setMainImage] = useState<string | null>(null);
     const [sourceUrl, setSourceUrl] = useState('');
-    const [options, setOptions] = useState([
-        { id: 1, name: 'Yes' },
-        { id: 2, name: 'No' }
+
+    // Updated Option State with Color
+    const [options, setOptions] = useState<{ id: number; name: string; color: string }[]>([
+        { id: 1, name: 'Yes', color: '#10B981' },
+        { id: 2, name: 'No', color: '#EF4444' }
     ]);
-    const [initialBuyAmount, setInitialBuyAmount] = useState('0'); // Default 0 - Protocol Virtual Liquidity Handles Depth
+
+    const [initialBuyAmount, setInitialBuyAmount] = useState('0');
     const [initialBuySide, setInitialBuySide] = useState<'yes' | 'no'>('yes');
-    // Resolution Time Removed - Defaults to 7 Days
+
     const [error, setError] = useState('');
     const [successData, setSuccessData] = useState<{
         txSignature: string;
@@ -60,19 +73,18 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
     // Reset State logic
     React.useEffect(() => {
         if (!isOpen) {
-            // Wait for animation to finish before resetting visual state if needed
             const t = setTimeout(() => {
                 setIsSuccess(false);
                 setIsLoading(false);
                 setPoolName('');
                 setMainImage(null);
                 setMarketType('binary');
-                setOptions([{ id: 1, name: 'Yes' }, { id: 2, name: 'No' }]);
+                setOptions([{ id: 1, name: 'Yes', color: '#10B981' }, { id: 2, name: 'No', color: '#EF4444' }]);
                 setInitialBuyAmount('0');
                 setInitialBuySide('yes');
                 setSuccessData(null);
                 setSourceUrl('');
-            }, 300); // Small delay for fade out
+            }, 300);
             return () => clearTimeout(t);
         }
     }, [isOpen]);
@@ -85,52 +97,54 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
     };
 
     const addOption = () => {
-        setOptions([...options, { id: options.length + 1, name: '' }]);
+        const nextId = options.length + 1;
+        const nextColor = COLORS[(nextId - 1) % COLORS.length];
+        setOptions([...options, { id: nextId, name: '', color: nextColor }]);
     };
 
     const switchMode = (mode: 'binary' | 'multiple') => {
         setMarketType(mode);
-        setOptions(mode === 'binary'
-            ? [{ id: 1, name: 'Yes' }, { id: 2, name: 'No' }]
-            : [{ id: 1, name: '' }, { id: 2, name: '' }, { id: 3, name: '' }]
-        );
+        if (mode === 'binary') {
+            setOptions([
+                { id: 1, name: 'Yes', color: '#10B981' },
+                { id: 2, name: 'No', color: '#EF4444' }
+            ]);
+        } else {
+            setOptions([
+                { id: 1, name: '', color: COLORS[0] },
+                { id: 2, name: '', color: COLORS[1] },
+                { id: 3, name: '', color: COLORS[2] }
+            ]);
+        }
     };
 
     // Auto-detect category from market title using keywords
     const autoDetectCategory = (title: string): string => {
         const lowerTitle = title.toLowerCase();
-
-        // Keyword patterns for each category
         const patterns = {
-            'Crypto': ['bitcoin', 'btc', 'ethereum', 'eth', 'crypto', 'solana', 'sol', 'token', 'nft', 'defi', 'blockchain', 'coin', 'pump', 'airdrop', 'wallet'],
-            'Politics': ['election', 'president', 'trump', 'biden', 'congress', 'senate', 'vote', 'political', 'minister', 'government', 'democrat', 'republican', 'policy'],
-            'Sports': ['world cup', 'nba', 'nfl', 'fifa', 'olympics', 'football', 'soccer', 'basketball', 'baseball', 'tennis', 'match', 'championship', 'league', 'team', 'player'],
-            'Movies': ['movie', 'film', 'oscar', 'box office', 'cinema', 'director', 'actor', 'hollywood', 'netflix', 'streaming', 'premiere'],
-            'Tech': ['apple', 'google', 'microsoft', 'meta', 'amazon', 'tech', 'iphone', 'android', 'software', 'hardware', 'startup', 'launch'],
-            'AI': ['ai', 'artificial intelligence', 'chatgpt', 'openai', 'gpt', 'llm', 'machine learning', 'neural', 'model', 'anthropic', 'claude'],
-            'Science': ['nasa', 'space', 'climate', 'research', 'study', 'scientist', 'discovery', 'experiment', 'quantum', 'physics', 'biology'],
-            'Finance': ['stock', 'market', 'dow', 's&p', 'nasdaq', 'fed', 'interest rate', 'inflation', 'economy', 'gdp', 'bank', 'treasury'],
-            'Gaming': ['gta', 'game', 'gaming', 'xbox', 'playstation', 'nintendo', 'steam', 'esports', 'twitch', 'rockstar'],
-            'Culture': ['music', 'artist', 'album', 'concert', 'festival', 'grammy', 'fashion', 'art', 'culture', 'taylor swift', 'drake']
+            'Crypto': ['bitcoin', 'btc', 'ethereum', 'eth', 'crypto', 'solana', 'sol', 'token', 'nft', 'defi'],
+            'Politics': ['election', 'president', 'trump', 'biden', 'vote', 'political', 'government'],
+            'Sports': ['match', 'game', 'score', 'team', 'player', 'win'],
+            'Movies': ['movie', 'film', 'oscar', 'cinema', 'actor'],
+            'Tech': ['apple', 'google', 'microsoft', 'ai', 'tech', 'startup', 'launch'],
+            'Science': ['space', 'nasa', 'science', 'research'],
+            'Finance': ['stock', 'market', 'price', 'economy'],
+            'Gaming': ['game', 'xbox', 'playstation', 'nintendo'],
+            'Culture': ['music', 'song', 'artist', 'concert']
         };
 
-        // Check each category for keyword matches
         for (const [category, keywords] of Object.entries(patterns)) {
             if (keywords.some(keyword => lowerTitle.includes(keyword))) {
                 return category;
             }
         }
-
-        // Default to Trending if no match
         return 'Trending';
     };
 
-    // --- MAIN LOGIC (Ported from Hero.tsx) ---
+    // --- MAIN LOGIC ---
     const handleCreateMarket = async () => {
-        // ✅ Check if Supabase is configured
         if (!isSupabaseConfigured) {
-            setError('⚠️ Supabase not configured. Check your .env.local file.');
-            console.error('Supabase credentials missing!');
+            setError('⚠️ Supabase not configured.');
             return;
         }
 
@@ -140,40 +154,26 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
         }
         if (!poolName) return alert("Please enter a question");
 
-        // Auto-detect category from title
         const finalCategory = autoDetectCategory(poolName);
-        console.log(`📁 Auto-detected category: ${finalCategory} (from title: "${poolName}")`);
-
         setIsLoading(true);
 
         try {
-            console.log("🚀 Creating market on blockchain...");
-
-            // Generate slug
-            // Reduce seed length to max 32 bytes (Solana Limit)
-            // Timestamp (~8 chars) + Dash (1) = 9 chars.
-            // Max name length = 32 - 9 = 23. We use 20 for safety.
+            console.log("🚀 Creating market...");
             const timestamp = Date.now().toString(36);
             const sanitizedName = poolName.toLowerCase().trim()
                 .replace(/[^\w\s-]/g, '')
                 .replace(/[\s_-]+/g, '-')
                 .replace(/^-+|-+$/g, '')
-                .slice(0, 20); // TRUNCATE HERE
+                .slice(0, 20);
 
             const slug = `${sanitizedName}-${timestamp}`;
-
-            // Calculate Resolution Time (Fixed to 7 Days)
             const SEVEN_DAYS_SECONDS = 7 * 24 * 60 * 60;
             const finalResolutionTime = Math.floor(Date.now() / 1000) + SEVEN_DAYS_SECONDS;
 
-            // Upload image to IPFS (returns short URL, not base64)
-            // This is required because Solana transactions have ~1KB limit
             let finalBanner = "https://arweave.net/djinn-placeholder";
             if (mainImage) {
-                console.log("📷 Uploading image to IPFS...");
                 const compressed = await compressImage(mainImage);
                 finalBanner = await uploadToIPFS(compressed);
-                console.log("✅ IPFS URL:", finalBanner);
             }
 
             let marketPDA = '';
@@ -181,60 +181,49 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
             let yesTokenMint = '';
             let noTokenMint = '';
 
-            // Try to create on blockchain (with timeout to prevent hanging)
             if (isContractReady && wallet && publicKey) {
                 try {
-                    console.log("⛓️ Calling smart contract (60s timeout)...");
-
-                    // Add timeout wrapper to prevent indefinite hanging
                     const timeoutPromise = new Promise((_, reject) =>
-                        setTimeout(() => reject(new Error('Transaction timeout - Devnet is extremely congested. Please wait 1-2 mins and try again.')), 120000)
+                        setTimeout(() => reject(new Error('Timeout - Network congested.')), 120000)
                     );
 
                     const buyAmount = parseFloat(initialBuyAmount) || 0;
-                    const numOutcomes = options.length; // Use number of options (2-6)
+                    const numOutcomes = options.length;
                     const contractPromise = createMarketOnChain(
                         poolName,
-                        poolName, // Using poolName as description for now
+                        poolName,
                         new Date(finalResolutionTime * 1000),
-                        sourceUrl, // Veritas
-                        finalBanner || "https://arweave.net/placeholder", // metadataUri (Metaplex)
-                        numOutcomes, // Send number of outcomes
+                        sourceUrl,
+                        finalBanner || "https://arweave.net/placeholder",
+                        numOutcomes,
                         buyAmount,
-                        initialBuySide === 'yes' ? 0 : 1 // Convert to index
+                        initialBuySide === 'yes' ? 0 : 1
                     );
 
                     const result = await Promise.race([contractPromise, timeoutPromise]) as any;
 
-                    // Ensure we have a signature
-                    if (!result || !result.tx) {
-                        throw new Error("No transaction signature returned");
-                    }
+                    if (!result || !result.tx) throw new Error("No transaction signature returned");
 
                     marketPDA = result.marketPda.toBase58();
                     yesTokenMint = result.yesMintPda.toBase58();
                     noTokenMint = result.noMintPda.toBase58();
                     txSignature = result.tx;
-                    console.log("✅ Blockchain TX:", txSignature);
                 } catch (blockchainError: any) {
                     console.error("⚠️ Blockchain failed:", blockchainError);
-                    alert(`Blockchain Error: ${blockchainError.message}`); // Keep alert for critical failures if toast context not available, or assume alert is fine for now as requested by user to see error. 
-                    // Actually user hates alerts, but effectively we want to STOP.
+                    alert(`Blockchain Error: ${blockchainError.message}`);
                     throw blockchainError;
                 }
             } else {
-                console.log("ℹ️ Contract not ready or wallet not connected, saving locally");
                 marketPDA = `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
                 txSignature = 'local_fallback';
             }
 
-            // SAVE TO SUPABASE (Using centralized helper - throws on error)
             // @ts-ignore
-            const { data: savedMarket } = await createMarket({
+            await createMarket({
                 slug,
                 title: poolName,
                 creator_wallet: publicKey.toString(),
-                category: finalCategory, // Auto-detected category
+                category: finalCategory,
                 end_date: new Date(finalResolutionTime * 1000).toISOString(),
                 market_pda: marketPDA,
                 yes_token_mint: yesTokenMint,
@@ -243,47 +232,35 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                 total_yes_pool: 0,
                 total_no_pool: 0,
                 resolved: false,
-                resolution_source: sourceUrl || 'DERIVED', // Save actual source URL if provided
+                resolution_source: sourceUrl || 'DERIVED',
                 banner_url: finalBanner,
-                icon: finalBanner, // Save icon as well for lists
-                options: options.map(opt => opt.name || '').filter(name => name.trim() !== '') // Save outcome names
+                options: options.map(opt => opt.name || '').filter(name => name.trim() !== ''),
+                outcome_colors: options.map(opt => opt.color) // ✅ Saving colors
             });
 
-            // INITIALIZE MARKET DATA (Price & Volume)
-            // If there was an initial buy, the price isn't exactly 50, but we'll let the indexer or first load correct it.
-            // Importantly, we record the VOLUME from the initial buy.
             const initialVol = parseFloat(initialBuyAmount) || 0;
-            // Value of buy ~ initialVol (ignoring fees for rough volume stats)
-            await updateMarketPrice(slug, 50, initialVol * 200); // *200 as mock USD conversion or just use SOL? updateMarketPrice expects number.
-            // Actually Activity logs USD amount. market_data volume usually USD?
-            // Let's assume volume is USD.
-            // We'll init with 50% price. The on-chain sync will fix the exact price later if it moved.
-
-            // CONSTRUCT MARKET OBJECT FOR OPTIMISTIC UPDATE (BEFORE resetting state!)
-            const savedTitle = poolName; // Save before reset
-            const savedSourceUrl = sourceUrl;
-            const savedBanner = finalBanner;
-            const savedCreator = publicKey.toString();
+            await updateMarketPrice(slug, 50, initialVol * 200);
 
             const optimisticMarket = {
-                id: `local_${Date.now()}`, // Temporary ID
+                id: `local_${Date.now()}`,
                 slug,
-                title: savedTitle,
-                volume: "$0", // Initial volume
+                title: poolName,
+                volume: "$0",
                 chance: 50,
-                icon: savedBanner,
-                category: finalCategory, // Auto-detected category
+                icon: finalBanner,
+                category: finalCategory,
                 createdAt: Date.now(),
                 marketPDA,
                 yesTokenMint,
                 noTokenMint,
                 resolved: false,
                 winningOutcome: null,
-                resolutionSource: savedSourceUrl || 'DERIVED',
-                creator_wallet: savedCreator
+                resolutionSource: sourceUrl || 'DERIVED',
+                creator_wallet: publicKey.toString(),
+                options: options.map(o => o.name),
+                outcome_colors: options.map(o => o.color)
             };
 
-            // SUCCESS - Store data and show animation
             setSuccessData({
                 txSignature,
                 marketPda: marketPDA,
@@ -293,13 +270,12 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
             });
             setIsSuccess(true);
 
-            // RESET FORM (after saving data)
+            // Cleanup
             setPoolName('');
             setMainImage(null);
             setMarketType('binary');
-            setOptions([{ id: 1, name: '' }, { id: 2, name: '' }]);
+            setOptions([{ id: 1, name: 'Yes', color: '#10B981' }, { id: 2, name: 'No', color: '#EF4444' }]);
 
-            // FORCE SAVE TO LOCALSTORAGE (Backup)
             try {
                 const currentLocal = JSON.parse(localStorage.getItem('djinn_created_markets') || '[]');
                 localStorage.setItem('djinn_created_markets', JSON.stringify([optimisticMarket, ...currentLocal]));
@@ -307,53 +283,33 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                 console.warn("LocalStorage save failed", e);
             }
 
-            // SEND TO DRACO/CERBERUS API (separate try/catch for visibility)
             try {
-                console.log("🐉 Sending market to DRACO API...", { title: savedTitle, source: savedSourceUrl, image: savedBanner });
                 const dracoRes = await fetch('/api/markets', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         id: optimisticMarket.id,
-                        title: savedTitle,
-                        sourceUrl: savedSourceUrl,
-                        imageUrl: savedBanner,
-                        creator: savedCreator,
+                        title: poolName,
+                        sourceUrl: sourceUrl,
+                        imageUrl: finalBanner,
+                        creator: publicKey.toString(),
                         marketPda: marketPDA,
                         slug: slug
                     })
                 });
-                const dracoData = await dracoRes.json();
-                console.log("🐉 DRACO Response:", dracoData);
-            } catch (dracoErr) {
-                console.error("🐉 DRACO API failed:", dracoErr);
-            }
+            } catch (e) { }
 
-            // DISPARAR EL EVENTO CON DATA
             window.dispatchEvent(new Event('storage'));
             window.dispatchEvent(new CustomEvent('market-created', { detail: optimisticMarket }));
 
-            // DON'T CLOSE - Let user see success modal and click buttons
-            // User will click "Go to Market" or "Create Another" in the success modal
-
-            // Trigger Milestones (background)
             import('@/lib/supabase-db').then(async mod => {
                 try {
                     const achievements = await mod.checkMarketMilestones(publicKey.toString());
                     if (achievements && achievements.length > 0) {
-                        // Inject Custom Image for Genesis Medal (since DB might have placeholder)
                         const withImages = achievements.map(a => {
-                            if (a.code === 'FIRST_MARKET') {
-                                return { ...a, name: 'Genesis Creator', image_url: 'file:///Users/benjaminfuentes/.gemini/antigravity/brain/232bb7b6-f65f-453f-a039-95e5bb425672/genesis_medal.png' };
-                                // NOTE: File URL won't work in browser. I need to move it to public folder or use relative path?
-                                // I cannot move files to public easily. I should rely on the DB OR Use a known placeholder I can control.
-                                // Actually, I can use the tool `run_command` to move the file to public!
-                            }
+                            if (a.code === 'FIRST_MARKET') return { ...a, name: 'Genesis Creator', image_url: 'https://arweave.net/placeholder-medal' };
                             return a;
                         });
-                        // Wait, I can't leave that file path. 
-                        // I will use a placeholder URL and rely on moving the file in next step.
-                        // Or better: map it to `/medals/genesis_medal.png` and I will put the file there.
                         setNewAchievements(withImages);
                     }
                 } catch (e) { console.error("Milestone check failed", e); }
@@ -361,19 +317,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
 
         } catch (error: any) {
             console.error("❌ Error:", error);
-            if (typeof error === 'object' && error !== null) {
-                console.error("❌ Error details:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
-                if (error.logs) console.error("📜 Blockchain Logs:", error.logs);
-            }
-
-            // Better error parsing
-            let diffMsg = error.message || 'Unknown error';
-            if (diffMsg.includes('timeout')) {
-                diffMsg = 'Devnet is slow. Please try again or check your wallet.';
-            } else if (diffMsg.includes('User rejected')) {
-                diffMsg = 'Transaction cancelled by user.';
-            }
-            setError(diffMsg);
+            setError(error.message || 'Unknown error');
         } finally {
             setIsLoading(false);
         }
@@ -382,149 +326,158 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/95 backdrop-blur-xl" onClick={() => !isLoading && onClose()} />
-            <div className={`relative bg-[#0B0E14] border border-white/10 rounded-[2rem] w-full overflow-hidden shadow-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200 transition-all ${isSuccess ? 'max-w-sm text-center' : 'max-w-2xl'}`}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 font-sans animate-in fade-in duration-300">
+            {/* BACKDROP: Clean semi-transparent black for high focus */}
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !isLoading && onClose()} />
 
+            {/* NEO-BRUTALIST CONTAINER */}
+            <div className={`
+                relative w-full overflow-hidden transition-all duration-300
+                bg-white border-4 border-black rounded-3xl p-0
+                shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]
+                ${isSuccess ? 'max-w-md' : 'max-w-2xl max-h-[90vh] flex flex-col'}
+            `}>
+
+                {/* --- SUCCESS MODE --- */}
                 {isSuccess && successData ? (
-                    <div className="p-8 md:p-12 text-center flex flex-col items-center justify-center space-y-6">
-                        {/* Pink Checkmark - Visible */}
-                        <div className="relative">
-                            <div className="w-24 h-24 bg-[#F492B7] rounded-full flex items-center justify-center shadow-[0_0_60px_rgba(244,146,183,0.5)]">
-                                <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                </svg>
-                            </div>
-                            <div className="absolute -inset-3 bg-[#F492B7]/20 rounded-full blur-xl -z-10"></div>
-                        </div>
-
-                        {/* Title with Djinn styling */}
-                        <div>
-                            <h2 className="text-3xl md:text-4xl font-black">
-                                <span className="text-[#F492B7]">M</span>arket <span className="text-[#F492B7]">C</span>reated!
-                            </h2>
-                            <p className="text-gray-400 mt-2">Your prediction market is live on Solana</p>
-                        </div>
-
-                        {/* Token Addresses */}
-                        <div className="w-full bg-white/5 rounded-2xl p-4 space-y-3 text-left text-xs font-mono">
-                            <div className="flex justify-between items-center">
-                                <span className="text-gray-500">Market PDA</span>
-                                <span className="text-[#F492B7] truncate max-w-[180px]">{successData.marketPda.slice(0, 8)}...{successData.marketPda.slice(-6)}</span>
-                            </div>
-                            <div className="flex justify-between items-center border-t border-white/5 pt-3">
-                                <span className="text-gray-500">Asset Model</span>
-                                <span className="text-white">Virtual Shares ⚡</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-gray-500">Liquidity</span>
-                                <span className="text-white">Shared Vault 🏦</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-gray-500">Outcomes</span>
-                                <span className="text-[#F492B7]">{options.length} (YES/NO/...)</span>
-                            </div>
-                        </div>
-
-                        {/* Solscan Link - Only show for real transactions */}
-                        {successData.txSignature && !successData.txSignature.startsWith('local') && (
-                            <button
-                                onClick={() => window.open(`https://solscan.io/tx/${successData.txSignature}?cluster=devnet`, '_blank')}
-                                className="flex items-center gap-2 text-[#F492B7] hover:text-white transition-colors underline underline-offset-4 cursor-pointer bg-transparent border-none"
-                            >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
-                                </svg>
-                                View on Solscan
+                    <div className="p-8 text-center flex flex-col items-center">
+                        {/* Header: Title + Close */}
+                        <div className="w-full flex justify-end mb-4">
+                            <button onClick={onClose} className="bg-white border-2 border-black p-2 rounded-full hover:bg-gray-100 hover:scale-105 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:shadow-none transition-all">
+                                <CloseIcon />
                             </button>
-                        )}
+                        </div>
 
-                        {/* Action Button - Solid Pink, No Pulse, No Emoji */}
+                        {/* Big Icon */}
+                        <div className="mb-6 relative">
+                            <div className="w-24 h-24 bg-[#10B981] border-4 border-black rounded-full flex items-center justify-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] animate-in zoom-in spin-in-12 duration-500">
+                                <svg className="w-12 h-12 text-black" fill="none" stroke="currentColor" strokeWidth="4" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                </svg>
+                            </div>
+                        </div>
+
+                        <h2 className="text-4xl font-black text-black lowercase mb-2">market created!</h2>
+                        <p className="text-gray-600 font-bold lowercase mb-8">you cooked. it's live on solana.</p>
+
+                        {/* Receipt Card */}
+                        <div className="w-full bg-[#f8f9fa] border-2 border-dashed border-black rounded-xl p-6 mb-8 text-left font-mono text-sm relative">
+                            <div className="flex justify-between border-b-2 border-dashed border-gray-300 pb-2 mb-2">
+                                <span className="text-gray-500">MARKET_PDA</span>
+                                <span className="text-black font-bold">{successData.marketPda.slice(0, 4)}...{successData.marketPda.slice(-4)}</span>
+                            </div>
+                            <div className="flex justify-between border-b-2 border-dashed border-gray-300 pb-2 mb-2">
+                                <span className="text-gray-500">ASSET_TYPE</span>
+                                <span className="text-black font-bold">VIRTUAL_SHARES</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-gray-500">OUTCOMES</span>
+                                <span className="text-black font-bold">{options.length}</span>
+                            </div>
+                        </div>
+
+                        {/* Action Primary */}
                         <button
-                            onClick={() => {
-                                onClose();
-                                router.push(`/market/${successData.slug}`);
-                            }}
-                            className="w-full py-4 bg-[#F492B7] text-white font-black text-lg rounded-2xl hover:brightness-110 transition-all"
+                            onClick={() => { onClose(); router.push(`/market/${successData.slug}`); }}
+                            className="w-full py-4 bg-[#F492B7] border-2 border-black rounded-xl font-black text-xl uppercase text-black hover:bg-[#ff85b0] hover:-translate-y-1 hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-0 active:shadow-none transition-all mb-3 flex items-center justify-center gap-2"
                         >
-                            Go to Market
+                            Open Market 🚀
                         </button>
                     </div>
                 ) : (
+                    /* --- FORM MODE --- */
                     <>
-                        <button onClick={onClose} disabled={isLoading} className="absolute top-6 right-6 md:top-8 md:right-8 text-gray-500 hover:text-white transition-colors disabled:opacity-50 z-10">
-                            <CloseIcon />
-                        </button>
+                        {/* Header */}
+                        <div className="p-6 md:p-8 pb-4 flex justify-between items-center bg-white border-b-4 border-black z-20">
+                            <h1 className="text-3xl md:text-4xl font-black lowercase tracking-tight text-black leading-none">
+                                create<br />market
+                            </h1>
 
-                        <div className="p-6 md:p-12 text-white">
-                            <h2 className="text-3xl font-black mb-6 text-center">Create New Market</h2>
+                            {/* CLOSE BUTTON - Always Visible, Neo-Brutalist */}
+                            <button
+                                onClick={onClose}
+                                className="group bg-red-400 border-2 border-black p-2.5 rounded-full hover:bg-red-500 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:shadow-none"
+                            >
+                                <CloseIcon />
+                            </button>
+                        </div>
 
-                            <div className="flex gap-2 mb-8 bg-white/5 p-1 rounded-xl w-fit mx-auto">
-                                <button onClick={() => switchMode('binary')} className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${marketType === 'binary' ? 'bg-[#F492B7] text-black' : 'text-gray-500 hover:text-white'}`}>Binary</button>
-                                <button onClick={() => switchMode('multiple')} className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${marketType === 'multiple' ? 'bg-[#F492B7] text-black' : 'text-gray-500 hover:text-white'}`}>Multiple</button>
+                        <div className="p-6 md:p-8 overflow-y-auto custom-scrollbar flex-1 bg-white">
+                            {/* Mode Switcher */}
+                            <div className="flex gap-4 mb-8">
+                                <button onClick={() => switchMode('binary')} className={`flex-1 py-3 border-2 border-black rounded-xl font-black uppercase text-sm transition-all ${marketType === 'binary' ? 'bg-[#F492B7] text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-y-1' : 'bg-white text-gray-400 hover:text-black hover:bg-gray-50'}`}>
+                                    Binary
+                                </button>
+                                <button onClick={() => switchMode('multiple')} className={`flex-1 py-3 border-2 border-black rounded-xl font-black uppercase text-sm transition-all ${marketType === 'multiple' ? 'bg-[#F492B7] text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-y-1' : 'bg-white text-gray-400 hover:text-black hover:bg-gray-50'}`}>
+                                    Multiple
+                                </button>
                             </div>
 
-                            <div className="space-y-6">
-                                <div className="flex justify-center">
-                                    <div className="w-full max-w-sm">
-                                        <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest block mb-2 text-center">Upload Image</label>
-                                        <div className="w-full aspect-square rounded-2xl border-2 border-dashed border-white/10 bg-white/5 flex items-center justify-center cursor-pointer overflow-hidden hover:border-[#F492B7] transition-all"
-                                            onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.onchange = (e: any) => handleImageUpload(e.target.files[0]); input.click(); }}>
+                            <div className="space-y-8">
+                                {/* Image & Title */}
+                                <div className="flex flex-col md:flex-row gap-6">
+                                    <div className="w-32 shrink-0">
+                                        <label className="text-black font-black lowercase mb-2 block tracking-tight">Icon</label>
+                                        <div
+                                            className="w-32 h-32 bg-white border-2 border-black border-dashed rounded-xl flex items-center justify-center cursor-pointer hover:bg-gray-50 hover:border-solid transition-all overflow-hidden relative group"
+                                            onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.onchange = (e: any) => handleImageUpload(e.target.files[0]); input.click(); }}
+                                        >
                                             {mainImage ? (
                                                 <img src={mainImage} className="w-full h-full object-cover" />
                                             ) : (
-                                                <div className="text-center">
-                                                    <div className="text-4xl mb-2">🖼️</div>
-                                                    <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Click to Upload</span>
-                                                    <p className="text-[10px] text-gray-600 mt-1">JPG, PNG, WEBP</p>
+                                                <div className="text-center p-2 opacity-50 group-hover:opacity-100 transition-opacity">
+                                                    <div className="text-3xl mb-1">📷</div>
                                                 </div>
                                             )}
                                         </div>
                                     </div>
+                                    <div className="flex-1">
+                                        <label className="text-black font-black lowercase mb-2 block tracking-tight">Question</label>
+                                        <textarea
+                                            placeholder="what will happen?"
+                                            className="w-full h-32 bg-white border-2 border-black rounded-xl p-4 text-xl font-bold text-black outline-none focus:shadow-[4px_4px_0px_0px_#F492B7] transition-all resize-none placeholder:text-gray-300"
+                                            value={poolName}
+                                            onChange={(e) => setPoolName(e.target.value)}
+                                        />
+                                    </div>
                                 </div>
 
-                                <input type="text" placeholder="Enter question..." className="w-full bg-black/40 border border-white/10 rounded-xl p-5 text-lg font-bold outline-none focus:border-[#F492B7]" value={poolName} onChange={(e) => setPoolName(e.target.value)} />
-
-                                { /* LIQUIDITY DEPTH REMOVED - Protocol Virtual Liquidity Handles This */}
-
-                                { /* RESOLUTION TIME INPUT REMOVED - Defaulting to 7 Days internally */}
-
-                                <div className="space-y-2">
-                                    <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest block">Source of Truth (URL)</label>
+                                {/* Source URL */}
+                                <div>
+                                    <label className="text-black font-black lowercase mb-2 block tracking-tight">resolution source</label>
                                     <input
                                         type="text"
-                                        placeholder="https://official-source.com/news/123"
-                                        className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-sm font-medium outline-none focus:border-[#F492B7] text-gray-300"
+                                        placeholder="https://x.com/..."
+                                        className="w-full bg-white border-2 border-black rounded-xl py-4 px-4 font-bold text-black outline-none focus:shadow-[4px_4px_0px_0px_#F492B7] transition-all placeholder:text-gray-300"
                                         value={sourceUrl}
                                         onChange={(e) => setSourceUrl(e.target.value)}
                                     />
-                                    <p className="text-[10px] text-gray-600">Protocol Veritas: If this link fails verification, the market will be invalidated.</p>
+                                    <p className="text-xs font-bold text-gray-500 mt-2 lowercase">the oracle dogs use this to verify the outcome</p>
                                 </div>
 
-                                <div className="space-y-3">
-
-
-                                    <div className="flex justify-between items-center">
-                                        <label className="text-gray-500 text-[10px] font-black uppercase tracking-widest">Outcomes</label>
+                                {/* Outcomes with Custom Color Menu */}
+                                <div>
+                                    <div className="flex justify-between items-center mb-4">
+                                        <label className="text-black font-black lowercase tracking-tight">Outcomes & Colors</label>
                                         {marketType === 'multiple' && (
-                                            <button onClick={addOption} className="text-[#F492B7] text-[10px] font-black uppercase tracking-widest hover:text-[#ff6fb7]">+ Add Outcome</button>
+                                            <button onClick={addOption} className="text-black bg-[#FFA07A] border-2 border-black px-3 py-1.5 rounded-lg text-xs font-black uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-1px] active:translate-y-0 active:shadow-none transition-all">
+                                                + Add
+                                            </button>
                                         )}
                                     </div>
 
-                                    {/* ALWAYS SHOW INPUTS (User wants to see/edit them) */}
-                                    <div className="max-h-48 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
+                                    <div className="space-y-3">
                                         {options.map((option, index) => (
-                                            <div key={option.id} className="bg-white/5 p-4 rounded-xl border border-white/10 flex items-center gap-3">
-                                                {/* Number or Color dot */}
-                                                <div className={`w-2 h-2 rounded-full shrink-0 ${index === 0 ? 'bg-[#10B981]' :
-                                                    index === 1 ? 'bg-[#F492B7]' :
-                                                        'bg-gray-500'
-                                                    }`} />
+                                            <div key={option.id} className="flex items-center gap-3 animate-in fade-in slide-in-from-left-4 duration-300">
+                                                <div className="w-10 h-10 rounded-xl border-2 border-black bg-white flex items-center justify-center font-black text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] shrink-0">
+                                                    {index + 1}
+                                                </div>
 
+                                                {/* Outcome Name Input */}
                                                 <input
                                                     type="text"
-                                                    placeholder={`Outcome ${index + 1}...`}
-                                                    className="w-full bg-transparent border-none text-white font-bold outline-none text-sm"
+                                                    placeholder={`Option ${index + 1}`}
+                                                    className="flex-1 bg-white border-2 border-black rounded-xl py-3 px-4 font-bold text-black outline-none focus:shadow-[2px_2px_0px_0px_#F492B7] transition-all placeholder:text-gray-300"
                                                     value={option.name}
                                                     onChange={(e) => {
                                                         const newOpts = [...options];
@@ -532,56 +485,78 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                                                         setOptions(newOpts);
                                                     }}
                                                 />
+
+                                                {/* Color Picker: Neo-Brutalist Mini Menu */}
+                                                <div className="relative group/picker">
+                                                    {/* The Trigger Swatch */}
+                                                    <div
+                                                        className="w-12 h-12 rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] shrink-0 cursor-pointer hover:-translate-y-0.5 transition-transform"
+                                                        style={{ backgroundColor: option.color }}
+                                                    >
+                                                    </div>
+
+                                                    {/* The Mini Menu (Tooltip/Popover) */}
+                                                    <div className="absolute bottom-full right-0 mb-2 hidden group-hover/picker:flex flex-wrap gap-1 p-2 bg-white border-2 border-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] w-40 z-50">
+                                                        {COLORS.map((c) => (
+                                                            <button
+                                                                key={c}
+                                                                className="w-8 h-8 rounded-lg border-2 border-black hover:scale-110 transition-transform"
+                                                                style={{ backgroundColor: c }}
+                                                                onClick={() => {
+                                                                    const newOpts = [...options];
+                                                                    newOpts[index].color = c;
+                                                                    setOptions(newOpts);
+                                                                }}
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+
+                                                {/* Delete Button - ALWAYS VISIBLE */}
+                                                {marketType === 'multiple' && options.length > 2 && (
+                                                    <button
+                                                        onClick={() => setOptions(options.filter((_, i) => i !== index))}
+                                                        className="w-10 h-10 flex items-center justify-center text-black bg-red-100 border-2 border-black rounded-xl hover:bg-red-200 transition-colors shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:shadow-none"
+                                                    >
+                                                        <TrashIcon />
+                                                    </button>
+                                                )}
                                             </div>
                                         ))}
                                     </div>
                                 </div>
 
-
-                                <button
-                                    onClick={handleCreateMarket}
-                                    disabled={isLoading}
-                                    className="w-full bg-[#F492B7] text-black py-5 rounded-xl font-black text-lg uppercase shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                >
-                                    {isLoading ? '⏳ CREATING ON SOLANA...' : 'CREATE MARKET'}
-                                </button>
-
-                                {error && <ErrorMessage error={error} />}
+                                {/* Error */}
+                                {error && (
+                                    <div className="bg-red-50 border-2 border-red-500 text-red-600 font-bold p-4 rounded-xl">
+                                        {error}
+                                    </div>
+                                )}
                             </div>
+                        </div>
+
+                        {/* Footer / Submit */}
+                        <div className="p-6 md:p-8 pt-4 bg-white border-t-4 border-black z-20">
+                            <button
+                                onClick={handleCreateMarket}
+                                disabled={isLoading}
+                                className="w-full py-5 bg-[#10B981] border-2 border-black rounded-xl font-black text-2xl uppercase text-black hover:bg-[#34d399] hover:-translate-y-1 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-y-0 active:shadow-none disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                            >
+                                {isLoading ? (
+                                    <>
+                                        <Loader2 className="animate-spin w-6 h-6" /> minting...
+                                    </>
+                                ) : (
+                                    'Create Market'
+                                )}
+                            </button>
                         </div>
                     </>
                 )}
             </div>
 
-            {/* ACHIEVEMENT TOAST LAYER */}
             <AchievementToast achievements={newAchievements} onClose={() => setNewAchievements([])} />
-        </div>
-    );
-}
-
-function ErrorMessage({ error }: { error: string }) {
-    const isTimeout = error.toLowerCase().includes('timeout') || error.toLowerCase().includes('slow');
-    const isRejection = error.includes('cancelled');
-
-    return (
-        <div className="bg-red-900/20 border border-red-500 rounded-xl p-4 mt-4 animate-in fade-in slide-in-from-bottom-2">
-            <p className="text-red-400 font-bold flex items-center gap-2">
-                {isTimeout && '⏱️ Transaction Timeout'}
-                {isRejection && '🚫 Transaction Cancelled'}
-                {!isTimeout && !isRejection && '❌ Error'}
-            </p>
-            <p className="text-red-300 text-xs mt-1 font-mono">{error}</p>
-
-            {isTimeout && (
-                <div className="mt-3 text-[10px] text-gray-400 bg-black/20 p-2 rounded">
-                    <p className="font-bold mb-1">Devnet Tips:</p>
-                    <ul className="list-disc ml-4 space-y-1">
-                        <li>Wait 30s and try again</li>
-                        <li>Check your wallet has SOL (~0.01)</li>
-                        <li>Ensure you are connected to Devnet</li>
-                    </ul>
-                </div>
-            )}
         </div>
     );
 }

@@ -13,6 +13,7 @@ export interface Outcome {
     image?: string; // Optional image for the outcome
     mcapSOL?: number;
     supply?: number;
+    color?: string; // Custom color for the outcome
 }
 
 interface OutcomeListProps {
@@ -46,7 +47,7 @@ export default function OutcomeList({ outcomes, selectedId, onSelect, onBuyClick
 
             <div className="space-y-2">
                 {outcomes.map((outcome, idx) => {
-                    const color = OUTCOME_COLORS[idx % OUTCOME_COLORS.length];
+                    const color = outcome.color || OUTCOME_COLORS[idx % OUTCOME_COLORS.length];
                     const isSelected = selectedId === outcome.id;
 
                     return (

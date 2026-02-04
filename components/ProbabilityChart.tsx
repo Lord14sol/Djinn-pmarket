@@ -52,10 +52,10 @@ const CustomTooltip = React.memo(({ active, payload, label }: any) => {
     }
 
     return (
-        <div className="bg-zinc-950/95 backdrop-blur-xl rounded-xl p-4 border border-white/20 pointer-events-none shadow-2xl min-w-[140px]">
+        <div className="bg-white rounded-xl p-4 border-4 border-black pointer-events-none shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] min-w-[140px]">
             {formattedDate && (
-                <div className="text-center mb-3 pb-2 border-b border-white/10">
-                    <span className="text-[11px] font-bold text-white uppercase tracking-wider">
+                <div className="text-center mb-3 pb-2 border-b-2 border-black">
+                    <span className="text-[11px] font-black text-black uppercase tracking-wider">
                         {formattedDate}
                     </span>
                 </div>
@@ -66,7 +66,7 @@ const CustomTooltip = React.memo(({ active, payload, label }: any) => {
                     .sort((a: any, b: any) => (b.value ?? 0) - (a.value ?? 0))
                     .map((p: any) => (
                         <div key={p.name} className="flex flex-col">
-                            <span className="text-[10px] font-bold uppercase tracking-wider mb-0.5" style={{ color: p.stroke }}>
+                            <span className="text-[10px] font-black uppercase tracking-wider mb-0.5" style={{ color: p.stroke }}>
                                 {p.name}
                             </span>
                             <span
@@ -447,16 +447,14 @@ export default React.memo(function ProbabilityChart({
 
     return (
         <div className="w-full h-full flex flex-col relative group">
-            {/* GLASSMORPHISM BACKGROUND */}
-            <div className="absolute inset-0 bg-black/30 backdrop-blur-md rounded-2xl border border-white/10 shadow-2xl shadow-black/50" />
-            <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-white/5 rounded-2xl pointer-events-none" />
+            {/* FULLY TRANSPARENT - No background, shows stars */}
 
             {/* BRAND HEADER */}
-            <div className="absolute top-2 right-10 z-20 flex items-center gap-0 pointer-events-none">
+            <div className="absolute top-4 right-4 z-20 flex items-center gap-0 pointer-events-none">
                 <div className="relative w-12 h-12 -mr-1.5">
                     <Image src="/djinn-logo.png?v=3" alt="Djinn Logo" fill className="object-contain" priority unoptimized />
                 </div>
-                <span className="text-2xl text-white mt-0.5 relative z-10" style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}>
+                <span className="text-2xl text-white mt-0.5 relative z-10 drop-shadow-lg" style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}>
                     Djinn
                 </span>
             </div>
@@ -464,23 +462,23 @@ export default React.memo(function ProbabilityChart({
             {/* VOLUME */}
             <div className="absolute bottom-2 left-4 z-30 pointer-events-none">
                 {volume && (
-                    <span className="text-sm font-medium text-zinc-100 font-mono tracking-tight shadow-black drop-shadow-md">
-                        {volume} <span className="text-zinc-500 ml-0.5">vol</span>
+                    <span className="bg-white/10 backdrop-blur-md border-2 border-white/30 px-3 py-1.5 rounded-lg text-sm font-black text-white font-mono tracking-tight uppercase">
+                        {volume} <span className="text-white/70 ml-0.5">vol</span>
                     </span>
                 )}
             </div>
 
-            {/* TIMEFRAMES - OPTIMIZED: Memoized buttons */}
-            <div className="absolute bottom-2 right-4 z-30 flex gap-0.5 pointer-events-auto">
+            {/* TIMEFRAMES - TRANSPARENT */}
+            <div className="absolute bottom-2 right-4 z-30 flex gap-1 pointer-events-auto">
                 {['1m', '5m', '15m', '1H', '6H', '1D', '1W', '1M', 'ALL'].map((tf) => (
                     <button
                         key={tf}
                         onClick={() => setTimeframe(tf as any)}
                         className={cn(
-                            "px-2 py-1 rounded-md text-[10px] font-black transition-all whitespace-nowrap backdrop-blur-sm cursor-pointer border border-transparent hover:border-white/20",
+                            "px-2.5 py-1.5 rounded-lg text-[10px] font-black transition-all whitespace-nowrap cursor-pointer border-2 backdrop-blur-md",
                             timeframe === tf
-                                ? "bg-white text-black shadow-lg shadow-white/10 scale-105"
-                                : "text-zinc-400 hover:text-white hover:bg-white/10"
+                                ? "bg-white text-black border-white"
+                                : "bg-white/10 text-white border-white/30 hover:bg-white/20 hover:border-white/50"
                         )}
                     >
                         {tf}
@@ -488,25 +486,25 @@ export default React.memo(function ProbabilityChart({
                 ))}
             </div>
 
-            <div className="absolute top-4 left-4 z-20 flex flex-wrap items-center gap-4 pointer-events-none">
+            <div className="absolute top-4 left-4 z-20 flex flex-wrap items-center gap-3 pointer-events-none">
                 {outcomeKeys.map((title, idx) => {
                     const color = getOutcomeColor(title, idx);
                     const val = displayProbs[title] ?? 0;
                     return (
-                        <div key={title} className="flex items-center gap-2 bg-zinc-950/40 backdrop-blur-sm px-2.5 py-1 rounded-lg border border-zinc-800/30">
+                        <div key={title} className="flex items-center gap-2 bg-white/10 backdrop-blur-md border-2 border-white/30 px-3 py-1.5 rounded-lg">
                             <div className="flex items-center gap-1.5">
-                                <div className="w-2 h-2 rounded-full ring-1 ring-white/20" style={{ backgroundColor: color }} />
-                                <span className="text-xs font-bold text-zinc-400 uppercase tracking-wide">{title}</span>
+                                <div className="w-3 h-3 rounded-full border-2 border-white" style={{ backgroundColor: color }} />
+                                <span className="text-xs font-black text-white uppercase tracking-wider">{title}</span>
                             </div>
                             <span className="text-lg font-black tabular-nums tracking-tight leading-none" style={{ color: color }}>
-                                {val.toFixed(0)}<span className="text-[10px] align-top opacity-50 ml-0.5">%</span>
+                                {val.toFixed(0)}<span className="text-[10px] align-top opacity-70 ml-0.5 text-white">%</span>
                             </span>
                         </div>
                     );
                 })}
             </div>
 
-            {/* BUBBLES - OPTIMIZED: Removed excessive animations */}
+            {/* BUBBLES - TRANSPARENT */}
             <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden">
                 <AnimatePresence mode="popLayout">
                     {bubbles.slice(0, 5).map(b => ( // Limit to 5 bubbles max
@@ -520,8 +518,8 @@ export default React.memo(function ProbabilityChart({
                             className="absolute flex items-center gap-2"
                         >
                             <div
-                                className="px-3 py-1 rounded-full bg-zinc-900/90 border text-xs font-bold shadow-xl backdrop-blur-md whitespace-nowrap"
-                                style={{ color: b.color, borderColor: b.color }}
+                                className="px-3 py-1.5 rounded-lg bg-white/10 backdrop-blur-md border-2 border-white/30 text-xs font-black whitespace-nowrap"
+                                style={{ color: b.color }}
                             >
                                 {b.text}
                             </div>
@@ -542,9 +540,9 @@ export default React.memo(function ProbabilityChart({
                         <CartesianGrid
                             vertical={false}
                             stroke="#ffffff"
-                            strokeOpacity={0.15}
+                            strokeOpacity={0.3}
                             strokeWidth={1}
-                            strokeDasharray="2 4"
+                            strokeDasharray="4 4"
                         />
                         <XAxis
                             dataKey="time"
@@ -568,7 +566,7 @@ export default React.memo(function ProbabilityChart({
                             tickFormatter={(val) => `${val}%`}
                             width={35}
                         />
-                        <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#52525b', strokeWidth: 1, strokeDasharray: '5 5' }} />
+                        <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#ffffff', strokeWidth: 2, strokeDasharray: '5 5' }} />
                         {outcomeKeys.map((title, idx) => {
                             const color = getOutcomeColor(title, idx);
                             return (

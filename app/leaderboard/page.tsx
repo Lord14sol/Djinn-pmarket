@@ -252,31 +252,33 @@ export default function LeaderboardPage() {
                 {/* LEFT COLUMN: LEADERBOARD Table */}
                 <div className="lg:col-span-7">
 
-                    {/* Page Title - FULL BLOCK NEO-BRUTALISM */}
-                    <div className="mb-10 inline-block">
-                        <h1 className="text-6xl font-black tracking-tighter text-black bg-[#F492B7] px-8 py-2 border-4 border-black shadow-[8px_8px_0px_0px_#FFF] cursor-default lowercase select-none">
-                            leaderboard
-                        </h1>
+                    {/* Page Title - RESTORED MATCHING SIDEBAR STYLE */}
+                    <div className="bg-[#F492B7] border-4 border-black rounded-3xl p-6 mb-8 shadow-[8px_8px_0px_0px_#FFF] flex justify-between items-center">
+                        <h1 className="text-4xl font-black text-black lowercase tracking-tight">leaderboard</h1>
+                        <div className="bg-white border-2 border-black px-3 py-1 rounded-full text-xs font-black uppercase text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                            Global
+                        </div>
                     </div>
 
+
                     {/* FILTERS CARD - PREMIUM NEO-BRUTALISM */}
-                    <div className="bg-[#121212] border-2 border-white/20 rounded-xl p-3 mb-8 flex flex-wrap gap-3 backdrop-blur-md shadow-lg w-fit">
+                    <div className="bg-[#121212] border-2 border-white/20 rounded-full p-2 mb-8 flex flex-wrap gap-2 backdrop-blur-md shadow-lg w-fit">
                         {(['daily', 'weekly', 'monthly', 'all_time'] as const).map((p) => (
                             <button
                                 key={p}
                                 onClick={() => setPeriod(p)}
-                                className={`px-6 py-2 rounded-lg text-sm font-black lowercase transition-all border-2 relative overflow-hidden group ${period === p
+                                className={`px-6 py-2 rounded-full text-sm font-black lowercase transition-all border-2 relative overflow-hidden group ${period === p
                                     ? 'bg-white border-white text-black shadow-[4px_4px_0px_0px_#F492B7] -translate-y-1'
                                     : 'bg-transparent border-white/30 text-gray-400 hover:text-white hover:border-white hover:bg-white/5'
                                     }`}
-                            >
+                            >y q
                                 <span className="relative z-10">{p.replace('_', ' ')}</span>
                             </button>
                         ))}
                     </div>
 
                     {/* TABLE CONTAINER */}
-                    <div className="bg-white border-4 border-black rounded-[2.5rem] overflow-hidden shadow-[12px_12px_0px_0px_#F492B7]">
+                    <div className="bg-white border-4 border-black rounded-[3rem] overflow-hidden">
                         {/* HEADER */}
                         <div className="flex items-center justify-between px-8 py-4 bg-black text-white border-b-4 border-black">
                             <span className="text-sm font-black uppercase tracking-widest text-[#F492B7]">Trader</span>
@@ -296,7 +298,7 @@ export default function LeaderboardPage() {
                                 >
                                     <div className="flex items-center gap-5">
                                         {/* Rank Badge */}
-                                        <div className={`w-10 h-10 flex items-center justify-center rounded-lg border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] font-black text-sm shrink-0 transform -rotate-2 ${trader.rank === 1 ? 'bg-[#FFD700] text-black' :
+                                        <div className={`w-10 h-10 flex items-center justify-center rounded-2xl border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] font-black text-sm shrink-0 transform -rotate-2 ${trader.rank === 1 ? 'bg-[#FFD700] text-black' :
                                             trader.rank === 2 ? 'bg-[#C0C0C0] text-black' :
                                                 trader.rank === 3 ? 'bg-[#CD7F32] text-black' :
                                                     'bg-white text-black'
@@ -353,12 +355,12 @@ export default function LeaderboardPage() {
                         {/* Title Card - PINK and STRAIGHT */}
                         <div className="bg-[#F492B7] border-4 border-black rounded-3xl p-6 mb-6 shadow-[8px_8px_0px_0px_#FFF] flex justify-between items-center">
                             <h2 className="text-3xl font-black text-black lowercase tracking-tight">biggest wins</h2>
-                            <div className="bg-white border-2 border-black px-3 py-1 rounded-full text-xs font-black uppercase text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                            <div className="bg-wshite border-2 border-black px-3 py-1 rounded-full text-xs font-black uppercase text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                                 All Time
                             </div>
                         </div>
 
-                        {/* Wins List */}
+                        {/* Winss List */}
                         <div className="space-y-4">
                             {biggestWinsAllTime.slice(0, 5).map((win, i) => (
                                 <div key={i} className="bg-white border-3 border-black rounded-3xl p-5 shadow-[6px_6px_0px_0px_rgba(255,255,255,0.2)] hover:scale-[1.02] hover:shadow-[8px_8px_0px_0px_#F492B7] transition-all group relative overflow-hidden">

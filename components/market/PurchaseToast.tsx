@@ -45,68 +45,67 @@ export default function PurchaseToast({ isVisible, onClose, onShare, betDetails 
     const textColor = isSell ? 'text-red-500' : 'text-[#10B981]';
 
     return (
-        <div className={`fixed bottom-6 right-6 z-50 transition-all duration-300 ${show ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}`}>
-            <div className="bg-[#0E0E0E] border border-white/10 rounded-2xl p-5 shadow-2xl w-80 relative overflow-hidden">
-                {/* Glow Effect */}
-                <div className={`absolute -top-20 -right-20 w-40 h-40 rounded-full blur-3xl pointer-events-none ${isSell ? 'bg-red-500/20' : 'bg-[#10B981]/20'}`} />
+        <div className={`fixed bottom-6 right-6 z-50 transition-all duration-500 ${show ? 'translate-x-0 opacity-100 scale-100' : 'translate-x-full opacity-0 scale-95'}`}>
+            <div className={`bg-white border-4 border-black rounded-3xl p-6 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] w-96 relative overflow-hidden ${show ? 'animate-bounce-once' : ''}`}>
+                {/* Epic Background Gradient */}
+                <div className={`absolute inset-0 bg-gradient-to-br ${isSell ? 'from-rose-100 to-rose-50' : 'from-emerald-100 to-emerald-50'} -z-10`} />
 
-                {/* Close Button */}
+                {/* Close Button - NEO-BRUTALIST */}
                 <button
                     onClick={() => { setShow(false); setTimeout(onClose, 300); }}
-                    className="absolute top-3 right-3 text-gray-600 hover:text-white transition-colors"
+                    className="absolute top-3 right-3 bg-black text-white p-2 rounded-lg border-2 border-black hover:bg-gray-800 transition-colors shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
                 >
-                    <X size={16} />
+                    <X size={14} />
                 </button>
 
-                {/* Header */}
-                <div className="flex items-center gap-3 mb-4">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${bgColor} overflow-hidden border border-white/20`}>
+                {/* EPIC Header */}
+                <div className="flex items-center gap-4 mb-5">
+                    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center ${isSell ? 'bg-rose-400' : 'bg-emerald-400'} overflow-hidden border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]`}>
                         {betDetails.imageUrl ? (
                             <img src={betDetails.imageUrl} alt="Market" className="w-full h-full object-cover" />
                         ) : (
-                            <CheckCircle2 size={20} className={textColor} />
+                            <CheckCircle2 size={32} className="text-black" strokeWidth={3} />
                         )}
                     </div>
                     <div>
-                        <p className="text-white font-bold text-sm">{isSell ? 'Sold Successfully!' : 'Bet Placed!'}</p>
-                        <p className="text-gray-500 text-xs">{isSell ? '+ SOL Received' : 'Position confirmed'}</p>
+                        <p className="text-black font-black text-xl tracking-tight">{isSell ? '💰 Sold!' : '🚀 Bet Placed!'}</p>
+                        <p className="text-black/60 text-sm font-bold uppercase tracking-wider">{isSell ? 'SOL Received' : 'Position confirmed'}</p>
                     </div>
                 </div>
 
-                {/* Bet Details */}
-                <div className="bg-black/50 rounded-xl p-3 mb-4 border border-white/5">
-                    <div className="flex items-center justify-between mb-2">
-                        <span className={`text-xs font-black uppercase px-2 py-0.5 rounded ${betDetails.side === 'YES' ? 'bg-[#10B981]/20 text-[#10B981]' : 'bg-red-500/20 text-red-500'}`}>
+                {/* Bet Details - CARD */}
+                <div className="bg-white rounded-2xl p-5 mb-5 border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                    <div className="flex items-center justify-between mb-3">
+                        <span className={`text-xs font-black uppercase px-3 py-1.5 rounded-lg border-3 border-black ${betDetails.side === 'YES' ? 'bg-emerald-400 text-black' : 'bg-rose-400 text-black'}`}>
                             {betDetails.side} {betDetails.outcomeName}
                         </span>
                     </div>
-                    <p className="text-white font-bold text-sm truncate mb-2">{betDetails.marketTitle}</p>
-                    <div className="flex items-center justify-between text-xs">
-                        <span className="text-gray-500">{isSell ? 'Received' : 'Amount'}</span>
+                    <p className="text-black font-black text-base truncate mb-4">{betDetails.marketTitle}</p>
+                    <div className="flex items-center justify-between pt-3 border-t-2 border-black">
+                        <span className="text-black/60 text-xs font-black uppercase">{isSell ? '💵 Received' : '💳 Amount'}</span>
                         <div className="text-right">
-                            {/* Make SOL prominent for Sells */}
-                            <span className={`${isSell ? 'text-[#10B981]' : 'text-[#F492B7]'} font-bold`}>
+                            <span className={`${isSell ? 'text-emerald-600' : 'text-black'} font-black text-xl`}>
                                 {isSell ? '+' : ''}{betDetails.solAmount.toFixed(4)} SOL
                             </span>
-                            {!isSell && <span className="text-gray-600 ml-1">(${betDetails.usdAmount.toFixed(2)})</span>}
+                            {!isSell && <span className="text-black/40 ml-1 text-sm font-bold">(${betDetails.usdAmount.toFixed(2)})</span>}
                         </div>
                     </div>
                 </div>
 
-                {/* Share Button */}
+                {/* Share Button - EPIC */}
                 <button
                     onClick={onShare}
-                    className="w-full py-3 rounded-xl bg-gradient-to-r from-[#F492B7] to-[#E056A0] text-black font-black text-sm uppercase flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
+                    className="w-full py-4 rounded-xl bg-gradient-to-r from-[#F492B7] to-[#FFB6C1] text-black font-black text-base uppercase flex items-center justify-center gap-2 border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 transition-all active:translate-y-0 active:shadow-none"
                 >
-                    <Image src="/star.png" alt="Djinn" width={16} height={16} />
+                    <Image src="/star.png" alt="Djinn" width={20} height={20} />
                     {isSell ? 'Share Profit' : 'Share Your Bet'}
-                    <ExternalLink size={14} />
+                    <ExternalLink size={16} />
                 </button>
 
                 {/* Branding */}
-                <div className="flex items-center justify-center gap-1 mt-3 opacity-40">
-                    <Image src="/star.png" alt="Djinn" width={12} height={12} />
-                    <span className="text-[10px] text-gray-500 font-medium">Djinn Markets</span>
+                <div className="flex items-center justify-center gap-2 mt-4">
+                    <Image src="/star.png" alt="Djinn" width={16} height={16} />
+                    <span className="text-xs text-black/50 font-black uppercase tracking-wider">Djinn Markets</span>
                 </div>
             </div>
         </div>

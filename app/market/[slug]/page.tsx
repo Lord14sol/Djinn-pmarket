@@ -370,6 +370,18 @@ export default function Page() {
             }
         }
 
+        // 🎨 APPLY CUSTOM COLORS (If available)
+        if (marketAccount?.outcome_colors && marketAccount.outcome_colors.length === base.length) {
+            base = base.map((o, idx) => ({
+                ...o,
+                color: marketAccount.outcome_colors[idx] // Inject custom color
+            }));
+        } else if (marketAccount?.outcome_colors && base.length === 2) {
+            // Binary fallback mapping if length mismatch but it's likely [Yes, No]
+            base[0].color = marketAccount.outcome_colors[0] || '#10B981';
+            base[1].color = marketAccount.outcome_colors[1] || '#EF4444';
+        }
+
         return base;
     }, [slug, livePrice, marketAccount]);
 
@@ -482,7 +494,7 @@ export default function Page() {
     const [isSuccess, setIsSuccess] = useState(false);
     const [tradeSuccessInfo, setTradeSuccessInfo] = useState<{ shares: number; side: string; txSignature: string } | null>(null);
 
-    const [lastTradeEvent, setLastTradeEvent] = useState<{ id: string; amount: number; side: 'YES' | 'NO' } | null>(null);
+    const [lastTradeEvent, setLastTradeEvent] = useState<{ id: string; amount: number; side: 'YES' | 'NO'; title?: string; color?: string; } | null>(null);
     const [tradeMode, setTradeMode] = useState<'BUY' | 'SELL'>('BUY');
     const [isMaxSell, setIsMaxSell] = useState(false);
     const [showPurchaseToast, setShowPurchaseToast] = useState(false);
@@ -2319,7 +2331,7 @@ export default function Page() {
                         {/* PREMIUM HEADER - MATCHING SCREENSHOT */}
                         <div className="flex flex-col md:flex-row items-start gap-8 relative">
                             {/* 1. LEFT: Banner Image */}
-                            <div className="w-48 h-48 md:w-64 md:h-64 bg-gray-100 rounded-[2.5rem] shadow-[8px_8px_0px_0px_rgba(255,255,255,0.2)] overflow-hidden shrink-0 group relative mt-4">
+                            <div className="w-48 h-48 md:w-64 md:h-64 rounded-[2.5rem] overflow-hidden shrink-0 group relative mt-4">
                                 {(marketAccount?.banner_url || (typeof staticMarketInfo.icon === 'string' && (staticMarketInfo.icon.startsWith('http') || staticMarketInfo.icon.startsWith('data:')))) ?
                                     <img
                                         src={marketAccount?.banner_url || staticMarketInfo.icon}
@@ -2344,44 +2356,44 @@ export default function Page() {
                                     </button>
                                 </div>
 
-                                {/* TITLE & CREATOR */}
-                                <div className="space-y-4 bg-white border-2 border-black rounded-[2rem] p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] max-w-[900px]">
-                                    <h1 className="text-4xl lg:text-5xl font-black text-black tracking-tighter leading-[0.95]">
+                                {/* TITLE & CREATOR & MCAPS - COMPACT */}
+                                <div className="space-y-4 bg-white border-4 border-black rounded-2xl p-5 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] max-w-[900px]">
+                                    <h1 className="text-3xl lg:text-4xl font-black text-black tracking-tighter leading-tight">
                                         {marketAccount?.title || staticMarketInfo.title}
                                     </h1>
 
-                                    <Link href={`/profile/${marketAccount.creator_wallet}`} className="flex items-center gap-3 group w-fit">
-                                        <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-black bg-white">
+                                    <Link href={`/profile/${marketAccount.creator_wallet}`} className="flex items-center gap-2 group w-fit">
+                                        <div className="w-8 h-8 rounded-full overflow-hidden bg-white">
                                             <img src={creatorDisplay.avatar} className="w-full h-full object-cover" />
                                         </div>
-                                        <span className="text-sm font-bold text-gray-600">
+                                        <span className="text-xs font-bold text-gray-600">
                                             by <span className="text-black font-black group-hover:underline">{creatorDisplay.username}</span>
                                         </span>
                                     </Link>
-                                </div>
 
-                                {/* MCAPS SUB-HEADER (Now Below Title) */}
-                                <div className="flex flex-wrap gap-4 w-full">
-                                    {marketOutcomes.slice(0, 2).map((outcome, idx) => {
-                                        const color = getOutcomeColor(outcome.title, idx);
-                                        const mcapUSD = (outcome.mcapSOL || 0) * (solPrice || 0);
-                                        return (
-                                            <div key={idx} className="flex-1 min-w-[180px] bg-white border-2 border-black px-8 py-5 rounded-[2rem] flex flex-col items-center group/mcap hover:bg-[#F492B7] transition-all duration-300 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-                                                <div className="flex items-center gap-3 mb-2">
-                                                    <div className="w-3 h-3 rounded-full border border-black" style={{ backgroundColor: color }} />
-                                                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 group-hover/mcap:text-black transition-colors">{outcome.title} MCAP</span>
+                                    {/* MCAPS INLINE - COMPACT */}
+                                    <div className="flex gap-3 pt-3 border-t-2 border-black">
+                                        {marketOutcomes.slice(0, 2).map((outcome, idx) => {
+                                            const color = getOutcomeColor(outcome.title, idx);
+                                            const mcapUSD = (outcome.mcapSOL || 0) * (solPrice || 0);
+                                            return (
+                                                <div key={idx} className="flex-1 bg-gray-50 border-2 border-black px-4 py-3 rounded-xl flex flex-col items-center">
+                                                    <div className="flex items-center gap-1.5 mb-1.5">
+                                                        <div className="w-2.5 h-2.5 rounded-full border-2 border-black" style={{ backgroundColor: color }} />
+                                                        <span className="text-[8px] font-black uppercase tracking-[0.2em] text-black/60">{outcome.title} MCAP</span>
+                                                    </div>
+                                                    <div className="flex flex-col items-center gap-0.5">
+                                                        <span className="text-xl font-black text-black tabular-nums tracking-tighter">
+                                                            <AnimatedNumber value={mcapUSD} decimals={1} prefix="$" />
+                                                        </span>
+                                                        <span className="text-[9px] font-bold text-black/50 uppercase tracking-widest tabular-nums font-mono">
+                                                            {formatCompact(outcome.mcapSOL || 0)} <span className="opacity-50">SOL</span>
+                                                        </span>
+                                                    </div>
                                                 </div>
-                                                <div className="flex flex-col items-center gap-1">
-                                                    <span className="text-3xl font-black text-black tabular-nums tracking-tighter transition-transform group-hover/mcap:scale-105 duration-300">
-                                                        <AnimatedNumber value={mcapUSD} decimals={1} prefix="$" />
-                                                    </span>
-                                                    <span className="text-[11px] font-bold text-gray-500 group-hover/mcap:text-black/70 uppercase tracking-widest tabular-nums font-mono">
-                                                        {formatCompact(outcome.mcapSOL || 0)} <span className="opacity-50">SOL</span>
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
+                                            );
+                                        })}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -2389,12 +2401,8 @@ export default function Page() {
 
 
 
-                        <div className="bg-white rounded-[2.5rem] border-2 border-black overflow-hidden min-h-[850px] relative shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-
-
-
-
-                            {/* Dual-line Chart (Bazaar of Answers Style) */}
+                        {/* CHART SECTION - Transparent background to show stars */}
+                        <div className="rounded-[2.5rem] overflow-hidden min-h-[500px] relative mb-6">
                             <TheDjinnChart
                                 outcomes={marketOutcomes.map(o => o.title)}
                                 probabilityData={historyState.probability}
@@ -2421,8 +2429,18 @@ export default function Page() {
                                     }
                                 }}
                             />
+                        </div>
 
-                            {/* HOLDINGS SECTION REMOVED FROM HERE (Relocated Below) */}
+                        {/* WHITE BACKGROUND SECTION - Starts from Holdings */}
+                        <div className="bg-white rounded-[2.5rem] border-2 border-black overflow-hidden relative shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+                            {/* ✅ HOLDINGS SECTION - Moved here after chart */}
+                            <div className="px-6 pt-6 mb-4">
+                                <HoldingsSection
+                                    bets={userBets}
+                                    outcomeSupplies={marketOutcomes.map(o => o.supply || 0)}
+                                    marketOutcomes={marketOutcomes}
+                                />
+                            </div>
 
                             {/* Multi-outcome Selector (if applicable) */}
                             {isMultiOutcome && (
@@ -2499,13 +2517,6 @@ export default function Page() {
 
                             {/* TABS (Relocated UP - as requested) */}
                             <div className="px-6 mb-8 mt-2">
-                                {/* ✅ HOLDINGS - ALWAYS VISIBLE ABOVE TABS */}
-                                <HoldingsSection
-                                    bets={userBets}
-                                    outcomeSupplies={marketOutcomes.map(o => o.supply)}
-                                    marketOutcomes={marketOutcomes}
-                                />
-
                                 <div className="flex items-center gap-6 mb-6 border-b border-white/5 pb-2">
                                     <TabButton label="Activity" icon={<Activity size={14} />} active={bottomTab === 'ACTIVITY'} onClick={() => setBottomTab('ACTIVITY')} />
                                     <TabButton label="Comments" icon={<MessageCircle size={14} />} active={bottomTab === 'COMMENTS'} onClick={() => setBottomTab('COMMENTS')} />
@@ -2520,7 +2531,7 @@ export default function Page() {
                                         userProfile={userProfile}
                                         marketOutcomes={marketOutcomes}
                                         myHeldPosition={null} // Pass null or actual position if available
-                                        myHeldAmount={0}
+                                        myHeldAmount={"0"}
                                     />
                                 )}
 
@@ -2711,40 +2722,40 @@ export default function Page() {
                     {/* RIGHT COLUMN: TRADING (Sticky Sidebar) */}
                     <div className="hidden lg:block sticky top-24 w-[400px] shrink-0 z-40">
                         <div className="origin-top scale-[0.95]">
-                            {/* TOTAL POOL - ADDED TO SIDEBAR TOP */}
-                            <div className="mb-6 w-full flex flex-col items-center px-6 py-4 rounded-[1.5rem] bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden group/pool">
-                                <span className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-500 mb-1">
+                            {/* TOTAL POOL - EPIC HEADER */}
+                            <div className="mb-2 w-full flex flex-col items-center px-8 py-6 rounded-2xl bg-gradient-to-br from-[#F492B7] to-[#FFB6C1] border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden group/pool">
+                                <span className="text-[11px] font-black uppercase tracking-[0.4em] text-black/70 mb-2">
                                     Total Pool
                                 </span>
-                                <span className="text-4xl font-black text-black tracking-tighter italic -skew-x-6">
+                                <span className="text-5xl font-black text-black tracking-tighter">
                                     <AnimatedNumber
                                         value={totalPoolSol}
                                         decimals={2}
                                         className="inline"
-                                    /> <span className="text-[#F492B7]">SOL</span>
+                                    /> <span className="text-white">SOL</span>
                                 </span>
                             </div>
 
-                            {/* SOLID PANEL WITH ELEVATION */}
-                            <div className="relative rounded-[24px] overflow-visible">
+                            {/* EPIC TRADE PANEL */}
+                            <div className="relative rounded-3xl overflow-visible">
 
-                                {/* Main body - White Aesthetic */}
-                                <div className="relative bg-white rounded-[24px] border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
+                                {/* Main body - Neo-Brutalist White */}
+                                <div className="relative bg-white rounded-3xl border-4 border-black shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
 
-                                    {/* TRADE PANEL CONTENT - Scrollable inner area */}
-                                    <div className="p-4 max-h-[calc(100vh-14rem)] overflow-y-auto custom-scrollbar">
+                                    {/* TRADE PANEL CONTENT - No scroll, perfect fit */}
+                                    <div className="p-5">
 
-                                        {/* BUY/SELL TOGGLE - At top now */}
-                                        <div className="mb-4 p-1 bg-gray-100 border-2 border-black rounded-xl flex gap-1">
+                                        {/* BUY/SELL TOGGLE - EPIC */}
+                                        <div className="mb-6 p-2 bg-gray-50 border-3 border-black rounded-xl flex gap-2">
                                             <button
                                                 onClick={() => setTradeMode('BUY')}
-                                                className={`flex-1 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all border-2 ${tradeMode === 'BUY' ? 'bg-[#10B981] text-white border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]' : 'text-gray-500 border-transparent hover:text-black'}`}
+                                                className={`flex-1 py-3 rounded-lg text-sm font-black uppercase tracking-widest transition-all border-3 ${tradeMode === 'BUY' ? 'bg-emerald-400 text-black border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] -translate-y-0.5' : 'text-gray-400 border-transparent hover:text-black hover:bg-white'}`}
                                             >
                                                 Buy
                                             </button>
                                             <button
                                                 onClick={() => setTradeMode('SELL')}
-                                                className={`flex-1 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all border-2 ${tradeMode === 'SELL' ? 'bg-[#EF4444] text-white border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]' : 'text-gray-500 border-transparent hover:text-black'}`}
+                                                className={`flex-1 py-3 rounded-lg text-sm font-black uppercase tracking-widest transition-all border-3 ${tradeMode === 'SELL' ? 'bg-rose-400 text-black border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] -translate-y-0.5' : 'text-gray-400 border-transparent hover:text-black hover:bg-white'}`}
                                             >
                                                 Sell
                                             </button>
@@ -2752,37 +2763,36 @@ export default function Page() {
 
 
 
-                                        {/* INPUT Section */}
-                                        <div className="bg-white rounded-xl border-2 border-black p-4 mb-4 shadow-[4px_4px_0px_0px_rgba(229,231,235,1)]">
-                                            <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-2 block">
-                                                {tradeMode === 'BUY' ? 'You Pay' : 'Shares to Sell'}
+                                        {/* INPUT Section - EPIC */}
+                                        <div className="bg-gradient-to-br from-gray-50 to-white rounded-2xl border-4 border-black p-6 mb-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+                                            <label className="text-xs font-black uppercase text-black/60 tracking-[0.3em] mb-3 block">
+                                                {tradeMode === 'BUY' ? '💳 You Pay' : '📊 Shares to Sell'}
                                             </label>
-                                            <div className="flex items-center gap-3">
+                                            <div className="flex items-center gap-4">
                                                 <input
                                                     type="text"
                                                     inputMode="decimal"
                                                     value={betAmount || ''}
                                                     onChange={(e) => {
-                                                        // Allow free typing, parseCompactNumber handles the value extraction logic
                                                         setBetAmount(e.target.value);
                                                         setIsMaxSell(false);
                                                     }}
-                                                    className="bg-transparent text-5xl font-extralight text-black w-full outline-none placeholder-gray-300 tracking-tighter"
+                                                    className="bg-transparent text-6xl font-black text-black w-full outline-none placeholder-gray-300 tracking-tighter"
                                                     placeholder="0"
                                                 />
-                                                {/* SOL ICON */}
-                                                <div className="flex items-center gap-2 bg-gray-100 px-3 py-2 rounded-xl border-2 border-black shrink-0">
+                                                {/* SOL BADGE */}
+                                                <div className="flex items-center gap-2 bg-black px-4 py-3 rounded-xl border-3 border-black shrink-0">
                                                     <img
                                                         src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
-                                                        className="w-5 h-5"
+                                                        className="w-6 h-6"
                                                         alt="SOL"
                                                     />
-                                                    <span className="text-sm font-bold text-black">{tradeMode === 'BUY' ? 'SOL' : 'SHARES'}</span>
+                                                    <span className="text-sm font-black text-white">{tradeMode === 'BUY' ? 'SOL' : 'SHR'}</span>
                                                 </div>
                                             </div>
-                                            {/* Percentage Buttons (SELL MODE ONLY) */}
+                                            {/* Percentage Buttons - EPIC UX */}
                                             {tradeMode === 'SELL' && (
-                                                <div className="flex gap-2 mt-4 pt-4 border-t border-white/5">
+                                                <div className="flex gap-2 mt-4 pt-4 border-t-2 border-black">
                                                     {[25, 50, 75, 100].map((pct) => (
                                                         <button
                                                             key={pct}
@@ -2798,22 +2808,19 @@ export default function Page() {
                                                                     setIsMaxSell(false);
                                                                 }
 
-                                                                // Share Input Logic: 100% means 100% of SHARES.
                                                                 const sharesToSell = sharesOwned * (pct / 100);
-
-                                                                // Enable COMPACT FORMAT (e.g. 1M) since we switched to text input
                                                                 const formattedShares = sharesToSell >= 100_000
                                                                     ? formatCompact(sharesToSell)
                                                                     : sharesToSell.toFixed(2);
 
                                                                 setBetAmount(formattedShares);
                                                             }}
-                                                            className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-colors border ${(pct === 100 && isMaxSell)
-                                                                ? 'bg-white/20 text-white border-white/20'
-                                                                : 'bg-white/5 text-gray-400 border-white/5 hover:bg-white/10 hover:text-white'
-                                                                }`}
+                                                            className={`flex-1 py-2.5 rounded-lg text-xs font-black transition-all border-2 ${(pct === 100 && isMaxSell)
+                                                                ? 'bg-rose-400 text-black border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] -translate-y-0.5 scale-105'
+                                                                : 'bg-white text-black border-black hover:bg-gray-100 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none'
+                                                                } ${pct === 100 ? 'font-black text-base' : ''}`}
                                                         >
-                                                            {pct}%
+                                                            {pct === 100 ? '💯 MAX' : `${pct}%`}
                                                         </button>
                                                     ))}
                                                 </div>
@@ -2838,35 +2845,35 @@ export default function Page() {
 
 
 
-                                            {/* LARGE YES/NO BUTTONS (Limitless Style) */}
-                                            <div className="flex gap-3 h-36">
+                                            {/* EPIC YES/NO BUTTONS - NEO-BRUTALIST */}
+                                            <div className="flex gap-4 h-40">
                                                 {isMultiOutcome ? (
-                                                    <div className="flex-1 bg-[#1A1A1A] rounded-2xl border border-white/10 p-4 flex flex-col justify-center items-center hover:border-[#F492B7]/50 transition-colors cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-                                                        <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-1">Target Outcome</span>
-                                                        <span className="font-bold text-white text-lg truncate max-w-full">{selectedOutcomeName || 'Select First'}</span>
-                                                        <span className="text-sm font-mono text-[#10B981] mt-1">{(livePrice ?? 0).toFixed(0)}%</span>
+                                                    <div className="flex-1 bg-gradient-to-br from-[#F492B7] to-[#FFB6C1] rounded-2xl border-4 border-black p-6 flex flex-col justify-center items-center hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+                                                        <span className="text-xs font-black uppercase text-black/70 tracking-widest mb-2">Target Outcome</span>
+                                                        <span className="font-black text-black text-xl truncate max-w-full">{selectedOutcomeName || 'Select First'}</span>
+                                                        <span className="text-base font-black text-white mt-2">{(livePrice ?? 0).toFixed(0)}%</span>
                                                     </div>
                                                 ) : (
                                                     <>
                                                         <button
                                                             onClick={() => setSelectedSide('YES')}
-                                                            className={`flex-1 rounded-xl flex flex-col items-center justify-center transition-all duration-200 border-2 ${selectedSide === 'YES'
-                                                                ? 'bg-[#10B981] border-[#10B981] text-white shadow-[0_0_20px_rgba(16,185,129,0.4)] scale-[1.02]'
-                                                                : 'bg-white border-[#10B981] text-[#10B981] hover:bg-[#10B981]/10'}`}
+                                                            className={`flex-1 rounded-2xl flex flex-col items-center justify-center transition-all duration-200 border-4 ${selectedSide === 'YES'
+                                                                ? 'bg-emerald-400 border-black text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] -translate-y-1'
+                                                                : 'bg-white border-emerald-400 text-emerald-600 hover:bg-emerald-50 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'}`}
                                                         >
-                                                            <span className="text-xs font-black uppercase tracking-widest mb-0.5">{marketOutcomes[0]?.title || 'YES'}</span>
-                                                            <span className={`text-2xl font-bold ${selectedSide === 'YES' ? 'text-white' : 'text-[#10B981]'}`}>
+                                                            <span className="text-sm font-black uppercase tracking-widest mb-2">{marketOutcomes[0]?.title || 'YES'}</span>
+                                                            <span className={`text-4xl font-black ${selectedSide === 'YES' ? 'text-black' : 'text-emerald-600'}`}>
                                                                 {yesPercent.toFixed(0)}%
                                                             </span>
                                                         </button>
                                                         <button
                                                             onClick={() => setSelectedSide('NO')}
-                                                            className={`flex-1 rounded-xl flex flex-col items-center justify-center transition-all duration-200 border-2 ${selectedSide === 'NO'
-                                                                ? 'bg-[#EF4444] border-[#EF4444] text-white shadow-[0_0_20px_rgba(239,68,68,0.4)] scale-[1.02]'
-                                                                : 'bg-white border-[#EF4444] text-[#EF4444] hover:bg-[#EF4444]/10'}`}
+                                                            className={`flex-1 rounded-2xl flex flex-col items-center justify-center transition-all duration-200 border-4 ${selectedSide === 'NO'
+                                                                ? 'bg-rose-400 border-black text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] -translate-y-1'
+                                                                : 'bg-white border-rose-400 text-rose-600 hover:bg-rose-50 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'}`}
                                                         >
-                                                            <span className="text-xs font-black uppercase tracking-widest mb-0.5">{marketOutcomes[1]?.title || 'NO'}</span>
-                                                            <span className={`text-2xl font-bold ${selectedSide === 'NO' ? 'text-white' : 'text-[#EF4444]'}`}>
+                                                            <span className="text-sm font-black uppercase tracking-widest mb-2">{marketOutcomes[1]?.title || 'NO'}</span>
+                                                            <span className={`text-4xl font-black ${selectedSide === 'NO' ? 'text-black' : 'text-rose-600'}`}>
                                                                 {noPercent.toFixed(0)}%
                                                             </span>
                                                         </button>
@@ -2874,8 +2881,8 @@ export default function Page() {
                                                 )}
                                             </div>
 
-                                            {/* 3. TRANSACTION SUMMARY */}
-                                            <div className="bg-white rounded-[2rem] border-2 border-black p-6 space-y-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                                            {/* 3. TRANSACTION SUMMARY - EPIC */}
+                                            <div className="bg-gradient-to-br from-gray-50 to-white rounded-2xl border-4 border-black p-6 space-y-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
                                                 {/* BUY MODE SUMMARY */}
                                                 {tradeMode === 'BUY' && (
                                                     <>

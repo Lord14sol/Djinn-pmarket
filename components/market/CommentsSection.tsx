@@ -485,12 +485,12 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
                                     {activeReplyId === comment.id && (
                                         <div className="mt-4 animate-in fade-in slide-in-from-top-2">
                                             <div className="flex gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-xs shrink-0">You</div>
+                                                <div className="w-8 h-8 rounded-full bg-black/5 border border-black/10 flex items-center justify-center text-xs shrink-0 font-bold text-gray-500">You</div>
                                                 <div className="flex-1">
-                                                    <div className="bg-white/5 border border-white/10 rounded-xl p-3 focus-within:border-[#F492B7] transition-colors">
+                                                    <div className="bg-gray-50 border-2 border-black/10 rounded-xl p-3 focus-within:border-[#F492B7] focus-within:shadow-md transition-all">
                                                         <input
                                                             autoFocus
-                                                            className="w-full bg-transparent text-sm focus:outline-none"
+                                                            className="w-full bg-transparent text-sm focus:outline-none text-black placeholder:text-gray-400 font-medium"
                                                             placeholder="Write a reply..."
                                                             value={replyText}
                                                             onChange={(e) => setReplyText(e.target.value)}
@@ -550,7 +550,7 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
                                                             </Link>
                                                             <span className="text-[9px] text-gray-500">{reply.timeAgo}</span>
                                                         </div>
-                                                        <p className="text-gray-400 text-xs leading-relaxed">{reply.text}</p>
+                                                        <p className="text-gray-800 text-xs leading-relaxed font-medium">{reply.text}</p>
                                                         {/* ✅ NEW: Display reply image if exists */}
                                                         {reply.image_url && (
                                                             <img src={reply.image_url} alt="Reply attachment" className="rounded-lg max-h-40 border border-white/10 mt-2" />

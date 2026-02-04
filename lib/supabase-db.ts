@@ -942,6 +942,7 @@ export interface Market {
     resolution_source?: string;
     // Multi-outcome support
     options?: string[]; // Array of outcome names (e.g., ["Yes", "No"] or ["Brasil", "Argentina", "Chile"])
+    outcome_colors?: string[]; // Array of hex colors for each outcome
     creator_username?: string;
     creator_avatar?: string;
 }
@@ -987,6 +988,7 @@ const MOCK_MARKETS = [
         icon: '💰',
         category: 'Crypto',
         options: ['Yes', 'No'],
+        outcome_colors: ['#10B981', '#EF4444'],
         creator_wallet: '8xK...9zLq',
         created_at: new Date().toISOString(),
         verified: true,
