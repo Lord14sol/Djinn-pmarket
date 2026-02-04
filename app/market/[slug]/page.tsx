@@ -2401,8 +2401,8 @@ export default function Page() {
 
 
 
-                        {/* CHART SECTION - Transparent background to show stars */}
-                        <div className="rounded-[2.5rem] overflow-hidden min-h-[500px] relative mb-6">
+                        {/* CHART SECTION - Neo-Brutalist Style */}
+                        <div className="overflow-visible min-h-[600px] relative mb-8">
                             <TheDjinnChart
                                 outcomes={marketOutcomes.map(o => o.title)}
                                 probabilityData={historyState.probability}
