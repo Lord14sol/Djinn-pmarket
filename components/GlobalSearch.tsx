@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { searchGlobal } from '@/lib/supabase-db';
 import { Loader2, Search } from 'lucide-react';
@@ -86,9 +87,10 @@ export default function GlobalSearch() {
                         <div>
                             <h3 className="px-4 py-2 text-[10px] uppercase font-black tracking-widest text-black bg-gray-100 border-b-2 border-black">Profiles</h3>
                             {results.profiles.map((p, i) => (
-                                <button
+                                <Link
                                     key={i}
-                                    onClick={() => handleSelect(`/profile/${p.username}`)}
+                                    href={`/profile/${p.username}`}
+                                    onClick={() => { setIsOpen(false); setQuery(''); }}
                                     className="w-full px-4 py-2.5 flex items-center gap-3 hover:bg-[#F492B7] group transition-colors text-left border-b-2 border-black last:border-0"
                                 >
                                     <div className="w-8 h-8 rounded-full overflow-hidden bg-white border-2 border-black shrink-0">
@@ -98,7 +100,7 @@ export default function GlobalSearch() {
                                         <p className="text-sm font-black text-black truncate">{p.username}</p>
                                         <p className="text-[10px] text-gray-600 group-hover:text-black/80 font-mono truncate">{p.wallet_address}</p>
                                     </div>
-                                </button>
+                                </Link>
                             ))}
                         </div>
                     )}
@@ -113,9 +115,10 @@ export default function GlobalSearch() {
                         <div>
                             <h3 className="px-4 py-2 text-[10px] uppercase font-black tracking-widest text-black bg-gray-100 border-b-2 border-black">Markets</h3>
                             {results.markets.map((m, i) => (
-                                <button
+                                <Link
                                     key={i}
-                                    onClick={() => handleSelect(`/market/${m.slug}`)}
+                                    href={`/market/${m.slug}`}
+                                    onClick={() => { setIsOpen(false); setQuery(''); }}
                                     className="w-full px-4 py-2.5 flex items-center gap-3 hover:bg-[#F492B7] group transition-colors text-left border-b-2 border-black last:border-0"
                                 >
                                     <div className="w-8 h-8 rounded-lg overflow-hidden bg-white border-2 border-black shrink-0 flex items-center justify-center text-lg">
@@ -126,7 +129,7 @@ export default function GlobalSearch() {
                                     <div className="flex-1 min-w-0">
                                         <p className="text-sm font-black text-black truncate">{m.title}</p>
                                     </div>
-                                </button>
+                                </Link>
                             ))}
                         </div>
                     )}

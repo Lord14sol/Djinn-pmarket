@@ -1678,19 +1678,23 @@ export async function getFollowCounts(walletAddress: string): Promise<{ follower
 export async function searchGlobal(queryText: string) {
     if (!queryText || queryText.length < 2) return { profiles: [], markets: [] };
 
+    // Sanitize: allow alphanumeric, spaces, dashes (prevent breaking sql/filter syntax)
+    const sanitizedQuery = queryText.replace(/[,%]/g, '').trim();
+    if (!sanitizedQuery) return { profiles: [], markets: [] };
+
     try {
         // 1. Search Profiles (Username OR Wallet)
         const profilesPromise = supabase
             .from('profiles')
             .select('username, wallet_address, avatar_url')
-            .or(`username.ilike.%${queryText}%,wallet_address.ilike.%${queryText}%`)
+            .or(`username.ilike.%${sanitizedQuery}%,wallet_address.ilike.%${sanitizedQuery}%`)
             .limit(5);
 
         // 2. Search Markets (Title OR Slug)
         const marketsPromise = supabase
             .from('markets')
             .select('title, slug, banner_url, creator_wallet')
-            .or(`title.ilike.%${queryText}%,slug.ilike.%${queryText}%`)
+            .or(`title.ilike.%${sanitizedQuery}%,slug.ilike.%${sanitizedQuery}%`)
             .limit(5);
 
         const [profilesResult, marketsResult] = await Promise.all([profilesPromise, marketsPromise]);
