@@ -1,7 +1,7 @@
 "use client";
 import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { AnimatePresence, motion } from "framer-motion";
 import { cn, formatCompact } from "@/lib/utils";
 import { getOutcomeColor } from "@/lib/market-colors";
@@ -26,7 +26,7 @@ interface ProbabilityChartProps {
     onOutcomeChange?: (outcome: string) => void;
 }
 
-// OPTIMIZED: Memoized Custom Tooltip
+// NEO-BRUTALIST CUSTOM TOOLTIP - Big Numbers like Polymarket/Kalshi
 const CustomTooltip = React.memo(({ active, payload, label }: any) => {
     if (!active || !payload || !payload.length) return null;
 
@@ -42,8 +42,7 @@ const CustomTooltip = React.memo(({ active, payload, label }: any) => {
                     month: 'short',
                     day: 'numeric',
                     hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit'
+                    minute: '2-digit'
                 });
             }
         } catch {
@@ -52,25 +51,31 @@ const CustomTooltip = React.memo(({ active, payload, label }: any) => {
     }
 
     return (
-        <div className="bg-white rounded-xl p-4 border-4 border-black pointer-events-none shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] min-w-[140px]">
+        <div className="bg-white rounded-xl p-4 border-4 border-black pointer-events-none shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] min-w-[160px]">
             {formattedDate && (
-                <div className="text-center mb-3 pb-2 border-b-2 border-black">
-                    <span className="text-[11px] font-black text-black uppercase tracking-wider">
+                <div className="text-center mb-3 pb-2 border-b-2 border-black/20">
+                    <span className="text-[10px] font-black text-black/60 uppercase tracking-wider">
                         {formattedDate}
                     </span>
                 </div>
             )}
-            <div className="flex flex-col gap-2 items-start">
+            <div className="flex flex-col gap-3">
                 {payload
                     .filter((p: any) => p.value !== undefined && p.value !== null && typeof p.value === 'number')
                     .sort((a: any, b: any) => (b.value ?? 0) - (a.value ?? 0))
                     .map((p: any) => (
-                        <div key={p.name} className="flex flex-col">
-                            <span className="text-[10px] font-black uppercase tracking-wider mb-0.5" style={{ color: p.stroke }}>
-                                {p.name}
-                            </span>
+                        <div key={p.name} className="flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-2">
+                                <div
+                                    className="w-3 h-3 rounded-full border-2 border-black"
+                                    style={{ backgroundColor: p.stroke }}
+                                />
+                                <span className="text-xs font-black uppercase tracking-wider text-black">
+                                    {p.name}
+                                </span>
+                            </div>
                             <span
-                                className="text-3xl font-black tabular-nums tracking-tighter leading-none"
+                                className="text-2xl font-black tabular-nums tracking-tighter"
                                 style={{ color: p.stroke }}
                             >
                                 {Number(p.value).toFixed(1)}%
@@ -84,7 +89,7 @@ const CustomTooltip = React.memo(({ active, payload, label }: any) => {
 
 CustomTooltip.displayName = 'CustomTooltip';
 
-// OPTIMIZED: Simplified Pulsing Dot with requestAnimationFrame
+// PULSING DOT - Live indicator at line end
 const PulsingDot = React.memo((props: any) => {
     const { cx, cy, stroke } = props;
 
@@ -95,11 +100,11 @@ const PulsingDot = React.memo((props: any) => {
             <motion.circle
                 cx={cx}
                 cy={cy}
-                r="6"
+                r="8"
                 fill="none"
                 stroke={stroke}
-                strokeWidth={3}
-                initial={{ r: 6, opacity: 0.5 }}
+                strokeWidth={2}
+                initial={{ r: 8, opacity: 0.6 }}
                 animate={{ r: 20, opacity: 0 }}
                 transition={{
                     duration: 1.5,
@@ -107,24 +112,31 @@ const PulsingDot = React.memo((props: any) => {
                     ease: "easeOut"
                 }}
             />
-            <circle cx={cx} cy={cy} r="5" fill={stroke} />
+            <circle
+                cx={cx}
+                cy={cy}
+                r="6"
+                fill={stroke}
+                stroke="white"
+                strokeWidth={3}
+            />
         </g>
     );
 });
 
 PulsingDot.displayName = 'PulsingDot';
 
-// 🔥 CONFIGURACIÓN DE TEMPORALIDADES
+// TIMEFRAMES CONFIG
 const TIMEFRAMES = {
-    '1m': { label: '1 Minuto', seconds: 60 },
-    '5m': { label: '5 Minutos', seconds: 300 },
-    '15m': { label: '15 Minutos', seconds: 900 },
-    '1H': { label: '1 Hora', seconds: 3600 },
-    '6H': { label: '6 Horas', seconds: 21600 },
-    '1D': { label: '1 Día', seconds: 86400 },
-    '1W': { label: '1 Semana', seconds: 604800 },
-    '1M': { label: '1 Mes', seconds: 2592000 },
-    'ALL': { label: 'Todo', seconds: Infinity }
+    '1m': { label: '1m', seconds: 60 },
+    '5m': { label: '5m', seconds: 300 },
+    '15m': { label: '15m', seconds: 900 },
+    '1H': { label: '1H', seconds: 3600 },
+    '6H': { label: '6H', seconds: 21600 },
+    '1D': { label: '1D', seconds: 86400 },
+    '1W': { label: '1W', seconds: 604800 },
+    '1M': { label: '1M', seconds: 2592000 },
+    'ALL': { label: 'ALL', seconds: Infinity }
 } as const;
 
 export default React.memo(function ProbabilityChart({
@@ -142,96 +154,59 @@ export default React.memo(function ProbabilityChart({
     const [hoverData, setHoverData] = useState<any>(null);
     const [now, setNow] = useState(Math.floor(Date.now() / 1000));
 
-    // 🔥 Helper for Time Formatting
-    const formatTimeLabel = (timestamp: number, timeframe: string): string => {
+    // Time Format Helper
+    const formatTimeLabel = (timestamp: number, tf: string): string => {
         const date = new Date(timestamp * 1000);
-
-        switch (timeframe) {
+        switch (tf) {
             case '1m':
             case '5m':
             case '15m':
-            case '30m':
             case '1H':
             case '6H':
-                // Formato: HH:MM
-                return date.toLocaleTimeString('es-AR', {
+                return date.toLocaleTimeString('en-US', {
                     hour: '2-digit',
                     minute: '2-digit',
                     hour12: false
                 });
-
-            case '4H':
             case '1D':
-                // Formato: DD/MM HH:MM
-                return `${date.toLocaleDateString('es-AR', {
-                    day: '2-digit',
-                    month: '2-digit'
-                })} ${date.toLocaleTimeString('es-AR', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false
-                })}`;
-
+                return `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
             case '1W':
             case '1M':
-                // Formato: DD/MM
-                return date.toLocaleDateString('es-AR', {
-                    day: '2-digit',
-                    month: '2-digit'
-                });
-
+                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
             case 'ALL':
-                // Formato: DD/MM/YY
-                return date.toLocaleDateString('es-AR', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: '2-digit'
-                });
-
+                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
             default:
-                return date.toLocaleTimeString('es-AR', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false
-                });
+                return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
         }
     };
 
-
-
-    // OPTIMIZATION 1: Reduce heartbeat frequency to reduce re-renders
+    // 1s tick for live updates
     useEffect(() => {
         const interval = setInterval(() => {
             setNow(Math.floor(Date.now() / 1000));
-        }, 1000); // 1s tick for live feel
+        }, 1000);
         return () => clearInterval(interval);
     }, []);
 
-    // OPTIMIZATION 2: Deep memoization with stable references
+    // Outcome keys
     const outcomeKeys = useMemo(() => {
         return outcomes.map(o => typeof o === 'string' ? o : o.title);
     }, [outcomes]);
 
-    // OPTIMIZATION 3: Memoize base data processing separately
+    // Sort and dedupe data
     const baseSortedData = useMemo(() => {
         if (!data || data.length === 0) return null;
 
-        // 1. Sort by time
         const sorted = [...data].sort((a: any, b: any) => a.time - b.time);
-
-        // 2. Deduplicate: Remove points with identical timestamps, keeping the last one
         const uniqueData: any[] = [];
         let lastTime = -1;
 
         for (const point of sorted) {
-            // Ensure valid timestamp
             if (!point.time || isNaN(point.time)) continue;
-
             if (point.time !== lastTime) {
                 uniqueData.push(point);
                 lastTime = point.time;
             } else {
-                // Overwrite the last point if timestamp matches (assume newer data comes later or is preferred)
                 uniqueData[uniqueData.length - 1] = point;
             }
         }
@@ -239,19 +214,16 @@ export default React.memo(function ProbabilityChart({
         return uniqueData;
     }, [data]);
 
-    // OPTIMIZATION 4: Smart downsampling BEFORE sync
+    // Downsample for performance
     const downsampledData = useMemo(() => {
         if (!baseSortedData) return null;
-
-        // Adaptive downsampling based on data size
-        const targetPoints = 500; // Increased from 300 for better quality
+        const targetPoints = 500;
         if (baseSortedData.length <= targetPoints) return baseSortedData;
-
         const factor = Math.ceil(baseSortedData.length / targetPoints);
         return baseSortedData.filter((_, i) => i % factor === 0 || i === baseSortedData.length - 1);
     }, [baseSortedData]);
 
-    // OPTIMIZATION 5: Sync with live data (minimal processing)
+    // Sync with live data
     const syncedData = useMemo(() => {
         if (!downsampledData) {
             const fallbackProbs: any = {};
@@ -265,16 +237,10 @@ export default React.memo(function ProbabilityChart({
         const last = sorted[sorted.length - 1];
 
         if (currentProbabilities && Object.keys(currentProbabilities).length > 0) {
-            const livePoint: any = {
-                time: now,
-                ...currentProbabilities
-            };
-
-            // STABILITY FIX: Increase buffer to 30s to prevent jitter/bouncing of tail
+            const livePoint: any = { time: now, ...currentProbabilities };
             if (last && (now - last.time > 30)) {
                 sorted.push(livePoint);
             } else if (last) {
-                // In-place update for smoother animation
                 sorted[sorted.length - 1] = { ...last, ...currentProbabilities, time: Math.max(last.time, now) };
             }
         } else if (last && now - last.time > 30) {
@@ -284,69 +250,34 @@ export default React.memo(function ProbabilityChart({
         return sorted;
     }, [downsampledData, outcomeKeys, currentProbabilities, now]);
 
-    // OPTIMIZATION 6: Memoize timeframe calculation
-    const timeframeConfig = useMemo(() => {
-        // Use the TIMEFRAMES constant we defined above
-        // We need to map the prop string ('1m', '1H') to our keys
-        // The existing props seem to match our keys mostly.
-        // If prop is '5M' (uppercase) and key is '5m' (lowercase), handle it.
-        // The prop type says '1m' | '5m' ... so it should match.
-        // Fallback to 1H if not found.
-        const key = timeframe as keyof typeof TIMEFRAMES;
-        return TIMEFRAMES[key]?.seconds || 3600;
-    }, [timeframe]);
-
-
-    // 🔥 FILTRAR DATOS SEGÚN TEMPORALIDAD
+    // Filter by timeframe
     const { filteredData, domainMin, domainMax } = useMemo(() => {
         if (!syncedData || syncedData.length === 0) {
             return { filteredData: [], domainMin: 'dataMin', domainMax: 'dataMax' };
         }
 
         const config = TIMEFRAMES[timeframe as keyof typeof TIMEFRAMES] || TIMEFRAMES['1H'];
-        const windowStart = config.seconds === Infinity
-            ? 0
-            : now - config.seconds;
+        const windowStart = config.seconds === Infinity ? 0 : now - config.seconds;
 
-        // Filtrar datos dentro de la ventana de tiempo
         let filtered = syncedData.filter((d: any) => d.time >= windowStart && d.time <= now);
 
-        // 🔥 CRITICAL: Asegurar al menos 2 puntos para dibujar línea
         if (filtered.length === 0 && syncedData.length > 0) {
-            // No hay datos en esta ventana, usar el último punto conocido
             const lastPoint = syncedData[syncedData.length - 1];
-            filtered = [
-                { ...lastPoint, time: windowStart },
-                { ...lastPoint, time: now }
-            ];
+            filtered = [{ ...lastPoint, time: windowStart }, { ...lastPoint, time: now }];
         } else if (filtered.length === 1) {
-            // Solo 1 punto, extender hacia atrás
             const singlePoint = filtered[0];
-            filtered = [
-                { ...singlePoint, time: windowStart },
-                singlePoint,
-                { ...singlePoint, time: now }
-            ];
+            filtered = [{ ...singlePoint, time: windowStart }, singlePoint, { ...singlePoint, time: now }];
         } else if (filtered.length > 0) {
-            // Ensure continuity from left side
             if (filtered[0].time > windowStart) {
-                // Try to find the point just before windowStart
                 const firstInsideIndex = syncedData.indexOf(filtered[0]);
                 if (firstInsideIndex > 0) {
                     const prev = syncedData[firstInsideIndex - 1];
-                    // Interpolate or just add prev point clamped?
                     filtered.unshift({ ...prev, time: windowStart });
                 } else {
-                    // If no previous, just extend first point to left edge
                     filtered.unshift({ ...filtered[0], time: windowStart });
                 }
             }
         }
-
-        // Ensure end point is 'now' if not present (handled by syncedData mostly but safe to check)
-        // syncedData usually ends at 'now' due to logic above.
-
-        console.log(`📊 Timeframe: ${timeframe}, Points: ${filtered.length}`);
 
         return {
             filteredData: filtered,
@@ -355,25 +286,19 @@ export default React.memo(function ProbabilityChart({
         };
     }, [syncedData, timeframe, now]);
 
-    // OPTIMIZATION 8: Stable display probabilities reference
+    // Display probabilities (hover or current)
     const displayProbs = useMemo(() => {
         return hoverData || currentProbabilities;
     }, [hoverData, currentProbabilities]);
 
-    // OPTIMIZATION 9: Adaptive Y-Axis with stable calculation
+    // Y-Axis domain
     const { yAxisDomain, yAxisTicks } = useMemo(() => {
         if (['1D', '1W', '1M', 'ALL'].includes(timeframe)) {
-            return {
-                yAxisDomain: [0, 100] as [number, number],
-                yAxisTicks: [0, 25, 50, 75, 100]
-            };
+            return { yAxisDomain: [0, 100] as [number, number], yAxisTicks: [0, 25, 50, 75, 100] };
         }
 
         if (!filteredData || filteredData.length === 0) {
-            return {
-                yAxisDomain: [0, 100] as [number, number],
-                yAxisTicks: [0, 25, 50, 75, 100]
-            };
+            return { yAxisDomain: [0, 100] as [number, number], yAxisTicks: [0, 25, 50, 75, 100] };
         }
 
         let minVal = 100;
@@ -395,17 +320,16 @@ export default React.memo(function ProbabilityChart({
         const smartMax = Math.min(100, Math.ceil((maxVal + padding / 2) / 5) * 5);
 
         const ticks = [];
-        for (let i = smartMin; i <= smartMax; i += 5) {
+        for (let i = smartMin; i <= smartMax; i += 25) {
             ticks.push(i);
         }
+        if (!ticks.includes(smartMin)) ticks.unshift(smartMin);
+        if (!ticks.includes(smartMax)) ticks.push(smartMax);
 
-        return {
-            yAxisDomain: [smartMin, smartMax] as [number, number],
-            yAxisTicks: ticks
-        };
+        return { yAxisDomain: [smartMin, smartMax] as [number, number], yAxisTicks: [...new Set(ticks)].sort((a, b) => a - b) };
     }, [filteredData, outcomeKeys, timeframe]);
 
-    // OPTIMIZATION 10: Memoized handlers
+    // Mouse handlers
     const handleMouseMove = useCallback((e: any) => {
         if (e.activePayload && e.activePayload.length > 0) {
             const payload = e.activePayload[0].payload;
@@ -417,188 +341,221 @@ export default React.memo(function ProbabilityChart({
         setHoverData(null);
     }, []);
 
-    // OPTIMIZATION 11: Memoized timeframe formatter
-    const tickFormatter = useCallback((val: number) => {
-        if (!val || typeof val !== 'number' || val <= 0) return '';
-        const date = new Date(val * 1000);
-        if (isNaN(date.getTime())) return '';
-
-        switch (timeframe) {
-            case '1m':
-            case '5m':
-            case '15m':
-                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
-            case '1H':
-            case '6H':
-            case '1D':
-                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-            case '1W':
-            case '1M':
-                return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-            case 'ALL':
-                // For ALL, show date if range > 1 day, else time
-                const range = (filteredData[filteredData.length - 1]?.time || 0) - (filteredData[0]?.time || 0);
-                if (range > 86400) return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-            default:
-                return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-        }
-    }, [timeframe, filteredData]);
-
     return (
-        <div className="w-full h-full flex flex-col relative group">
-            {/* FULLY TRANSPARENT - No background, shows stars */}
+        <div className="w-full h-full flex flex-col relative">
+            {/* NEO-BRUTALIST CHART CONTAINER */}
+            <div className="bg-white border-4 border-black rounded-3xl shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] overflow-hidden flex flex-col h-full">
 
-            {/* BRAND HEADER */}
-            <div className="absolute top-4 right-4 z-20 flex items-center gap-0 pointer-events-none">
-                <div className="relative w-12 h-12 -mr-1.5">
-                    <Image src="/djinn-logo.png?v=3" alt="Djinn Logo" fill className="object-contain" priority unoptimized />
-                </div>
-                <span className="text-2xl text-white mt-0.5 relative z-10 drop-shadow-lg" style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}>
-                    Djinn
-                </span>
-            </div>
+                {/* TOP BAR - Outcomes with Big Numbers */}
+                <div className="bg-gray-50 border-b-4 border-black px-6 py-4">
+                    <div className="flex items-center justify-between">
+                        {/* OUTCOME LEGEND WITH BIG NUMBERS */}
+                        <div className="flex items-center gap-4">
+                            {outcomeKeys.map((title, idx) => {
+                                const color = getOutcomeColor(title, idx);
+                                const val = displayProbs[title] ?? 0;
+                                const isHovered = hoverData !== null;
 
-            {/* VOLUME */}
-            <div className="absolute bottom-2 left-4 z-30 pointer-events-none">
-                {volume && (
-                    <span className="bg-white/10 backdrop-blur-md border-2 border-white/30 px-3 py-1.5 rounded-lg text-sm font-black text-white font-mono tracking-tight uppercase">
-                        {volume} <span className="text-white/70 ml-0.5">vol</span>
-                    </span>
-                )}
-            </div>
+                                return (
+                                    <div
+                                        key={title}
+                                        className={cn(
+                                            "flex items-center gap-3 px-4 py-2 rounded-xl border-2 border-black transition-all cursor-pointer",
+                                            selectedOutcome === title
+                                                ? "bg-black text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)]"
+                                                : "bg-white hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5"
+                                        )}
+                                        onClick={() => onOutcomeChange?.(title)}
+                                    >
+                                        <div
+                                            className="w-4 h-4 rounded-full border-2 border-black"
+                                            style={{ backgroundColor: color }}
+                                        />
+                                        <span className={cn(
+                                            "text-sm font-black uppercase tracking-wider",
+                                            selectedOutcome === title ? "text-white" : "text-black"
+                                        )}>
+                                            {title}
+                                        </span>
+                                        <span
+                                            className={cn(
+                                                "text-3xl font-black tabular-nums tracking-tighter transition-all",
+                                                isHovered ? "scale-110" : ""
+                                            )}
+                                            style={{ color: selectedOutcome === title ? 'white' : color }}
+                                        >
+                                            {val.toFixed(1)}%
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
 
-            {/* TIMEFRAMES - TRANSPARENT */}
-            <div className="absolute bottom-2 right-4 z-30 flex gap-1 pointer-events-auto">
-                {['1m', '5m', '15m', '1H', '6H', '1D', '1W', '1M', 'ALL'].map((tf) => (
-                    <button
-                        key={tf}
-                        onClick={() => setTimeframe(tf as any)}
-                        className={cn(
-                            "px-2.5 py-1.5 rounded-lg text-[10px] font-black transition-all whitespace-nowrap cursor-pointer border-2 backdrop-blur-md",
-                            timeframe === tf
-                                ? "bg-white text-black border-white"
-                                : "bg-white/10 text-white border-white/30 hover:bg-white/20 hover:border-white/50"
-                        )}
-                    >
-                        {tf}
-                    </button>
-                ))}
-            </div>
-
-            <div className="absolute top-4 left-4 z-20 flex flex-wrap items-center gap-3 pointer-events-none">
-                {outcomeKeys.map((title, idx) => {
-                    const color = getOutcomeColor(title, idx);
-                    const val = displayProbs[title] ?? 0;
-                    return (
-                        <div key={title} className="flex items-center gap-2 bg-white/10 backdrop-blur-md border-2 border-white/30 px-3 py-1.5 rounded-lg">
-                            <div className="flex items-center gap-1.5">
-                                <div className="w-3 h-3 rounded-full border-2 border-white" style={{ backgroundColor: color }} />
-                                <span className="text-xs font-black text-white uppercase tracking-wider">{title}</span>
+                        {/* BRAND */}
+                        <div className="flex items-center gap-1.5 opacity-60">
+                            <div className="relative w-8 h-8">
+                                <Image src="/djinn-logo.png?v=3" alt="Djinn" fill className="object-contain" priority unoptimized />
                             </div>
-                            <span className="text-lg font-black tabular-nums tracking-tight leading-none" style={{ color: color }}>
-                                {val.toFixed(0)}<span className="text-[10px] align-top opacity-70 ml-0.5 text-white">%</span>
+                            <span className="text-lg text-black font-bold" style={{ fontFamily: 'var(--font-adriane), serif' }}>
+                                Djinn
                             </span>
                         </div>
-                    );
-                })}
-            </div>
+                    </div>
+                </div>
 
-            {/* BUBBLES - TRANSPARENT */}
-            <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden">
-                <AnimatePresence mode="popLayout">
-                    {bubbles.slice(0, 5).map(b => ( // Limit to 5 bubbles max
-                        <motion.div
-                            key={b.id}
-                            initial={{ opacity: 0, x: -20, scale: 0.8 }}
-                            animate={{ opacity: 1, x: 20, y: -50, scale: 1 }}
-                            exit={{ opacity: 0, y: -100 }}
-                            transition={{ duration: 3, ease: "easeOut" }}
-                            style={{ top: `${b.y}%`, left: '0%' }}
-                            className="absolute flex items-center gap-2"
+                {/* CHART AREA - Clean Lines Only */}
+                <div className="flex-1 w-full min-h-0 relative bg-white p-4">
+                    {/* Trade Bubbles */}
+                    <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden">
+                        <AnimatePresence mode="popLayout">
+                            {bubbles.slice(0, 3).map(b => (
+                                <motion.div
+                                    key={b.id}
+                                    initial={{ opacity: 0, x: -20, scale: 0.8 }}
+                                    animate={{ opacity: 1, x: 40, y: -60, scale: 1 }}
+                                    exit={{ opacity: 0, y: -120 }}
+                                    transition={{ duration: 3, ease: "easeOut" }}
+                                    style={{ top: `${b.y}%`, left: '5%' }}
+                                    className="absolute"
+                                >
+                                    <div
+                                        className="px-4 py-2 rounded-xl bg-white border-2 border-black text-sm font-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+                                        style={{ color: b.color }}
+                                    >
+                                        {b.text}
+                                    </div>
+                                </motion.div>
+                            ))}
+                        </AnimatePresence>
+                    </div>
+
+                    <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                            data={filteredData}
+                            margin={{ top: 20, right: 60, left: 20, bottom: 20 }}
+                            onMouseMove={handleMouseMove}
+                            onMouseLeave={handleMouseLeave}
                         >
-                            <div
-                                className="px-3 py-1.5 rounded-lg bg-white/10 backdrop-blur-md border-2 border-white/30 text-xs font-black whitespace-nowrap"
-                                style={{ color: b.color }}
-                            >
-                                {b.text}
-                            </div>
-                        </motion.div>
-                    ))}
-                </AnimatePresence>
-            </div>
-
-            {/* CHART - CRITICAL OPTIMIZATIONS */}
-            <div className="flex-1 w-full min-h-0 relative z-10">
-                <ResponsiveContainer width="100%" height="100%">
-                    <LineChart
-                        data={filteredData}
-                        margin={{ top: 80, right: 25, left: 10, bottom: 60 }}
-                        onMouseMove={handleMouseMove}
-                        onMouseLeave={handleMouseLeave}
-                    >
-                        <CartesianGrid
-                            vertical={false}
-                            stroke="#ffffff"
-                            strokeOpacity={0.3}
-                            strokeWidth={1}
-                            strokeDasharray="4 4"
-                        />
-                        <XAxis
-                            dataKey="time"
-                            type="number"
-                            scale="time"
-                            domain={[domainMin || 'dataMin', domainMax || 'dataMax']}
-                            axisLine={false}
-                            tickLine={false}
-                            tickFormatter={(timestamp) => formatTimeLabel(timestamp, timeframe)}
-                            tick={{ fill: '#ffffff', fontSize: 12, fontWeight: 700 }}
-                            minTickGap={50}
-                        />
-                        <YAxis
-                            orientation="right"
-                            domain={yAxisDomain}
-                            ticks={yAxisTicks}
-                            allowDataOverflow={true}
-                            axisLine={false}
-                            tickLine={false}
-                            tick={{ fill: '#ffffff', fontSize: 11, fontWeight: 700 }}
-                            tickFormatter={(val) => `${val}%`}
-                            width={35}
-                        />
-                        <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#ffffff', strokeWidth: 2, strokeDasharray: '5 5' }} />
-                        {outcomeKeys.map((title, idx) => {
-                            const color = getOutcomeColor(title, idx);
-                            return (
-                                <Line
-                                    key={title}
-                                    type="monotone"
-                                    dataKey={title}
-                                    stroke={color}
-                                    strokeWidth={3}
-                                    dot={(props: any) => {
-                                        const { index, cx, ...restProps } = props;
-                                        if (index === filteredData.length - 1) {
-                                            return <PulsingDot {...restProps} cx={cx - 6} stroke={color} />;
-                                        }
-                                        return null;
-                                    }}
-                                    activeDot={{ r: 6, strokeWidth: 0, fill: color }}
-                                    isAnimationActive={false}
-                                    animationDuration={0}
-                                    connectNulls
-                                    style={{ cursor: 'pointer', filter: `drop-shadow(0 0 4px ${color})` }}
-                                    onClick={() => onOutcomeChange?.(title)}
+                            {/* HORIZONTAL GRID LINES - Clean dashed */}
+                            {yAxisTicks.map((tick) => (
+                                <ReferenceLine
+                                    key={tick}
+                                    y={tick}
+                                    stroke="#e5e7eb"
+                                    strokeWidth={1}
+                                    strokeDasharray="6 4"
                                 />
-                            );
-                        })}
-                    </LineChart>
-                </ResponsiveContainer>
+                            ))}
+
+                            {/* X AXIS */}
+                            <XAxis
+                                dataKey="time"
+                                type="number"
+                                scale="time"
+                                domain={[domainMin || 'dataMin', domainMax || 'dataMax']}
+                                axisLine={{ stroke: '#000', strokeWidth: 2 }}
+                                tickLine={{ stroke: '#000', strokeWidth: 1 }}
+                                tickFormatter={(timestamp) => formatTimeLabel(timestamp, timeframe)}
+                                tick={{ fill: '#000', fontSize: 11, fontWeight: 700 }}
+                                minTickGap={60}
+                            />
+
+                            {/* Y AXIS */}
+                            <YAxis
+                                orientation="right"
+                                domain={yAxisDomain}
+                                ticks={yAxisTicks}
+                                allowDataOverflow={true}
+                                axisLine={{ stroke: '#000', strokeWidth: 2 }}
+                                tickLine={{ stroke: '#000', strokeWidth: 1 }}
+                                tick={{ fill: '#000', fontSize: 12, fontWeight: 700 }}
+                                tickFormatter={(val) => `${val}%`}
+                                width={50}
+                            />
+
+                            {/* TOOLTIP */}
+                            <Tooltip
+                                content={<CustomTooltip />}
+                                cursor={{
+                                    stroke: '#000',
+                                    strokeWidth: 2,
+                                    strokeDasharray: '6 4'
+                                }}
+                            />
+
+                            {/* LINES - Clean, no shadows, step interpolation */}
+                            {outcomeKeys.map((title, idx) => {
+                                const color = getOutcomeColor(title, idx);
+                                return (
+                                    <Line
+                                        key={title}
+                                        type="stepAfter"
+                                        dataKey={title}
+                                        stroke={color}
+                                        strokeWidth={3}
+                                        dot={(props: any) => {
+                                            const { index, cx, ...restProps } = props;
+                                            if (index === filteredData.length - 1) {
+                                                return <PulsingDot {...restProps} cx={cx} stroke={color} />;
+                                            }
+                                            return null;
+                                        }}
+                                        activeDot={{
+                                            r: 8,
+                                            strokeWidth: 3,
+                                            fill: color,
+                                            stroke: '#fff'
+                                        }}
+                                        isAnimationActive={false}
+                                        connectNulls
+                                        onClick={() => onOutcomeChange?.(title)}
+                                    />
+                                );
+                            })}
+                        </LineChart>
+                    </ResponsiveContainer>
+                </div>
+
+                {/* BOTTOM BAR - Volume & Timeframes */}
+                <div className="bg-gray-50 border-t-4 border-black px-6 py-3 flex items-center justify-between">
+                    {/* VOLUME */}
+                    <div className="flex items-center gap-4">
+                        {volume && (
+                            <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl border-2 border-black">
+                                <span className="text-xs font-black text-black/50 uppercase tracking-wider">Vol</span>
+                                <span className="text-sm font-black text-black">{volume}</span>
+                            </div>
+                        )}
+                        {resolutionDate && (
+                            <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl border-2 border-black">
+                                <span className="text-xs font-black text-black/50 uppercase tracking-wider">Ends</span>
+                                <span className="text-sm font-black text-black">{resolutionDate}</span>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* TIMEFRAME SELECTOR */}
+                    <div className="flex items-center gap-1 bg-white rounded-xl border-2 border-black p-1">
+                        {Object.keys(TIMEFRAMES).map((tf) => (
+                            <button
+                                key={tf}
+                                onClick={() => setTimeframe(tf as any)}
+                                className={cn(
+                                    "px-3 py-1.5 rounded-lg text-xs font-black transition-all",
+                                    timeframe === tf
+                                        ? "bg-black text-white"
+                                        : "bg-transparent text-black hover:bg-gray-100"
+                                )}
+                            >
+                                {tf}
+                            </button>
+                        ))}
+                    </div>
+                </div>
             </div>
         </div>
     );
 }, (prevProps, nextProps) => {
-    // OPTIMIZATION 12: Custom comparison for React.memo
     return (
         prevProps.timeframe === nextProps.timeframe &&
         prevProps.selectedOutcome === nextProps.selectedOutcome &&

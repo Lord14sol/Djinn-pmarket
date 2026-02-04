@@ -149,9 +149,9 @@ function TheDjinnChart({
     // For now, passing necessary data to ProbabilityChart
 
     return (
-        <div className="w-full max-w-4xl mx-auto overflow-hidden relative font-sans h-[700px]">
-            {/* CHART AREA */}
-            <div className="w-full h-full bg-transparent">
+        <div className="w-full mx-auto overflow-visible relative font-sans h-[600px]">
+            {/* CHART AREA - Full width, no background */}
+            <div className="w-full h-full">
                 <ProbabilityChart
                     data={safeProbData}
                     outcomes={outcomes}
