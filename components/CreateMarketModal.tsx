@@ -52,6 +52,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
     const [poolName, setPoolName] = useState('');
     const [mainImage, setMainImage] = useState<string | null>(null);
     const [sourceUrl, setSourceUrl] = useState('');
+    const [activeColorPicker, setActiveColorPicker] = useState<number | null>(null);
 
     // Updated Option State with Color
     const [options, setOptions] = useState<{ id: number; name: string; color: string }[]>([
@@ -491,31 +492,45 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                                         {options.map((option, index) => (
                                             <div key={option.id} className="flex items-center gap-3 animate-in fade-in slide-in-from-left-4 duration-300">
 
-                                                {/* LEFT: Color Picker + Number Combined */}
-                                                <div className="relative group/picker shrink-0">
-                                                    {/* The Trigger Swatch (ACTS AS NUMBER DISPLAY TOO) */}
+                                                {/* LEFT: Color Picker (Click to Toggle) */}
+                                                <div className="relative shrink-0">
+                                                    {/* The Trigger Swatch (No Number) */}
                                                     <div
-                                                        className="w-12 h-12 rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] shrink-0 cursor-pointer hover:-translate-y-0.5 transition-transform flex items-center justify-center font-black text-white text-lg"
-                                                        style={{ backgroundColor: option.color, textShadow: '1px 1px 0 #000' }}
+                                                        className="w-12 h-12 rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] shrink-0 cursor-pointer hover:-translate-y-0.5 transition-transform flex items-center justify-center"
+                                                        style={{ backgroundColor: option.color }}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setActiveColorPicker(activeColorPicker === index ? null : index);
+                                                        }}
                                                     >
-                                                        {index + 1}
                                                     </div>
 
-                                                    {/* The Mini Menu (Tooltip/Popover) */}
-                                                    <div className="absolute bottom-full left-0 mb-2 hidden group-hover/picker:flex flex-wrap gap-1 p-2 bg-white border-2 border-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] w-40 z-50">
-                                                        {COLORS.map((c) => (
-                                                            <button
-                                                                key={c}
-                                                                className="w-8 h-8 rounded-lg border-2 border-black hover:scale-110 transition-transform"
-                                                                style={{ backgroundColor: c }}
-                                                                onClick={() => {
-                                                                    const newOpts = [...options];
-                                                                    newOpts[index].color = c;
-                                                                    setOptions(newOpts);
-                                                                }}
-                                                            />
-                                                        ))}
-                                                    </div>
+                                                    {/* The Mini Menu (Toggle on Click) */}
+                                                    {activeColorPicker === index && (
+                                                        <div className="absolute bottom-full left-0 mb-2 flex flex-wrap gap-1 p-2 bg-white border-2 border-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] w-40 z-50 animate-in fade-in zoom-in-95 duration-200">
+                                                            {COLORS.map((c) => (
+                                                                <button
+                                                                    key={c}
+                                                                    className="w-8 h-8 rounded-lg border-2 border-black hover:scale-110 transition-transform"
+                                                                    style={{ backgroundColor: c }}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        const newOpts = [...options];
+                                                                        newOpts[index].color = c;
+                                                                        setOptions(newOpts);
+                                                                        setActiveColorPicker(null); // Close after select
+                                                                    }}
+                                                                />
+                                                            ))}
+                                                            {/* Close Trigger (Optional) */}
+                                                            <div className="fixed inset-0 z-[-1]" onClick={() => setActiveColorPicker(null)} />
+                                                        </div>
+                                                    )}
+
+                                                    {/* Backdrop to close menu when clicking outside (Local) */}
+                                                    {activeColorPicker === index && (
+                                                        <div className="fixed inset-0 z-40 bg-transparent" onClick={() => setActiveColorPicker(null)} />
+                                                    )}
                                                 </div>
 
                                                 {/* MIDDLE: Outcome Name Input */}
