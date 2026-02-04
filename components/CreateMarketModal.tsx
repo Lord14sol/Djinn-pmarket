@@ -410,8 +410,8 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                     <>
                         {/* Header */}
                         <div className="p-6 md:p-8 pb-4 flex justify-between items-center bg-white border-b-4 border-black z-20">
-                            <h1 className="text-3xl md:text-4xl font-black lowercase tracking-tight text-black leading-none">
-                                create<br />market
+                            <h1 className="text-3xl md:text-3xl font-black lowercase tracking-tight text-black leading-none">
+                                create market
                             </h1>
 
                             {/* CLOSE BUTTON - Always Visible, Neo-Brutalist */}
@@ -490,34 +490,19 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                                     <div className="space-y-3">
                                         {options.map((option, index) => (
                                             <div key={option.id} className="flex items-center gap-3 animate-in fade-in slide-in-from-left-4 duration-300">
-                                                <div className="w-10 h-10 rounded-xl border-2 border-black bg-white flex items-center justify-center font-black text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] shrink-0">
-                                                    {index + 1}
-                                                </div>
 
-                                                {/* Outcome Name Input */}
-                                                <input
-                                                    type="text"
-                                                    placeholder={`Option ${index + 1}`}
-                                                    className="flex-1 bg-white border-2 border-black rounded-xl py-3 px-4 font-bold text-black outline-none focus:shadow-[2px_2px_0px_0px_#F492B7] transition-all placeholder:text-gray-300"
-                                                    value={option.name}
-                                                    onChange={(e) => {
-                                                        const newOpts = [...options];
-                                                        newOpts[index].name = e.target.value;
-                                                        setOptions(newOpts);
-                                                    }}
-                                                />
-
-                                                {/* Color Picker: Neo-Brutalist Mini Menu */}
-                                                <div className="relative group/picker">
-                                                    {/* The Trigger Swatch */}
+                                                {/* LEFT: Color Picker + Number Combined */}
+                                                <div className="relative group/picker shrink-0">
+                                                    {/* The Trigger Swatch (ACTS AS NUMBER DISPLAY TOO) */}
                                                     <div
-                                                        className="w-12 h-12 rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] shrink-0 cursor-pointer hover:-translate-y-0.5 transition-transform"
-                                                        style={{ backgroundColor: option.color }}
+                                                        className="w-12 h-12 rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] shrink-0 cursor-pointer hover:-translate-y-0.5 transition-transform flex items-center justify-center font-black text-white text-lg"
+                                                        style={{ backgroundColor: option.color, textShadow: '1px 1px 0 #000' }}
                                                     >
+                                                        {index + 1}
                                                     </div>
 
                                                     {/* The Mini Menu (Tooltip/Popover) */}
-                                                    <div className="absolute bottom-full right-0 mb-2 hidden group-hover/picker:flex flex-wrap gap-1 p-2 bg-white border-2 border-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] w-40 z-50">
+                                                    <div className="absolute bottom-full left-0 mb-2 hidden group-hover/picker:flex flex-wrap gap-1 p-2 bg-white border-2 border-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] w-40 z-50">
                                                         {COLORS.map((c) => (
                                                             <button
                                                                 key={c}
@@ -533,12 +518,24 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                                                     </div>
                                                 </div>
 
+                                                {/* MIDDLE: Outcome Name Input */}
+                                                <input
+                                                    type="text"
+                                                    placeholder={`Option ${index + 1}`}
+                                                    className="flex-1 bg-white border-2 border-black rounded-xl py-3 px-4 font-bold text-black outline-none focus:shadow-[2px_2px_0px_0px_#F492B7] transition-all placeholder:text-gray-300"
+                                                    value={option.name}
+                                                    onChange={(e) => {
+                                                        const newOpts = [...options];
+                                                        newOpts[index].name = e.target.value;
+                                                        setOptions(newOpts);
+                                                    }}
+                                                />
 
-                                                {/* Delete Button - ALWAYS VISIBLE */}
+                                                {/* RIGHT: Delete Button */}
                                                 {marketType === 'multiple' && options.length > 2 && (
                                                     <button
                                                         onClick={() => setOptions(options.filter((_, i) => i !== index))}
-                                                        className="w-10 h-10 flex items-center justify-center text-black bg-red-100 border-2 border-black rounded-xl hover:bg-red-200 transition-colors shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:shadow-none"
+                                                        className="w-10 h-10 flex items-center justify-center text-black bg-red-100 border-2 border-black rounded-xl hover:bg-red-200 transition-colors shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:shadow-none shrink-0"
                                                     >
                                                         <TrashIcon />
                                                     </button>
