@@ -37,6 +37,12 @@ const COLORS = [
     "#EC4899", // Pink
     "#06B6D4", // Cyan
     "#14B8A6", // Teal
+    "#6366F1", // Indigo
+    "#84CC16", // Lime
+    "#F97316", // Orange
+    "#D946EF", // Fuchsia
+    "#F43F5E", // Rose
+    "#0EA5E9", // Sky
 ];
 
 export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModalProps) {
