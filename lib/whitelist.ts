@@ -2,7 +2,8 @@ import { supabase } from './supabase';
 
 export const ADMIN_WALLETS = [
     "C31JQfZBVRsnvFqiNptD95rvbEx8fsuPwdZn62yEWx9X",
-    "G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma"
+    "G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma",
+    "6Jg8mGGywg758CDvywz8QnshCJNvBJzXvYWdYZ4YNznH"
 ];
 
 // Límite de Genesis: Solo los primeros 1000 usuarios reciben la medalla

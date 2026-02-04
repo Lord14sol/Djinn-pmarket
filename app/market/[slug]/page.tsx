@@ -2439,41 +2439,52 @@ export default function Page() {
                                     </div>
                                 </div>
 
-                                {/* 2. TRADE PANEL (Right Side) - Fixed Width */}
-                                <div className="w-full lg:w-[420px] shrink-0 bg-white p-6 overflow-y-auto custom-scrollbar lg:max-h-[850px]">
-                                    {/* TOTAL POOL HEADER */}
-                                    <div className="mb-6 w-full flex flex-col items-center px-8 py-4 rounded-2xl bg-gradient-to-br from-[#F492B7] to-[#FFB6C1] border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden group/pool">
-                                        <span className="text-[10px] font-black uppercase tracking-[0.4em] text-black/70 mb-1">
+                                {/* 2. TRADE PANEL (Right Side) - ENHANCED VISIBILITY */}
+                                <div className="w-full lg:w-[440px] shrink-0 bg-gradient-to-br from-white to-gray-50 p-6 overflow-y-auto custom-scrollbar lg:max-h-[850px] border-l-4 border-black">
+                                    {/* 🎯 TRADE HEADER - Eye-catching */}
+                                    <div className="mb-6 bg-black text-white px-6 py-3 -mx-6 -mt-6 border-b-4 border-black flex items-center justify-between">
+                                        <h2 className="text-xl font-black uppercase tracking-wider">Trade Now</h2>
+                                        <div className="w-3 h-3 bg-[#F492B7] rounded-full animate-pulse border-2 border-white" />
+                                    </div>
+
+                                    {/* TOTAL POOL HEADER - More prominent */}
+                                    <div className="mb-6 w-full flex flex-col items-center px-8 py-6 rounded-2xl bg-gradient-to-br from-[#F492B7] via-[#FFB6C1] to-[#FFC0CB] border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden group/pool hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 transition-all">
+                                        {/* Decorative pattern */}
+                                        <div className="absolute inset-0 opacity-10">
+                                            <div className="absolute top-0 right-0 w-24 h-24 bg-black rounded-full -mr-12 -mt-12" />
+                                            <div className="absolute bottom-0 left-0 w-16 h-16 bg-black rounded-full -ml-8 -mb-8" />
+                                        </div>
+                                        <span className="text-[11px] font-black uppercase tracking-[0.4em] text-black/70 mb-2 relative z-10">
                                             Total Pool
                                         </span>
-                                        <span className="text-4xl font-black text-black tracking-tighter">
+                                        <span className="text-5xl font-black text-black tracking-tighter relative z-10">
                                             <AnimatedNumber
                                                 value={totalPoolSol}
                                                 decimals={2}
                                                 className="inline"
-                                            /> <span className="text-white">SOL</span>
+                                            /> <span className="text-white drop-shadow-lg">SOL</span>
                                         </span>
                                     </div>
 
-                                    {/* BUY/SELL TOGGLE */}
-                                    <div className="mb-6 p-2 bg-gray-50 border-3 border-black rounded-xl flex gap-2">
+                                    {/* BUY/SELL TOGGLE - Enhanced */}
+                                    <div className="mb-6 p-2 bg-gray-100 border-4 border-black rounded-2xl flex gap-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                                         <button
                                             onClick={() => setTradeMode('BUY')}
-                                            className={`flex-1 py-3 rounded-lg text-sm font-black uppercase tracking-widest transition-all border-3 ${tradeMode === 'BUY' ? 'bg-emerald-400 text-black border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] -translate-y-0.5' : 'text-gray-400 border-transparent hover:text-black hover:bg-white'}`}
+                                            className={`flex-1 py-4 rounded-xl text-base font-black uppercase tracking-widest transition-all border-4 ${tradeMode === 'BUY' ? 'bg-emerald-400 text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-y-1 scale-105' : 'text-gray-500 border-gray-300 bg-white hover:text-black hover:border-black hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'}`}
                                         >
-                                            Buy
+                                            🔥 Buy
                                         </button>
                                         <button
                                             onClick={() => setTradeMode('SELL')}
-                                            className={`flex-1 py-3 rounded-lg text-sm font-black uppercase tracking-widest transition-all border-3 ${tradeMode === 'SELL' ? 'bg-rose-400 text-black border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] -translate-y-0.5' : 'text-gray-400 border-transparent hover:text-black hover:bg-white'}`}
+                                            className={`flex-1 py-4 rounded-xl text-base font-black uppercase tracking-widest transition-all border-4 ${tradeMode === 'SELL' ? 'bg-rose-400 text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-y-1 scale-105' : 'text-gray-500 border-gray-300 bg-white hover:text-black hover:border-black hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'}`}
                                         >
-                                            Sell
+                                            💸 Sell
                                         </button>
                                     </div>
 
-                                    {/* INPUT Section */}
-                                    <div className="bg-gradient-to-br from-gray-50 to-white rounded-2xl border-4 border-black p-6 mb-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                                        <label className="text-xs font-black uppercase text-black/60 tracking-[0.3em] mb-3 block">
+                                    {/* INPUT Section - Enhanced Brutalist */}
+                                    <div className="bg-white rounded-2xl border-4 border-black p-8 mb-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 transition-all">
+                                        <label className="text-xs font-black uppercase text-black/80 tracking-[0.35em] mb-4 block border-b-2 border-black pb-2">
                                             {tradeMode === 'BUY' ? '💳 You Pay' : '📊 Shares to Sell'}
                                         </label>
                                         <div className="flex items-center gap-4">
@@ -2485,17 +2496,17 @@ export default function Page() {
                                                     setBetAmount(e.target.value);
                                                     setIsMaxSell(false);
                                                 }}
-                                                className="bg-transparent text-5xl md:text-6xl font-black text-black w-full outline-none placeholder-gray-300 tracking-tighter"
+                                                className="bg-transparent text-6xl md:text-7xl font-black text-black w-full outline-none placeholder-gray-300 tracking-tighter focus:text-[#F492B7] transition-colors"
                                                 placeholder="0"
                                             />
-                                            {/* SOL BADGE */}
-                                            <div className="flex items-center gap-2 bg-black px-4 py-3 rounded-xl border-3 border-black shrink-0">
+                                            {/* SOL BADGE - Enhanced */}
+                                            <div className="flex items-center gap-2 bg-black px-5 py-4 rounded-xl border-4 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,0.3)] shrink-0">
                                                 <img
                                                     src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
-                                                    className="w-6 h-6"
+                                                    className="w-7 h-7"
                                                     alt="SOL"
                                                 />
-                                                <span className="text-sm font-black text-white">{tradeMode === 'BUY' ? 'SOL' : 'SHR'}</span>
+                                                <span className="text-base font-black text-white">{tradeMode === 'BUY' ? 'SOL' : 'SHR'}</span>
                                             </div>
                                         </div>
                                         {/* Percentage Buttons */}
@@ -2535,51 +2546,59 @@ export default function Page() {
                                         )}
                                     </div>
 
-                                    {/* PROBABILITY BAR & OUTCOMES */}
-                                    <div className="mb-6 space-y-3">
-                                        <div className="flex items-center justify-between px-2">
-                                            <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Prediction</span>
+                                    {/* PROBABILITY BAR & OUTCOMES - Enhanced */}
+                                    <div className="mb-6 space-y-4">
+                                        <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-2 border-black rounded-lg">
+                                            <span className="text-xs font-black uppercase text-black tracking-wider">📊 Prediction</span>
                                             {/* Slippage (Pencil Edit) */}
                                             <div className="flex items-center gap-2">
-                                                <span className="text-[10px] font-bold text-gray-500 bg-white/5 px-2 py-1 rounded border border-white/5">{slippageTolerance}% SLIP</span>
+                                                <span className="text-[10px] font-black text-gray-700 bg-white px-2.5 py-1.5 rounded-md border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">{slippageTolerance}% SLIP</span>
                                                 <button onClick={() => {
                                                     const newSlippage = prompt("Enter new slippage %:", slippageTolerance.toString());
                                                     if (newSlippage && !isNaN(parseFloat(newSlippage))) setSlippageTolerance(parseFloat(newSlippage));
-                                                }} className="p-1.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-400 hover:text-black transition-colors">
-                                                    <Edit2 size={12} />
+                                                }} className="p-2 rounded-md bg-white hover:bg-[#F492B7] text-gray-600 hover:text-black transition-all border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-y-0.5">
+                                                    <Edit2 size={14} />
                                                 </button>
                                             </div>
                                         </div>
 
-                                        {/* YES/NO BUTTONS */}
-                                        <div className="flex gap-4 h-32 md:h-40">
+                                        {/* YES/NO BUTTONS - ENHANCED BRUTALIST */}
+                                        <div className="flex gap-4 h-40 md:h-48">
                                             {isMultiOutcome ? (
-                                                <div className="flex-1 bg-gradient-to-br from-[#F492B7] to-[#FFB6C1] rounded-2xl border-4 border-black p-6 flex flex-col justify-center items-center hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-                                                    <span className="text-xs font-black uppercase text-black/70 tracking-widest mb-2">Target Outcome</span>
-                                                    <span className="font-black text-black text-xl truncate max-w-full">{selectedOutcomeName || 'Select First'}</span>
-                                                    <span className="text-base font-black text-white mt-2">{(livePrice ?? 0).toFixed(0)}%</span>
+                                                <div className="flex-1 bg-gradient-to-br from-[#F492B7] via-[#FFB6C1] to-[#FFC0CB] rounded-2xl border-4 border-black p-8 flex flex-col justify-center items-center hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all cursor-pointer shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+                                                    <span className="text-xs font-black uppercase text-black/70 tracking-[0.3em] mb-3">🎯 Target</span>
+                                                    <span className="font-black text-black text-2xl truncate max-w-full">{selectedOutcomeName || 'Select First'}</span>
+                                                    <span className="text-xl font-black text-white mt-3 bg-black/20 px-4 py-1 rounded-lg">{(livePrice ?? 0).toFixed(0)}%</span>
                                                 </div>
                                             ) : (
                                                 <>
                                                     <button
                                                         onClick={() => setSelectedSide('YES')}
-                                                        className={`flex-1 rounded-2xl flex flex-col items-center justify-center transition-all duration-200 border-4 ${selectedSide === 'YES'
-                                                            ? 'bg-emerald-400 border-black text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] -translate-y-1'
-                                                            : 'bg-white border-emerald-400 text-emerald-600 hover:bg-emerald-50 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'}`}
+                                                        className={`flex-1 rounded-2xl flex flex-col items-center justify-center transition-all duration-200 border-4 relative overflow-hidden group ${selectedSide === 'YES'
+                                                            ? 'bg-emerald-400 border-black text-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] -translate-y-2 scale-105'
+                                                            : 'bg-white border-emerald-400 text-emerald-600 hover:bg-emerald-50 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1'}`}
                                                     >
-                                                        <span className="text-sm font-black uppercase tracking-widest mb-2">{marketOutcomes[0]?.title || 'YES'}</span>
-                                                        <span className={`text-4xl font-black ${selectedSide === 'YES' ? 'text-black' : 'text-emerald-600'}`}>
+                                                        {/* Decorative corner */}
+                                                        {selectedSide === 'YES' && (
+                                                            <div className="absolute top-2 right-2 w-3 h-3 bg-black rounded-full animate-pulse" />
+                                                        )}
+                                                        <span className="text-base font-black uppercase tracking-[0.2em] mb-3">{marketOutcomes[0]?.title || 'YES'}</span>
+                                                        <span className={`text-5xl font-black ${selectedSide === 'YES' ? 'text-black' : 'text-emerald-600'}`}>
                                                             {yesPercent.toFixed(0)}%
                                                         </span>
                                                     </button>
                                                     <button
                                                         onClick={() => setSelectedSide('NO')}
-                                                        className={`flex-1 rounded-2xl flex flex-col items-center justify-center transition-all duration-200 border-4 ${selectedSide === 'NO'
-                                                            ? 'bg-rose-400 border-black text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] -translate-y-1'
-                                                            : 'bg-white border-rose-400 text-rose-600 hover:bg-rose-50 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'}`}
+                                                        className={`flex-1 rounded-2xl flex flex-col items-center justify-center transition-all duration-200 border-4 relative overflow-hidden group ${selectedSide === 'NO'
+                                                            ? 'bg-rose-400 border-black text-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] -translate-y-2 scale-105'
+                                                            : 'bg-white border-rose-400 text-rose-600 hover:bg-rose-50 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1'}`}
                                                     >
-                                                        <span className="text-sm font-black uppercase tracking-widest mb-2">{marketOutcomes[1]?.title || 'NO'}</span>
-                                                        <span className={`text-4xl font-black ${selectedSide === 'NO' ? 'text-black' : 'text-rose-600'}`}>
+                                                        {/* Decorative corner */}
+                                                        {selectedSide === 'NO' && (
+                                                            <div className="absolute top-2 right-2 w-3 h-3 bg-black rounded-full animate-pulse" />
+                                                        )}
+                                                        <span className="text-base font-black uppercase tracking-[0.2em] mb-3">{marketOutcomes[1]?.title || 'NO'}</span>
+                                                        <span className={`text-5xl font-black ${selectedSide === 'NO' ? 'text-black' : 'text-rose-600'}`}>
                                                             {noPercent.toFixed(0)}%
                                                         </span>
                                                     </button>
@@ -2634,12 +2653,12 @@ export default function Page() {
                                         </div>
                                     </div>
 
-                                    {/* ACTION BUTTON */}
+                                    {/* ACTION BUTTON - SUPER PROMINENT */}
                                     <button
                                         onClick={handleTrade}
                                         disabled={isPending || isSuccess}
-                                        className={`w-full py-6 rounded-[2rem] font-bold text-lg uppercase tracking-[0.25em] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-y-1 transition-all duration-150 relative overflow-hidden group mt-2 border-2 border-black ${isSuccess ? 'bg-[#10B981] text-black' :
-                                            'bg-black text-white hover:bg-[#F492B7] hover:text-black'
+                                        className={`w-full py-7 rounded-2xl font-black text-xl uppercase tracking-[0.3em] shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 transition-all duration-200 relative overflow-hidden group mt-4 border-4 border-black ${isSuccess ? 'bg-emerald-400 text-black' :
+                                            'bg-black text-white hover:bg-[#F492B7] hover:text-black hover:scale-[1.02]'
                                             }`}
                                     >
                                         {isPending ? (

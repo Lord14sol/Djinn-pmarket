@@ -185,21 +185,68 @@ const MarketCard: React.FC<MarketCardProps> = React.memo(({
                     </span>
                 )}
 
+                {/* MINI PROBABILITY CHART - Neo-Brutalist Style */}
+                {!resolved && (
+                    <div className={`bg-gradient-to-br from-gray-50 to-white border-4 border-black rounded-2xl overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] pointer-events-auto
+                        ${compact ? 'p-2 mb-2' : 'p-4 mb-3'}
+                    `}>
+                        <div className="flex items-end justify-between gap-1 h-16">
+                            {/* Generate sparkline-style bars */}
+                            {Array.from({ length: 12 }).map((_, idx) => {
+                                // Simulate probability trend (replace with real historical data if available)
+                                const baseHeight = chance || 50;
+                                const variance = Math.sin(idx * 0.5) * 10;
+                                const height = Math.max(10, Math.min(90, baseHeight + variance));
+                                const isLast = idx === 11;
+
+                                return (
+                                    <div
+                                        key={idx}
+                                        className="flex-1 flex flex-col justify-end items-center gap-0.5"
+                                    >
+                                        {/* YES bar */}
+                                        <div
+                                            className={`w-full rounded-t-sm transition-all duration-300 ${isLast ? 'bg-emerald-400 border-2 border-black' : 'bg-emerald-300 border border-black/20'}`}
+                                            style={{ height: `${height}%` }}
+                                        />
+                                        {/* NO bar (inverted) */}
+                                        <div
+                                            className={`w-full rounded-b-sm transition-all duration-300 ${isLast ? 'bg-rose-400 border-2 border-black' : 'bg-rose-300 border border-black/20'}`}
+                                            style={{ height: `${100 - height}%` }}
+                                        />
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        {/* Mini Legend */}
+                        <div className="flex items-center justify-center gap-4 mt-3 pt-2 border-t-2 border-black">
+                            <div className="flex items-center gap-1.5">
+                                <div className="w-2 h-2 bg-emerald-400 border border-black rounded-sm" />
+                                <span className="text-[9px] font-black uppercase text-emerald-700">Yes {chance || 50}%</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                <div className="w-2 h-2 bg-rose-400 border border-black rounded-sm" />
+                                <span className="text-[9px] font-black uppercase text-rose-700">No {100 - (chance || 50)}%</span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Outcomes Information */}
                 <div className="mt-auto pointer-events-auto w-full">
                     {resolved ? (
-                        <div className={`flex items-center justify-center gap-2 bg-gray-100 border-2 border-black rounded-xl
-                             ${compact ? 'p-2' : 'p-3'}
+                        <div className={`flex items-center justify-center gap-2 bg-gradient-to-br from-emerald-100 to-emerald-50 border-4 border-black rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]
+                             ${compact ? 'p-3' : 'p-4'}
                         `}>
-                            <span className="text-[10px] uppercase font-black text-gray-600 tracking-[0.2em]">Winner</span>
-                            <span className={`font-black text-black ${compact ? 'text-sm' : 'text-base'}`}>{winningOutcome}</span>
+                            <span className="text-[10px] uppercase font-black text-emerald-800 tracking-[0.3em]">Winner</span>
+                            <span className={`font-black text-black ${compact ? 'text-base' : 'text-xl'}`}>{winningOutcome}</span>
                         </div>
                     ) : isMultiple && options ? (
                         <div className={`flex flex-col overflow-y-auto pr-1 customize-scrollbar
                             ${compact ? 'gap-1.5 max-h-[80px]' : 'gap-2 max-h-[140px]'}
                         `}>
                             {options.map((opt: any, idx: number) => {
-                                let optChance = 0; // Logic placeholder
+                                let optChance = 0;
                                 if (options.length === 2) {
                                     optChance = idx === 0 ? (chance || 50) : (100 - (chance || 50));
                                 }
@@ -225,21 +272,21 @@ const MarketCard: React.FC<MarketCardProps> = React.memo(({
                         <div className={`grid grid-cols-2 ${compact ? 'gap-2' : 'gap-3'}`}>
                             <button
                                 onClick={(e) => handleBetClick(e, 'yes')}
-                                className={`flex flex-col items-center justify-center bg-emerald-400 text-black border-2 border-black hover:brightness-110 rounded-2xl group/yes transition-all duration-200 active:scale-95 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]
-                                    ${compact ? 'py-1.5' : 'py-3'}
+                                className={`flex flex-col items-center justify-center bg-emerald-400 text-black border-4 border-black hover:brightness-110 hover:-translate-y-1 rounded-2xl group/yes transition-all duration-200 active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]
+                                    ${compact ? 'py-2' : 'py-4'}
                                 `}
                             >
-                                <span className={`font-black uppercase tracking-wider mb-0.5 ${compact ? 'text-[9px]' : 'text-[10px]'}`}>Yes</span>
-                                <span className={`font-black ${compact ? 'text-sm' : 'text-xl'}`}>{chance || 50}%</span>
+                                <span className={`font-black uppercase tracking-wider mb-1 ${compact ? 'text-[10px]' : 'text-xs'}`}>Yes</span>
+                                <span className={`font-black ${compact ? 'text-lg' : 'text-2xl'}`}>{chance || 50}%</span>
                             </button>
                             <button
                                 onClick={(e) => handleBetClick(e, 'no')}
-                                className={`flex flex-col items-center justify-center bg-rose-400 text-black border-2 border-black hover:brightness-110 rounded-2xl group/no transition-all duration-200 active:scale-95 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]
-                                    ${compact ? 'py-1.5' : 'py-3'}
+                                className={`flex flex-col items-center justify-center bg-rose-400 text-black border-4 border-black hover:brightness-110 hover:-translate-y-1 rounded-2xl group/no transition-all duration-200 active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]
+                                    ${compact ? 'py-2' : 'py-4'}
                                 `}
                             >
-                                <span className={`font-black uppercase tracking-wider mb-0.5 ${compact ? 'text-[9px]' : 'text-[10px]'}`}>No</span>
-                                <span className={`font-black ${compact ? 'text-sm' : 'text-xl'}`}>{100 - (chance || 50)}%</span>
+                                <span className={`font-black uppercase tracking-wider mb-1 ${compact ? 'text-[10px]' : 'text-xs'}`}>No</span>
+                                <span className={`font-black ${compact ? 'text-lg' : 'text-2xl'}`}>{100 - (chance || 50)}%</span>
                             </button>
                         </div>
                     )}

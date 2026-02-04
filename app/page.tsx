@@ -9,6 +9,7 @@ import { getWhitelistStatus, registerForWhitelist } from '@/lib/whitelist';
 import CustomWalletModal from '@/components/CustomWalletModal';
 import { useRouter } from 'next/navigation';
 
+// FORCE UPDATE: v1.0.5
 export default function GenesisPage() {
     const router = useRouter();
     const { publicKey, connected } = useWallet();
@@ -81,9 +82,7 @@ export default function GenesisPage() {
                         <h1 className="text-6xl md:text-8xl font-bold tracking-tight text-black mb-2" style={{ fontFamily: 'var(--font-adriane), serif' }}>
                             Djinn
                         </h1>
-                        <p className="text-gray-500 font-bold uppercase tracking-widest text-xs mt-2">
-                            The Oracle of Probabilities
-                        </p>
+                        {/* ABSOLUTELY NO SUBTITLE HERE */}
                     </div>
 
                     {/* Interactive Area */}
@@ -125,17 +124,7 @@ export default function GenesisPage() {
                                 </motion.div>
                             ) : !status.isFull ? (
                                 <motion.div key="join" className="w-full space-y-6">
-                                    {/* Stats Row */}
-                                    <div className="flex justify-between items-end border-b-2 border-gray-100 pb-4">
-                                        <div className="text-left">
-                                            <div className="text-[10px] font-bold uppercase text-gray-400 tracking-widest mb-1">Spots Remaining</div>
-                                            <div className="text-3xl font-black font-mono">{1000 - status.count}</div>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className="text-[10px] font-bold uppercase text-gray-400 tracking-widest mb-1">Total Capacity</div>
-                                            <div className="text-xl font-bold text-gray-900">1,000</div>
-                                        </div>
-                                    </div>
+                                    {/* Stats Row REMOVED COMPLETELY */}
 
                                     {!connected ? (
                                         <button
