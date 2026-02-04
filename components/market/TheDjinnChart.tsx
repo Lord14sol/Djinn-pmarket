@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
-    LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, AreaChart, Area, CartesianGrid
+    XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, CartesianGrid
 } from 'recharts';
-import { createChart, ColorType, CrosshairMode, IChartApi, CandlestickSeries } from 'lightweight-charts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { Activity, Zap } from 'lucide-react';
@@ -11,14 +10,6 @@ import { Activity, Zap } from 'lucide-react';
 export interface ChartDataPoint {
     time: number; // ms
     [key: string]: any; // Allow dynamic keys (e.g. "YES", "NO", or specific outcome names)
-}
-
-export interface CandleData {
-    time: number; // seconds
-    open: number;
-    high: number;
-    low: number;
-    close: number;
 }
 
 interface TradeBubble {
@@ -53,53 +44,8 @@ const TIMEFRAMES = [
     { label: '1D', val: '1d', ms: 24 * 60 * 60 * 1000, isMicro: false },
     { label: '3D', val: '3d', ms: 3 * 24 * 60 * 60 * 1000, isMicro: false },
     { label: '1W', val: '1w', ms: 7 * 24 * 60 * 60 * 1000, isMicro: false },
-    { label: 'ALL', val: 'all', ms: 365 * 24 * 60 * 60 * 1000, isMicro: false }, // Use large number for ALL
+    { label: 'ALL', val: 'all', ms: 365 * 24 * 60 * 60 * 1000, isMicro: false },
 ];
-
-// --- HELPERS ---
-
-// Aggregate raw line data into candles dynamically based on timeframe
-const aggregateCandles = (data: ChartDataPoint[], intervalMs: number, key: string): CandleData[] => {
-    if (!data.length) return [];
-
-    // Sort just in case
-    const sorted = [...data].sort((a, b) => a.time - b.time);
-
-    const buckets: Record<number, number[]> = {};
-    const candles: CandleData[] = [];
-
-    // Group by bucket
-    sorted.forEach(pt => {
-        const bucketTime = Math.floor(pt.time / intervalMs) * intervalMs;
-        if (!buckets[bucketTime]) buckets[bucketTime] = [];
-        if (pt[key] !== undefined) {
-            buckets[bucketTime].push(Number(pt[key]));
-        }
-    });
-
-    // Create candles
-    Object.keys(buckets).sort((a, b) => Number(a) - Number(b)).forEach(t => {
-        const time = Number(t);
-        const values = buckets[time];
-        if (values.length > 0) {
-            const open = values[0];
-            const close = values[values.length - 1];
-            const high = Math.max(...values);
-            const low = Math.min(...values);
-
-            // LightWeight Charts expects seconds for time (UNIX)
-            candles.push({
-                time: time / 1000,
-                open: open, // Percent 0-100
-                high: high,
-                low: low,
-                close: close
-            });
-        }
-    });
-
-    return candles;
-};
 
 // --- SUB-COMPONENTS ---
 
@@ -128,7 +74,6 @@ const TradeBubblesOverlay = ({ bubbles }: { bubbles: TradeBubble[] }) => {
     );
 };
 
-
 // --- MAIN COMPONENT ---
 export default function TheDjinnChart({
     data,
@@ -137,37 +82,23 @@ export default function TheDjinnChart({
     onOutcomeChange,
     ...props
 }: TheDjinnChartProps) {
-    const [mode, setMode] = useState<'MARKET' | 'DJINN'>('MARKET');
-    // Default to 1M for better responsiveness? User asked for sync with timeframes.
-    // Let's default to standard 1H view if they want to see "move" from 50%
+    // Default to 1M
     const [timeframe, setTimeframe] = useState(TIMEFRAMES.find(t => t.val === '1m') || TIMEFRAMES[4]);
-    const [showMicros, setShowMicros] = useState(false); // Toggle to show seconds frames
+    const [showMicros, setShowMicros] = useState(false);
 
     // Outcomes
     const outcomes = useMemo(() => props.outcomeNames || ['YES', 'NO'], [props.outcomeNames]);
-    const [djinnOutcome, setDjinnOutcome] = useState<string>(outcomes[0]);
+    const [selectedOutcome, setSelectedOutcome] = useState<string>(outcomes[0]);
 
     // Sync external choice
     useEffect(() => {
         if (props.selectedOutcome && outcomes.includes(props.selectedOutcome)) {
-            setDjinnOutcome(props.selectedOutcome);
+            setSelectedOutcome(props.selectedOutcome);
         }
     }, [props.selectedOutcome, outcomes]);
 
-    // Notify parent on change
-    useEffect(() => {
-        onOutcomeChange?.(djinnOutcome);
-    }, [djinnOutcome]);
-
     const [bubbles, setBubbles] = useState<TradeBubble[]>([]);
-
-    // BUBBLE LOOP FIX: Ref to track processed event IDs
     const lastProcessedEventId = useRef<string | null>(null);
-
-    // Chart Refs
-    const chartContainerRef = useRef<HTMLDivElement>(null);
-    const tvChartRef = useRef<IChartApi | null>(null);
-    const seriesRef = useRef<any>(null);
 
     // Handle Trade Events -> Bubbles
     useEffect(() => {
@@ -175,7 +106,7 @@ export default function TheDjinnChart({
             lastProcessedEventId.current = tradeEvent.id;
 
             const newBubble: TradeBubble = {
-                id: tradeEvent.id, // Use actual event ID
+                id: tradeEvent.id,
                 side: tradeEvent.side,
                 amountSol: tradeEvent.amount,
                 outcomeName: tradeEvent.outcome
@@ -185,93 +116,13 @@ export default function TheDjinnChart({
         }
     }, [tradeEvent]);
 
-
-    // --- FILTER DATA (MARKET MODE) ---
+    // --- FILTER DATA ---
     const filteredLineData = useMemo(() => {
         if (!data.length) return [];
         const now = data[data.length - 1].time;
-        // If timeframe is huge, show all.
         const cutoff = now - timeframe.ms;
         return data.filter(d => d.time >= cutoff);
     }, [data, timeframe]);
-
-
-    // --- DJINN MODE (Candlesticks) ---
-    useEffect(() => {
-        if (mode === 'DJINN' && chartContainerRef.current) {
-            if (tvChartRef.current) {
-                tvChartRef.current.remove();
-                tvChartRef.current = null;
-            }
-
-            const chart = createChart(chartContainerRef.current, {
-                layout: {
-                    background: { type: ColorType.Solid, color: 'transparent' },
-                    textColor: '#000000',
-                    fontFamily: 'monospace',
-                },
-                grid: {
-                    vertLines: { color: '#00000010' },
-                    horzLines: { color: '#00000010' }
-                },
-                width: chartContainerRef.current.clientWidth,
-                height: 350,
-                crosshair: { mode: CrosshairMode.Normal },
-                timeScale: {
-                    timeVisible: true,
-                    secondsVisible: true,
-                    borderColor: '#ffffff10'
-                },
-                rightPriceScale: {
-                    borderColor: '#ffffff10',
-                    scaleMargins: { top: 0.1, bottom: 0.1 }
-                }
-            });
-
-            const candleSeries = chart.addSeries(CandlestickSeries, {
-                upColor: '#10B981',
-                downColor: '#EF4444',
-                borderVisible: false,
-                wickUpColor: '#10B981',
-                wickDownColor: '#EF4444'
-            });
-
-            seriesRef.current = candleSeries;
-            tvChartRef.current = chart;
-
-            const handleResize = () => {
-                if (chartContainerRef.current) {
-                    chart.applyOptions({ width: chartContainerRef.current.clientWidth });
-                }
-            };
-
-            window.addEventListener('resize', handleResize);
-
-            return () => {
-                window.removeEventListener('resize', handleResize);
-                if (tvChartRef.current) {
-                    tvChartRef.current.remove();
-                    tvChartRef.current = null;
-                }
-            };
-        }
-    }, [mode]);
-
-    // --- AGGREGATE DJINN DATA ---
-    useEffect(() => {
-        if (mode === 'DJINN' && seriesRef.current && data.length > 0) {
-            // FIX: Use timeframe.ms for grouping
-            const aggregated = aggregateCandles(data, timeframe.ms, djinnOutcome);
-            seriesRef.current.setData(aggregated);
-
-            if (tvChartRef.current) {
-                tvChartRef.current.timeScale().fitContent();
-            }
-        }
-    }, [data, timeframe, djinnOutcome, mode]); // Re-run when data or timeframe changes
-
-
-    const lastPoint = filteredLineData.length ? filteredLineData[filteredLineData.length - 1] : null;
 
     return (
         <div className="flex flex-col w-full h-full bg-transparent rounded-3xl relative overflow-hidden">
@@ -279,161 +130,133 @@ export default function TheDjinnChart({
             <div className="flex flex-col gap-2 p-4 px-6 border-b-2 border-black/5 z-20 bg-transparent">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                        {/* MODE */}
-                        <div className="flex bg-white/5 p-0.5 rounded-lg border border-white/5">
-                            <button
-                                onClick={() => setMode('MARKET')}
-                                className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-md transition-all flex items-center gap-1.5
-                                ${mode === 'MARKET' ? 'bg-[#10B981] text-white shadow-lg shadow-[#10B981]/20' : 'text-gray-400 hover:text-white'}`}
-                            >
-                                <Activity size={12} />
-                                Market
-                            </button>
-                            <button
-                                onClick={() => setMode('DJINN')}
-                                className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-md transition-all flex items-center gap-1.5
-                                ${mode === 'DJINN' ? 'bg-[#F492B7] text-white shadow-lg shadow-[#F492B7]/20' : 'text-gray-400 hover:text-white'}`}
-                            >
-                                <Zap size={12} />
-                                Djinn
-                            </button>
+                        <div className="flex items-center gap-2 bg-black text-white px-4 py-2 rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                            <Activity size={14} />
+                            <span className="text-[11px] font-black uppercase tracking-widest">Probability</span>
                         </div>
+                    </div>
 
-                        {/* OUTCOME SELECTOR (Djinn Mode) */}
-                        {mode === 'DJINN' && (
-                            <div className="flex bg-white/5 p-0.5 rounded-lg border border-white/5 ml-2">
-                                {outcomes.map((outcome, idx) => {
-                                    const isSelected = djinnOutcome === outcome;
-                                    const color = idx === 0 ? '#10B981' : (idx === 1 ? '#EF4444' : '#FCD116');
-                                    return (
-                                        <button
-                                            key={outcome}
-                                            onClick={() => setDjinnOutcome(outcome)}
-                                            className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-md transition-all border ${isSelected
-                                                ? `bg-[${color}]/20 text-[${color}] border-[${color}]/50`
-                                                : 'text-gray-500 hover:text-white border-transparent'
-                                                }`}
-                                            style={{
-                                                color: isSelected ? color : undefined,
-                                                borderColor: isSelected ? wrapperHexAlpha(color, 0.5) : undefined,
-                                                backgroundColor: isSelected ? wrapperHexAlpha(color, 0.2) : undefined
-                                            }}
-                                        >
-                                            {outcome}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        )}
+                    {/* LIVE INDICATOR */}
+                    <div className="flex items-center gap-2 bg-emerald-500/10 px-3 py-1.5 rounded-full border border-emerald-500/20">
+                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Live</span>
                     </div>
                 </div>
             </div>
 
-            {/* CHART */}
-            <div className="flex-1 w-full bg-transparent relative min-h-[350px]">
-                {mode === 'MARKET' ? (
-                    <div className="w-full h-[350px] relative">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart
-                                data={filteredLineData}
-                                margin={{ top: 20, right: 0, left: -20, bottom: 0 }}
-                                onMouseMove={(e) => {
-                                    // Dynamic Key Access
-                                    if (e.activePayload && e.activePayload[0]) {
-                                        const val = e.activePayload[0].payload[outcomes[0]];
-                                        onHover?.(val);
-                                    }
+            <div className="flex-1 w-full bg-transparent relative min-h-[400px]">
+                <div className="w-full h-full relative border-2 border-black rounded-xl overflow-hidden bg-[#F8F9FA]">
+                    {/* SUBTLE GRID PATTERN */}
+                    <div className="absolute inset-0 opacity-[0.05] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
+
+                    <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart
+                            data={filteredLineData}
+                            margin={{ top: 20, right: 10, left: 10, bottom: 0 }}
+                            onMouseMove={(e) => {
+                                if (e.activePayload && e.activePayload[0] && e.activePayload[0].payload) {
+                                    // Try to get value for currently selected outcome, fallback to first outcome
+                                    const val = e.activePayload[0].payload[selectedOutcome] ?? e.activePayload[0].payload[outcomes[0]];
+                                    onHover?.(val);
+                                }
+                            }}
+                            onMouseLeave={() => onHover?.(null)}
+                        >
+                            <defs>
+                                <linearGradient id="colorOutcome0" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.6} />
+                                    <stop offset="95%" stopColor="#10B981" stopOpacity={0.1} />
+                                </linearGradient>
+                                <linearGradient id="colorOutcome1" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#EF4444" stopOpacity={0.6} />
+                                    <stop offset="95%" stopColor="#EF4444" stopOpacity={0.1} />
+                                </linearGradient>
+                            </defs>
+                            <XAxis
+                                dataKey="time"
+                                domain={['dataMin', 'dataMax']}
+                                type="number"
+                                scale="time"
+                                tickFormatter={(t) => {
+                                    if (timeframe.ms < 60 * 1000) return format(t, 'h:mm:ss');
+                                    if (timeframe.ms <= 24 * 60 * 60 * 1000) return format(t, 'h:mm a');
+                                    return format(t, 'MMM d');
                                 }}
-                                onMouseLeave={() => onHover?.(null)}
-                            >
-                                <defs>
-                                    <linearGradient id="colorOutcome0" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.1} />
-                                        <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
-                                    </linearGradient>
-                                    <linearGradient id="colorOutcome1" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#EF4444" stopOpacity={0.1} />
-                                        <stop offset="95%" stopColor="#EF4444" stopOpacity={0} />
-                                    </linearGradient>
-                                </defs>
-                                <XAxis
-                                    dataKey="time"
-                                    tickFormatter={(t) => {
-                                        if (timeframe.ms < 60 * 1000) return format(t, 'h:mm:ss');
-                                        if (timeframe.ms <= 24 * 60 * 60 * 1000) return format(t, 'h:mm a');
-                                        return format(t, 'MMM d');
-                                    }}
-                                    axisLine={false}
-                                    tickLine={false}
-                                    tick={{ fill: '#000000', fontSize: 10, fontFamily: 'monospace' }}
-                                    minTickGap={50}
-                                />
-                                <YAxis
-                                    orientation="right"
-                                    domain={[0, 100]}
-                                    axisLine={false}
-                                    tickLine={false}
-                                    ticks={[0, 25, 50, 75, 100]}
-                                    tick={{ fill: '#000000', fontSize: 10, fontFamily: 'monospace', opacity: 0.8 }}
-                                    tickFormatter={(val) => `${val}%`}
-                                />
-                                <Tooltip
-                                    contentStyle={{ backgroundColor: '#0B0E14', borderColor: '#333', borderRadius: '8px' }}
-                                    itemStyle={{ fontFamily: 'monospace', fontSize: '11px' }}
-                                    labelStyle={{ color: '#6B7280', fontSize: '10px', marginBottom: '4px' }}
-                                    labelFormatter={(label) => format(label, 'MMM d, h:mm:ss a')}
-                                />
+                                axisLine={{ stroke: '#000000', strokeWidth: 2 }}
+                                tickLine={{ stroke: '#000000', strokeWidth: 2 }}
+                                tick={{ fill: '#000000', fontSize: 11, fontWeight: '700', fontFamily: 'monospace' }}
+                                minTickGap={50}
+                            />
+                            <YAxis
+                                orientation="right"
+                                domain={[0, 100]}
+                                axisLine={{ stroke: '#000000', strokeWidth: 2 }}
+                                tickLine={{ stroke: '#000000', strokeWidth: 2 }}
+                                ticks={[0, 25, 50, 75, 100]}
+                                tick={{ fill: '#000000', fontSize: 11, fontWeight: '700', fontFamily: 'monospace' }}
+                                tickFormatter={(val) => `${val}%`}
+                                width={40}
+                            />
+                            <Tooltip
+                                contentStyle={{ backgroundColor: '#0B0E14', borderColor: '#333', borderRadius: '8px' }}
+                                itemStyle={{ fontFamily: 'monospace', fontSize: '11px', color: '#fff' }}
+                                labelStyle={{ color: '#9CA3AF', fontSize: '10px', marginBottom: '4px' }}
+                                labelFormatter={(label) => format(label, 'MMM d, h:mm:ss a')}
+                                formatter={(value: number) => [`${value}%`, 'Probability']}
+                            />
+                            {/* Primary Outcome Area (YES) */}
+                            <Area
+                                type="stepAfter"
+                                dataKey={outcomes[0] || 'YES'}
+                                stroke="#10B981"
+                                strokeWidth={3}
+                                fill="url(#colorOutcome0)"
+                                isAnimationActive={false}
+                                activeDot={{ r: 6, fill: "#10B981", stroke: "#fff", strokeWidth: 2 }}
+                            />
+                            {/* Secondary Outcome Area (NO) - Only if exists */}
+                            {outcomes[1] && (
                                 <Area
                                     type="stepAfter"
-                                    dataKey={outcomes[0] || 'YES'}
-                                    stroke="#10B981"
+                                    dataKey={outcomes[1]}
+                                    stroke="#EF4444"
                                     strokeWidth={3}
+                                    fill="url(#colorOutcome1)"
                                     isAnimationActive={false}
+                                    activeDot={{ r: 6, fill: "#EF4444", stroke: "#fff", strokeWidth: 2 }}
                                 />
-                                {outcomes[1] && (
-                                    <Area
-                                        type="stepAfter"
-                                        dataKey={outcomes[1]}
-                                        stroke="#EF4444"
-                                        strokeWidth={3}
-                                        isAnimationActive={false}
-                                    />
-                                )}
-                                {/* GRID ON TOP FOR VISIBILITY - SOLID LINES */}
-                                <CartesianGrid vertical={false} stroke="#000000" strokeOpacity={0.05} />
-                            </AreaChart>
-                        </ResponsiveContainer>
-                        <TradeBubblesOverlay bubbles={bubbles} />
-                    </div>
-                ) : (
-                    <div ref={chartContainerRef} className="w-full h-[350px]" />
-                )}
+                            )}
+                            <CartesianGrid vertical={false} stroke="#000000" strokeOpacity={0.1} strokeDasharray="4 4" />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                    <TradeBubblesOverlay bubbles={bubbles} />
+                </div>
             </div>
 
             {/* TIMEFRAMES */}
-            <div className="flex items-center gap-1 border-t border-white/5 bg-transparent px-2 min-h-[44px]">
+            <div className="flex items-center gap-2 border-t-2 border-black bg-gray-100 p-3 z-30">
                 <button
                     onClick={() => setShowMicros(!showMicros)}
-                    className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 border-r border-white/5 mr-1 h-full
-                        ${showMicros ? 'text-[#F492B7] bg-[#F492B7]/10' : 'text-gray-500 hover:text-white'}`}
+                    className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all border-3 flex items-center gap-2
+                    ${showMicros
+                            ? 'bg-[#F492B7] text-black border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] -translate-y-0.5'
+                            : 'bg-white text-black border-black hover:bg-gray-50 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]'}`}
                 >
-                    <Zap size={10} className={showMicros ? "fill-current" : ""} />
+                    <Zap size={14} className={showMicros ? "fill-current" : ""} />
                     <span>{showMicros ? 'Micros' : 'Macro'}</span>
                 </button>
 
-                <div className="flex overflow-x-auto no-scrollbar gap-1 py-2 flex-1 items-center">
+                <div className="flex overflow-x-auto no-scrollbar gap-2 flex-1 items-center py-1">
                     {TIMEFRAMES.filter(tf => {
-                        // Simplify: Always show all if not micros, else show micros. 
-                        // Or just list them all? No, list by mode.
                         return showMicros ? tf.isMicro : !tf.isMicro;
                     }).map(tf => (
                         <button
                             key={tf.val}
                             onClick={() => setTimeframe(tf)}
-                            className={`px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold transition-all whitespace-nowrap
-                                 ${timeframe.val === tf.val
-                                    ? 'bg-white/10 text-white border border-white/20'
-                                    : 'text-gray-600 hover:text-gray-300 hover:bg-white/5'}`}
+                            className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all border-3 whitespace-nowrap
+                             ${timeframe.val === tf.val
+                                    ? 'bg-[#10B981] text-white border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] -translate-y-0.5'
+                                    : 'bg-white text-black border-black hover:bg-gray-50 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0 active:shadow-none'}`}
                         >
                             {tf.label}
                         </button>
@@ -441,9 +264,9 @@ export default function TheDjinnChart({
                 </div>
             </div>
 
-            {/* BG WATERMARK - Faded further to not compete with lines */}
-            <div className="absolute top-[80px] left-8 pointer-events-none opacity-5 z-0">
-                <h1 className="text-6xl font-serif font-medium text-white leading-none tracking-tight mix-blend-overlay">Djinn</h1>
+            {/* BG WATERMARK */}
+            <div className="absolute top-[50%] left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none opacity-[0.03] z-0">
+                <h1 className="text-[15rem] font-black text-black pointer-events-none uppercase italic tracking-tighter">Djinn</h1>
             </div>
         </div>
     );
@@ -452,7 +275,6 @@ export default function TheDjinnChart({
 // Helper for dynamic colors
 function wrapperHexAlpha(hex: string, alpha: number) {
     if (!hex) return 'rgba(255,255,255,0.1)';
-    // Simple hex to rgba
     const r = parseInt(hex.slice(1, 3), 16);
     const g = parseInt(hex.slice(3, 5), 16);
     const b = parseInt(hex.slice(5, 7), 16);

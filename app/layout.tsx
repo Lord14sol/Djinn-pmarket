@@ -83,7 +83,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${adrianeStyle.variable} antialiased text-white flex flex-col min-h-screen`}
+        className={`${geistSans.variable} ${geistMono.variable} ${adrianeStyle.variable} antialiased text-white flex flex-col min-h-screen bg-[#050505]`}
       >
         <StarBackground />
         <SolanaProvider>

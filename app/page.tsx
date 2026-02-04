@@ -1,28 +1,20 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ArrowRight, Lock, Zap, Ticket } from 'lucide-react';
 import { getWhitelistStatus, registerForWhitelist } from '@/lib/whitelist';
 import CustomWalletModal from '@/components/CustomWalletModal';
-
 import { useRouter } from 'next/navigation';
 
 export default function GenesisPage() {
     const router = useRouter();
     const { publicKey, connected } = useWallet();
-    const [status, setStatus] = useState({
-        count: 0,
-        isFull: false,
-        isRegistered: false,
-        isAdmin: false,
-    });
+    const [status, setStatus] = useState({ count: 0, isFull: false, isRegistered: false, isAdmin: false });
     const [loading, setLoading] = useState(true);
-    const [isVideoPlaying, setIsVideoPlaying] = useState(false);
     const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
-    const videoRef = useRef<HTMLVideoElement>(null);
 
     // Initial Status Check
     const refreshStatus = useCallback(async () => {
@@ -38,226 +30,149 @@ export default function GenesisPage() {
 
     useEffect(() => {
         refreshStatus();
-        // Poll status every 30 seconds to keep count fresh
         const interval = setInterval(refreshStatus, 30000);
         return () => clearInterval(interval);
     }, [refreshStatus]);
 
-    // AUTO-REGISTER & REDIRECT: When wallet connects, auto-register if spots available
+    // Redirect
     useEffect(() => {
-        const autoRegisterAndRedirect = async () => {
-            if (!connected || loading || !publicKey) return;
+        if (connected && !loading && status.isAdmin) {
+            router.push('/markets');
+        }
+    }, [connected, loading, status.isAdmin, router]);
 
-            // Already authorized? Go to markets
-            if (status.isAdmin || status.isRegistered) {
-                router.push('/markets');
-                return;
-            }
-
-            // Not registered but spots available? Auto-register
-            if (!status.isFull) {
-                console.log('[Genesis] Auto-registering wallet...');
-                const result = await registerForWhitelist(publicKey.toBase58());
-                if (result.success) {
-                    console.log('[Genesis] Auto-registration successful!');
-                    router.push('/markets');
-                }
-            }
-        };
-
-        autoRegisterAndRedirect();
-    }, [connected, loading, status, router, publicKey]);
-
-    // Force autoplay on mobile
-    useEffect(() => {
-        const forcePlay = () => {
-            if (videoRef.current) {
-                videoRef.current.muted = true;
-                const playPromise = videoRef.current.play();
-
-                if (playPromise !== undefined) {
-                    playPromise.then(() => {
-                        setIsVideoPlaying(true);
-                    }).catch(err => {
-                        console.warn('[Genesis] Autoplay blocked or failed:', err);
-                    });
-                }
-            }
-        };
-
-        // Initial attempt
-        forcePlay();
-
-        // Interaction listeners to bypass strict iOS/Android blocks
-        const events = ['touchstart', 'pointerdown', 'mousedown', 'keydown'];
-        const handleInteraction = () => {
-            forcePlay();
-            // Remove listeners once we've successfully attempted playback
-            events.forEach(event => window.removeEventListener(event, handleInteraction));
-        };
-
-        events.forEach(event => window.addEventListener(event, handleInteraction, { passive: true }));
-
-        return () => {
-            events.forEach(event => window.removeEventListener(event, handleInteraction));
-        };
-    }, []);
+    const handleConnect = async () => {
+        if (!connected) { setIsWalletModalOpen(true); return; }
+        if (!status.isRegistered && !status.isFull) {
+            setLoading(true);
+            const result = await registerForWhitelist(publicKey!.toBase58());
+            if (result.success) await refreshStatus();
+            setLoading(false);
+        }
+    };
 
     return (
-        <div className="relative min-h-screen w-full overflow-hidden bg-black text-white selection:bg-white/10 font-mono">
-            {/* --- GRAIN/NOISE OVERLAY (Premium Skill) --- */}
-            <div className="pointer-events-none absolute inset-0 z-50 opacity-[0.03] mix-blend-overlay bg-[url('https://grain-y-gradients.vercel.app/noise.svg')]"></div>
+        <div className="fixed inset-0 z-40 bg-white text-black font-sans selection:bg-[#F492B7] selection:text-white flex flex-col items-center justify-center overflow-y-auto overflow-x-hidden">
 
-            {/* --- BACKGROUND VIDEO / AMBIENCE (Artistic Positioning) --- */}
-            <div className="absolute inset-0 z-0 overflow-hidden bg-black">
-                <div className="absolute top-1/2 -right-1/4 md:right-32 -translate-y-1/2 w-full md:w-[60%] h-full md:h-[120%] opacity-[0.45] animate-pulse-slow">
-                    <video
-                        ref={videoRef}
-                        autoPlay
-                        loop
-                        muted
-                        playsInline
-                        preload="auto"
-                        disablePictureInPicture
-                        poster="/genesis/poster.png"
-                        className={`h-full w-full object-contain mix-blend-screen pointer-events-none transition-opacity duration-1000 ${isVideoPlaying ? 'opacity-100' : 'opacity-0'}`}
-                    >
-                        <source src="/genesis/g-genesis.mp4" type="video/mp4" />
-                    </video>
-                    {/* Fallback Poster (Always visible behind video) */}
-                    {!isVideoPlaying && (
-                        <div
-                            className="absolute inset-0 bg-contain bg-center bg-no-repeat opacity-50 transition-opacity duration-1000"
-                            style={{ backgroundImage: 'url(/genesis/poster.png)' }}
-                        />
-                    )}
-                    {/* Radial Fade Mask - Ultra tight for maximum blend */}
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,black_60%)] md:bg-[radial-gradient(circle_at_center,transparent_0%,black_70%)]" />
-                </div>
+            {/* --- DOT GRID BACKGROUND --- */}
+            <div className="fixed inset-0 z-0 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none"></div>
 
-                {/* --- MEGA VIGNETTE SYSTEM REMOVED FOR PURE BLACK --- */}
-                {/* Only keeping a very subtle bottom fade for text readability if needed, otherwise clean */}
-            </div>
+            {/* MAIN CONTENT CARD */}
+            <motion.main
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.5 }}
+                className="relative z-10 w-full max-w-xl mx-4 my-auto pt-24 pb-12"
+            >
+                <div className="bg-white border-2 border-black rounded-3xl p-8 md:p-12 shadow-[8px_8px_0_0_#F492B7] relative">
 
-            {/* --- MAIN CONTENT --- */}
-            <main className="relative z-10 mx-auto flex max-w-7xl flex-col items-center justify-center px-4 py-20 text-center">
-
-                {/* --- HEADER (Navbar Identical) --- */}
-                <motion.div
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 1.2, ease: "easeOut" }}
-                    className="mb-24 md:mb-48 flex flex-col items-center"
-                >
-                    <div className="flex items-center justify-center group gap-0 mb-4 px-2">
-                        <div className="relative w-28 h-28 md:w-36 md:h-36 transition-transform duration-500 hover:scale-105 animate-star-slow filter drop-shadow-[0_0_20px_rgba(255,255,255,0.2)] -mr-4">
-                            <Image src="/djinn-logo.png?v=3" alt="Djinn Logo" fill className="object-contain" priority unoptimized />
-                        </div>
-                        <span className="text-6xl md:text-7xl text-white mt-1 drop-shadow-[0_0_15px_rgba(255,255,255,0.1)]" style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}>
-                            Djinn
-                        </span>
+                    {/* Floating Badge */}
+                    <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-[#F492B7] text-black border-2 border-black px-6 py-2 rounded-full font-black uppercase tracking-widest text-xs shadow-[2px_2px_0_0_black]">
+                        Genesis Pass
                     </div>
-                </motion.div>
 
-                {/* --- WHITELIST CARD --- */}
-                <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: 0.3, duration: 0.6 }}
-                    className="relative w-full max-w-md overflow-hidden md:ml-8 mt-24 md:mt-40"
-                >
-                    <div className="flex flex-col gap-8">
-                        {/* Interaction Logic */}
+                    {/* Branding Section */}
+                    <div className="text-center mb-10">
+                        <div className="w-24 h-24 mx-auto mb-6 relative hover:scale-110 transition-transform duration-300">
+                            <Image src="/djinn-logo.png?v=3" alt="Logo" fill className="object-contain" priority unoptimized />
+                        </div>
+
+                        {/* THE BRAND FONT MATCHING NAVBAR */}
+                        <h1 className="text-6xl md:text-8xl font-bold tracking-tight text-black mb-2" style={{ fontFamily: 'var(--font-adriane), serif' }}>
+                            Djinn
+                        </h1>
+                        <p className="text-gray-500 font-bold uppercase tracking-widest text-xs mt-2">
+                            The Oracle of Probabilities
+                        </p>
+                    </div>
+
+                    {/* Interactive Area */}
+                    <div className="w-full">
                         <AnimatePresence mode="wait">
                             {loading ? (
-                                <motion.div
-                                    key="loader"
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    className="flex items-center justify-center py-6"
-                                >
-                                    <Loader2 className="h-8 w-8 animate-spin text-white/50" />
+                                <motion.div key="load" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-center py-8">
+                                    <Loader2 className="w-10 h-10 text-[#F492B7] animate-spin mx-auto mb-4" />
+                                    <div className="text-xs font-black uppercase tracking-widest text-gray-400">Loading System...</div>
                                 </motion.div>
-                            ) : !connected ? (
-                                <motion.div
-                                    key="connect"
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    className="flex flex-col items-center gap-6"
-                                >
-                                    <button
-                                        onClick={() => setIsWalletModalOpen(true)}
-                                        className="w-72 border border-white/20 bg-black py-5 text-[10px] font-bold tracking-[0.3em] uppercase text-white transition-all hover:border-[#F492B7] hover:bg-[#F492B7] hover:text-black active:scale-95 relative overflow-hidden"
-                                    >
-                                        <div className="absolute inset-0 shimmer-effect pointer-events-none" />
-                                        Connect Wallet to Claim Spot
-                                    </button>
-                                </motion.div>
-                            ) : (status.isAdmin || status.isRegistered) ? (
-                                <motion.div key="access" className="flex flex-col items-center gap-8">
-                                    <div className="border border-white/20 bg-white/5 px-8 py-4">
-                                        <div className="text-[10px] font-bold tracking-[0.3em] text-white uppercase text-center">
-                                            {status.isAdmin ? "WELCOME BACK, ARCHITECT" : "GENESIS SPOT SECURED"}
-                                        </div>
+                            ) : status.isAdmin ? (
+                                <motion.div key="admin" className="text-center">
+                                    <div className="bg-black text-white p-4 rounded-xl border-2 border-black mb-6">
+                                        <Lock className="w-6 h-6 mx-auto mb-2 text-[#F492B7]" />
+                                        <div className="font-bold uppercase tracking-wider text-sm">God Mode Active</div>
                                     </div>
                                     <button
-                                        onClick={() => window.location.href = '/markets'}
-                                        className="w-72 border border-white/20 bg-black py-5 text-[10px] font-bold tracking-[0.3em] uppercase text-white transition-all hover:border-[#F492B7] hover:bg-[#F492B7] hover:text-black active:scale-95 relative overflow-hidden"
+                                        onClick={() => router.push('/markets')}
+                                        className="w-full bg-[#F492B7] text-black border-2 border-black py-4 rounded-2xl font-black uppercase tracking-widest hover:translate-y-1 hover:shadow-none shadow-[4px_4px_0_0_black] transition-all"
                                     >
-                                        <div className="absolute inset-0 shimmer-effect pointer-events-none" />
-                                        Enter Djinn
+                                        Enter Markets
                                     </button>
+                                </motion.div>
+                            ) : status.isRegistered ? (
+                                <motion.div key="reg" className="text-center">
+                                    <div className="border-2 border-dashed border-gray-300 rounded-2xl p-6 mb-6 bg-gray-50">
+                                        <div className="flex items-center justify-center gap-2 mb-2">
+                                            <div className="w-3 h-3 bg-[#F492B7] rounded-full animate-pulse"></div>
+                                            <span className="font-bold uppercase text-sm text-gray-400">Waitlist Confirmed</span>
+                                        </div>
+                                        <div className="text-4xl font-black text-black mb-1">#{status.count}</div>
+                                        <div className="text-[10px] font-mono text-gray-400 truncate w-full px-4">{publicKey?.toBase58()}</div>
+                                    </div>
+
+                                    <div className="bg-black text-white py-3 px-4 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2">
+                                        <Ticket className="w-4 h-4 text-[#F492B7]" />
+                                        You are on the list
+                                    </div>
+                                </motion.div>
+                            ) : !status.isFull ? (
+                                <motion.div key="join" className="w-full space-y-6">
+                                    {/* Stats Row */}
+                                    <div className="flex justify-between items-end border-b-2 border-gray-100 pb-4">
+                                        <div className="text-left">
+                                            <div className="text-[10px] font-bold uppercase text-gray-400 tracking-widest mb-1">Spots Remaining</div>
+                                            <div className="text-3xl font-black font-mono">{1000 - status.count}</div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="text-[10px] font-bold uppercase text-gray-400 tracking-widest mb-1">Total Capacity</div>
+                                            <div className="text-xl font-bold text-gray-900">1,000</div>
+                                        </div>
+                                    </div>
+
+                                    {!connected ? (
+                                        <button
+                                            onClick={() => setIsWalletModalOpen(true)}
+                                            className="w-full bg-white text-black border-2 border-black py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-gray-50 hover:translate-y-1 hover:shadow-none shadow-[4px_4px_0_0_black] transition-all flex items-center justify-center gap-3"
+                                        >
+                                            Connect Wallet <ArrowRight className="w-5 h-5" />
+                                        </button>
+                                    ) : (
+                                        <button
+                                            onClick={handleConnect}
+                                            className="w-full bg-[#F492B7] text-black border-2 border-black py-4 rounded-2xl font-black uppercase tracking-widest hover:brightness-105 hover:translate-y-1 hover:shadow-none shadow-[4px_4px_0_0_black] transition-all flex items-center justify-center gap-2"
+                                        >
+                                            <Zap className="w-5 h-5" /> Secure Spot
+                                        </button>
+                                    )}
                                 </motion.div>
                             ) : (
-                                <motion.div key="full" className="flex flex-col items-center gap-4">
-                                    <div className="border border-white/5 bg-white/[0.02] px-8 py-6">
-                                        <div className="text-[10px] font-bold tracking-[0.3em] text-white/40 uppercase text-center leading-relaxed">
-                                            SPOTS FULL. <br /> THANK YOU STAY TUNED FOR UPDATES.
-                                        </div>
-                                    </div>
+                                <motion.div className="bg-red-50 text-red-500 border-2 border-red-100 p-6 rounded-2xl text-center font-bold uppercase tracking-widest">
+                                    Sold Out
                                 </motion.div>
                             )}
                         </AnimatePresence>
                     </div>
-                </motion.div>
 
-                {/* --- FOOTER INFO REMOVED FOR MINIMALISM --- */}
+                </div>
+            </motion.main>
 
-            </main>
+            {/* Footer Brand */}
+            <div className="relative z-10 pb-8 text-center text-gray-400">
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em]">Powered by Solana</p>
+            </div>
 
             <CustomWalletModal
                 isOpen={isWalletModalOpen}
                 onClose={() => setIsWalletModalOpen(false)}
             />
-
-            <style jsx global>{`
-                @keyframes breathe {
-                    0%, 100% { opacity: 1; transform: scale(1); filter: drop-shadow(0 0 10px rgba(255,255,255,0)); }
-                    50% { opacity: 0.8; transform: scale(0.98); filter: drop-shadow(0 0 25px rgba(255,255,255,0.3)); }
-                }
-                @keyframes pulse-slow {
-                    0%, 100% { opacity: 0.25; }
-                    50% { opacity: 0.6; }
-                }
-                @keyframes shimmer {
-                    0% { background-position: -200% 0; }
-                    100% { background-position: 200% 0; }
-                }
-                .animate-star-slow { animation: breathe 4s ease-in-out infinite; }
-                .animate-pulse-slow { animation: pulse-slow 12s ease-in-out infinite; }
-                .shimmer-effect {
-                    background: linear-gradient(90deg, transparent, rgba(244,146,183,0.1), transparent);
-                    background-size: 200% 100%;
-                    animation: shimmer 3s infinite;
-                }
-                /* Hide any native media controls that might appear on mobile if autoplay fails */
-                video::-webkit-media-controls {
-                    display:none !important;
-                }
-                video::-webkit-media-controls-start-playback-button {
-                    display:none !important;
-                }
-            `}</style>
         </div>
     );
 }

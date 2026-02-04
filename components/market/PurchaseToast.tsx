@@ -45,7 +45,7 @@ export default function PurchaseToast({ isVisible, onClose, onShare, betDetails 
     const textColor = isSell ? 'text-red-500' : 'text-[#10B981]';
 
     return (
-        <div className={`fixed bottom-6 right-6 z-50 transition-all duration-500 ${show ? 'translate-x-0 opacity-100 scale-100' : 'translate-x-full opacity-0 scale-95'}`}>
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] transition-all duration-500 ${show ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-full opacity-0 scale-95'}`}>
             <div className={`bg-white border-4 border-black rounded-3xl p-6 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] w-96 relative overflow-hidden ${show ? 'animate-bounce-once' : ''}`}>
                 {/* Epic Background Gradient */}
                 <div className={`absolute inset-0 bg-gradient-to-br ${isSell ? 'from-rose-100 to-rose-50' : 'from-emerald-100 to-emerald-50'} -z-10`} />
