@@ -584,7 +584,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                             >
                                 {isLoading ? (
                                     <>
-                                        <Loader2 className="animate-spin w-6 h-6" /> minting...
+                                        <Loader2 className="animate-spin w-6 h-6" /> creating...
                                     </>
                                 ) : (
                                     'Create Market'
