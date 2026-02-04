@@ -207,12 +207,12 @@ export default function TheDjinnChart({
             const chart = createChart(chartContainerRef.current, {
                 layout: {
                     background: { type: ColorType.Solid, color: 'transparent' },
-                    textColor: '#9CA3AF',
+                    textColor: '#000000',
                     fontFamily: 'monospace',
                 },
                 grid: {
-                    vertLines: { color: '#ffffff05' },
-                    horzLines: { color: '#ffffff05' }
+                    vertLines: { color: '#00000010' },
+                    horzLines: { color: '#00000010' }
                 },
                 width: chartContainerRef.current.clientWidth,
                 height: 350,
@@ -274,9 +274,9 @@ export default function TheDjinnChart({
     const lastPoint = filteredLineData.length ? filteredLineData[filteredLineData.length - 1] : null;
 
     return (
-        <div className="flex flex-col w-full h-full bg-transparent rounded-3xl border border-white/5 relative overflow-hidden">
+        <div className="flex flex-col w-full h-full bg-transparent rounded-3xl relative overflow-hidden">
             {/* TOP BAR */}
-            <div className="flex flex-col gap-2 p-4 px-6 border-b border-white/5 z-20 bg-transparent backdrop-blur-md">
+            <div className="flex flex-col gap-2 p-4 px-6 border-b-2 border-black/5 z-20 bg-transparent">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         {/* MODE */}
@@ -365,7 +365,7 @@ export default function TheDjinnChart({
                                     }}
                                     axisLine={false}
                                     tickLine={false}
-                                    tick={{ fill: '#4B5563', fontSize: 10, fontFamily: 'monospace' }}
+                                    tick={{ fill: '#000000', fontSize: 10, fontFamily: 'monospace' }}
                                     minTickGap={50}
                                 />
                                 <YAxis
@@ -374,7 +374,7 @@ export default function TheDjinnChart({
                                     axisLine={false}
                                     tickLine={false}
                                     ticks={[0, 25, 50, 75, 100]}
-                                    tick={{ fill: '#e5e7eb', fontSize: 10, fontFamily: 'monospace', opacity: 0.8 }}
+                                    tick={{ fill: '#000000', fontSize: 10, fontFamily: 'monospace', opacity: 0.8 }}
                                     tickFormatter={(val) => `${val}%`}
                                 />
                                 <Tooltip
@@ -400,7 +400,7 @@ export default function TheDjinnChart({
                                     />
                                 )}
                                 {/* GRID ON TOP FOR VISIBILITY - SOLID LINES */}
-                                <CartesianGrid vertical={false} stroke="#ffffff" strokeOpacity={0.15} />
+                                <CartesianGrid vertical={false} stroke="#000000" strokeOpacity={0.05} />
                             </AreaChart>
                         </ResponsiveContainer>
                         <TradeBubblesOverlay bubbles={bubbles} />

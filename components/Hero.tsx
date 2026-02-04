@@ -142,7 +142,7 @@ const HeroContent = ({ onMarketCreated }: { onMarketCreated: (m: any) => void })
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
                             onFocus={() => setIsSearchOpen(true)}
-                            className="block w-full pl-12 pr-16 py-4 bg-[#1C1D25] border border-gray-800 rounded-2xl text-lg text-white outline-none focus:ring-2 focus:ring-[#F492B7] transition-all"
+                            className="block w-full pl-12 pr-16 py-4 bg-[#111] border-2 border-white/20 rounded-2xl text-lg text-white outline-none hover:-translate-y-1 hover:shadow-[4px_4px_0px_0px_#F492B7] focus:border-white focus:-translate-y-1 focus:shadow-[4px_4px_0px_0px_#F492B7] transition-all placeholder:text-gray-600"
                             placeholder="Search for markets or profiles..."
                         />
                         <div className="absolute inset-y-0 right-0 pr-4 flex items-center gap-2">
@@ -167,32 +167,32 @@ const HeroContent = ({ onMarketCreated }: { onMarketCreated: (m: any) => void })
                                     animate={{ opacity: 1, y: 0, scale: 1 }}
                                     exit={{ opacity: 0, y: -10, scale: 0.98 }}
                                     transition={{ duration: 0.15 }}
-                                    className="absolute top-full left-0 right-0 mt-2 bg-[#0A0A0A]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50 max-h-[60vh] overflow-y-auto"
+                                    className="absolute top-full left-0 right-0 mt-2 bg-white border-2 border-black rounded-2xl shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] overflow-hidden z-50 max-h-[60vh] overflow-y-auto"
                                 >
                                     {isLoading ? (
                                         <div className="p-6 text-center">
-                                            <div className="inline-block w-5 h-5 border-2 border-[#F492B7] border-t-transparent rounded-full animate-spin" />
-                                            <p className="text-gray-500 text-sm mt-2">Searching...</p>
+                                            <div className="inline-block w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                                            <p className="text-black text-sm mt-2 font-bold uppercase tracking-widest">Searching...</p>
                                         </div>
                                     ) : !hasResults && query.length >= 2 ? (
                                         <div className="p-6 text-center">
-                                            <p className="text-gray-400 text-sm">No results for "{query}"</p>
+                                            <p className="text-gray-500 text-sm font-bold uppercase tracking-widest">No results for "{query}"</p>
                                         </div>
                                     ) : (
                                         <>
                                             {/* Markets */}
                                             {markets.length > 0 && (
                                                 <div>
-                                                    <div className="px-4 py-2 border-b border-white/5">
-                                                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Markets</span>
+                                                    <div className="px-4 py-2 border-b-2 border-black bg-gray-100">
+                                                        <span className="text-[10px] font-black text-black uppercase tracking-wider">Markets</span>
                                                     </div>
                                                     {markets.map((market) => (
                                                         <button
                                                             key={market.slug}
                                                             onClick={() => handleMarketClick(market.slug)}
-                                                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left group"
+                                                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#F492B7] transition-colors text-left group border-b-2 border-black last:border-0"
                                                         >
-                                                            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#F492B7]/20 to-[#FF007A]/20 flex items-center justify-center overflow-hidden flex-shrink-0">
+                                                            <div className="w-9 h-9 rounded-xl bg-white border-2 border-black flex items-center justify-center overflow-hidden flex-shrink-0">
                                                                 {market.banner_url ? (
                                                                     <img src={market.banner_url} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                                                                 ) : (
@@ -200,37 +200,40 @@ const HeroContent = ({ onMarketCreated }: { onMarketCreated: (m: any) => void })
                                                                 )}
                                                             </div>
                                                             <div className="flex-1 min-w-0">
-                                                                <p className="text-white text-sm font-medium truncate group-hover:text-[#F492B7] transition-colors">{market.title}</p>
-                                                                {market.category && <span className="text-[10px] text-gray-500 uppercase">{market.category}</span>}
+                                                                <p className="text-black text-sm font-black truncate">{market.title}</p>
+                                                                {market.category && <span className="text-[10px] text-gray-600 font-bold uppercase">{market.category}</span>}
                                                             </div>
-                                                            <span className="text-gray-600 group-hover:text-[#F492B7]">→</span>
+                                                            <span className="text-black group-hover:translate-x-1 transition-transform font-black">→</span>
                                                         </button>
                                                     ))}
                                                 </div>
                                             )}
 
+                                            {/* DIVIDER */}
+                                            {markets.length > 0 && profiles.length > 0 && <div className="h-2 bg-black w-full" />}
+
                                             {/* Profiles */}
                                             {profiles.length > 0 && (
                                                 <div>
-                                                    <div className="px-4 py-2 border-b border-white/5 border-t border-white/5">
-                                                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Profiles</span>
+                                                    <div className="px-4 py-2 border-b-2 border-black bg-gray-100">
+                                                        <span className="text-[10px] font-black text-black uppercase tracking-wider">Profiles</span>
                                                     </div>
                                                     {profiles.map((profile) => (
                                                         <button
                                                             key={profile.wallet_address}
                                                             onClick={() => handleProfileClick(profile.username || profile.wallet_address)}
-                                                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left group"
+                                                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#F492B7] transition-colors text-left group border-b-2 border-black last:border-0"
                                                         >
-                                                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#F492B7]/20 to-[#FF007A]/20 overflow-hidden flex-shrink-0 border border-white/10">
+                                                            <div className="w-9 h-9 rounded-full bg-white border-2 border-black overflow-hidden flex-shrink-0">
                                                                 <img src={profile.avatar_url || '/pink-pfp.png'} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).src = '/pink-pfp.png'; }} />
                                                             </div>
                                                             <div className="flex-1 min-w-0">
-                                                                <p className="text-white text-sm font-medium truncate group-hover:text-[#F492B7] transition-colors">
+                                                                <p className="text-black text-sm font-black truncate">
                                                                     {profile.username || `${profile.wallet_address.slice(0, 6)}...${profile.wallet_address.slice(-4)}`}
                                                                 </p>
-                                                                {profile.bio && <p className="text-gray-500 text-xs truncate">{profile.bio}</p>}
+                                                                {profile.bio && <p className="text-gray-600 font-medium text-xs truncate">{profile.bio}</p>}
                                                             </div>
-                                                            <span className="text-gray-600 group-hover:text-[#F492B7]">→</span>
+                                                            <span className="text-black group-hover:translate-x-1 transition-transform font-black">→</span>
                                                         </button>
                                                     ))}
                                                 </div>
@@ -244,11 +247,26 @@ const HeroContent = ({ onMarketCreated }: { onMarketCreated: (m: any) => void })
 
                     {/* BOTÓN PRINCIPAL */}
                     <div className="flex justify-center mt-1">
+                        <style jsx>{`
+                            @keyframes gradient-xy {
+                                0% { background-position: 0% 50%; }
+                                50% { background-position: 100% 50%; }
+                                100% { background-position: 0% 50%; }
+                            }
+                            .chroma-hover {
+                                background-color: #F492B7;
+                            }
+                            .chroma-hover:hover {
+                                background: linear-gradient(-45deg, #F492B7, #A855F7, #3B82F6, #10B981, #FCD34D, #F492B7);
+                                background-size: 400% 400%;
+                                animation: gradient-xy 3s ease infinite;
+                            }
+                        `}</style>
                         <button
                             onClick={openCreateMarket}
-                            className="bg-[#F492B7] text-black text-xl font-black py-4 px-12 rounded-xl shadow-[0_0_10px_rgba(244,146,183,0.1)] hover:scale-105 active:scale-95 transition-all uppercase relative overflow-hidden group"
+                            className="chroma-hover text-black text-xl font-black py-4 px-12 rounded-xl shadow-[0_0_20px_rgba(244,146,183,0.3)] hover:scale-105 active:scale-95 transition-all uppercase relative overflow-hidden group tracking-wide"
                         >
-                            <div className="absolute inset-0 animate-shimmer pointer-events-none" />
+                            <div className="absolute inset-0 bg-white/20 animate-pulse pointer-events-none mix-blend-overlay opacity-0 group-hover:opacity-100 transition-opacity" />
                             Create a Market
                         </button>
                     </div>

@@ -159,20 +159,28 @@ export default function CategoryMegaMenu() {
 
     return (
         <div className="relative">
-            {/* Trigger Bar - Compact Category Pills */}
-            <div className="flex items-center justify-center flex-wrap gap-4 md:gap-6 py-4 px-6 md:px-12 lg:px-20 border-t border-white/5 bg-transparent">
+            {/* Trigger Bar - Compact Category Pills - Horizontal Scroll */}
+            <div className="flex items-center gap-6 overflow-x-auto no-scrollbar py-3 px-6 md:px-12 bg-black w-full text-left">
+                <style jsx>{`
+                    .no-scrollbar::-webkit-scrollbar { display: none; }
+                    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+                `}</style>
                 {CATEGORIES.map((cat) => (
                     <button
                         key={cat.id}
                         onClick={() => handleCategoryClick(cat)}
                         className={`
-                            text-[12px] md:text-[13px] font-black uppercase tracking-[0.1em] whitespace-nowrap
-                            transition-all duration-300
+                            shrink-0 text-[13px] font-black uppercase tracking-widest whitespace-nowrap
+                            transition-all duration-200
                             ${activeCategory === cat.slug
-                                ? 'text-[#F492B7]'
+                                ? 'scale-110'
                                 : 'text-gray-500 hover:text-white'
                             }
                         `}
+                        style={{
+                            color: activeCategory === cat.slug ? cat.glowColor : undefined,
+                            textShadow: activeCategory === cat.slug ? `0 0 10px ${cat.glowColor}40` : 'none'
+                        }}
                     >
                         {cat.name}
                     </button>

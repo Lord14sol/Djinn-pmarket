@@ -40,9 +40,13 @@ export default function ProfilePage() {
     // SOLANA HOOKS
     const { connection } = useConnection();
     const { publicKey } = useWallet();
-    const { price: contextSolPrice } = usePrice();
+    const { solPrice: contextSolPrice } = usePrice();
     const [localSolPrice, setLocalSolPrice] = useState(0);
     const solPrice = contextSolPrice || localSolPrice; // Prioritize context, fallback to local
+
+    // Mount state for hydration
+    const [isMounted, setIsMounted] = useState(false);
+    useEffect(() => { setIsMounted(true); }, []);
 
     useEffect(() => {
         // Fallback Price Fetcher if Context is 0
@@ -739,148 +743,151 @@ export default function ProfilePage() {
             {/* NO BANNER - Space Theme Background from global or main */}
 
             <div className="max-w-[1600px] mx-auto px-14 pt-2">
-                {/* PROFILE HEADER - Redesigned without banner */}
-                <div className="flex items-start gap-12 relative z-10 mb-12">
-                    <div className="flex flex-col items-center gap-6">
-                        <div className="w-60 h-60 rounded-full border-[6px] border-white/5 overflow-hidden bg-[#0A0A0A] shadow-2xl group relative">
-                            <img
-                                src={(profile.pfp && profile.pfp.trim()) ? profile.pfp : '/pink-pfp.png'}
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                                alt=""
-                                onError={(e) => {
-                                    (e.currentTarget as HTMLImageElement).src = '/pink-pfp.png';
-                                }}
-                            />
-                        </div>
+                {/* USERNAME + MEDALS - OUTSIDE PANEL */}
+                <div className="flex items-center gap-3 flex-wrap mb-6">
+                    <h1 className="text-7xl font-black tracking-tighter leading-none bg-[#F492B7] border-4 border-black px-8 py-2 shadow-[8px_8px_0px_0px_#000] lowercase">{profile.username}</h1>
 
-                        {/* FOLLOW BUTTON ONLY BELOW PFP */}
-                        {!isMyProfile && (
-                            <button
-                                onClick={handleToggleFollow}
-                                disabled={isFollowLoading || !publicKey}
-                                className={`w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all border ${isFollowingUser
-                                    ? 'bg-transparent border-white/20 text-white hover:bg-white/5'
-                                    : 'bg-[#F492B7] border-[#F492B7] text-black hover:brightness-110 shadow-lg shadow-[#F492B7]/20'
-                                    } disabled:opacity-50`}
-                            >
-                                {isFollowLoading ? '...' : (isFollowingUser ? 'Following' : 'Follow')}
-                            </button>
-                        )}
-                    </div>
+                    {/* MEDALS */}
+                    {profile.medals && profile.medals.map((m: string, i: number) => {
+                        if (m === 'GOLD_TROPHY') return <img key={i} src="/gold-trophy.png" className="w-20 h-20 object-contain border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:scale-110 hover:shadow-[6px_6px_0px_0px_#F492B7] transition-all cursor-help rounded-xl" title="Achieved Top 1 Leaderboard" alt="Trophy" />;
+                        if (m === 'LEGENDARY_TRADER') return <img key={i} src="/gems-trophy.png" className="w-16 h-16 object-contain border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:scale-110 hover:shadow-[6px_6px_0px_0px_#F492B7] transition-all cursor-help rounded-xl" title="Biggest Win All Time" alt="Legendary" />;
+                        if (m === 'FIRST_MARKET') return <img key={i} src="/genesis-medal-v2.png" className="w-16 h-16 object-contain border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:scale-110 hover:shadow-[6px_6px_0px_0px_#F492B7] transition-all cursor-help rounded-xl" title="Genesis Creator" alt="Genesis" />;
+                        if (m === 'MARKET_MAKER') return <img key={i} src="/blue-crystal.png" className="w-16 h-16 object-contain border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:scale-110 hover:shadow-[6px_6px_0px_0px_#F492B7] transition-all cursor-help rounded-xl" title="Market Maker" alt="Market Maker" />;
+                        if (m === 'ORACLE') return <img key={i} src="/orange-crystal-v2.png" className="w-16 h-16 object-contain border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:scale-110 hover:shadow-[6px_6px_0px_0px_#F492B7] transition-all cursor-help rounded-xl" title="Grand Oracle" alt="Oracle" />;
+                        if (m === 'DIAMOND_HANDS') return <img key={i} src="/diamond-crystal.png" className="w-16 h-16 object-contain border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:scale-110 hover:shadow-[6px_6px_0px_0px_#F492B7] transition-all cursor-help rounded-xl" title="Diamond Hands" alt="Diamond" />;
+                        if (m === 'PINK_CRYSTAL') return <img key={i} src="/pink-crystal.png" className="w-16 h-16 object-contain border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:scale-110 hover:shadow-[6px_6px_0px_0px_#F492B7] transition-all cursor-help rounded-xl" title="Mystic Rose" alt="Rose" />;
+                        if (m === 'EMERALD_SAGE') return <img key={i} src="/green-crystal.png" className="w-16 h-16 object-contain border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:scale-110 hover:shadow-[6px_6px_0px_0px_#F492B7] transition-all cursor-help rounded-xl" title="Emerald Sage" alt="Emerald" />;
+                        if (m === 'MOON_DANCER') return <img key={i} src="/moon-crystal.png" className="w-16 h-16 object-contain border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:scale-110 hover:shadow-[6px_6px_0px_0px_#F492B7] transition-all cursor-help rounded-xl" title="Moon Dancer" alt="Moon" />;
+                        if (m === 'MARKET_SNIPER') return <img key={i} src="/emerald-sniper.png" className="w-16 h-16 object-contain border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:scale-110 hover:shadow-[6px_6px_0px_0px_#F492B7] transition-all cursor-help rounded-xl" title="Market Sniper" alt="Sniper" />;
+                        if (m === 'APEX_PREDATOR') return <img key={i} src="/apex-skull.png" className="w-16 h-16 object-contain border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:scale-110 hover:shadow-[6px_6px_0px_0px_#F492B7] transition-all cursor-help rounded-xl" title="Apex Predator" alt="Apex" />;
+                        return <span key={i} className="text-5xl animate-pulse cursor-help hover:scale-110 transition-transform" title="Medal">{m}</span>;
+                    })}
+                </div>
 
-                    <div className="flex-1 pt-6">
-                        <div className="flex items-center justify-between align-middle mb-4">
-                            <div className="flex flex-col">
-                                <div className="flex items-center gap-4 align-middle">
-                                    <h1 className="text-7xl font-black tracking-tighter leading-none drop-shadow-2xl">{profile.username}</h1>
-                                    {profile.medals && profile.medals.map((m: string, i: number) => {
-                                        if (m === 'GOLD_TROPHY') return <img key={i} src="/gold-trophy.png" className="w-20 h-20 object-contain drop-shadow-[0_0_25px_rgba(255,215,0,0.6)] hover:scale-110 transition-transform cursor-help z-10" title="Achieved Top 1 Leaderboard" alt="Trophy" />;
-                                        if (m === 'LEGENDARY_TRADER') return <img key={i} src="/gems-trophy.png" className="w-16 h-16 object-contain hover:scale-110 transition-transform cursor-help z-20" title="Biggest Win All Time" alt="Legendary" />;
-                                        if (m === 'FIRST_MARKET') return <img key={i} src="/genesis-medal-v2.png" className="w-16 h-16 object-contain drop-shadow-[0_0_15px_rgba(244,146,183,0.5)] hover:scale-110 transition-transform cursor-help" title="Genesis Creator" alt="Genesis" />;
-                                        if (m === 'MARKET_MAKER') return <img key={i} src="/blue-crystal.png" className="w-16 h-16 object-contain drop-shadow-[0_0_15px_rgba(59,130,246,0.5)] hover:scale-110 transition-transform cursor-help" title="Market Maker" alt="Market Maker" />;
-                                        if (m === 'ORACLE') return <img key={i} src="/orange-crystal-v2.png" className="w-16 h-16 object-contain drop-shadow-[0_0_15px_rgba(245,158,11,0.5)] hover:scale-110 transition-transform cursor-help" title="Grand Oracle" alt="Oracle" />;
-                                        if (m === 'DIAMOND_HANDS') return <img key={i} src="/diamond-crystal.png" className="w-16 h-16 object-contain drop-shadow-[0_0_20px_rgba(56,189,248,0.6)] hover:scale-110 transition-transform cursor-help" title="Diamond Hands" alt="Diamond" />;
-                                        if (m === 'PINK_CRYSTAL') return <img key={i} src="/pink-crystal.png" className="w-16 h-16 object-contain drop-shadow-[0_0_20px_rgba(244,114,182,0.6)] hover:scale-110 transition-transform cursor-help" title="Mystic Rose" alt="Rose" />;
-                                        if (m === 'EMERALD_SAGE') return <img key={i} src="/green-crystal.png" className="w-16 h-16 object-contain drop-shadow-[0_0_20px_rgba(34,197,94,0.6)] hover:scale-110 transition-transform cursor-help" title="Emerald Sage" alt="Emerald" />;
-                                        if (m === 'MOON_DANCER') return <img key={i} src="/moon-crystal.png" className="w-16 h-16 object-contain drop-shadow-[0_0_20px_rgba(167,139,250,0.8)] hover:scale-110 transition-transform cursor-help" title="Moon Dancer" alt="Moon" />;
-                                        if (m === 'MARKET_SNIPER') return <img key={i} src="/emerald-sniper.png" className="w-16 h-16 object-contain drop-shadow-[0_0_20px_rgba(16,185,129,0.8)] hover:scale-110 transition-transform cursor-help" title="Market Sniper" alt="Sniper" />;
-                                        if (m === 'APEX_PREDATOR') return <img key={i} src="/apex-skull.png" className="w-16 h-16 object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.6)] hover:scale-110 transition-transform cursor-help" title="Apex Predator" alt="Apex" />;
-
-                                        return <span key={i} className="text-5xl animate-pulse cursor-help hover:scale-110 transition-transform" title="Medal">{m}</span>;
-                                    })}
-
-                                </div>
-                                {/* METADATA ROW */}
-                                <div className="flex items-center gap-4 mt-2 text-gray-400 text-sm font-bold uppercase tracking-widest">
-                                    <span>Joined {profile.joinedAt ? new Date(profile.joinedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long' }) : new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long' })}</span>
-                                    <span>•</span>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-white">{viewCount.toLocaleString()} Views</span>
-                                    </div>
-                                    {targetWalletAddress && (
-                                        <>
-                                            <span>•</span>
-                                            <button
-                                                onClick={() => {
-                                                    navigator.clipboard.writeText(targetWalletAddress);
-                                                    const btn = document.getElementById('wallet-copy-btn-header');
-                                                    if (btn) {
-                                                        btn.textContent = 'COPIED';
-                                                        setTimeout(() => { btn.textContent = 'COPY ADDRESS'; }, 2000);
-                                                    }
-                                                }}
-                                                className="group flex items-center gap-2 hover:text-[#F492B7] transition-colors"
-                                            >
-                                                <span className="text-white/40">{targetWalletAddress.slice(0, 4)}...{targetWalletAddress.slice(-4)}</span>
-                                                <span id="wallet-copy-btn-header" className="text-[10px] bg-white/5 px-2 py-0.5 rounded border border-white/10 group-hover:bg-[#F492B7] group-hover:text-black transition-all">COPY ADDRESS</span>
-                                            </button>
-                                        </>
-                                    )}
-                                </div>
-                                {/* FOLLOW COUNTS ROW */}
-                                <div className="flex items-center gap-6 mt-4 text-sm font-bold tracking-widest uppercase">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-white text-xl">{formatCompact(followersCount)}</span>
-                                        <span className="text-gray-500 text-[11px]">Followers</span>
-                                    </div>
-                                    <button
-                                        className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-                                        onClick={() => setIsFollowingModalOpen(true)}
-                                    >
-                                        <span className="text-white text-xl">{formatCompact(followingCount)}</span>
-                                        <span className="text-gray-500 text-[11px]">Following</span>
-                                    </button>
-                                </div>
-
-
-                            </div>
-                            {/* EDIT PROFILE BUTTON */}
-                            {isMyProfile && (
-                                <button
-                                    onClick={() => {
-                                        setTempName(profile.username);
-                                        setTempBio(profile.bio);
-                                        setTempPfp(profile.pfp);
-                                        setIsEditModalOpen(true);
+                {/* PROFILE INFO PANEL - WHITE CARD */}
+                <div className="bg-white border-4 border-black rounded-3xl p-8 mb-8 shadow-[12px_12px_0px_0px_#F492B7] relative">
+                    <div className="flex items-start gap-8">
+                        {/* AVATAR COLUMN */}
+                        <div className="flex flex-col items-center gap-4">
+                            <div className="w-48 h-48 rounded-full border-4 border-black overflow-hidden bg-black shadow-[6px_6px_0px_0px_rgba(0,0,0,0.3)] group relative hover:shadow-[8px_8px_0px_0px_#F492B7] transition-all">
+                                <img
+                                    src={(profile.pfp && profile.pfp.trim()) ? profile.pfp : '/pink-pfp.png'}
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                    alt=""
+                                    onError={(e) => {
+                                        (e.currentTarget as HTMLImageElement).src = '/pink-pfp.png';
                                     }}
-                                    className="border border-white/20 bg-white/5 text-white px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-[#F492B7] hover:text-black transition-all flex items-center gap-2 ml-auto h-fit"
+                                />
+                            </div>
+
+                            {/* FOLLOW BUTTON */}
+                            {!isMyProfile && (
+                                <button
+                                    onClick={handleToggleFollow}
+                                    disabled={!isMounted || isFollowLoading || !publicKey}
+                                    className={`w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all border-3 ${isFollowingUser
+                                        ? 'bg-white border-black text-black hover:translate-y-1 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                                        : 'bg-[#F492B7] border-black text-black hover:translate-y-1 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                                        } disabled:opacity-50`}
                                 >
-                                    <span>✎</span> Edit Profile
+                                    {isFollowLoading ? '...' : (isFollowingUser ? 'Following' : 'Follow')}
                                 </button>
                             )}
                         </div>
-                        {/* Bio estilo Twitter - sin barra lateral */}
-                        <p className="text-gray-400 text-lg mt-4 max-w-2xl leading-relaxed">{profile.bio}</p>
 
-                        {/* Gems flexeadas debajo del bio */}
-                        {profile.showGems !== false && (
-                            <div className="flex items-center gap-3 mt-6">
-                                <span className="text-4xl font-[900] text-white" style={{ textShadow: '0 0 30px rgba(244,146,183,0.4)' }}>
-                                    {profile.gems.toLocaleString('en-US')}
-                                </span>
-                                <span className="text-[#F492B7] text-sm font-black uppercase tracking-widest">💎 Gems</span>
+                        {/* INFO COLUMN */}
+                        <div className="flex-1">
+                            {/* EDIT BUTTON (TOP RIGHT) */}
+                            {isMyProfile && (
+                                <div className="flex justify-end mb-4">
+                                    <button
+                                        onClick={() => {
+                                            setTempName(profile.username);
+                                            setTempBio(profile.bio);
+                                            setTempPfp(profile.pfp);
+                                            setIsEditModalOpen(true);
+                                        }}
+                                        className="border-3 border-black bg-[#F492B7] text-black px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest hover:translate-y-1 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center gap-2"
+                                    >
+                                        <span>✎</span> Edit Profile
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* METADATA: JOINED + VIEWS + WALLET */}
+                            <div className="flex items-center gap-2 mb-4 flex-wrap">
+                                <span className="bg-black/5 border-2 border-black rounded-full px-3 py-1 text-black text-xs font-black lowercase">joined {profile.joinedAt ? new Date(profile.joinedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span>
+                                <span className="bg-black/5 border-2 border-black rounded-full px-3 py-1 text-black text-xs font-black lowercase">{viewCount.toLocaleString()} views</span>
+                                {targetWalletAddress && (
+                                    <button
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(targetWalletAddress);
+                                            const btn = document.getElementById('wallet-copy-btn-header');
+                                            if (btn) {
+                                                btn.textContent = 'copied!';
+                                                setTimeout(() => { btn.textContent = targetWalletAddress.slice(0, 4) + '...' + targetWalletAddress.slice(-4); }, 2000);
+                                            }
+                                        }}
+                                        className="group bg-black/5 border-2 border-black rounded-full px-3 py-1 hover:bg-[#F492B7] transition-all"
+                                    >
+                                        <span id="wallet-copy-btn-header" className="text-black text-xs font-black lowercase">{targetWalletAddress.slice(0, 4)}...{targetWalletAddress.slice(-4)}</span>
+                                    </button>
+                                )}
                             </div>
-                        )}
+
+                            {/* FOLLOW COUNTS */}
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className="bg-black/5 border-2 border-black rounded-xl px-4 py-2 flex items-center gap-2">
+                                    <span className="text-black text-2xl font-black">{formatCompact(followersCount)}</span>
+                                    <span className="text-black/70 text-xs font-black lowercase">followers</span>
+                                </div>
+                                <button
+                                    className="bg-black/5 border-2 border-black rounded-xl px-4 py-2 flex items-center gap-2 hover:bg-[#F492B7] transition-all"
+                                    onClick={() => setIsFollowingModalOpen(true)}
+                                >
+                                    <span className="text-black text-2xl font-black">{formatCompact(followingCount)}</span>
+                                    <span className="text-black/70 text-xs font-black lowercase">following</span>
+                                </button>
+                            </div>
+
+                            {/* BIO */}
+                            {profile.bio && (
+                                <div className="bg-black/5 border-2 border-black rounded-xl p-4">
+                                    <p className="text-black text-base leading-relaxed font-bold">{profile.bio}</p>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
 
-                {/* STATS GRID */}
+                {/* GEMS - OUTSIDE PANEL */}
+                {profile.showGems !== false && (
+                    <div className="bg-[#FFD700] border-4 border-black rounded-xl p-4 inline-flex items-center gap-3 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] mb-12">
+                        <span className="text-5xl font-black text-black">
+                            {profile.gems.toLocaleString('en-US')}
+                        </span>
+                        <span className="text-black text-sm font-black uppercase tracking-widest">💎 gems</span>
+                    </div>
+                )}
+
+                {/* STATS GRID - NEO-BRUTALISM */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
                     <StatCard
                         label="Positions Value"
                         value={`${(profile.activeBets.reduce((acc: number, bet: any) => acc + ((bet.shares || 0) * (bet.currentPrice || (bet.current ? bet.current / (bet.shares || 1) : 0))), 0)).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}`}
+                        color="text-black"
                     />
                     <StatCard
                         label="Win rate"
                         value={`${profile.winRate || '0.0'}%`}
-                        color="text-[#F492B7]"
+                        color="text-black"
                     />
                     <StatCard
                         label="Biggest win"
                         value={`+$${profile.biggestWin?.toLocaleString() || '0'}`}
                         color="text-[#10B981]"
                     />
-                    <StatCard label="Markets created" value={creatorStats?.totalMarkets || profile.createdMarkets?.length || 0} color="text-blue-400" />
+                    <StatCard label="Markets created" value={creatorStats?.totalMarkets || profile.createdMarkets?.length || 0} color="text-black" />
                 </div>
 
                 {/* CHARTS GRID */}
@@ -896,17 +903,14 @@ export default function ProfilePage() {
                 </div>
 
                 {/* TABS NAVIGATION */}
-                <div className="flex items-center gap-8 border-b border-white/10 mb-8">
+                <div className="bg-white border-3 border-black rounded-xl p-2 flex gap-2 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.2)] mb-8">
                     {(['positions', 'activity', 'markets'] as const).map((tab) => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
-                            className={`pb-4 text-sm font-bold tracking-widest transition-all relative ${activeTab === tab ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                            className={`px-6 py-3 rounded-lg text-sm font-black lowercase tracking-tight transition-all ${activeTab === tab ? 'bg-black text-white border-2 border-black shadow-[3px_3px_0px_0px_#F492B7]' : 'bg-transparent text-black border-2 border-transparent hover:bg-black/5 hover:border-black/20'}`}
                         >
-                            {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                            {activeTab === tab && (
-                                <span className="absolute bottom-0 left-0 w-full h-[2px] bg-[#F492B7] shadow-[0_0_10px_#F492B7]"></span>
-                            )}
+                            {tab}
                         </button>
                     ))}
                 </div>
@@ -1045,11 +1049,11 @@ function ProfitChart({ activeBets }: any) {
     );
 }
 
-function StatCard({ label, value, color = "text-white" }: any) {
+function StatCard({ label, value, color = "text-black" }: any) {
     return (
-        <div className="bg-gradient-to-br from-[#0D0D0D] to-black border border-white/10 p-8 rounded-[2rem] shadow-xl hover:border-[#F492B7]/30 transition-all hover:-translate-y-1">
-            <p className="text-gray-500 text-xs font-black tracking-[0.2em] mb-4">{label}</p>
-            <p className={`text-4xl font-[900] tracking-tighter italic leading-none ${color}`}>{value}</p>
+        <div className="bg-white border-4 border-black p-6 rounded-2xl shadow-[8px_8px_0px_0px_#F492B7] hover:translate-y-1 hover:shadow-[4px_4px_0px_0px_#F492B7] transition-all">
+            <p className="text-[10px] uppercase font-black tracking-widest text-black/70 mb-2">{label}</p>
+            <p className={`text-4xl font-black tracking-tighter italic leading-none ${color}`}>{value}</p>
         </div>
     );
 }
@@ -1256,24 +1260,24 @@ function BetCard({ bet, onCashOut, router }: any) {
 function EditModal({ profile, tempName, tempBio, setTempName, setTempBio, tempPfp, showGems, setShowGems, nameAvailable, isCheckingName, onClose, onSave, pfpInputRef, handleFileChange, openVault, tempMedals }: any) {
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-3xl">
-            <div className="relative bg-[#080808] border border-white/10 w-full max-w-2xl max-h-[90vh] flex flex-col rounded-[2.5rem] shadow-2xl overflow-hidden">
+            <div className="relative bg-white border-4 border-black w-full max-w-2xl max-h-[90vh] flex flex-col rounded-3xl shadow-[16px_16px_0px_0px_#F492B7] overflow-hidden">
 
                 {/* HEAD - FIXED */}
-                <div className="px-10 pt-10 pb-6 shrink-0 z-10 bg-[#080808] border-b border-white/5">
-                    <h2 className="text-3xl font-black uppercase tracking-tighter text-[#F492B7]">Edit Identity</h2>
+                <div className="px-10 pt-10 pb-6 shrink-0 z-10 bg-[#F492B7] border-b-4 border-black">
+                    <h2 className="text-3xl font-black lowercase tracking-tight text-black">edit identity</h2>
                 </div>
 
                 {/* BODY - SCROLLABLE */}
-                <div className="p-10 overflow-y-auto flex-1 custom-scrollbar space-y-10">
+                <div className="p-10 overflow-y-auto flex-1 custom-scrollbar space-y-10 bg-white">
 
                     {/* GEMS & ASSETS QUICK SECTION */}
-                    <div className="flex items-center gap-6 bg-white/5 p-6 rounded-3xl border border-white/10 group cursor-pointer hover:bg-white/10 transition-all" onClick={openVault}>
-                        <div className="w-16 h-16 rounded-2xl bg-[#F492B7]/10 flex items-center justify-center border border-[#F492B7]/20 group-hover:scale-110 transition-transform">
+                    <div className="flex items-center gap-6 bg-white border-3 border-black p-6 rounded-2xl group cursor-pointer hover:translate-y-0.5 transition-all shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]" onClick={openVault}>
+                        <div className="w-16 h-16 rounded-2xl bg-[#FFD700] flex items-center justify-center border-2 border-black group-hover:scale-110 transition-transform">
                             <span className="text-3xl">💎</span>
                         </div>
                         <div className="flex-1">
-                            <p className="text-sm font-black text-white uppercase tracking-tighter">Gems</p>
-                            <p className="text-[11px] text-gray-500 font-bold uppercase tracking-widest mt-1">Manage featured gems ({tempMedals.length}/9 slots used)</p>
+                            <p className="text-sm font-black text-black lowercase tracking-tight">gems</p>
+                            <p className="text-[11px] text-black/70 font-bold uppercase tracking-widest mt-1">manage featured gems ({tempMedals.length}/9 slots used)</p>
                         </div>
                         <div className="flex gap-2">
                             {tempMedals.slice(0, 3).map((m: string, i: number) => {
@@ -1292,9 +1296,9 @@ function EditModal({ profile, tempName, tempBio, setTempName, setTempBio, tempPf
 
                                 return <img key={i} src={src} className="w-8 h-8 object-contain" alt="" />;
                             })}
-                            {tempMedals.length > 3 && <span className="text-gray-500 text-xs font-bold flex items-center">+{tempMedals.length - 3}</span>}
+                            {tempMedals.length > 3 && <span className="text-black/70 text-xs font-bold flex items-center">+{tempMedals.length - 3}</span>}
                         </div>
-                        <div className="text-[#F492B7] font-black text-xl translate-x-0 group-hover:translate-x-2 transition-transform">→</div>
+                        <div className="text-black font-black text-xl translate-x-0 group-hover:translate-x-2 transition-transform">→</div>
                     </div>
 
                     {/* MAIN FORM */}
@@ -1302,29 +1306,29 @@ function EditModal({ profile, tempName, tempBio, setTempName, setTempBio, tempPf
                         {/* PFP & DETAILS ROW - NO BANNER */}
                         <div className="flex gap-8">
                             <div className="shrink-0 space-y-3 pb-8">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">Avatar</p>
-                                <button onClick={() => pfpInputRef.current?.click()} className="w-32 h-32 bg-white/5 border border-dashed border-white/20 rounded-full flex items-center justify-center relative group hover:border-[#F492B7]/40 transition-all overflow-hidden mx-auto">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-black/70 ml-1">avatar</p>
+                                <button onClick={() => pfpInputRef.current?.click()} className="w-32 h-32 bg-white border-4 border-black rounded-full flex items-center justify-center relative group hover:shadow-[4px_4px_0px_0px_#F492B7] transition-all overflow-hidden mx-auto shadow-[6px_6px_0px_0px_rgba(0,0,0,0.3)]">
                                     <img src={tempPfp || profile.pfp} className="w-full h-full object-cover object-center opacity-80 group-hover:opacity-100 transition-all" alt="" />
-                                    <span className="absolute inset-x-0 bottom-0 py-1 bg-black/60 text-[9px] font-black uppercase text-white opacity-0 group-hover:opacity-100 transition-opacity text-center">Change</span>
+                                    <span className="absolute inset-x-0 bottom-0 py-1 bg-black text-[9px] font-black uppercase text-white opacity-0 group-hover:opacity-100 transition-opacity text-center">change</span>
                                 </button>
                             </div>
 
                             <div className="flex-1 space-y-6">
                                 <div>
                                     <div className="flex items-center justify-between mb-2 ml-1">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Username</p>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-black/70">username</p>
                                         <div className="flex items-center gap-1.5 transition-all duration-300">
                                             {isCheckingName ? (
                                                 <Loader2 className="w-3 h-3 text-[#F492B7] animate-spin" />
                                             ) : tempName.length >= 3 && tempName !== profile.username ? (
                                                 nameAvailable ? (
-                                                    <div className="flex items-center gap-1 text-[#F492B7]">
-                                                        <span className="text-[10px] font-black uppercase tracking-widest">Available</span>
+                                                    <div className="flex items-center gap-1 bg-[#10B981] border-2 border-black text-white px-2 py-1 rounded-lg">
+                                                        <span className="text-[10px] font-black uppercase tracking-widest">available</span>
                                                         <span className="text-sm">✓</span>
                                                     </div>
                                                 ) : (
-                                                    <div className="flex items-center gap-1 text-red-500">
-                                                        <span className="text-[10px] font-black uppercase tracking-widest">Taken</span>
+                                                    <div className="flex items-center gap-1 bg-red-500 border-2 border-black text-white px-2 py-1 rounded-lg">
+                                                        <span className="text-[10px] font-black uppercase tracking-widest">taken</span>
                                                         <span className="text-sm">✕</span>
                                                     </div>
                                                 )
@@ -1333,18 +1337,18 @@ function EditModal({ profile, tempName, tempBio, setTempName, setTempBio, tempPf
                                     </div>
                                     <input
                                         type="text"
-                                        className={`w-full bg-white/5 border ${nameAvailable === false && tempName !== profile.username ? 'border-red-500/50' : 'border-white/10'} rounded-2xl p-4 text-white font-bold outline-none focus:border-[#F492B7] transition-all`}
-                                        placeholder="Username"
+                                        className={`w-full bg-white border-3 ${nameAvailable === false && tempName !== profile.username ? 'border-red-500' : 'border-black'} rounded-xl p-4 text-black font-bold outline-none focus:border-[#F492B7] transition-all placeholder:text-black/40`}
+                                        placeholder="username"
                                         value={tempName}
                                         onChange={(e) => setTempName(e.target.value.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 15))}
                                     />
                                     {nameAvailable === false && tempName !== profile.username && (
-                                        <p className="text-[9px] text-red-500 font-bold uppercase tracking-widest mt-2 ml-1">This username is already claimed by another Djinn.</p>
+                                        <p className="text-[9px] text-red-500 font-bold uppercase tracking-widest mt-2 ml-1">this username is already claimed by another djinn.</p>
                                     )}
                                 </div>
                                 <div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2 ml-1">Bio</p>
-                                    <textarea className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white text-sm outline-none h-24 resize-none focus:border-[#F492B7] transition-all" placeholder="Tell us about yourself..." value={tempBio} onChange={(e) => setTempBio(e.target.value)} />
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-black/70 mb-2 ml-1">bio</p>
+                                    <textarea className="w-full bg-white border-3 border-black rounded-xl p-4 text-black text-sm outline-none h-24 resize-none focus:border-[#F492B7] transition-all placeholder:text-black/40 font-bold" placeholder="tell us about yourself..." value={tempBio} onChange={(e) => setTempBio(e.target.value)} />
                                 </div>
                             </div>
                         </div>
@@ -1353,10 +1357,10 @@ function EditModal({ profile, tempName, tempBio, setTempName, setTempBio, tempPf
                 </div>
 
                 {/* FOOTER - FIXED */}
-                <div className="p-8 shrink-0 border-t border-white/5 bg-[#080808] z-10">
+                <div className="p-8 shrink-0 border-t-4 border-black bg-white z-10">
                     <div className="flex gap-4">
-                        <button onClick={onClose} className="flex-1 bg-white/5 text-gray-400 hover:text-white py-4 rounded-2xl font-black uppercase text-xs hover:bg-white/10 transition-all">Cancel</button>
-                        <button onClick={onSave} className="flex-1 bg-[#F492B7] text-black py-4 rounded-2xl font-black uppercase text-xs shadow-lg hover:shadow-[#F492B7]/20 hover:brightness-110 transition-all">Save Changes</button>
+                        <button onClick={onClose} className="flex-1 bg-white border-3 border-black text-black py-4 rounded-xl font-black lowercase text-sm hover:bg-black hover:text-white transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)]">cancel</button>
+                        <button onClick={onSave} className="flex-1 bg-[#F492B7] border-3 border-black text-black py-4 rounded-xl font-black lowercase text-sm hover:translate-y-1 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all">save changes</button>
                     </div>
                 </div>
 
@@ -1387,9 +1391,11 @@ function ProfitLossCard({ profit, activeBets }: { profit: number; activeBets: an
         return profit * 0.05; // 1D
     }, [period, profit]);
 
-    // Generate chart data
-    const dataPoints = period === '1D' ? 24 : period === '1W' ? 7 : period === '1M' ? 30 : 90;
-    const chartData = useMemo(() => {
+    // Generate chart data client-side only to prevent hydration mismatch
+    const [chartData, setChartData] = useState<{ y: number; val: number }[]>([]);
+
+    useEffect(() => {
+        const dataPoints = period === '1D' ? 24 : period === '1W' ? 7 : period === '1M' ? 30 : 90;
         const rawValues = [];
         let value = profit;
         // Make volatility relative to profit magnitude or fallback to base
@@ -1409,40 +1415,45 @@ function ProfitLossCard({ profit, activeBets }: { profit: number; activeBets: an
         const minVal = Math.min(...rawValues);
         const range = maxVal - minVal || 1; // Avoid div 0
 
-        return rawValues.map(val => ({
+        const calculated = rawValues.map(val => ({
             // Map value to 10-90 range to keep padding
             y: 90 - ((val - minVal) / range) * 80,
             val: val
         }));
-    }, [period, profit, dataPoints]);
+
+        setChartData(calculated);
+    }, [period, profit]);
+
+    // Derived logic for dataPoints for tooltip interaction
+    const dataPoints = period === '1D' ? 24 : period === '1W' ? 7 : period === '1M' ? 30 : 90;
 
     const periodLabels = { '1D': 'Past Day', '1W': 'Past Week', '1M': 'Past Month', 'ALL': 'All Time' };
 
     return (
-        <div className="bg-transparent rounded-[1.5rem] p-6 mb-8 relative overflow-hidden">
+        <div className="bg-white border-4 border-black rounded-3xl p-6 mb-8 relative overflow-hidden shadow-[8px_8px_0px_0px_#F492B7] hover:translate-y-1 hover:shadow-[4px_4px_0px_0px_#F492B7] transition-all">
             {/* Header Row */}
             <div className="flex items-start justify-between mb-2 relative z-10">
                 <div>
                     <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-bold uppercase tracking-wider text-white">
-                            {isPositive ? '▲' : '▼'} Profit/Loss
+                        <span className="text-[10px] font-black uppercase tracking-widest text-black/70">
+                            {isPositive ? '▲' : '▼'} profit/loss
                         </span>
                     </div>
                     <h2 className="text-4xl font-black tracking-tighter leading-none italic text-[#10B981]">
                         $<AnimatedNumber value={Math.abs(hoverValue !== null ? hoverValue : periodProfit)} />
                     </h2>
-                    <p className="text-gray-500 text-xs font-medium mt-1">{periodLabels[period]} • {new Date().toLocaleDateString()}</p>
+                    <p className="text-black/60 text-xs font-bold mt-1">{periodLabels[period]} • {new Date().toLocaleDateString()}</p>
                 </div>
 
                 {/* Time Tabs */}
-                <div className="flex items-center bg-white/5 rounded-lg p-1 border border-white/5">
+                <div className="flex items-center bg-white rounded-lg p-1 border-2 border-black/20">
                     {(['1D', '1W', '1M', 'ALL'] as const).map((p) => (
                         <button
                             key={p}
                             onClick={() => setPeriod(p)}
-                            className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${period === p
-                                ? 'bg-white text-black shadow-sm'
-                                : 'text-gray-500 hover:text-white hover:bg-white/5'
+                            className={`px-3 py-1 text-xs font-black rounded-lg transition-all ${period === p
+                                ? 'bg-black text-white border-2 border-black shadow-[3px_3px_0px_0px_#F492B7]'
+                                : 'text-black border-2 border-transparent hover:border-black'
                                 }`}
                         >
                             {p}
@@ -1453,7 +1464,7 @@ function ProfitLossCard({ profit, activeBets }: { profit: number; activeBets: an
 
             {/* Chart Container */}
             <div
-                className="relative h-64 -mx-6 -mb-6 cursor-crosshair group"
+                className="relative h-64 -mx-6 -mb-6 cursor-crosshair group bg-[#FFF5F7] border-t-2 border-black/10"
                 onMouseMove={(e) => {
                     const rect = e.currentTarget.getBoundingClientRect();
                     const x = e.clientX - rect.left;
@@ -1472,34 +1483,29 @@ function ProfitLossCard({ profit, activeBets }: { profit: number; activeBets: an
                 {/* Vertical Line Indicator */}
                 {hoverIndex !== null && (
                     <div
-                        className="absolute top-0 bottom-0 w-0.5 bg-white/20 z-20 pointer-events-none transition-transform duration-75"
+                        className="absolute top-0 bottom-0 w-0.5 bg-black/30 z-20 pointer-events-none transition-transform duration-75"
                         style={{ left: `${(hoverIndex / (dataPoints - 1)) * 100}%` }}
                     />
                 )}
 
                 <svg viewBox="0 0 240 100" className="w-full h-full" preserveAspectRatio="none">
-                    <defs>
-                        <linearGradient id="plGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                            <stop offset="0%" stopColor={chartColor} stopOpacity="0.15" />
-                            <stop offset="100%" stopColor={chartColor} stopOpacity="0" />
-                        </linearGradient>
-                    </defs>
                     {chartData.length > 1 ? (
                         <>
                             <path
                                 d={`M 0 100 ${chartData.map((d, i) => `L ${i * (240 / (chartData.length - 1))} ${100 - d.y}`).join(' ')} L 240 100 Z`}
-                                fill="url(#plGradient)"
+                                fill={chartColor}
+                                opacity="0.15"
                             />
                             <path
                                 d={`M 0 ${100 - (chartData[0]?.y || 0)} ${chartData.map((d, i) => `L ${i * (240 / (chartData.length - 1))} ${100 - d.y}`).join(' ')}`}
                                 fill="none"
                                 stroke={chartColor}
-                                strokeWidth="1.5"
+                                strokeWidth="2.5"
                             />
                         </>
                     ) : (
                         // Placeholder flat line if no data
-                        <path d="M 0 50 L 240 50" stroke={chartColor} strokeWidth="1.5" strokeDasharray="4 4" opacity="0.5" />
+                        <path d="M 0 50 L 240 50" stroke={chartColor} strokeWidth="2.5" strokeDasharray="4 4" opacity="0.5" />
                     )}
                 </svg>
             </div>
@@ -1652,13 +1658,13 @@ function CreatorRewardsCard({ createdMarkets, isMyProfile, creatorStats }: { cre
     const periodLabels = { '1D': 'Today', '3D': '3 Days', '1W': 'This Week', '1M': 'This Month', 'ALL': 'All Time' };
 
     return (
-        <div className="bg-transparent rounded-[1.5rem] p-6 mb-8 relative overflow-hidden">
+        <div className="bg-white border-4 border-black rounded-3xl p-6 mb-8 relative overflow-hidden shadow-[8px_8px_0px_0px_#10B981] hover:translate-y-1 hover:shadow-[4px_4px_0px_0px_#10B981] transition-all">
             {/* Header Row */}
             <div className="flex items-start justify-between mb-2 relative z-10">
                 <div>
                     <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-bold uppercase tracking-wider text-white">
-                            ▲ Creator Rewards
+                        <span className="text-[10px] font-black uppercase tracking-widest text-black/70">
+                            ▲ creator rewards
                         </span>
                     </div>
 
@@ -1671,28 +1677,28 @@ function CreatorRewardsCard({ createdMarkets, isMyProfile, creatorStats }: { cre
                             <button
                                 onClick={handleClaimAll}
                                 disabled={isLoading || claimableSol <= 0}
-                                className="bg-[#F492B7] hover:bg-[#e07aa3] text-black font-bold text-[10px] px-3 py-1 rounded-full transition-all disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 uppercase tracking-widest flex items-center gap-1"
+                                className="bg-[#10B981] hover:translate-y-0.5 text-white font-black text-[10px] px-3 py-1.5 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed border-2 border-black uppercase tracking-widest flex items-center gap-1 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
                             >
                                 {isLoading ? <Loader2 className="animate-spin w-3 h-3" /> : 'Claim'}
                             </button>
                         )}
                     </div>
 
-                    <p className="text-gray-500 text-xs font-medium mt-1">
-                        {periodLabels[rewardsPeriod]} • {claimableSol > 0 ? <span className="text-emerald-400 font-bold">{claimableSol.toFixed(4)} SOL Unclaimed</span> : 'All caught up'}
+                    <p className="text-black/60 text-xs font-bold mt-1">
+                        {periodLabels[rewardsPeriod]} • {claimableSol > 0 ? <span className="text-[#10B981] font-black">{claimableSol.toFixed(4)} SOL Unclaimed</span> : 'All caught up'}
                     </p>
                 </div>
 
                 {/* Time Tabs (Claim button moved next to number) */}
                 <div className="flex items-center gap-3">
-                    <div className="flex items-center bg-white/5 rounded-lg p-1 border border-white/5">
+                    <div className="flex items-center bg-white rounded-lg p-1 border-2 border-black/20">
                         {(['1D', '3D', '1W', '1M', 'ALL'] as const).map((p) => (
                             <button
                                 key={p}
                                 onClick={() => setRewardsPeriod(p)}
-                                className={`px-2 py-1 text-xs font-bold rounded-md transition-all ${rewardsPeriod === p
-                                    ? 'bg-white text-black shadow-sm'
-                                    : 'text-gray-500 hover:text-white hover:bg-white/5'
+                                className={`px-2 py-1 text-xs font-black rounded-lg transition-all ${rewardsPeriod === p
+                                    ? 'bg-black text-white border-2 border-black shadow-[3px_3px_0px_0px_#10B981]'
+                                    : 'text-black border-2 border-transparent hover:border-black'
                                     }`}
                             >
                                 {p}
@@ -1704,7 +1710,7 @@ function CreatorRewardsCard({ createdMarkets, isMyProfile, creatorStats }: { cre
 
             {/* Chart Container */}
             <div
-                className="relative h-64 -mx-6 -mb-6 cursor-crosshair group"
+                className="relative h-64 -mx-6 -mb-6 cursor-crosshair group bg-[#F0FDF4] border-t-2 border-black/10"
                 onMouseMove={(e) => {
                     const rect = e.currentTarget.getBoundingClientRect();
                     const x = e.clientX - rect.left;
@@ -1723,27 +1729,22 @@ function CreatorRewardsCard({ createdMarkets, isMyProfile, creatorStats }: { cre
                 {/* Vertical Line Indicator */}
                 {hoverIndex !== null && (
                     <div
-                        className="absolute top-0 bottom-0 w-0.5 bg-white/20 z-20 pointer-events-none transition-transform duration-75"
+                        className="absolute top-0 bottom-0 w-0.5 bg-black/30 z-20 pointer-events-none transition-transform duration-75"
                         style={{ left: `${(hoverIndex / (dataPoints - 1)) * 100}%` }}
                     />
                 )}
 
                 <svg viewBox="0 0 240 100" className="w-full h-full" preserveAspectRatio="none">
-                    <defs>
-                        <linearGradient id="rewardsGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                            <stop offset="0%" stopColor="#F492B7" stopOpacity="0.15" />
-                            <stop offset="100%" stopColor="#F492B7" stopOpacity="0" />
-                        </linearGradient>
-                    </defs>
                     <path
                         d={`M 0 100 ${miniChartData.map((d, i) => `L ${i * (240 / miniChartData.length)} ${100 - d.y}`).join(' ')} L 240 100 Z`}
-                        fill="url(#rewardsGradient)"
+                        fill="#10B981"
+                        opacity="0.15"
                     />
                     <path
                         d={`M 0 ${100 - miniChartData[0]?.y} ${miniChartData.map((d, i) => `L ${i * (240 / miniChartData.length)} ${100 - d.y}`).join(' ')}`}
                         fill="none"
-                        stroke="#F492B7"
-                        strokeWidth="1.5"
+                        stroke="#10B981"
+                        strokeWidth="2.5"
                     />
                 </svg>
             </div>
@@ -1788,40 +1789,40 @@ function PositionsTable({ activeBets, closedBets, isMyProfile, solPrice }: { act
     const bets = filter === 'active' ? activeBets : closedBets;
 
     return (
-        <div className="bg-gradient-to-br from-[#0D0D0D] to-black border border-white/10 rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden">
-            <div className="flex items-center gap-4 mb-8">
+        <div className="bg-white border-4 border-black rounded-3xl overflow-hidden shadow-[12px_12px_0px_0px_#F492B7]">
+            <div className="flex items-center gap-4 p-6 border-b-4 border-black bg-white">
                 <button
                     onClick={() => setFilter('active')}
-                    className={`px-6 py-2 rounded-xl text-sm font-black tracking-widest transition-all ${filter === 'active' ? 'bg-white text-black' : 'bg-white/5 text-gray-500 hover:text-white'}`}
+                    className={`px-6 py-2 rounded-xl text-sm font-black lowercase tracking-tight transition-all border-2 ${filter === 'active' ? 'bg-black text-white border-black shadow-[3px_3px_0px_0px_#F492B7]' : 'bg-white text-black border-black/20 hover:border-black'}`}
                 >
-                    Active
+                    active
                 </button>
                 <button
                     onClick={() => setFilter('closed')}
-                    className={`px-6 py-2 rounded-xl text-sm font-black tracking-widest transition-all ${filter === 'closed' ? 'bg-white text-black' : 'bg-white/5 text-gray-500 hover:text-white'}`}
+                    className={`px-6 py-2 rounded-xl text-sm font-black lowercase tracking-tight transition-all border-2 ${filter === 'closed' ? 'bg-black text-white border-black shadow-[3px_3px_0px_0px_#F492B7]' : 'bg-white text-black border-black/20 hover:border-black'}`}
                 >
-                    Closed
+                    closed
                 </button>
             </div>
 
             {bets.length === 0 ? (
-                <div className="text-center py-20 bg-white/5 rounded-2xl border border-dashed border-white/10">
-                    <p className="text-gray-500 font-bold uppercase tracking-widest">No {filter} positions found</p>
+                <div className="text-center py-20 bg-white border-4 border-dashed border-black/20 m-6 rounded-2xl">
+                    <p className="text-black/70 font-black uppercase tracking-widest text-sm">no {filter} positions found</p>
                 </div>
             ) : (
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>
-                            <tr className="text-gray-500 text-xs font-black uppercase tracking-widest border-b border-white/10">
-                                <th className="pb-4 pl-6">Market</th>
-                                <th className="pb-4 text-right">Shares</th>
-                                <th className="pb-4 text-right">Avg MCAP</th>
-                                <th className="pb-4 text-right">Curr MCAP</th>
-                                <th className="pb-4 text-right">Value</th>
-                                <th className="pb-4 text-right pr-6">ROI</th>
+                            <tr className="text-[10px] font-black uppercase tracking-widest border-b-4 border-black bg-black text-white">
+                                <th className="py-4 pl-6">market</th>
+                                <th className="py-4 text-right">shares</th>
+                                <th className="py-4 text-right">avg mcap</th>
+                                <th className="py-4 text-right">curr mcap</th>
+                                <th className="py-4 text-right">value</th>
+                                <th className="py-4 text-right pr-6">roi</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-white/5">
+                        <tbody className="divide-y divide-black/20">
                             {bets.map((bet: any, i: number) => {
                                 // --- ROBUST CALCULATIONS ---
 
@@ -1888,31 +1889,35 @@ function PositionsTable({ activeBets, closedBets, isMyProfile, solPrice }: { act
 
                                 const isPositive = pnlSol >= 0;
 
+                                const marketName = bet.title || bet.market_slug || 'Unknown Market';
+                                const isYes = bet.side === 'YES';
+                                const sideColor = isYes ? 'text-[#10B981] bg-[#10B981]' : 'text-red-500 bg-red-500';
+
                                 return (
                                     <tr
                                         key={i}
                                         onClick={(e) => {
                                             router.push(`/market/${bet.market_slug}`);
                                         }}
-                                        className="group hover:bg-white/5 transition-colors cursor-pointer border-b border-white/5 last:border-0"
+                                        className="group hover:bg-[#FFF5F7] transition-colors cursor-pointer last:border-0"
                                     >
                                         <td className="py-5 pl-6">
                                             <div className="flex items-center gap-4">
-                                                <div className="w-12 h-12 rounded-xl bg-white/10 overflow-hidden flex-shrink-0 relative shadow-inner">
+                                                <div className="w-12 h-12 rounded-xl bg-white border-2 border-black overflow-hidden flex-shrink-0 relative shadow-[2px_2px_0px_0px_rgba(0,0,0,0.2)]">
                                                     {bet.market_icon ? (
                                                         <img src={bet.market_icon} className="w-full h-full object-cover" alt="" />
                                                     ) : (
-                                                        <div className="w-full h-full flex items-center justify-center text-lg text-gray-500">🔮</div>
+                                                        <div className="w-full h-full flex items-center justify-center text-lg">🔮</div>
                                                     )}
                                                 </div>
                                                 <div className="flex flex-col gap-0.5">
-                                                    <span className="font-bold text-white text-base max-w-[200px] truncate capitalize leading-tight group-hover:text-[#F3F4F6] transition-colors">{marketName}</span>
+                                                    <span className="font-black text-black text-base max-w-[200px] truncate capitalize leading-tight group-hover:text-[#F492B7] transition-colors">{marketName}</span>
                                                     <div className="flex items-center gap-2">
-                                                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${sideColor} bg-opacity-20`}>
+                                                        <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider border-2 ${isYes ? 'bg-[#10B981] border-black text-white' : 'bg-red-500 border-black text-white'}`}>
                                                             {bet.outcome_name || bet.side}
                                                         </span>
                                                         {filter === 'closed' && (
-                                                            <span className="text-[10px] text-gray-500">Ended {new Date().toLocaleDateString()}</span>
+                                                            <span className="text-[10px] text-black/60 font-bold">Ended {new Date().toLocaleDateString()}</span>
                                                         )}
                                                     </div>
                                                 </div>
@@ -1920,23 +1925,23 @@ function PositionsTable({ activeBets, closedBets, isMyProfile, solPrice }: { act
                                         </td>
 
                                         {/* Shares */}
-                                        <td className="py-5 text-right font-mono text-gray-500 text-sm">
+                                        <td className="py-5 text-right font-mono text-black/70 text-sm font-bold">
                                             {formatCompact(normalizedShares)}
                                         </td>
 
                                         {/* Entry MCAP */}
-                                        <td className="py-5 text-right font-mono text-gray-500 text-xs">
+                                        <td className="py-5 text-right font-mono text-black/60 text-xs font-bold">
                                             ${formatCompact(entryMcapUsd)}
                                         </td>
 
                                         {/* Current MCAP */}
-                                        <td className="py-5 text-right font-mono font-medium text-gray-300 text-sm">
+                                        <td className="py-5 text-right font-mono font-black text-black text-sm">
                                             ${formatCompact(currentMcapUsd)}
                                         </td>
 
                                         {/* Value (USD) - Prominent */}
                                         <td className="py-5 text-right">
-                                            <div className="font-black text-white text-lg tracking-tight">
+                                            <div className="font-black text-black text-lg tracking-tight italic">
                                                 ${formatCompact(valUsd)}
                                             </div>
                                         </td>
@@ -1944,11 +1949,11 @@ function PositionsTable({ activeBets, closedBets, isMyProfile, solPrice }: { act
                                         {/* ROI / PnL */}
                                         <td className="py-5 text-right pr-6">
                                             <div className="flex flex-col items-end gap-0.5">
-                                                <div className={`flex items-center gap-1.5 font-bold text-sm ${isPositive ? 'text-[#10B981]' : 'text-red-500'}`}>
+                                                <div className={`flex items-center gap-1.5 font-black text-sm italic ${isPositive ? 'text-[#10B981]' : 'text-red-500'}`}>
                                                     {isPositive && <span className="text-base">🚀</span>}
                                                     <span>{isPositive ? '+' : ''}${formatCompact(pnlUsd)}</span>
                                                 </div>
-                                                <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${isPositive ? 'bg-[#10B981]/10 text-[#10B981]' : 'bg-red-500/10 text-red-500'}`}>
+                                                <span className={`text-xs font-black px-1.5 py-0.5 rounded border-2 ${isPositive ? 'bg-[#10B981] border-black text-white' : 'bg-red-500 border-black text-white'}`}>
                                                     {isPositive ? '+' : ''}{pnlPercent.toFixed(1)}%
                                                 </span>
                                             </div>
@@ -1981,48 +1986,48 @@ function ActivityTable({ walletAddress }: { walletAddress: string }) {
     if (loading) return <div className="text-center py-20"><Loader2 className="w-8 h-8 animate-spin mx-auto text-gray-500" /></div>;
 
     return (
-        <div className="bg-gradient-to-br from-[#0D0D0D] to-black border border-white/10 rounded-[2.5rem] p-8 shadow-2xl overflow-hidden">
+        <div className="bg-white border-4 border-black rounded-3xl overflow-hidden shadow-[12px_12px_0px_0px_#F492B7]">
             <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                     <thead>
-                        <tr className="text-gray-500 text-xs font-black uppercase tracking-widest border-b border-white/10">
-                            <th className="pb-4 pl-4">Type</th>
-                            <th className="pb-4">Market</th>
-                            <th className="pb-4 text-center">Outcome</th>
-                            <th className="pb-4 text-right">Amount</th>
-                            <th className="pb-4 text-right pr-4">Value</th>
+                        <tr className="text-[10px] font-black uppercase tracking-widest border-b-4 border-black bg-black text-white">
+                            <th className="py-4 pl-6">type</th>
+                            <th className="py-4">market</th>
+                            <th className="py-4 text-center">outcome</th>
+                            <th className="py-4 text-right">amount</th>
+                            <th className="py-4 text-right pr-6">value</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/5">
+                    <tbody className="divide-y divide-black/20">
                         {activity.map((item, i) => {
                             if (item.market_slug?.includes('mkjm2hmf')) return null;
 
                             const marketName = (item.market_title || item.market_slug || '').replace(/-/g, ' ');
                             const isBuy = item.order_type === 'BUY' || (!item.order_type && item.amount > 0);
-                            const typeColor = !isBuy ? 'text-red-500 bg-red-500/10 border-red-500/20' : 'text-[#10B981] bg-[#10B981]/10 border-[#10B981]/20';
+                            const typeColor = !isBuy ? 'bg-red-500 border-black text-white' : 'bg-[#10B981] border-black text-white';
                             const outcomeName = item.outcome_name || (item.outcome_index === 0 ? 'Yes' : 'No');
 
                             return (
                                 <tr
                                     key={i}
                                     onClick={() => router.push(`/market/${item.market_slug}`)}
-                                    className="group hover:bg-white/5 transition-colors cursor-pointer"
+                                    className="group hover:bg-[#FFF5F7] transition-colors cursor-pointer"
                                 >
-                                    <td className="py-4 pl-4">
-                                        <span className={`text-[10px] font-black uppercase px-2 py-1 rounded border ${typeColor}`}>
+                                    <td className="py-4 pl-6">
+                                        <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-lg border-2 ${typeColor}`}>
                                             {isBuy ? 'BUY' : 'SELL'}
                                         </span>
                                     </td>
                                     <td className="py-4">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-lg bg-white/10 overflow-hidden flex-shrink-0 relative">
+                                            <div className="w-10 h-10 rounded-lg bg-white border-2 border-black overflow-hidden flex-shrink-0 relative shadow-[2px_2px_0px_0px_rgba(0,0,0,0.2)]">
                                                 {item.market_icon ? (
                                                     <img src={item.market_icon} className="w-full h-full object-cover" alt="" />
                                                 ) : (
-                                                    <div className="w-full h-full flex items-center justify-center text-xs text-gray-500">🔮</div>
+                                                    <div className="w-full h-full flex items-center justify-center text-xs">🔮</div>
                                                 )}
                                             </div>
-                                            <span className="font-bold text-white max-w-[200px] truncate capitalize">{marketName}</span>
+                                            <span className="font-black text-black max-w-[200px] truncate capitalize group-hover:text-[#F492B7]">{marketName}</span>
                                         </div>
                                     </td>
                                     <td className="py-4 text-center">
@@ -2032,13 +2037,13 @@ function ActivityTable({ walletAddress }: { walletAddress: string }) {
                                     </td>
                                     <td className="py-4 text-right">
                                         <div className="flex flex-col items-end">
-                                            <span className="font-mono text-gray-300">{formatCompact(item.shares || 0)} Shares</span>
+                                            <span className="font-mono text-black/70 font-bold">{formatCompact(item.shares || 0)} Shares</span>
                                         </div>
                                     </td>
-                                    <td className="py-4 text-right pr-4">
+                                    <td className="py-4 text-right pr-6">
                                         <div className="flex flex-col items-end">
-                                            <span className="font-black text-white">${formatCompact(item.amount || 0)}</span>
-                                            <span className="text-[10px] text-gray-500 font-mono mt-0.5">
+                                            <span className="font-black text-black italic">${formatCompact(item.amount || 0)}</span>
+                                            <span className="text-[10px] text-black/60 font-bold mt-0.5">
                                                 {new Date(item.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                             </span>
                                         </div>
@@ -2050,7 +2055,7 @@ function ActivityTable({ walletAddress }: { walletAddress: string }) {
                 </table>
             </div>
             {activity.length === 0 && (
-                <div className="text-center py-10 text-gray-500 text-sm font-medium uppercase tracking-widest">No recent activity</div>
+                <div className="text-center py-10 text-black/70 text-sm font-black uppercase tracking-widest">no recent activity</div>
             )}
         </div>
     );
@@ -2059,8 +2064,8 @@ function ActivityTable({ walletAddress }: { walletAddress: string }) {
 // --- MY MARKETS LIST ---
 function MyMarketsList({ markets }: { markets: any[] }) {
     if (!markets || markets.length === 0) return (
-        <div className="bg-black/50 border border-white/10 rounded-[2.5rem] p-20 text-center">
-            <p className="text-gray-500 font-black uppercase tracking-widest">No markets created yet</p>
+        <div className="bg-white border-4 border-dashed border-black/20 rounded-3xl p-20 text-center shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)]">
+            <p className="text-black/70 font-black uppercase tracking-widest text-sm">no markets created yet</p>
         </div>
     );
 
@@ -2072,16 +2077,16 @@ function MyMarketsList({ markets }: { markets: any[] }) {
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {markets.map((m: any, i: number) => (
-                <div key={i} className="bg-[#0D0D0D] border border-white/10 p-6 rounded-3xl hover:border-white/20 transition-all group">
+                <div key={i} className="bg-white border-4 border-black p-6 rounded-3xl hover:translate-y-1 transition-all group shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] cursor-pointer">
                     <div className="flex items-start justify-between mb-4">
-                        <img src={m.icon || '/pink-pfp.png'} className="w-12 h-12 rounded-xl object-contain bg-white/5" onError={(e) => { e.currentTarget.src = '/pink-pfp.png'; }} />
-                        <span className="bg-white/5 text-gray-500 text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded">
-                            {m.volume ? 'Verified' : 'Unverified'}
+                        <img src={m.icon || '/pink-pfp.png'} className="w-12 h-12 rounded-xl object-contain bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)]" onError={(e) => { e.currentTarget.src = '/pink-pfp.png'; }} />
+                        <span className="bg-white border-2 border-black text-black text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg">
+                            {m.volume ? 'verified' : 'unverified'}
                         </span>
                     </div>
-                    <h3 className="text-lg font-bold text-white leading-tight mb-2 group-hover:text-[#F492B7] transition-colors line-clamp-2">{m.title}</h3>
-                    <div className="flex items-center justify-between text-xs text-gray-500 font-mono">
-                        <span>{m.type || 'Binary'}</span>
+                    <h3 className="text-lg font-black text-black leading-tight mb-2 group-hover:text-[#F492B7] transition-colors line-clamp-2 lowercase">{m.title}</h3>
+                    <div className="flex items-center justify-between text-xs text-black/70 font-bold">
+                        <span className="lowercase">{m.type || 'Binary'}</span>
                         <span>{formatDate(m.createdAt || m.created_at)}</span>
                     </div>
                 </div>
@@ -2132,14 +2137,14 @@ function MedalVault({ profile, earnedAchievements, selectedMedals, setSelectedMe
 
     return (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-6 bg-black/98 backdrop-blur-3xl">
-            <div className="relative bg-[#080808] border border-white/10 w-full max-w-2xl h-[90vh] flex flex-col rounded-[3rem] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
+            <div className="relative bg-white border-4 border-black w-full max-w-2xl h-[90vh] flex flex-col rounded-3xl shadow-[16px_16px_0px_0px_#F492B7] overflow-hidden animate-in fade-in zoom-in duration-300">
 
                 {/* VAULT HEADER */}
-                <div className="px-10 pt-10 pb-6 flex items-center justify-between border-b border-white/5 shrink-0 bg-[#080808] z-20">
+                <div className="px-10 pt-10 pb-6 flex items-center justify-between border-b-4 border-black shrink-0 bg-[#F492B7] z-20">
                     <div>
-                        <h2 className="text-4xl font-black uppercase tracking-tighter text-[#F492B7]">Gems Vault</h2>
+                        <h2 className="text-4xl font-black lowercase tracking-tight text-black">gems vault</h2>
                         <div className="flex items-center gap-2 mt-1">
-                            <p className="text-gray-500 text-[10px] font-bold uppercase tracking-[0.2em]">Select gems to feature on your profile</p>
+                            <p className="text-black/70 text-[10px] font-bold uppercase tracking-[0.2em]">select gems to feature on your profile</p>
                         </div>
                     </div>
                 </div>
@@ -2148,8 +2153,8 @@ function MedalVault({ profile, earnedAchievements, selectedMedals, setSelectedMe
                 <div className="flex-1 flex flex-col overflow-hidden relative">
 
                     {/* TOP: AVAILABLE (SCROLLABLE) */}
-                    <div className="flex-1 overflow-y-auto px-10 py-8 custom-scrollbar bg-white/[0.02]">
-                        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500 mb-6 sticky top-0 bg-[#080808]/0 backdrop-blur-sm z-10 py-2">Available Gems</p>
+                    <div className="flex-1 overflow-y-auto px-10 py-8 custom-scrollbar bg-white">
+                        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-black/70 mb-6 sticky top-0 bg-white backdrop-blur-sm z-10 py-2">available gems</p>
                         <div className="grid grid-cols-5 gap-3 pb-24"> {/* Extra padding for hover info */}
                             {availableCodes.map((code: string, i: number) => {
                                 const details = MEDAL_DETAILS[code];
@@ -2161,7 +2166,7 @@ function MedalVault({ profile, earnedAchievements, selectedMedals, setSelectedMe
                                         onMouseEnter={() => setHovered(code)}
                                         onMouseLeave={() => setHovered(null)}
                                         onClick={() => toggleMedal(code)}
-                                        className={`relative aspect-square rounded-2xl border transition-all flex items-center justify-center group ${isSelected ? 'bg-white/5 border-white/10 opacity-30 brightness-50' : 'bg-white/5 border-white/10 hover:border-[#F492B7]/50 hover:bg-white/10 hover:scale-105'}`}
+                                        className={`relative aspect-square rounded-2xl border-3 transition-all flex items-center justify-center group ${isSelected ? 'bg-white border-black/20 opacity-30 grayscale' : 'bg-white border-black hover:border-[#F492B7] hover:shadow-[4px_4px_0px_0px_#F492B7] hover:scale-105 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.2)]'}`}
                                     >
                                         {details?.img?.length === 1 ? (
                                             <span className="text-3xl group-hover:scale-110 transition-transform">{details.img}</span>
@@ -2169,8 +2174,8 @@ function MedalVault({ profile, earnedAchievements, selectedMedals, setSelectedMe
                                             <img src={details?.img || '/pink-pfp.png'} className="w-full h-full object-contain p-3 group-hover:scale-110 transition-transform" />
                                         )}
                                         {isSelected && (
-                                            <div className="absolute inset-0 flex items-center justify-center">
-                                                <span className="text-[10px] font-black text-[#F492B7] uppercase tracking-widest">Active</span>
+                                            <div className="absolute inset-0 flex items-center justify-center bg-white/90 rounded-2xl">
+                                                <span className="text-[10px] font-black text-[#F492B7] uppercase tracking-widest">active</span>
                                             </div>
                                         )}
                                     </button>
@@ -2181,15 +2186,15 @@ function MedalVault({ profile, earnedAchievements, selectedMedals, setSelectedMe
 
                     {/* FIXED INFO PANEL (FLOATING) */}
                     <div className="absolute bottom-1/2 left-0 right-0 px-10 pointer-events-none flex justify-center z-30 translate-y-1/2">
-                        <div className={`bg-[#0A0A0A] border border-white/20 p-5 rounded-2xl shadow-2xl flex items-center gap-5 max-w-lg transition-all duration-300 transform ${hovered ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-4'}`}>
+                        <div className={`bg-white border-4 border-black p-5 rounded-2xl shadow-[8px_8px_0px_0px_#F492B7] flex items-center gap-5 max-w-lg transition-all duration-300 transform ${hovered ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-4'}`}>
                             {hoverInfo && (
                                 <>
-                                    <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center shrink-0 border border-white/10">
+                                    <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shrink-0 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)]">
                                         {hoverInfo.img?.length === 1 ? <span className="text-3xl">{hoverInfo.img}</span> : <img src={hoverInfo.img || '/pink-pfp.png'} className="w-10 h-10 object-contain" />}
                                     </div>
                                     <div>
-                                        <p className="font-black text-white text-lg uppercase tracking-tight leading-none mb-1 text-[#F492B7]">{hoverInfo.title}</p>
-                                        <p className="text-gray-400 text-xs font-medium leading-relaxed">{hoverInfo.desc}</p>
+                                        <p className="font-black text-black text-lg lowercase tracking-tight leading-none mb-1">{hoverInfo.title}</p>
+                                        <p className="text-black/70 text-xs font-bold leading-relaxed">{hoverInfo.desc}</p>
                                     </div>
                                 </>
                             )}
@@ -2197,8 +2202,8 @@ function MedalVault({ profile, earnedAchievements, selectedMedals, setSelectedMe
                     </div>
 
                     {/* BOTTOM: ACTIVE (SCROLLABLE) */}
-                    <div className="flex-1 overflow-y-auto px-10 py-8 custom-scrollbar border-t border-white/5 bg-[#080808]">
-                        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500 mb-6 sticky top-0 bg-[#080808] z-10 py-2">Featured on Profile ({selectedMedals.length}/9)</p>
+                    <div className="flex-1 overflow-y-auto px-10 py-8 custom-scrollbar border-t-4 border-black bg-[#FFF5F7]">
+                        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-black/70 mb-6 sticky top-0 bg-[#FFF5F7] z-10 py-2">featured on profile ({selectedMedals.length}/9)</p>
                         <div className="flex flex-wrap gap-3">
                             {selectedMedals.map((code: string, i: number) => {
                                 const details = MEDAL_DETAILS[code];
@@ -2208,22 +2213,22 @@ function MedalVault({ profile, earnedAchievements, selectedMedals, setSelectedMe
                                         onMouseEnter={() => setHovered(code)}
                                         onMouseLeave={() => setHovered(null)}
                                         onClick={() => toggleMedal(code)}
-                                        className="relative w-20 h-20 rounded-2xl bg-[#F492B7]/10 border border-[#F492B7]/30 flex items-center justify-center hover:bg-red-500/20 hover:border-red-500/50 group transition-all"
+                                        className="relative w-20 h-20 rounded-2xl bg-white border-3 border-[#F492B7] flex items-center justify-center hover:border-red-500 group transition-all shadow-[4px_4px_0px_0px_#F492B7] hover:shadow-[4px_4px_0px_0px_#EF4444]"
                                     >
                                         {details?.img?.length === 1 ? (
                                             <span className="text-3xl group-hover:opacity-0">{details.img}</span>
                                         ) : (
                                             <img src={details?.img || '/pink-pfp.png'} className="w-12 h-12 object-contain group-hover:opacity-0" />
                                         )}
-                                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100">
-                                            <span className="text-red-500 font-black text-[9px] uppercase tracking-widest">Remove</span>
+                                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-white/95 rounded-2xl">
+                                            <span className="text-red-500 font-black text-[9px] uppercase tracking-widest">remove</span>
                                         </div>
                                     </button>
                                 );
                             })}
                             {selectedMedals.length === 0 && (
-                                <div className="w-full flex items-center justify-center h-20 border border-dashed border-white/10 rounded-2xl">
-                                    <p className="text-gray-600 font-bold uppercase text-[10px] tracking-widest">Click gems above to activate</p>
+                                <div className="w-full flex items-center justify-center h-20 border-4 border-dashed border-black/20 rounded-2xl bg-white">
+                                    <p className="text-black/70 font-bold uppercase text-[10px] tracking-widest">click gems above to activate</p>
                                 </div>
                             )}
                         </div>
@@ -2231,12 +2236,12 @@ function MedalVault({ profile, earnedAchievements, selectedMedals, setSelectedMe
                 </div>
 
                 {/* VAULT FOOTER */}
-                <div className="px-10 py-6 border-t border-white/5 bg-[#080808] shrink-0 z-20">
+                <div className="px-10 py-6 border-t-4 border-black bg-white shrink-0 z-20">
                     <button
                         onClick={onClose}
-                        className="w-full bg-[#F492B7] text-black py-4 rounded-xl font-black uppercase text-xs tracking-widest shadow-[0_0_20px_rgba(244,146,183,0.3)] hover:shadow-[0_0_30px_rgba(244,146,183,0.5)] hover:scale-[1.02] transition-all active:scale-95"
+                        className="w-full bg-[#F492B7] border-3 border-black text-black py-4 rounded-xl font-black lowercase text-sm tracking-tight shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all"
                     >
-                        Apply Changes
+                        apply changes
                     </button>
                 </div>
 

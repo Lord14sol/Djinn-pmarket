@@ -421,7 +421,7 @@ export default function Home() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.3 }}
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-[1px] bg-white/10 overflow-hidden"
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 bg-transparent overflow-hidden"
             >
               {sortedMarkets
                 .map((market, index) => {

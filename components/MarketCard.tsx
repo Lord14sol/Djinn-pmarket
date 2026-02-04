@@ -123,13 +123,16 @@ const MarketCard: React.FC<MarketCardProps> = React.memo(({
     return (
         <div
             onClick={handleNavigate}
-            className={`bg-black flex flex-col relative hover:bg-white/[0.02] hover:-translate-y-2 transition-all duration-300 h-full group/card shadow-lg hover:shadow-xl cursor-pointer
-                ${compact ? 'p-3 gap-2 min-h-[200px]' : 'p-4 gap-4 min-h-[380px]'}
+            style={{ borderColor: 'black' }}
+            className={`
+                bg-white border-2 !border-black rounded-3xl relative flex flex-col 
+                hover:-translate-y-1 hover:!shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] !shadow-none ring-0 outline-none
+                transition-all duration-200 cursor-pointer overflow-visible group/card
+                ${compact ? 'p-3 gap-3 min-h-[220px]' : 'p-5 gap-5 min-h-[420px]'}
             `}
         >
-
-            {/* 1. Header Image (Top) - Aspect Ratio Box */}
-            <div className={`w-full overflow-hidden bg-[#1C212E]/50 relative z-10 border border-white/5 shadow-2xl rounded-xl
+            {/* 1. Header Image (Top) - Rounded-2xl with Border */}
+            <div className={`w-full overflow-hidden bg-gray-100 relative z-10 border-2 border-black rounded-2xl shadow-inner
                 aspect-square
             `}>
                 {/* ... existing image logic ... */}
@@ -148,114 +151,123 @@ const MarketCard: React.FC<MarketCardProps> = React.memo(({
                     <div className="w-full h-full flex items-center justify-center text-6xl opacity-50">{icon || '🔮'}</div>
                 )}
 
-                {/* Status Badge Overlay */}
+                {/* Status Badge Overlay - Pill Style */}
                 <div className="absolute top-2 left-2 z-20">
-                    <MarketStatusBadge status={status} />
+                    <span className="bg-[#FFA07A] text-black border-2 border-black px-3 py-1 rounded-full text-[10px] font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] uppercase">
+                        {status === 'ACTIVE' ? 'Live' : status}
+                    </span>
                 </div>
+
+                {/* Is New / Featured Badge */}
+                {isNew && (
+                    <div className="absolute right-2 top-2 z-20">
+                        <span className="bg-[#F492B7] text-black border-2 border-black px-3 py-1 rounded-full text-[10px] font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                            NEW
+                        </span>
+                    </div>
+                )}
             </div>
 
-            {/* 2. Body Content (Bottom) */}
-            <div className="flex-1 flex flex-col gap-4 relative z-10 pointer-events-none">
+            {/* 2. Body Content */}
+            <div className="flex-1 flex flex-col gap-3 relative z-10 pointer-events-none">
 
                 {/* Title */}
-                <h3 className={`font-bold text-gray-100 group-hover/card:text-[#F492B7] transition-colors leading-tight pointer-events-auto line-clamp-2
-                    ${compact ? 'text-sm mt-1' : 'text-lg mt-2'}
+                <h3 className={`font-black text-black group-hover/card:text-gray-700 transition-colors leading-tight pointer-events-auto line-clamp-2
+                    ${compact ? 'text-sm mt-1' : 'text-xl mt-2 tracking-tight'}
                 `}>
                     {title}
                 </h3>
 
+                {/* Category Tag */}
+                {category && (
+                    <span className="pointer-events-auto w-fit bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border border-black/10">
+                        {category}
+                    </span>
+                )}
+
                 {/* Outcomes Information */}
                 <div className="mt-auto pointer-events-auto w-full">
                     {resolved ? (
-                        <div className={`flex items-center justify-center gap-2 bg-white/5 border border-white/5 rounded-lg
-                             ${compact ? 'p-1.5' : 'p-3'}
+                        <div className={`flex items-center justify-center gap-2 bg-gray-100 border-2 border-black rounded-xl
+                             ${compact ? 'p-2' : 'p-3'}
                         `}>
-                            <span className="text-[10px] uppercase font-black text-gray-500 tracking-[0.2em]">Winner</span>
-                            <span className={`font-black ${winningOutcome === 'YES' ? 'text-emerald-400' : 'text-rose-400'} ${compact ? 'text-sm' : 'text-base'}`}>{winningOutcome}</span>
+                            <span className="text-[10px] uppercase font-black text-gray-600 tracking-[0.2em]">Winner</span>
+                            <span className={`font-black text-black ${compact ? 'text-sm' : 'text-base'}`}>{winningOutcome}</span>
                         </div>
                     ) : isMultiple && options ? (
                         <div className={`flex flex-col overflow-y-auto pr-1 customize-scrollbar
-                            ${compact ? 'gap-1 max-h-[80px]' : 'gap-2 max-h-[140px]'}
+                            ${compact ? 'gap-1.5 max-h-[80px]' : 'gap-2 max-h-[140px]'}
                         `}>
                             {options.map((opt: any, idx: number) => {
-                                // For multi-outcome, we attempt to show the PROBABILITY if chance is passed as an object
-                                // or if we have a simple split for binary with names.
-                                let optChance = 0;
+                                let optChance = 0; // Logic placeholder
                                 if (options.length === 2) {
                                     optChance = idx === 0 ? (chance || 50) : (100 - (chance || 50));
-                                } else {
-                                    // For N outcomes, without full supply data here, we show a distributed view or a dash
-                                    // In the future, we could pass an array of chances.
-                                    optChance = 0;
                                 }
 
                                 return (
                                     <div
                                         key={typeof opt === 'string' ? opt : (opt.id || idx)}
-                                        className={`flex items-center justify-between bg-[#111] border border-white/5 hover:bg-white/10 rounded-lg cursor-pointer transition-all duration-200 shrink-0
-                                            ${compact ? 'text-[10px] py-1 px-2' : 'text-[11px] py-2 px-3'}
+                                        className={`flex items-center justify-between bg-white border-2 border-black rounded-full cursor-pointer transition-all duration-200 shrink-0 group/opt hover:bg-gray-50 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]
+                                            ${compact ? 'text-[10px] py-1.5 px-3' : 'text-xs py-2 px-4'}
                                         `}
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             router.push(`/market/${slug}`);
                                         }}
                                     >
-                                        <span className="text-gray-300 truncate font-bold max-w-[70%]">{typeof opt === 'string' ? opt : opt.title}</span>
-                                        <span className="text-[#F492B7] font-black">{optChance > 0 ? `${optChance.toFixed(1)}%` : '--%'}</span>
+                                        <span className="text-gray-800 group-hover/opt:text-black truncate font-bold max-w-[70%]">{typeof opt === 'string' ? opt : opt.title}</span>
+                                        <span className="text-black font-black">{optChance > 0 ? `${optChance.toFixed(1)}%` : '--%'}</span>
                                     </div>
                                 );
                             })}
                         </div>
                     ) : (
-                        <div className={`grid grid-cols-2 ${compact ? 'gap-1.5' : 'gap-3'}`}>
+                        <div className={`grid grid-cols-2 ${compact ? 'gap-2' : 'gap-3'}`}>
                             <button
                                 onClick={(e) => handleBetClick(e, 'yes')}
-                                className={`flex flex-col items-center justify-center bg-[#0E2825] border border-emerald-500/20 hover:bg-emerald-500 hover:border-emerald-400 rounded-lg group/yes transition-all duration-200 active:scale-95
-                                    ${compact ? 'py-1' : 'py-2'}
+                                className={`flex flex-col items-center justify-center bg-emerald-400 text-black border-2 border-black hover:brightness-110 rounded-2xl group/yes transition-all duration-200 active:scale-95 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]
+                                    ${compact ? 'py-1.5' : 'py-3'}
                                 `}
                             >
-                                <span className={`font-bold text-emerald-400 group-hover/yes:text-white uppercase tracking-wider mb-0.5 ${compact ? 'text-[9px]' : 'text-[10px]'}`}>Yes</span>
-                                <span className={`font-black text-emerald-400 group-hover/yes:text-white ${compact ? 'text-sm' : 'text-lg'}`}>{chance || 50}%</span>
+                                <span className={`font-black uppercase tracking-wider mb-0.5 ${compact ? 'text-[9px]' : 'text-[10px]'}`}>Yes</span>
+                                <span className={`font-black ${compact ? 'text-sm' : 'text-xl'}`}>{chance || 50}%</span>
                             </button>
                             <button
                                 onClick={(e) => handleBetClick(e, 'no')}
-                                className={`flex flex-col items-center justify-center bg-[#2B1616] border border-rose-500/20 hover:bg-rose-500 hover:border-rose-400 rounded-lg group/no transition-all duration-200 active:scale-95
-                                    ${compact ? 'py-1' : 'py-2'}
+                                className={`flex flex-col items-center justify-center bg-rose-400 text-black border-2 border-black hover:brightness-110 rounded-2xl group/no transition-all duration-200 active:scale-95 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]
+                                    ${compact ? 'py-1.5' : 'py-3'}
                                 `}
                             >
-                                <span className={`font-bold text-rose-400 group-hover/no:text-white uppercase tracking-wider mb-0.5 ${compact ? 'text-[9px]' : 'text-[10px]'}`}>No</span>
-                                <span className={`font-black text-rose-400 group-hover/no:text-white ${compact ? 'text-sm' : 'text-lg'}`}>{100 - (chance || 50)}%</span>
+                                <span className={`font-black uppercase tracking-wider mb-0.5 ${compact ? 'text-[9px]' : 'text-[10px]'}`}>No</span>
+                                <span className={`font-black ${compact ? 'text-sm' : 'text-xl'}`}>{100 - (chance || 50)}%</span>
                             </button>
                         </div>
                     )}
                 </div>
 
                 {/* Footer: Volume, Time & STAR */}
-                <div className={`flex items-center justify-between font-bold text-gray-500 uppercase tracking-wider border-t border-white/5 pointer-events-auto
-                    ${compact ? 'text-[9px] pt-2 mt-0.5' : 'text-[11px] pt-3 mt-1'}
+                <div className={`flex items-center justify-between font-bold uppercase tracking-wider border-t-2 border-black pointer-events-auto
+                    ${compact ? 'text-[9px] pt-2 mt-auto' : 'text-[11px] pt-4 mt-auto'}
                 `}>
                     <div className="flex items-center gap-3">
-                        <span className="text-gray-400">{volume} Vol</span>
-                        {timeLeft && <span className="text-gray-600">{timeLeft}</span>}
+                        <span className="bg-white text-black px-2 py-1 rounded-md border-2 border-black">{volume} Vol</span>
+                        {timeLeft && <span className="text-black bg-white px-2 py-1 rounded-md border-2 border-black">{timeLeft}</span>}
                     </div>
 
-                    {/* Star Moved to Bottom - Pink on Active */}
+                    {/* Star - Circle Button */}
                     <button
-                        className="text-gray-600 hover:text-white transition-colors p-1 rounded-full relative group/star"
+                        className="bg-gray-100 border border-black/10 hover:border-black hover:text-black transition-colors w-8 h-8 flex items-center justify-center rounded-full relative group/star"
                         onClick={handleStarClick}
                     >
-                        <Star className={`w-5 h-5 transition-all duration-300 ${isStarred ? 'fill-[#F492B7] text-[#F492B7] scale-110' : 'text-gray-600 group-hover/star:text-white'}`} style={{ strokeWidth: isStarred ? 0 : 2 }} />
+                        <Star className={`w-4 h-4 transition-all duration-300 ${isStarred ? 'fill-[#F492B7] text-[#F492B7] scale-110' : 'text-gray-400 group-hover/star:text-black'}`} style={{ strokeWidth: isStarred ? 0 : 2 }} />
                         <AnimatePresence>
                             {showSavedAnim && (
                                 <motion.span
-                                    initial={{ opacity: 0, y: 10, x: -20 }}
-                                    animate={{ opacity: 1, y: -25, x: -20 }}
+                                    initial={{ opacity: 0, scale: 0 }}
+                                    animate={{ opacity: 1, scale: 1 }}
                                     exit={{ opacity: 0 }}
-                                    transition={{ duration: 0.8 }}
-                                    className="absolute top-0 right-0 text-[#F492B7] font-black text-[10px] uppercase tracking-wide whitespace-nowrap pointer-events-none"
-                                >
-                                    Saved!
-                                </motion.span>
+                                    className="absolute -top-1 -right-1 block w-2.5 h-2.5 bg-[#F492B7] rounded-full border border-black"
+                                />
                             )}
                         </AnimatePresence>
                     </button>

@@ -212,7 +212,7 @@ function NavbarContent() {
 
     return (
         <>
-            <nav className="fixed top-0 left-0 w-full z-50 bg-black/60 backdrop-blur-xl border-b border-white/5">
+            <nav className="fixed top-0 left-0 w-full z-50 bg-black">
                 <style jsx global>{`
                 @keyframes breathe {
                     0%, 100% { opacity: 1; transform: scale(1); }
@@ -247,10 +247,10 @@ function NavbarContent() {
 
                     <div className="flex items-center gap-4">
                         <div className="hidden sm:flex items-center gap-4">
-                            {/* Botón Create Market estilo principal */}
+                            {/* Botón Create Market estilo "Teclado" Pink */}
                             <button
                                 onClick={openCreateMarket}
-                                className="bg-[#F492B7] text-black text-sm font-black py-3 px-6 rounded-xl shadow-[0_0_10px_rgba(244,146,183,0.1)] hover:scale-105 active:scale-95 transition-all uppercase tracking-wide"
+                                className="bg-[#F492B7] text-black text-sm font-black py-3 px-6 rounded-xl hover:brightness-110 active:scale-95 transition-all uppercase tracking-wide shadow-lg"
                             >
                                 Create a Market
                             </button>
@@ -258,14 +258,14 @@ function NavbarContent() {
                             {/* HYDRATION FIX: Only render wallet state after mount */}
                             {!mounted ? (
                                 /* Placeholder during SSR */
-                                <div className="px-5 py-2.5 rounded-xl bg-[#1A1A1A] text-gray-400 text-[11px] font-black uppercase tracking-wider">
+                                <div className="px-5 py-2.5 rounded-xl bg-[#1A1A1A] text-gray-400 text-[11px] font-black uppercase tracking-wider border-2 border-white/10">
                                     Loading...
                                 </div>
                             ) : !connected ? (
                                 /* Desconectado */
                                 <button
                                     onClick={() => setIsWalletModalOpen(true)}
-                                    className="px-5 py-2.5 rounded-xl bg-[#F492B7] text-black text-[11px] font-black uppercase tracking-wider hover:bg-[#ff6fb7] hover:scale-105 active:scale-95 transition-all duration-300 shadow-[0_0_20px_rgba(244,146,183,0.2)]"
+                                    className="px-5 py-2.5 rounded-xl bg-white text-black border-2 border-black text-[11px] font-black uppercase tracking-wider shadow-[4px_4px_0px_0px_#F492B7] hover:translate-y-1 hover:shadow-[2px_2px_0px_0px_#F492B7] active:translate-y-1 active:shadow-none transition-all duration-300"
                                 >
                                     Connect Wallet
                                 </button>
@@ -275,7 +275,7 @@ function NavbarContent() {
                                     <div className="flex items-center gap-3">
                                         {/* Avatar Trigger Area */}
                                         <div
-                                            className="relative w-8 h-8 rounded-full overflow-hidden bg-white/5 cursor-pointer hover:opacity-80 transition-opacity"
+                                            className="relative w-10 h-10 rounded-full overflow-hidden bg-black cursor-pointer hover:scale-105 transition-transform"
                                             onClick={() => setIsOpen(!isOpen)}
                                         >
                                             {userPfp ? (
@@ -320,11 +320,11 @@ function NavbarContent() {
                                         </span>
                                     </div>
 
-                                    {/* HAMBURGER MENU NEXT TO PFP */}
+                                    {/* HAMBURGER MENU - PINK KEYCAP */}
                                     <div className="relative">
                                         <button
                                             onClick={() => setIsNavMenuOpen(!isNavMenuOpen)}
-                                            className="p-2 text-gray-400 hover:text-[#F492B7] transition-all hover:scale-110 active:scale-95 bg-white/5 rounded-lg border border-white/5"
+                                            className="p-2 text-black bg-[#F492B7] rounded-xl hover:brightness-110 active:scale-95 transition-all shadow-lg"
                                         >
                                             <MenuIcon />
                                         </button>
@@ -333,11 +333,11 @@ function NavbarContent() {
                                         {isNavMenuOpen && (
                                             <>
                                                 <div className="fixed inset-0 z-[100]" onClick={() => setIsNavMenuOpen(false)} />
-                                                <div className="absolute top-12 right-0 w-48 bg-[#0A0A0A]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl z-[101] py-3 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                                                <div className="absolute top-12 right-0 w-48 bg-black border-2 border-white rounded-xl z-[101] py-3 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
                                                     <Link
                                                         href="/leaderboard"
                                                         onClick={() => setIsNavMenuOpen(false)}
-                                                        className="w-full flex items-center gap-3 px-5 py-3 text-gray-300 hover:text-[#F492B7] hover:bg-white/5 transition-all text-sm font-bold group"
+                                                        className="w-full flex items-center gap-3 px-5 py-3 text-white hover:text-black hover:bg-[#F492B7] transition-all text-sm font-bold group"
                                                     >
                                                         <PodiumIcon />
                                                         <span>Leaderboard</span>
@@ -345,18 +345,18 @@ function NavbarContent() {
                                                     <Link
                                                         href="/activity"
                                                         onClick={() => setIsNavMenuOpen(false)}
-                                                        className="w-full flex items-center gap-3 px-5 py-3 text-gray-300 hover:text-[#F492B7] hover:bg-white/5 transition-all text-sm font-bold group text-left"
+                                                        className="w-full flex items-center gap-3 px-5 py-3 text-white hover:text-black hover:bg-[#F492B7] transition-all text-sm font-bold group text-left"
                                                     >
                                                         <ActivityIcon />
                                                         <span>Activity Feed</span>
                                                     </Link>
 
-                                                    <div className="border-t border-white/5 my-1" />
+                                                    <div className="border-t-2 border-white my-1" />
 
                                                     <Link
                                                         href={`/profile/me`}
                                                         onClick={() => setIsNavMenuOpen(false)}
-                                                        className="w-full flex items-center gap-3 px-5 py-3 text-[#F492B7] hover:bg-white/5 transition-all text-sm font-black uppercase tracking-wider"
+                                                        className="w-full flex items-center gap-3 px-5 py-3 text-[#F492B7] hover:bg-white hover:text-black transition-all text-sm font-black uppercase tracking-wider"
                                                     >
                                                         <span className="text-lg">👤</span>
                                                         <span>Profile</span>

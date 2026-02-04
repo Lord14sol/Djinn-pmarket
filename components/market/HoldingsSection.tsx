@@ -82,11 +82,11 @@ export default function HoldingsSection({ bets, outcomeSupplies, marketOutcomes 
         >
             {/* Scrollable container for multi-outcome holdings */}
             <div className="flex flex-col gap-2">
-                <div className="flex flex-col bg-black/40 backdrop-blur-xl rounded-2xl border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1),0_8px_16px_rgba(0,0,0,0.4)] overflow-hidden">
+                <div className="flex flex-col bg-white rounded-2xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
                     {sortedHoldings.map((h, idx) => (
                         <div
                             key={idx}
-                            className={`p-4 ${idx > 0 ? 'border-t border-white/5' : ''} relative group flex flex-row items-center justify-between hover:bg-white/[0.02] transition-colors`}
+                            className={`p-4 ${idx > 0 ? 'border-t-2 border-black' : ''} relative group flex flex-row items-center justify-between hover:bg-[#F492B7] transition-colors`}
                         >
                             <div className="flex flex-row items-center gap-6 flex-1">
                                 {/* Outcome name with matched color */}
@@ -103,7 +103,7 @@ export default function HoldingsSection({ bets, outcomeSupplies, marketOutcomes 
                                 {/* Shares */}
                                 <div className="flex flex-col">
                                     <span className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-0.5">Shares</span>
-                                    <span className="text-lg text-white font-black tabular-nums">
+                                    <span className="text-lg text-black font-black tabular-nums">
                                         {formatCompact(h.shares)}
                                     </span>
                                 </div>
@@ -111,7 +111,7 @@ export default function HoldingsSection({ bets, outcomeSupplies, marketOutcomes 
                                 {/* Current Value SOL */}
                                 <div className="flex flex-col">
                                     <span className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-0.5">Value</span>
-                                    <span className="text-lg text-white/60 font-medium tabular-nums">
+                                    <span className="text-lg text-black/60 font-medium tabular-nums">
                                         {formatCompact(h.currentValue)} <span className="text-[10px]">SOL</span>
                                     </span>
                                 </div>

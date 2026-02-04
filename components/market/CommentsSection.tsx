@@ -356,8 +356,8 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
     };
 
     return (
-        <div className="bg-[#0E0E0E] rounded-3xl p-6 md:p-8">
-            <h3 className="text-xl font-black uppercase mb-8 flex items-center gap-3">
+        <div className="bg-white rounded-3xl p-6 md:p-8 border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            <h3 className="text-xl font-black uppercase mb-8 flex items-center gap-3 text-black">
                 <MessageSquare className="w-5 h-5 text-[#F492B7]" />
                 Comments
             </h3>
@@ -378,9 +378,9 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
                     <div className="flex items-center gap-2 mb-2">
                         <span className="text-sm font-bold text-[#F492B7]">{userProfile.username || 'You'}</span>
                     </div>
-                    <div className="bg-white/5 rounded-2xl p-4 focus-within:bg-black transition-all">
+                    <div className="bg-white rounded-2xl p-4 border-2 border-black shadow-[4px_4px_0px_0px_rgba(229,231,235,1)] focus-within:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all">
                         <textarea
-                            className="w-full bg-transparent p-2 text-sm focus:outline-none resize-none h-20 placeholder:text-gray-600 font-medium"
+                            className="w-full bg-transparent p-2 text-sm focus:outline-none resize-none h-20 placeholder:text-gray-400 font-medium text-black"
                             placeholder="Add a comment..."
                             value={newCommentText}
                             onChange={(e) => setNewCommentText(e.target.value)}
@@ -399,7 +399,7 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
                             <button
                                 onClick={handlePostComment}
                                 disabled={!newCommentText.trim() && !newCommentImage}
-                                className="bg-[#F492B7] text-black px-6 py-2 rounded-xl text-xs font-black uppercase hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                className="bg-[#F492B7] text-black px-6 py-2 rounded-xl text-xs font-black uppercase border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-y-0.5 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                             >
                                 <Send size={12} /> Send
                             </button>
@@ -435,7 +435,7 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
                                 <div className="flex-1">
                                     <div className="flex items-baseline justify-between mb-1">
                                         <div className="flex items-center gap-2">
-                                            <Link href={`/profile/${comment.username}`} className={`text-sm font-bold hover:text-[#F492B7] transition-colors ${comment.username === currentUserProfile.username ? 'text-[#F492B7]' : 'text-white'}`}>
+                                            <Link href={`/profile/${comment.username}`} className={`text-sm font-bold hover:text-[#F492B7] transition-colors ${comment.username === currentUserProfile.username ? 'text-[#F492B7]' : 'text-black'}`}>
                                                 {comment.username}
                                             </Link>
                                             <span className="text-[10px] text-gray-500 font-medium">{comment.timeAgo}</span>
@@ -454,11 +454,11 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
                                         </div>
                                     </div>
 
-                                    <div className="text-gray-300 text-sm leading-relaxed mb-3">
+                                    <div className="text-black text-sm leading-relaxed mb-3 font-medium">
                                         {comment.text}
                                     </div>
                                     {comment.image_url && (
-                                        <img src={comment.image_url} alt="Comment attachment" className="rounded-xl max-h-60 border border-white/10 mb-3" />
+                                        <img src={comment.image_url} alt="Comment attachment" className="rounded-xl max-h-60 border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] mb-3" />
                                     )}
 
                                     <div className="flex items-center gap-6">
@@ -498,8 +498,8 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
                                                         />
                                                         {replyImage && (
                                                             <div className="relative inline-block mt-2">
-                                                                <img src={replyImage} alt="Reply preview" className="h-16 rounded-lg border border-white/10" />
-                                                                <button onClick={() => setReplyImage(null)} className="absolute -top-2 -right-2 bg-red-500 rounded-full p-1 hover:bg-red-600 transition-colors">
+                                                                <img src={replyImage} alt="Reply preview" className="h-16 rounded-lg border-2 border-black" />
+                                                                <button onClick={() => setReplyImage(null)} className="absolute -top-2 -right-2 bg-red-500 rounded-full p-1 border border-black hover:bg-red-600 transition-colors">
                                                                     <X size={10} />
                                                                 </button>
                                                             </div>
@@ -565,7 +565,7 @@ export default function CommentsSection({ marketSlug, publicKey, userProfile, my
                                     )}
                                 </div>
                             </div>
-                            <div className="h-px bg-white/5 my-6" />
+                            <div className="h-0.5 bg-gray-100 my-6" />
                         </div>
                     ))
                 )}

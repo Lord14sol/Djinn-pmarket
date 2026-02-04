@@ -52,9 +52,9 @@ export default function OutcomeList({ outcomes, selectedId, onSelect, onBuyClick
                     return (
                         <div
                             key={outcome.id}
-                            className={`group relative flex items-center justify-between p-4 rounded-2xl border transition-all cursor-pointer ${isSelected
-                                ? 'bg-white/10 border-[#F492B7] shadow-[0_0_20px_rgba(244,146,183,0.2)]'
-                                : 'bg-[#0E0E0E] border-white/5 hover:bg-white/5 hover:border-[#F492B7]/50 hover:shadow-[0_0_15px_rgba(244,146,183,0.1)]'
+                            className={`group relative flex items-center justify-between p-4 rounded-2xl border-2 border-black transition-all cursor-pointer ${isSelected
+                                ? 'bg-black text-white shadow-none translate-y-1'
+                                : 'bg-white text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-[#F492B7] hover:-translate-y-1 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]'
                                 }`}
                             onClick={() => {
                                 onSelect(outcome.id);
@@ -69,7 +69,7 @@ export default function OutcomeList({ outcomes, selectedId, onSelect, onBuyClick
                                 {/* Color / Image Indicator */}
                                 <div className="relative group-hover:scale-110 transition-transform duration-300">
                                     <div
-                                        className="w-10 h-10 rounded-full border border-white/10 flex items-center justify-center overflow-hidden bg-black/50"
+                                        className="w-10 h-10 rounded-full border-2 border-black flex items-center justify-center overflow-hidden bg-white"
                                         style={{ boxShadow: `0 0 10px ${color}40` }}
                                     >
                                         {outcome.image ? (
@@ -83,7 +83,7 @@ export default function OutcomeList({ outcomes, selectedId, onSelect, onBuyClick
                                 </div>
 
                                 <div className="flex flex-col min-w-0">
-                                    <span className={`text-base font-bold truncate transition-colors leading-tight ${isSelected ? 'text-white' : 'text-gray-300 group-hover:text-white'}`}>
+                                    <span className={`text-base font-bold truncate transition-colors leading-tight ${isSelected ? 'text-white' : 'text-black'}`}>
                                         {outcome.title}
                                     </span>
                                     {/* Mobile volume visible */}

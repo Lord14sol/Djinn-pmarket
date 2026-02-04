@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { formatDistanceToNow } from 'date-fns';
 import { ArrowLeft, ExternalLink, Activity, Clock, TrendingUp, TrendingDown, Filter } from 'lucide-react';
 import { getGlobalActivities, getProfile } from '@/lib/supabase-db';
+import StarBackground from '@/components/ui/StarBackground';
 
 // Mock SOL Price (or fetch real)
 const SOL_PRICE = 185;
@@ -85,98 +86,104 @@ export default function ActivityPage() {
     }, [activities, sizeFilter, typeFilter]);
 
     return (
-        <div className="min-h-screen bg-transparent text-white font-sans selection:bg-[#F492B7] selection:text-black pt-28 pb-12 px-4 md:px-8 relative overflow-hidden">
+        <div className="min-h-screen bg-[#050505] text-black font-sans selection:bg-[#F492B7] selection:text-black pt-28 pb-12 px-4 md:px-8 relative overflow-hidden">
 
-            {/* HEADER */}
-            <div className="relative z-10 max-w-6xl mx-auto mb-6">
-                <Link href="/markets" className="inline-flex items-center text-gray-400 hover:text-white mb-4 transition-colors">
-                    <ArrowLeft className="w-4 h-4 mr-2" />
-                    Back to Markets
-                </Link>
-                <h1 className="text-4xl md:text-5xl font-black tracking-tight flex items-center gap-3">
-                    <Activity className="w-8 h-8 md:w-10 md:h-10 text-[#F492B7]" />
-                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-500">
-                        Global Activity
-                    </span>
-                </h1>
-                <p className="text-gray-400 mt-2 text-lg">
-                    Real-time stream of all trades across Djinn.
-                </p>
+            {/* Animated Stars Background */}
+            <div className="absolute inset-0 z-0 opacity-60 pointer-events-none text-white">
+                <StarBackground />
             </div>
 
-            {/* FILTER BAR */}
-            <div className="relative z-10 max-w-6xl mx-auto mb-4">
-                <div className="flex flex-wrap gap-3 items-center p-4 rounded-2xl bg-white/5 backdrop-blur-lg border border-white/10">
+            {/* HEADER */}
+            <div className="relative z-10 max-w-6xl mx-auto mb-6 text-center md:text-left">
+                <Link href="/markets" className="inline-flex items-center text-gray-500 hover:text-white mb-4 transition-colors font-black uppercase tracking-widest text-[10px]">
+                    <ArrowLeft className="w-3 h-3 mr-1" />
+                    Back to Markets
+                </Link>
 
-                    {/* TYPE FILTERS */}
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500 uppercase font-bold mr-2">Type:</span>
-                        {TYPE_FILTERS.map(type => (
-                            <button
-                                key={type}
-                                onClick={() => setTypeFilter(type)}
-                                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-all ${typeFilter === type
-                                    ? type === 'Buys'
-                                        ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                                        : type === 'Sells'
-                                            ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                                            : 'bg-[#F492B7]/20 text-[#F492B7] border border-[#F492B7]/30'
-                                    : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
-                                    }`}
-                            >
-                                {type === 'Buys' && <TrendingUp className="w-3 h-3 inline mr-1" />}
-                                {type === 'Sells' && <TrendingDown className="w-3 h-3 inline mr-1" />}
-                                {type}
-                            </button>
-                        ))}
+                <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                    <div className="inline-block relative">
+                        <h1 className="text-3xl md:text-5xl font-black tracking-tighter text-black bg-[#F492B7] px-4 py-1 border-4 border-black shadow-[6px_6px_0px_0px_#FFF] cursor-default lowercase flex items-center gap-3">
+                            <Activity className="w-6 h-6 md:w-8 md:h-8 text-black fill-black/10" />
+                            global activity
+                        </h1>
                     </div>
 
-                    <div className="w-px h-6 bg-white/10 mx-2 hidden md:block" />
+                    {/* FILTER BAR - MOVED UP FOR COMPACTNESS */}
+                    <div className="flex flex-wrap gap-3 items-center p-2 rounded-xl bg-[#121212] border-2 border-white/20 backdrop-blur-md shadow-lg">
 
-                    {/* SIZE FILTERS */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs text-gray-500 uppercase font-bold mr-2">
-                            <Filter className="w-3 h-3 inline mr-1" />
-                            Size:
-                        </span>
-                        {SIZE_FILTERS.map(filter => (
-                            <button
-                                key={filter.label}
-                                onClick={() => setSizeFilter(filter)}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${sizeFilter.label === filter.label
-                                    ? 'bg-[#F492B7] text-black shadow-lg'
-                                    : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
-                                    }`}
-                            >
-                                {filter.label}
-                            </button>
-                        ))}
+                        {/* TYPE FILTERS */}
+                        <div className="flex items-center gap-1">
+                            {TYPE_FILTERS.map(type => (
+                                <button
+                                    key={type}
+                                    onClick={() => setTypeFilter(type)}
+                                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all border-2 relative overflow-hidden ${typeFilter === type
+                                        ? type === 'Buys'
+                                            ? 'bg-[#10B981] border-black text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                                            : type === 'Sells'
+                                                ? 'bg-[#EF4444] border-black text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                                                : 'bg-white border-white text-black shadow-[2px_2px_0px_0px_#F492B7]'
+                                        : 'bg-transparent border-gray-700 text-gray-500 hover:text-white hover:border-gray-500'
+                                        }`}
+                                >
+                                    <span className="relative z-10 flex items-center">
+                                        {type === 'Buys' && <TrendingUp className="w-3 h-3 inline mr-1" />}
+                                        {type === 'Sells' && <TrendingDown className="w-3 h-3 inline mr-1" />}
+                                        {type}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="w-0.5 h-6 bg-white/10 mx-1 hidden md:block" />
+
+                        {/* SIZE FILTERS */}
+                        <div className="flex items-center gap-1 flex-wrap">
+                            <span className="text-[10px] text-gray-500 uppercase font-black mr-1">
+                                <Filter className="w-3 h-3 inline mr-1" />
+                                Size:
+                            </span>
+                            {SIZE_FILTERS.map(filter => (
+                                <button
+                                    key={filter.label}
+                                    onClick={() => setSizeFilter(filter)}
+                                    className={`px-2 py-1 rounded-md text-[10px] font-black transition-all border-2 ${sizeFilter.label === filter.label
+                                        ? 'bg-[#F492B7] border-black text-black shadow-[2px_2px_0px_0px_#FFF]'
+                                        : 'bg-transparent border-gray-700 text-gray-500 hover:text-white hover:border-gray-500'
+                                        }`}
+                                >
+                                    {filter.label}
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* GLASS TABLE */}
+            {/* TABLE CONTAINER */}
             <div className="relative z-10 max-w-6xl mx-auto">
-                <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-2xl overflow-hidden">
+                <div className="bg-white border-4 border-black rounded-3xl overflow-hidden shadow-[12px_12px_0px_0px_#F492B7]">
 
                     {/* TABLE HEADER */}
-                    <div className="grid grid-cols-12 gap-4 px-6 py-4 border-b border-white/10 bg-black/20 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                        <div className="col-span-3 md:col-span-2">Trader</div>
+                    <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-black border-b-4 border-black text-[10px] font-black text-white uppercase tracking-widest">
+                        <div className="col-span-3 md:col-span-2 text-[#F492B7]">Trader</div>
                         <div className="col-span-2 md:col-span-1 text-center">Side</div>
                         <div className="col-span-3 md:col-span-2 text-right">Amount</div>
-                        <div className="hidden md:block md:col-span-4 pl-4">Market</div>
+                        <div className="hidden md:block md:col-span-4 pl-2">Market</div>
                         <div className="col-span-4 md:col-span-3 text-right">Time</div>
                     </div>
 
                     {/* ROWS */}
-                    <div className="divide-y divide-white/5 max-h-[600px] overflow-y-auto">
+                    <div className="max-h-[70vh] overflow-y-auto bg-white custom-scrollbar">
                         <AnimatePresence mode="popLayout">
                             {loading ? (
-                                [...Array(8)].map((_, i) => (
-                                    <div key={`skel-${i}`} className="h-16 animate-pulse bg-white/5" />
+                                [...Array(12)].map((_, i) => (
+                                    <div key={`skel-${i}`} className="h-10 animate-pulse bg-gray-50 flex items-center px-4 border-b border-gray-100">
+                                        <div className="w-full h-3 bg-gray-200 rounded-full"></div>
+                                    </div>
                                 ))
                             ) : filteredActivities.length === 0 ? (
-                                <div className="p-12 text-center text-gray-500">
+                                <div className="p-12 text-center text-black font-bold text-sm">
                                     No trades match your filters. Try adjusting the criteria.
                                 </div>
                             ) : (
@@ -185,8 +192,8 @@ export default function ActivityPage() {
                                     const isBuy = activity.type === 'buy';
                                     const isYes = activity.outcome_index === 0;
                                     const actionColor = isBuy
-                                        ? 'bg-green-500/10 border-green-500/20 text-green-400'
-                                        : 'bg-red-500/10 border-red-500/20 text-red-400';
+                                        ? 'bg-[#10B981] border-black text-black'
+                                        : 'bg-[#EF4444] border-black text-white';
                                     const amountSol = activity.amount || 0;
                                     const amountUsd = amountSol * SOL_PRICE;
 
@@ -198,23 +205,23 @@ export default function ActivityPage() {
                                     return (
                                         <motion.div
                                             key={activity.id || idx}
-                                            initial={{ opacity: 0, x: -20 }}
+                                            initial={{ opacity: 0, x: -10 }}
                                             animate={{ opacity: 1, x: 0 }}
-                                            exit={{ opacity: 0, x: 20 }}
-                                            transition={{ delay: idx * 0.02 }}
-                                            className="grid grid-cols-12 gap-4 px-6 py-4 items-center hover:bg-white/5 transition-colors"
+                                            exit={{ opacity: 0, x: 10 }}
+                                            transition={{ delay: idx * 0.01 }}
+                                            className={`grid grid-cols-12 gap-2 px-4 py-2 items-center hover:bg-[#FFF5F7] transition-colors group border-b border-gray-100 last:border-0 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
                                         >
                                             {/* TRADER */}
-                                            <div className="col-span-3 md:col-span-2 flex items-center gap-3">
-                                                <div className="w-9 h-9 rounded-full bg-gray-800 border border-white/10 overflow-hidden flex-shrink-0">
+                                            <div className="col-span-3 md:col-span-2 flex items-center gap-2">
+                                                <div className="w-8 h-8 rounded-full bg-gray-100 border border-black overflow-hidden flex-shrink-0 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
                                                     <img
                                                         src={avatarUrl}
                                                         alt="User"
                                                         className="w-full h-full object-cover"
                                                     />
                                                 </div>
-                                                <Link href={`/profile/${username}`} className="flex flex-col hover:text-[#F492B7] transition-colors">
-                                                    <span className="text-sm font-bold text-gray-200 truncate max-w-[80px]">
+                                                <Link href={`/profile/${username}`} className="flex flex-col group/link min-w-0">
+                                                    <span className="text-xs font-black text-black truncate group-hover:text-[#F492B7] transition-colors">
                                                         {username}
                                                     </span>
                                                 </Link>
@@ -222,53 +229,49 @@ export default function ActivityPage() {
 
                                             {/* SIDE */}
                                             <div className="col-span-2 md:col-span-1 flex justify-center">
-                                                <span className={`px-2 py-1 rounded-md text-[10px] font-black uppercase border ${actionColor}`}>
+                                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase border shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${actionColor}`}>
                                                     {isBuy ? 'BUY' : 'SELL'} {isYes ? 'YES' : 'NO'}
                                                 </span>
                                             </div>
 
                                             {/* AMOUNT */}
                                             <div className="col-span-3 md:col-span-2 text-right">
-                                                <div className="text-sm font-bold text-white font-mono">
+                                                <div className="text-xs font-black text-black font-mono tracking-tight">
                                                     {amountSol.toFixed(2)} SOL
                                                 </div>
-                                                <div className="text-[10px] text-gray-500">
-                                                    ≈ ${amountUsd.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                                                <div className="text-[9px] font-bold text-gray-400 font-mono">
+                                                    ${amountUsd.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                                                 </div>
                                             </div>
 
                                             {/* MARKET */}
-                                            <div className="hidden md:flex col-span-4 pl-4 items-center gap-3 overflow-hidden">
-                                                <div className="w-8 h-8 rounded-lg bg-gray-800 flex-shrink-0 flex items-center justify-center text-lg overflow-hidden">
+                                            <div className="hidden md:flex col-span-4 pl-2 items-center gap-2 overflow-hidden">
+                                                <div className="w-6 h-6 rounded bg-gray-100 border border-black flex-shrink-0 flex items-center justify-center text-xs overflow-hidden">
                                                     {market.banner_url && market.banner_url.startsWith('http') ? (
                                                         <img src={market.banner_url} className="w-full h-full object-cover" alt="" />
                                                     ) : (
                                                         market.banner_url || '🔮'
                                                     )}
                                                 </div>
-                                                <Link href={`/market/${market.slug || '#'}`} className="truncate hover:text-[#F492B7] transition-colors">
-                                                    <span className="text-sm font-medium text-gray-300 truncate block max-w-[250px]">
+                                                <Link href={`/market/${market.slug || '#'}`} className="truncate group/market">
+                                                    <span className="text-xs font-bold text-black group-hover:text-[#F492B7] transition-colors truncate block">
                                                         {market.title || 'Unknown Market'}
                                                     </span>
-                                                    <div className="text-[10px] text-gray-500 mt-0.5">
-                                                        Pool: {((market.total_yes_pool || 0) + (market.total_no_pool || 0)).toFixed(1)} SOL
-                                                    </div>
                                                 </Link>
                                             </div>
 
                                             {/* TIME */}
-                                            <div className="col-span-4 md:col-span-3 text-right flex flex-col items-end">
-                                                <div className="flex items-center gap-1.5 text-xs text-gray-400 font-medium">
-                                                    <Clock className="w-3 h-3" />
+                                            <div className="col-span-4 md:col-span-3 text-right flex flex-col items-end justify-center">
+                                                <div className="flex items-center gap-1 text-[10px] text-gray-400 font-bold font-mono">
                                                     {activity.created_at ? formatDistanceToNow(new Date(activity.created_at), { addSuffix: true }) : 'Just now'}
                                                 </div>
                                                 <a
                                                     href={`https://solscan.io/tx/${activity.tx_signature || ''}`}
                                                     target="_blank"
                                                     rel="noreferrer"
-                                                    className="text-[10px] text-[#F492B7]/60 hover:text-[#F492B7] flex items-center mt-1 gap-1"
+                                                    className="text-[9px] font-bold text-black/50 hover:text-[#F492B7] flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
                                                 >
-                                                    Verify <ExternalLink className="w-2 h-2" />
+                                                    View <ExternalLink className="w-2 h-2" />
                                                 </a>
                                             </div>
                                         </motion.div>
@@ -279,12 +282,8 @@ export default function ActivityPage() {
                     </div>
 
                     {/* FOOTER */}
-                    <div className="px-6 py-4 bg-white/5 border-t border-white/10 flex justify-between items-center text-xs text-gray-400">
-                        <span>Showing {Math.min(filteredActivities.length, 100)} of {filteredActivities.length} trades</span>
-                        <span className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                            Live Feed Active
-                        </span>
+                    <div className="px-4 py-2 bg-gray-50 border-t-2 border-black flex justify-between items-center text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                        <span>Showing {Math.min(filteredActivities.length, 100)} recent trades</span>
                     </div>
                 </div>
             </div>

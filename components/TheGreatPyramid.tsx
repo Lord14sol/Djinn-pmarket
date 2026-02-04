@@ -60,11 +60,9 @@ export default React.memo(function TheGreatPyramid({ topMarkets }: TheGreatPyram
                     }}
                     className="order-1 md:order-2 w-full md:w-[360px] lg:w-[400px] relative z-20 perspective-1000 md:-mt-12 lg:-mt-16"
                 >
-                    {/* Winner Card with Clean Pink Border */}
-                    <div className="transform md:scale-105 rounded-2xl p-[2px] bg-gradient-to-b from-[#F492B7] to-[#F492B7]/20 shadow-[0_0_60px_rgba(244,146,183,0.25)]">
-                        <div className="rounded-[14px] overflow-hidden bg-[#0A0A0A] h-full">
-                            <MarketCard {...winner} />
-                        </div>
+                    {/* Winner Card - Clean */}
+                    <div className="transform md:scale-105 transition-transform duration-300">
+                        <MarketCard {...winner} />
                     </div>
                 </motion.div>
 
@@ -95,7 +93,7 @@ export default React.memo(function TheGreatPyramid({ topMarkets }: TheGreatPyram
             </div>
 
             {/* Podium Base Gradient */}
-            <div className="absolute bottom-[-50px] left-1/2 -translate-x-1/2 w-[80%] h-[100px] bg-[#F492B7] blur-[150px] opacity-10 pointer-events-none"></div>
+            {/* Podium Base Gradient Removed */}
         </section>
     );
 });

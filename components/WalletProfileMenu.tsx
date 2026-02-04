@@ -46,15 +46,15 @@ export default function WalletProfileMenu({
     return (
         <>
             {/* BACKDROP */}
-            <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm" onClick={onClose} />
+            <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm" onClick={onClose} />
 
             {/* MODAL MENU - Raised 30% from bottom */}
-            <div className="fixed bottom-[35%] left-1/2 -translate-x-1/2 w-[320px] bg-[#0A0A0A] border border-white/10 rounded-3xl shadow-2xl z-[70] overflow-hidden flex flex-col items-center pt-8 pb-4 animate-in fade-in slide-in-from-bottom-8 duration-300">
+            <div className="fixed bottom-[35%] left-1/2 -translate-x-1/2 w-[340px] bg-white border-2 border-black rounded-3xl shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] z-[70] overflow-hidden flex flex-col items-center pt-8 pb-8 animate-in fade-in slide-in-from-bottom-8 duration-300">
 
                 {/* CLOSE BUTTON (X) */}
                 <button
                     onClick={onClose}
-                    className="absolute top-4 right-4 text-gray-500 hover:text-white transition-colors"
+                    className="absolute top-4 right-4 text-black hover:text-[#F492B7] transition-colors font-black text-xl"
                 >
                     ✕
                 </button>
@@ -63,13 +63,13 @@ export default function WalletProfileMenu({
                 <Link
                     href={`/profile/${username}`}
                     onClick={onClose}
-                    className="text-white text-lg font-bold mb-1 hover:text-[#F492B7] transition-colors"
+                    className="text-black text-2xl font-black mb-1 hover:text-[#F492B7] transition-colors uppercase tracking-tight"
                 >
                     @{username}
                 </Link>
 
                 {/* 2. PROFILE LINK (Mock) */}
-                <Link href={`/profile/${username}`} className="text-gray-500 text-xs mb-4 hover:text-[#F492B7] transition-colors">
+                <Link href={`/profile/${username}`} className="text-gray-500 text-xs mb-6 hover:text-black transition-colors font-mono">
                     djinn.markets/profile/{username}
                 </Link>
 
@@ -78,7 +78,7 @@ export default function WalletProfileMenu({
                     <Link
                         href="/admin"
                         onClick={onClose}
-                        className="mb-4 text-[#F492B7] text-xs font-black uppercase tracking-widest border border-[#F492B7]/30 bg-[#F492B7]/10 px-4 py-1.5 rounded-full hover:bg-[#F492B7] hover:text-black transition-all shadow-[0_0_15px_rgba(244,146,183,0.2)]"
+                        className="mb-4 bg-[#F492B7] text-black text-xs font-black uppercase tracking-widest border-2 border-black hover:translate-y-[2px] hover:shadow-none shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 rounded-xl px-5 py-2.5 transition-all"
                     >
                         ⚡ Admin Dashboard
                     </Link>
@@ -87,14 +87,14 @@ export default function WalletProfileMenu({
                 {/* 3. EDIT PROFILE BUTTON */}
                 <button
                     onClick={() => { onClose(); onEditProfile(); }}
-                    className="flex items-center gap-2 px-4 py-1.5 rounded-lg border border-white/10 text-white text-xs font-bold hover:bg-white/5 transition-colors mb-6"
+                    className="flex items-center gap-2 px-6 py-2 rounded-xl border-2 border-black bg-white text-black text-xs font-black uppercase tracking-wider hover:bg-[#F492B7] transition-all mb-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[2px] hover:shadow-none"
                 >
                     Edit profile <span className="text-[10px]">✎</span>
                 </button>
 
                 {/* 4. CIRCLE PFP */}
                 <div className="relative mb-6">
-                    <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white/10">
+                    <div className="w-20 h-20 rounded-full overflow-hidden bg-black shadow-none">
                         <img
                             src={pfp || '/pink-pfp.png'}
                             alt={username}
@@ -104,32 +104,31 @@ export default function WalletProfileMenu({
                     </div>
                 </div>
 
-                {/* 5. WALLET ADDRESS & COPY */}
-                <div className="flex items-center gap-2 mb-6">
-                    <span className="text-gray-300 font-mono text-sm">
-                        {walletAddress.slice(0, 4)}...{walletAddress.slice(-4)}
+                {/* 5. WALLET ADDRESS & COPY (Original Keycap Style) */}
+                <button
+                    onClick={handleCopy}
+                    className="group relative flex items-center justify-center gap-3 mb-6 px-5 py-3 bg-[#E0E0E0] border-b-4 border-[#999] hover:border-[#BBB] active:border-b-0 active:translate-y-1 rounded-xl w-[80%] transition-all"
+                    title="Copy Address"
+                >
+                    <span className="text-black font-mono text-sm font-bold tracking-wider">
+                        {copied ? 'COPIED!' : `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}`}
                     </span>
-                    <button
-                        onClick={handleCopy}
-                        className="text-gray-500 hover:text-white transition-colors"
-                    >
-                        {copied ? '✅' : '❐'}
-                    </button>
-                </div>
+                    {!copied && <span className="text-xs">📋</span>}
+                </button>
 
 
                 {/* 7. SEPARATOR OR */}
                 <div className="relative w-full text-center mb-6">
                     <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-[80%] border-t border-white/5"></div>
+                        <div className="w-[80%] border-t-2 border-black/10"></div>
                     </div>
-                    <span className="relative z-10 bg-[#0A0A0A] px-4 text-gray-600 text-xs">or</span>
+                    <span className="relative z-10 bg-white px-4 text-black text-xs font-black uppercase">or</span>
                 </div>
 
-                {/* 8. DISCONNECT BUTTON */}
+                {/* 8. DISCONNECT BUTTON (Red/Black Keycap) */}
                 <button
                     onClick={() => { onClose(); disconnect(); }}
-                    className="w-[90%] bg-white/5 hover:bg-white/10 text-gray-300 font-bold py-3 rounded-xl transition-colors mb-2 text-sm"
+                    className="w-[85%] bg-black text-white font-black uppercase tracking-widest py-3 rounded-xl border-2 border-black hover:bg-gray-900 active:translate-y-1 transition-all shadow-[4px_4px_0px_0px_#F492B7] hover:shadow-[2px_2px_0px_0px_#F492B7] active:shadow-none text-xs"
                 >
                     Disconnect wallet
                 </button>
