@@ -99,44 +99,35 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
 
         // Wait for the hook's wallet to match our selection
         if (wallet?.adapter.name === pendingWallet) {
-            console.log('[Modal] Wallet hook updated! Calling connect()...');
+            console.log('[Modal] Wallet hook updated!', {
+                adapterName: wallet.adapter.name,
+                adapterConnected: wallet.adapter.connected,
+                adapterReady: wallet.readyState,
+                publicKey: wallet.adapter.publicKey?.toBase58()?.slice(0, 8)
+            });
 
             const doConnect = async () => {
-                const maxRetries = 3;
+                try {
+                    // Try direct adapter connect first (bypasses hook issues)
+                    console.log('[Modal] Calling wallet.adapter.connect()...');
+                    await wallet.adapter.connect();
+                    console.log('[Modal] SUCCESS via adapter.connect()!');
+                } catch (adapterErr: any) {
+                    console.warn('[Modal] adapter.connect() failed:', adapterErr?.message);
 
-                for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                    // Fallback: try hook's connect()
                     try {
-                        // Small delay before each attempt
-                        if (attempt > 1) {
-                            console.log(`[Modal] Retry attempt ${attempt}/${maxRetries}...`);
-                            await new Promise(r => setTimeout(r, 500));
-                        }
-
+                        console.log('[Modal] Fallback: calling hook connect()...');
                         await connect();
-                        console.log('[Modal] SUCCESS! Connected.');
-                        return; // Success, exit loop
+                        console.log('[Modal] SUCCESS via hook connect()!');
+                    } catch (hookErr: any) {
+                        const isUserRejected = hookErr?.message?.includes('User rejected') ||
+                                               hookErr?.message?.includes('user rejected');
 
-                    } catch (err: any) {
-                        const isUnexpectedError = err?.message?.includes('Unexpected error');
-                        const isUserRejected = err?.message?.includes('User rejected') ||
-                                               err?.message?.includes('user rejected');
-
-                        console.warn(`[Modal] Attempt ${attempt} error:`, err?.name, err?.message);
-
-                        // User rejected - don't retry
-                        if (isUserRejected) {
-                            console.log('[Modal] User rejected, stopping.');
-                            break;
-                        }
-
-                        // Unexpected error - retry if attempts remain
-                        if (isUnexpectedError && attempt < maxRetries) {
-                            continue;
-                        }
-
-                        // Final failure or non-retriable error
-                        if (attempt === maxRetries) {
-                            console.error('[Modal] All retries failed');
+                        if (!isUserRejected) {
+                            console.error('[Modal] Both methods failed:', hookErr?.message);
+                        } else {
+                            console.log('[Modal] User rejected connection');
                         }
                     }
                 }
