@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
-import { Loader2, ArrowRight, LogOut } from 'lucide-react';
+import { Loader2, ArrowRight, LogOut, Sparkles } from 'lucide-react';
 import { getWhitelistStatus, registerForWhitelist } from '@/lib/whitelist';
 import CustomWalletModal from '@/components/CustomWalletModal';
 import { useRouter } from 'next/navigation';
@@ -134,7 +134,7 @@ export default function DjinnLanding() {
                     style={{ cursor: 'pointer' }}
                     onClick={() => isMounted && connected && profile ? router.push('/markets') : null}
                 >
-                    <div className="w-40 h-40 md:w-56 md:h-56 relative">
+                    <div className="w-40 h-40 md:w-56 md:h-56 relative translate-x-3 md:translate-x-5">
                         <Image
                             src="/djinn-logo.png"
                             alt="Djinn"
@@ -174,22 +174,37 @@ export default function DjinnLanding() {
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -20 }}
-                            className="w-full max-w-md"
+                            className="w-full max-w-lg flex justify-center"
                         >
                             <motion.button
+                                id="join-djinn-btn"
                                 onClick={handleConnect}
                                 disabled={isRegistering}
-                                className="group w-full relative py-6 px-10 rounded-xl font-black uppercase tracking-[0.4em] text-lg transition-all bg-[#FF69B4] text-white border-2 border-black shadow-[10px_10px_0px_#000000] hover:shadow-none hover:translate-x-[4px] hover:translate-y-[4px] active:scale-95"
-                                whileHover={{ scale: 1.01 }}
-                                whileTap={{ scale: 0.96 }}
+                                className="group relative py-5 px-14 font-black uppercase tracking-[0.3em] text-base overflow-hidden
+                                    bg-[#FF69B4] text-white
+                                    border-[3px] border-white/90
+                                    shadow-[6px_6px_0px_rgba(255,255,255,0.15),_0px_0px_30px_rgba(244,146,183,0.3)]
+                                    hover:shadow-[0px_0px_0px_rgba(255,255,255,0),_0px_0px_50px_rgba(244,146,183,0.5)]
+                                    hover:translate-x-[3px] hover:translate-y-[3px]
+                                    active:translate-x-[6px] active:translate-y-[6px] active:shadow-none
+                                    transition-all duration-150 ease-out
+                                    disabled:opacity-50 disabled:cursor-not-allowed"
+                                whileTap={{ scale: 0.97 }}
                             >
+                                {/* Shine sweep overlay */}
+                                <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out pointer-events-none" />
+
+                                {/* Top edge highlight */}
+                                <span className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/50 to-transparent" />
+
                                 <span className="relative z-10 flex items-center justify-center gap-3">
                                     {loading || isRegistering ? (
                                         <Loader2 className="w-5 h-5 animate-spin" />
                                     ) : (
                                         <>
+                                            <Sparkles className="w-4 h-4 opacity-70" />
                                             Join Djinn
-                                            <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                                            <ArrowRight className="w-5 h-5 group-hover:translate-x-1.5 transition-transform duration-200" />
                                         </>
                                     )}
                                 </span>
