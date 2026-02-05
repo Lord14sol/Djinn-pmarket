@@ -13,9 +13,14 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
     const cardRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
+    // State
+    const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+    const [isDragging, setIsDragging] = useState(false);
+
     // Mouse/Drag Position
     const x = useMotionValue(0);
     const y = useMotionValue(0);
+    const floatY = useMotionValue(0);
 
     // Bouncy spring physics
     const springConfig = useMemo(() => ({
@@ -89,16 +94,11 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
     );
 
     // Subtle floating
-    const floatY = useMotionValue(0);
     useAnimationFrame((t) => {
         if (!isDragging) {
             floatY.set(Math.sin(t / 1500) * 6);
         }
     });
-
-    // State
-    const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
-    const [isDragging, setIsDragging] = useState(false);
 
     // Celebration on Mount
     useEffect(() => {
