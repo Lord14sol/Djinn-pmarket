@@ -30,9 +30,17 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
         <ConnectionProvider endpoint={endpoint}>
             <WalletProvider
                 wallets={wallets}
-                autoConnect={true}
+                autoConnect={false}
                 // App Identity for wallet signatures
                 localStorageKey="djinn-wallet"
+                onError={(error) => {
+                    // Silently swallow "Unexpected error" from adapter race conditions
+                    if (error.message?.includes('Unexpected error')) {
+                        console.warn('[SolanaProvider] Suppressed transient error:', error.message);
+                        return;
+                    }
+                    console.error('[SolanaProvider] Wallet error:', error);
+                }}
             >
                 {/* ✅ NO uses WalletModalProvider aquí */}
                 <WalletAuthWrapper>
