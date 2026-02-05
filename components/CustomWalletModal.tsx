@@ -104,10 +104,10 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
                         const isUnexpected = error.message?.includes('Unexpected error');
                         const isMissingAdapter = error.message?.includes('Adapter is not connected');
 
-                        // SILENT RETRY for "Unexpected error"
+                        // SILENT RETRY for "Unexpected error" - with longer delay
                         if (isUnexpected && attempts < maxAttempts) {
-                            console.log('[CustomWalletModal] Retrying connection due to "Unexpected error"...');
-                            await new Promise(resolve => setTimeout(resolve, 350));
+                            console.log('[CustomWalletModal] Retrying connection due to "Unexpected error" in 1s...');
+                            await new Promise(resolve => setTimeout(resolve, 1000));
                             return attemptConnect();
                         }
 
