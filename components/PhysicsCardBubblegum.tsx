@@ -109,9 +109,9 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
     // Celebration on Mount
     useEffect(() => {
         if (!isClient) return;
-        const duration = 3 * 1000;
+        const duration = 4 * 1000;
         const animationEnd = Date.now() + duration;
-        const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
+        const defaults = { startVelocity: 45, spread: 90, ticks: 100, zIndex: 1000 };
 
         const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
 
@@ -122,10 +122,29 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                 return clearInterval(interval);
             }
 
-            const particleCount = 50 * (timeLeft / duration);
-            confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } });
-            confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } });
-        }, 250);
+            // Fire from the sides to surround the card
+            confetti({
+                ...defaults,
+                particleCount: 20,
+                origin: { x: 0, y: 0.5 },
+                angle: 60
+            });
+            confetti({
+                ...defaults,
+                particleCount: 20,
+                origin: { x: 1, y: 0.5 },
+                angle: 120
+            });
+
+            // Subtle middle bursts
+            if (Math.random() > 0.7) {
+                confetti({
+                    ...defaults,
+                    particleCount: 30,
+                    origin: { x: randomInRange(0.4, 0.6), y: 0.4 }
+                });
+            }
+        }, 300);
 
         return () => clearInterval(interval);
     }, [isClient]);
@@ -217,14 +236,14 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                 }}
                 whileTap={{ scale: 0.98 }}
                 whileHover={{ scale: 1.02 }}
-                className="relative w-[384px] h-[576px] cursor-grab active:cursor-grabbing z-20 will-change-transform"
+                className="relative w-[442px] h-[576px] cursor-grab active:cursor-grabbing z-20 will-change-transform"
             >
                 {/* CARD CONTAINER - PREMIUM GLASS BASE */}
                 <div
                     className="absolute inset-0 bg-white/[0.03] backdrop-blur-3xl shadow-[0_40px_100px_rgba(0,0,0,0.6)] overflow-hidden border border-white/10 rounded-[2.5rem]"
                     style={{
-                        maskImage: 'radial-gradient(circle at 192px 40px, transparent 15px, white 16px)',
-                        WebkitMaskImage: 'radial-gradient(circle at 192px 40px, transparent 15px, white 16px)'
+                        maskImage: 'radial-gradient(circle at 221px 40px, transparent 15px, white 16px)',
+                        WebkitMaskImage: 'radial-gradient(circle at 221px 40px, transparent 15px, white 16px)'
                     }}
                 >
 
@@ -253,15 +272,15 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                     {/* Top Hole */}
                     <div className="relative z-20 w-24 h-2.5 bg-black/40 border border-white/5 rounded-full mx-auto mt-8 mb-6 shadow-inner pointer-events-none" />
 
-                    {/* WATERMARK - Top Right Corner (Larger) */}
-                    <div className="absolute top-10 right-10 w-28 h-28 opacity-15 pointer-events-none z-10">
+                    {/* WATERMARK - Top Right Corner (Largest) */}
+                    <div className="absolute top-10 right-10 w-32 h-32 opacity-15 pointer-events-none z-10">
                         <div className="relative w-full h-full">
                             <Image
                                 src="/djinn-logo.png"
                                 alt=""
                                 fill
                                 className="object-contain grayscale brightness-200"
-                                sizes="112px"
+                                sizes="128px"
                             />
                         </div>
                     </div>
@@ -269,8 +288,8 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                     {/* Content */}
                     <div className="p-10 flex flex-col h-full relative z-10">
 
-                        {/* Top Right Branding (Larger) */}
-                        <div className="flex justify-end pt-2 pr-4">
+                        {/* Top Left Branding (Elite) */}
+                        <div className="flex justify-start pt-2 pl-2">
                             <motion.h1
                                 className="text-6xl font-black tracking-tighter"
                                 style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}
@@ -287,26 +306,24 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                         <div className="flex-1 flex flex-col justify-center gap-12">
                             <div className="flex items-center gap-6">
                                 <span
-                                    className="text-5xl font-bold tracking-tight lowercase text-white"
+                                    className="text-6xl font-bold tracking-tight lowercase text-white"
                                     style={{ fontFamily: 'var(--font-adriane), serif' }}
                                 >
                                     @{username || 'agent'}
                                 </span>
 
-                                <div className="h-10 w-[1px] bg-white/20" />
+                                <div className="h-12 w-0.5 bg-gradient-to-b from-[#FF69B4]/0 via-[#FF69B4]/50 to-[#FF69B4]/0" />
 
                                 <span
-                                    className="text-2xl font-mono text-white/30 tracking-widest"
+                                    className="text-3xl font-mono text-white/50 tracking-[0.2em] font-black"
                                 >
                                     #084
                                 </span>
                             </div>
                         </div>
 
-                        {/* Bottom Status (Reduced to simple indicator) */}
-                        <div className="pb-10 flex justify-center">
-                            <div className="w-2 h-2 rounded-full bg-[#00FF41] shadow-[0_0_12px_#00FF41] animate-pulse" />
-                        </div>
+                        {/* Bottom Spacer */}
+                        <div className="pb-10" />
                     </div>
 
                     {/* CRYSTAL CHROME SHINE */}

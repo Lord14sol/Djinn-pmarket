@@ -130,7 +130,7 @@ export default function DjinnLanding() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1 }}
-                    className="flex items-center gap-2 md:gap-4 mb-16 select-none"
+                    className="flex items-center gap-1 md:gap-1.5 mb-16 select-none"
                     style={{ cursor: 'pointer' }}
                     onClick={() => isMounted && connected && profile ? router.push('/markets') : null}
                 >
