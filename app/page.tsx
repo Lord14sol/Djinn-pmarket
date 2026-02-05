@@ -40,7 +40,12 @@ export default function DjinnLanding() {
     const [isClaimModalOpen, setIsClaimModalOpen] = useState(false);
     const [isRegistering, setIsRegistering] = useState(false);
 
+    const [isMounted, setIsMounted] = useState(false);
     const walletAddress = useMemo(() => publicKey?.toBase58(), [publicKey]);
+
+    useEffect(() => {
+        setIsMounted(true);
+    }, []);
 
     const refreshStatus = useCallback(async () => {
         if (!walletAddress) {
