@@ -2,7 +2,7 @@
 
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import Image from 'next/image';
-import { motion, useMotionValue, useSpring, useTransform, useAnimationFrame } from 'framer-motion';
+import { motion, useMotionValue, useSpring, useTransform, useAnimationFrame, animate } from 'framer-motion';
 import confetti from 'canvas-confetti';
 
 interface PhysicsCardProps {
@@ -21,6 +21,7 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
     // 3. Raw Motion Values
     const x = useMotionValue(0);
     const y = useMotionValue(0);
+    const autoRotate = useMotionValue(0);
     const floatY = useMotionValue(0);
 
     // Bouncy spring physics
@@ -33,13 +34,23 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
     const mouseX = useSpring(x, springConfig);
     const mouseY = useSpring(y, springConfig);
 
-    // 3D Tilt Logic
-    const rotateX = useTransform(mouseY, [-200, 200], [8, -8]);
-    const rotateY = useTransform(mouseX, [-200, 200], [-8, 8]);
+    // 3D Tilt & Rotation Logic
+    const rotateX = useTransform(mouseY, [-200, 200], [20, -20]);
+    const rotateY = useTransform([mouseX, autoRotate], ([latestMouseX, latestAuto]: any) => {
+        // High sensitivity: 150px drag = 180deg flip
+        const manualRot = (latestMouseX / 150) * 180;
+        return manualRot + latestAuto;
+    });
 
     // Glare Position Logic
     const glareX = useTransform(mouseX, [-200, 200], [100, 0]);
     const glareY = useTransform(mouseY, [-200, 200], [100, 0]);
+
+    // Magnetic Parallax Logic
+    const textParallaxX = useTransform(mouseX, (v: number) => v * 0.05);
+    const textParallaxY = useTransform(mouseY, (v: number) => v * 0.05);
+    const idParallaxX = useTransform(mouseX, (v: number) => v * 0.1);
+    const idParallaxY = useTransform(mouseY, (v: number) => v * 0.1);
 
     // Measure container size
     useEffect(() => {
@@ -59,19 +70,72 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
         return () => resizeObserver.disconnect();
     }, []);
 
-    // Drag handlers
-    const onDragStart = useCallback(() => setIsDragging(true), []);
+    // Interaction handlers
+    const startLongPress = useCallback(() => {
+        longPressTimeout.current = setTimeout(() => {
+            setCanDrag(true);
+        }, 500); // 500ms for long press
+    }, []);
+
+    const clearLongPress = useCallback(() => {
+        if (longPressTimeout.current) {
+            clearTimeout(longPressTimeout.current);
+            longPressTimeout.current = null;
+        }
+        setCanDrag(false);
+    }, []);
+
+    const handleMouseMove = useCallback((e: React.MouseEvent) => {
+        if (isDragging || !containerRef.current) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const mouseXPos = e.clientX - centerX;
+        const mouseYPos = e.clientY - centerY;
+
+        // Subtle tilt when just moving mouse
+        x.set(mouseXPos * 0.4);
+        y.set(mouseYPos * 0.4);
+    }, [isDragging, x, y]);
+
+    const handleMouseLeaveContainer = useCallback(() => {
+        if (!isDragging) {
+            x.set(0);
+            y.set(0);
+        }
+    }, [isDragging, x, y]);
+
+    const handleCardClick = useCallback(() => {
+        if (!isDragging) {
+            // Trigger 360 spin
+            const currentAuto = autoRotate.get();
+            animate(autoRotate, currentAuto + 360, {
+                duration: 2.5,
+                ease: "easeInOut"
+            });
+        }
+    }, [isDragging, autoRotate]);
+
+    const onDragStart = useCallback(() => {
+        setIsDragging(true);
+    }, []);
 
     const onDrag = useCallback((event: any, info: any) => {
-        x.set(info.offset.x);
+        // High sensitivity for rotation during drag
+        x.set(info.offset.x * 2.5);
         y.set(info.offset.y);
     }, [x, y]);
 
     const onDragEnd = useCallback(() => {
         setIsDragging(false);
-        x.set(0);
-        y.set(0);
-    }, [x, y]);
+        // Snap back to front smoothly
+        animate(x, 0, {
+            ...springConfig,
+            stiffness: 80, // Slightly softer snap for rotation
+            damping: 15
+        });
+        animate(y, 0, springConfig);
+    }, [x, y, springConfig]);
 
     // Lanyard Path
     const lanyardPath = useTransform(
@@ -86,9 +150,9 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
             const endY = (containerSize.height / 2) - 180 + (latestY as number);
 
             const cp1X = startX;
-            const cp1Y = startY + (endY - startY) * 0.35;
-            const cp2X = endX;
-            const cp2Y = endY - (endY - startY) * 0.25;
+            const cp1Y = startY + (endY - startY) * 0.45; // Increased weight
+            const cp2X = endX - (latestX as number) * 0.2; // Reacts to X movement
+            const cp2Y = endY - (endY - startY) * 0.15;
 
             return `M ${startX} ${startY} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${endX} ${endY}`;
         }
@@ -96,11 +160,35 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
 
     // 4. Transform / Derived Hooks
     const cardY = useTransform([mouseY, floatY], ([my, fy]) => (my as number) + (fy as number));
-    const dynamicGlare = useTransform([glareX, glareY], ([gx, gy]) => `radial-gradient(circle at ${gx}% ${gy}%, rgba(255, 255, 255, 0.15) 0%, transparent 60%)`);
-    const shimmerX = useTransform(mouseX, (v) => v * 0.3);
-    const shimmerY = useTransform(mouseY, (v) => v * 0.3);
-    const foilX = useTransform(mouseX, (v) => v * -0.1);
-    const foilY = useTransform(mouseY, (v) => v * -0.1);
+    // Cyclic visibility logic: handle any degree value (360, 720, etc.)
+    const frontOpacity = useTransform(rotateY, (v: number) => {
+        const norm = ((v % 360) + 360) % 360;
+        return (norm < 90 || norm > 270) ? 1 : 0;
+    });
+    const backOpacity = useTransform(rotateY, (v: number) => {
+        const norm = ((v % 360) + 360) % 360;
+        return (norm >= 90 && norm <= 270) ? 1 : 0;
+    });
+
+    // Logo Parallax Logic
+    const logoRotateX = useTransform(mouseY, [-200, 200], [12, -12]);
+    const logoRotateY = useTransform(mouseX, [-200, 200], [-12, 12]);
+    const logoScale = useTransform(mouseY, [-200, 200], [1.08, 0.92]);
+
+    const dynamicGlare = useTransform([glareX, glareY], ([gx, gy]) => `radial-gradient(circle at ${gx}% ${gy}%, rgba(255, 255, 255, 0.2) 0%, transparent 60%)`);
+    const shimmerX = useTransform(mouseX, (v: number) => v * 0.4);
+    const shimmerY = useTransform(mouseY, (v: number) => v * 0.4);
+    const foilX = useTransform(mouseX, (v: number) => v * -0.15);
+    const foilY = useTransform(mouseY, (v: number) => v * -0.15);
+
+    // Reactive Glow Colors
+    const glowColor = useTransform(
+        [mouseX, mouseY],
+        ([mx, my]) => {
+            const angle = Math.atan2(my as number, mx as number) * (180 / Math.PI);
+            return `hsl(${(angle + 360) % 360}, 70%, 60%)`;
+        }
+    );
 
     useAnimationFrame((t) => {
         if (!isDragging) {
@@ -162,7 +250,7 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
         <div
             ref={containerRef}
             className="relative w-full h-full flex items-center justify-center overflow-visible"
-            style={{ perspective: '1200px' }}
+            style={{ perspective: '1500px' }}
         >
             {/* LANYARD */}
             <svg
@@ -204,6 +292,14 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                             <feMergeNode in="SourceGraphic" />
                         </feMerge>
                     </filter>
+
+                    <filter id="noiseFilter">
+                        <feTurbulence type="fractalNoise" baseFrequency="0.6" numOctaves="3" stitchTiles="stitch" />
+                        <feColorMatrix type="saturate" values="0" />
+                        <feComponentTransfer>
+                            <feFuncA type="linear" slope="0.05" />
+                        </feComponentTransfer>
+                    </filter>
                 </defs>
 
                 <motion.path
@@ -219,24 +315,30 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                 />
             </svg>
 
+            {/* AMBIENT GLOW BEHIND CARD */}
+            <motion.div
+                style={{
+                    x: mouseX,
+                    y: cardY,
+                    scale: 1.1,
+                    background: glowColor,
+                    filter: 'blur(120px)',
+                    opacity: 0.15,
+                }}
+                className="absolute w-[500px] h-[600px] rounded-full pointer-events-none z-0"
+            />
+
             {/* THE CARD */}
             <motion.div
                 ref={cardRef}
                 drag
-                dragConstraints={{
-                    left: -Math.min(300, containerSize.width * 0.4),
-                    right: Math.min(300, containerSize.width * 0.4),
-                    top: -Math.min(180, containerSize.height * 0.3),
-                    bottom: Math.min(420, containerSize.height * 0.6)
-                }}
-                dragElastic={0.15}
-                dragTransition={{ bounceStiffness: 250, bounceDamping: 20 }}
+                dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+                dragElastic={0}
+                onClick={handleCardClick}
                 onDragStart={onDragStart}
                 onDrag={onDrag}
                 onDragEnd={onDragEnd}
                 style={{
-                    x: mouseX,
-                    y: cardY,
                     rotateX,
                     rotateY,
                     transformStyle: 'preserve-3d'
@@ -245,15 +347,26 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                 whileHover={{ scale: 1.02 }}
                 className="relative w-[442px] h-[576px] cursor-grab active:cursor-grabbing z-20 will-change-transform"
             >
-                {/* CARD CONTAINER - PREMIUM GLASS BASE */}
-                <div
-                    className="absolute inset-0 bg-white/[0.03] backdrop-blur-3xl shadow-[0_40px_100px_rgba(0,0,0,0.6)] overflow-hidden border border-white/10 rounded-[2.5rem]"
+                {/* FRONT FACE */}
+                <motion.div
                     style={{
-                        maskImage: 'radial-gradient(circle at 221px 40px, transparent 15px, white 16px)',
-                        WebkitMaskImage: 'radial-gradient(circle at 221px 40px, transparent 15px, white 16px)'
+                        opacity: frontOpacity,
+                        backfaceVisibility: 'hidden',
+                        transformStyle: 'preserve-3d'
                     }}
+                    className="absolute inset-0 bg-white/[0.03] backdrop-blur-3xl shadow-[0_40px_100px_rgba(0,0,0,0.6)] overflow-hidden border border-white/10 rounded-[2.5rem]"
                 >
-
+                    {/* FLUID MOTION BACKGROUND LAYER */}
+                    <motion.div
+                        className="absolute inset-0 pointer-events-none opacity-20"
+                        style={{
+                            background: `radial-gradient(circle at 50% 50%, #FF69B4, #7FFF9F, #FFB68F)`,
+                            filter: 'blur(60px)',
+                            x: shimmerX,
+                            y: shimmerY,
+                            scale: 1.5,
+                        }}
+                    />
                     {/* IRIDESCENT SHIMMER */}
                     <motion.div
                         className="absolute inset-x-[-100%] inset-y-[-100%] pointer-events-none opacity-20 mix-blend-overlay"
@@ -263,6 +376,9 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                             y: shimmerY,
                         }}
                     />
+
+                    {/* NOISE OVERLAY */}
+                    <div className="absolute inset-0 pointer-events-none opacity-40 mix-blend-soft-light" style={{ filter: 'url(#noiseFilter)' }} />
 
                     {/* RAINBOW FOIL (Subtle) */}
                     <motion.div
@@ -279,60 +395,104 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                     {/* Top Hole */}
                     <div className="relative z-20 w-24 h-2.5 bg-black/40 border border-white/5 rounded-full mx-auto mt-8 mb-6 shadow-inner pointer-events-none" />
 
-                    {/* WATERMARK - Top Right Corner (Largest Elite) */}
-                    <div className="absolute top-10 right-10 w-36 h-36 opacity-20 pointer-events-none z-10">
-                        <div className="relative w-full h-full">
+                    {/* 🆕 ELITE 3D LOGO - Static Gray Watermark */}
+                    <motion.div
+                        className="absolute top-6 right-6 w-[180px] h-[180px] pointer-events-none z-10"
+                        style={{
+                            transformStyle: 'preserve-3d',
+                            rotateX: logoRotateX,
+                            rotateY: logoRotateY,
+                            scale: logoScale,
+                        }}
+                    >
+                        {/* Static Gray Watermark layers */}
+                        <div className="absolute inset-0" style={{ transform: 'translateZ(-6px)' }}>
+                            <Image
+                                src="/djinn-logo.png"
+                                alt=""
+                                fill
+                                className="object-contain opacity-[0.05] grayscale"
+                                sizes="180px"
+                            />
+                        </div>
+
+                        <div className="relative w-full h-full" style={{ transform: 'translateZ(0px)' }}>
+                            <Image
+                                src="/djinn-logo.png"
+                                alt=""
+                                fill
+                                className="object-contain opacity-[0.05] grayscale brightness-150 contrast-100"
+                                sizes="180px"
+                                quality={100}
+                                priority
+                            />
+                        </div>
+
+                        <div className="absolute inset-0" style={{ transform: 'translateZ(8px)', opacity: 0.1 }}>
                             <Image
                                 src="/djinn-logo.png"
                                 alt=""
                                 fill
                                 className="object-contain grayscale brightness-200"
-                                sizes="144px"
+                                sizes="180px"
                             />
                         </div>
-                    </div>
+                    </motion.div>
 
                     {/* Content */}
                     <div className="p-10 flex flex-col h-full relative z-10">
-
-                        {/* Top Left Branding (Elite) */}
+                        {/* Top Left Branding */}
                         <div className="flex justify-start pt-2 pl-2">
                             <motion.h1
                                 className="text-6xl font-black tracking-tighter"
-                                style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}
-                                animate={{
-                                    color: ['#FF69B4', '#fff', '#FF69B4']
+                                style={{
+                                    fontFamily: 'var(--font-adriane), serif',
+                                    fontWeight: 700,
+                                    x: textParallaxX,
+                                    y: textParallaxY,
+                                    color: '#fff'
                                 }}
-                                transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+                                animate={{
+                                    color: ['#ffffff', '#f0f0f0', '#b8b8b8', '#ffffff', '#dcdcdc', '#ffffff']
+                                }}
+                                transition={{
+                                    duration: 3,
+                                    repeat: Infinity,
+                                    ease: "linear"
+                                }}
                             >
                                 Djinn
                             </motion.h1>
                         </div>
 
-                        {/* Identity Centered Below */}
-                        <div className="flex-1 flex flex-col justify-end gap-6 mb-12">
-                            <div className="flex flex-col gap-2">
-                                <span
-                                    className="text-7xl font-bold tracking-tight lowercase text-white"
-                                    style={{ fontFamily: 'var(--font-adriane), serif' }}
-                                >
-                                    @{username || 'agent'}
-                                </span>
-
-                                <div className="flex items-center gap-4">
-                                    <div className="h-0.5 flex-1 bg-gradient-to-r from-white/0 via-[#FF69B4]/50 to-white/0" />
-                                    <span
-                                        className="text-2xl font-mono text-white tracking-[0.4em] font-black"
+                        {/* Identity Centered Below (User and ID on same line, shifted up) */}
+                        <div className="flex-1 flex flex-col justify-center mb-24">
+                            <div className="flex flex-col gap-4">
+                                <div className="flex items-baseline gap-4">
+                                    <motion.span
+                                        className="text-6xl font-bold tracking-tight lowercase text-white"
+                                        style={{
+                                            fontFamily: 'var(--font-adriane), serif',
+                                            x: textParallaxX,
+                                            y: textParallaxY,
+                                        }}
+                                    >
+                                        @{username || 'agent'}
+                                    </motion.span>
+                                    <motion.span
+                                        className="text-2xl font-mono text-[#FF69B4] tracking-[0.2em] font-black opacity-80"
+                                        style={{
+                                            x: idParallaxX,
+                                            y: idParallaxY,
+                                        }}
                                     >
                                         #084
-                                    </span>
-                                    <div className="h-0.5 flex-1 bg-gradient-to-r from-white/0 via-[#FF69B4]/50 to-white/0" />
+                                    </motion.span>
                                 </div>
+
+                                <div className="h-0.5 w-3/4 bg-gradient-to-r from-[#FF69B4]/50 via-[#FF69B4]/20 to-transparent" />
                             </div>
                         </div>
-
-                        {/* Bottom Spacer */}
-                        <div className="pb-10" />
                     </div>
 
                     {/* CRYSTAL CHROME SHINE */}
@@ -360,15 +520,133 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                         }}
                         className="absolute inset-0 pointer-events-none mix-blend-overlay z-30"
                     />
-                </div>
+                </motion.div>
 
-                {/* Depth layers */}
+                {/* BACK FACE (Elite Full Chrome - Darker base for transparency) */}
+                <motion.div
+                    style={{
+                        opacity: backOpacity,
+                        rotateY: 180,
+                        backfaceVisibility: 'hidden',
+                        transformStyle: 'preserve-3d'
+                    }}
+                    className="absolute inset-0 bg-black/80 backdrop-blur-3xl shadow-[0_40px_100px_rgba(0,0,0,0.6)] overflow-hidden border border-white/20 rounded-[2.5rem] flex flex-col items-center justify-start p-10 pt-16 text-center"
+                >
+                    {/* CHROME / MIRROR EFFECT OVERLAY */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-white/5 pointer-events-none" />
+                    <motion.div
+                        className="absolute inset-[-100%] pointer-events-none opacity-30 mix-blend-overlay"
+                        style={{
+                            background: 'linear-gradient(45deg, transparent 45%, rgba(255,255,255,0.8) 50%, transparent 55%)',
+                            x: shimmerX,
+                            y: shimmerY
+                        }}
+                    />
+
+                    {/* 🆕 STAR SNIPER 3D Asset - Layered for depth */}
+                    <motion.div
+                        className="relative w-56 h-56 mb-2 mt-4"
+                        style={{
+                            transformStyle: 'preserve-3d',
+                        }}
+                    >
+                        {/* Underglow/Shadow layer */}
+                        <div className="absolute inset-0" style={{ transform: 'translateZ(-20px) scale(0.9)' }}>
+                            <Image
+                                src="/star-sniper-new.png"
+                                alt=""
+                                fill
+                                className="object-contain opacity-20 blur-xl grayscale brightness-0"
+                            />
+                        </div>
+
+                        {/* Mid Depth Layer */}
+                        <div className="absolute inset-0" style={{ transform: 'translateZ(-10px)' }}>
+                            <Image
+                                src="/star-sniper-new.png"
+                                alt=""
+                                fill
+                                className="object-contain opacity-40 brightness-125"
+                            />
+                        </div>
+
+                        {/* Main Asset */}
+                        <div className="relative w-full h-full" style={{ transform: 'translateZ(0px)' }}>
+                            <Image
+                                src="/star-sniper-new.png"
+                                alt="Star Sniper"
+                                fill
+                                className="object-contain"
+                                priority
+                            />
+                        </div>
+
+                        {/* Front Detail layer (More intense highlights) */}
+                        <div className="absolute inset-0" style={{ transform: 'translateZ(15px)' }}>
+                            <Image
+                                src="/star-sniper-new.png"
+                                alt=""
+                                fill
+                                className="object-contain opacity-50 brightness-150 contrast-125 selection:bg-transparent"
+                                style={{ mixBlendMode: 'soft-light' }}
+                            />
+                        </div>
+                    </motion.div>
+
+                    {/* EARLY PASS BRANDING */}
+                    <div
+                        className="flex flex-col items-center gap-1 mb-6"
+                        style={{ transform: 'translateZ(15px)' }}
+                    >
+                        <motion.h2
+                            className="text-4xl font-black tracking-[0.4em] uppercase"
+                            style={{
+                                fontFamily: 'var(--font-adriane), serif',
+                                textShadow: '0 0 25px rgba(255,255,255,0.4)'
+                            }}
+                            animate={{
+                                color: ['#FF69B4', '#fff', '#FF69B4']
+                            }}
+                            transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+                        >
+                            Early Pass
+                        </motion.h2>
+                        <span className="text-[10px] font-mono text-[#FF69B4] tracking-[0.5em] font-bold">Priority verified Agent</span>
+                    </div>
+
+                    {/* MANIFESTO TEXT FROM IMAGE */}
+                    <div
+                        className="flex flex-col gap-1 w-full max-w-[280px]"
+                        style={{ transform: 'translateZ(10px)' }}
+                    >
+                        <div className="flex flex-col items-center gap-0">
+                            <span className="text-[13px] font-black text-white/90 uppercase tracking-tighter">Born to Trench</span>
+                            <span className="text-[11px] font-bold text-white/70 uppercase tracking-tight">World is a Casino</span>
+                        </div>
+
+                        <div className="flex flex-col items-center gap-0 mt-2">
+                            <span className="text-[16px] font-black text-[#FF69B4] uppercase tracking-[-0.05em]" style={{ textShadow: '0 0 15px rgba(255,105,180,0.4)' }}>I AM A DJINN</span>
+                            <span className="text-[10px] font-bold text-white/50 uppercase tracking-[0.2em]">I predict the future</span>
+                        </div>
+
+                        <div className="w-full h-[1px] bg-white/10 my-2" />
+
+                        <div className="flex flex-col items-center gap-0.5">
+                            <span className="text-[9px] font-mono text-white/40 tracking-wider">410,757,864,530 NEW PAIRS</span>
+                            <span className="text-[10px] font-bold text-white/60">Ape em all 2026 未来はあなたのもの</span>
+                        </div>
+                    </div>
+
+                    {/* Scanline / Grid effect for back */}
+                    <div className="absolute inset-0 pointer-events-none opacity-[0.05] bg-[linear-gradient(rgba(255,255,255,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.1)_1px,transparent_1px)] bg-[size:24px_24px]" />
+                </motion.div>
+
+                {/* Depth layers (Central Spine) */}
                 <div
-                    className="absolute inset-0 bg-white/5 border border-white/5 rounded-[2.5rem] pointer-events-none"
-                    style={{ transform: 'translateZ(-12px)' }}
+                    className="absolute inset-0 bg-[#FF69B4]/10 border border-[#FF69B4]/20 rounded-[2.5rem] pointer-events-none"
+                    style={{ transform: 'translateZ(-2px)' }}
                 />
             </motion.div>
-
         </div>
     );
 }

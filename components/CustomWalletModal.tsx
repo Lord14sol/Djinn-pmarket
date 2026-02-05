@@ -14,6 +14,7 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
     const { wallets, select, connect, connecting, connected, wallet } = useWallet();
     const [isConnecting, setIsConnecting] = useState(false);
     const [selectedWalletName, setSelectedWalletName] = useState<WalletName | null>(null);
+    const connectionAttemptRef = useRef(false);
 
     // Filter valid wallets
     const uniqueWallets = useMemo(() => {
@@ -46,42 +47,64 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
 
     // Handle Wallet Selection
     const handleWalletSelect = useCallback((walletName: WalletName) => {
-        if (connected) return;
+        if (connected || isConnecting || connecting) return;
 
         console.log('[CustomWalletModal] Selecting wallet:', walletName);
-        select(walletName);
         setSelectedWalletName(walletName);
         setIsConnecting(true);
-    }, [connected, select]);
+
+        // Use a small timeout to let state settle before calling select
+        setTimeout(() => {
+            select(walletName);
+        }, 50);
+    }, [connected, isConnecting, connecting, select]);
 
     // Trigger Connection when wallet updates
     useEffect(() => {
-        if (!selectedWalletName || connected || connecting) return;
+        if (!selectedWalletName || connected || connecting || connectionAttemptRef.current) return;
 
         // If the selected wallet matches the current wallet adapter, try connecting
         if (wallet?.adapter.name === selectedWalletName) {
             console.log('[CustomWalletModal] Wallet ready, attempting connect...');
+            connectionAttemptRef.current = true;
 
             const connectWallet = async () => {
                 try {
-                    // Small delay to ensure adapter state is propagated
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                    await connect();
+                    // Significant delay to ensure adapter internal state is settled
+                    await new Promise(resolve => setTimeout(resolve, 500));
+
+                    // Re-check conditions after delay
+                    if (
+                        wallet?.adapter.name === selectedWalletName &&
+                        !connected &&
+                        !connecting &&
+                        isOpen
+                    ) {
+                        await connect();
+                    }
                 } catch (error: any) {
                     console.error('[CustomWalletModal] Connection failed:', error);
-                    // Only alert if it's not a "User rejected" error which is common
-                    if (error.name !== 'WalletConnectionError' || !error.message.includes('User rejected')) {
-                        alert(`Connection Failed: ${error.message}`);
+
+                    // Swallowing known white-noise errors
+                    const isUserRejected = error.name === 'WalletConnectionError' && error.message?.includes('User rejected');
+                    const isUnexpected = error.message?.includes('Unexpected error');
+                    const isMissingAdapter = error.message?.includes('Adapter is not connected');
+
+                    if (!isUserRejected && !isUnexpected && !isMissingAdapter) {
+                        alert(`Connection Failed: ${error.message || 'Unknown error'}`);
                     }
+
+                    // Reset name so user can try again
                     setSelectedWalletName(null);
                 } finally {
                     setIsConnecting(false);
+                    connectionAttemptRef.current = false;
                 }
             };
 
             connectWallet();
         }
-    }, [wallet, selectedWalletName, connected, connecting, connect]);
+    }, [wallet, selectedWalletName, connected, connecting, connect, isOpen]);
 
     // Cleanup on Close/Connect
     useEffect(() => {
@@ -97,6 +120,7 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
         if (!isOpen) {
             setIsConnecting(false);
             setSelectedWalletName(null);
+            connectionAttemptRef.current = false;
         }
     }, [isOpen]);
 
