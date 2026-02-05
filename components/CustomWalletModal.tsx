@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useCallback, useEffect, useState } from 'react';
+import React, { useMemo, useCallback, useEffect, useState, useRef } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { WalletReadyState, WalletName } from '@solana/wallet-adapter-base';
 import { ShieldCheck, X } from 'lucide-react';
