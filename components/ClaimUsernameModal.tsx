@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { isUsernameAvailable, upsertProfile } from '@/lib/supabase-db';
 import { Loader2, X } from 'lucide-react';
-import StarBackground from '@/components/ui/StarBackground';
 
 interface ClaimUsernameModalProps {
     isOpen: boolean;
@@ -66,103 +65,96 @@ export default function ClaimUsernameModal({ isOpen, walletAddress, onSuccess, o
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center p-4 font-sans animate-in fade-in duration-300 relative overflow-hidden">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 pointer-events-none">
+            {/* Backdrop: Subtle dark blur */}
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm pointer-events-auto" onClick={onClose} />
 
-            {/* --- STAR BACKGROUND --- */}
-            <StarBackground />
+            {/* NEO-BRUTALIST CONTAINER: Positioned Bottom-Center */}
+            <div className={`
+                relative w-full max-w-md pointer-events-auto
+                bg-white border-[4px] border-black rounded-[2.5rem] p-8
+                shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]
+                animate-in slide-in-from-bottom-12 duration-500
+                fixed bottom-12 left-1/2 -translate-x-1/2
+            `}>
 
-            {/* Main Card */}
-            <div className="w-full max-w-md bg-black/90 backdrop-blur-xl border-2 border-[#F492B7]/30 rounded-3xl p-8 relative shadow-[0_0_50px_rgba(244,146,183,0.15)] z-10">
-
-                {/* Header: Title + Close(Disconnect) */}
-                <div className="flex justify-between items-center mb-8">
-                    <h1 className="text-3xl font-black lowercase tracking-tight text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">
-                        claim your<br />username
+                {/* Header: Title + Close Button */}
+                <div className="flex justify-between items-start mb-8">
+                    <h1 className="text-4xl font-black lowercase tracking-tighter text-black leading-none">
+                        claim your<br />identity
                     </h1>
 
-                    {/* FIXED CLOSE BUTTON: High Contrast White on Black */}
                     <button
                         onClick={onClose}
-                        className="bg-white text-black border-2 border-white p-2 rounded-full hover:bg-[#F492B7] hover:border-[#F492B7] hover:scale-110 transition-all shadow-[0_0_15px_rgba(255,255,255,0.3)] group"
+                        className="bg-red-500 text-white border-2 border-black p-2 rounded-full hover:bg-red-600 hover:scale-110 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:shadow-none"
                     >
-                        <X className="w-5 h-5 transition-transform group-hover:rotate-90" />
+                        <X className="w-5 h-5 stroke-[3]" />
                     </button>
                 </div>
 
-                {/* Avatar Placeholder (Skull/Icon) */}
-                <div className="flex justify-center mb-10">
+                {/* Avatar Placeholder */}
+                <div className="flex justify-center mb-8">
                     <div className="relative">
-                        <div className="w-24 h-24 rounded-full border-4 border-white/10 bg-gradient-to-br from-pink-500/20 to-purple-500/20 flex items-center justify-center overflow-hidden shadow-[0_0_30px_rgba(244,146,183,0.3)]">
-                            <img src="/pink-pfp.png" className="w-full h-full object-cover opacity-90 hover:opacity-100 transition-opacity" alt="Avatar" />
+                        <div className="w-24 h-24 rounded-full border-4 border-black bg-[#F492B7] flex items-center justify-center overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                            <img src="/pink-pfp.png" className="w-full h-full object-cover" alt="Avatar" />
                         </div>
-                        <div className="absolute -bottom-2 -right-2 bg-[#F492B7] border-2 border-black px-2 py-0.5 rounded-full text-[10px] font-black uppercase text-black shadow-[2px_2px_0px_0px_black]">
+                        <div className="absolute -bottom-1 -right-1 bg-white border-2 border-black px-3 py-1 rounded-full text-[10px] font-black uppercase text-black shadow-[2px_2px_0px_0px_black]">
                             New
                         </div>
                     </div>
                 </div>
 
-                {/* Connect Wallet Step (Already Done) */}
-                <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4">
-                    <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-3">
-                            <div className="bg-[#F492B7] text-black w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs ring-2 ring-black">1</div>
-                            <span className="font-bold text-gray-300 lowercase text-sm">wallet connected</span>
+                {/* Input Section */}
+                <div className="space-y-6">
+                    <div>
+                        <label className="block text-black font-black lowercase mb-2 ml-1 text-sm tracking-tight">choose username</label>
+                        <div className="relative">
+                            <input
+                                type="text"
+                                className="w-full bg-white border-[3px] border-black rounded-2xl px-5 py-4 font-bold text-xl text-black outline-none focus:bg-[#F492B7]/10 transition-all placeholder:text-gray-300 lowercase"
+                                placeholder="djinngod"
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                                maxLength={15}
+                            />
+                            <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                                {isChecking ? (
+                                    <Loader2 className="w-6 h-6 animate-spin text-black" />
+                                ) : username.length >= 3 ? (
+                                    isAvailable ? (
+                                        <div className="bg-[#10B981] border-2 border-black rounded-full p-1 shadow-[2px_2px_0px_0px_black]">
+                                            <svg className="w-4 h-4 text-black" fill="none" stroke="currentColor" strokeWidth="4" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                                        </div>
+                                    ) : (
+                                        <div className="bg-red-500 border-2 border-black rounded-full p-1 shadow-[2px_2px_0px_0px_black]">
+                                            <X className="w-4 h-4 text-white" strokeWidth={4} />
+                                        </div>
+                                    )
+                                ) : null}
+                            </div>
                         </div>
-                        <span className="font-mono text-xs text-[#F492B7] truncate max-w-[100px]">{walletAddress}</span>
-                    </div>
-                </div>
-
-                {/* Choose Username Step (Active) */}
-                <div className="bg-white/5 border border-white/10 rounded-2xl p-6 relative">
-                    <div className="absolute -top-3 left-4 bg-[#F492B7] text-black px-3 py-1 rounded-full text-xs font-bold border-2 border-black">
-                        step 2
-                    </div>
-
-                    <label className="block text-white font-black lowercase mb-2 ml-1 text-sm mt-2">choose username</label>
-                    <div className="relative">
-                        <input
-                            type="text"
-                            className="w-full bg-black/50 border-2 border-white/20 rounded-xl px-4 py-3 font-bold text-lg text-white outline-none focus:border-[#F492B7] focus:shadow-[0_0_15px_rgba(244,146,183,0.3)] transition-all placeholder:text-gray-700 lowercase"
-                            placeholder="e.g. degen420"
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
-                            maxLength={15}
-                        />
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                            {isChecking ? (
-                                <Loader2 className="w-5 h-5 animate-spin text-[#F492B7]" />
-                            ) : username.length >= 3 ? (
-                                isAvailable ? (
-                                    <span className="text-[#10B981] text-xl drop-shadow-[0_0_5px_rgba(16,185,129,0.5)]">✓</span>
-                                ) : (
-                                    <span className="text-red-500 text-xl drop-shadow-[0_0_5px_rgba(239,68,68,0.5)]">✕</span>
-                                )
-                            ) : null}
+                        <div className="mt-3 px-1 flex justify-between items-center text-[11px] font-black uppercase tracking-wider">
+                            <span className={error || isAvailable === false ? 'text-red-500' : 'text-gray-400'}>
+                                {error || (isAvailable === false ? 'Taken' : 'min 3 chars')}
+                            </span>
+                            <span className="text-gray-400">{username.length}/15</span>
                         </div>
                     </div>
 
-                    <p className="text-xs font-bold text-gray-500 mt-2 ml-1 lowercase">
-                        {error ? <span className="text-red-500">{error}</span> : isAvailable === false ? <span className="text-red-400">Username taken</span> : '3-15 chars, letters & numbers'}
-                    </p>
-                </div>
-
-                {/* Submit Button */}
-                <div className="mt-8 flex justify-end">
+                    {/* Action Button */}
                     <button
                         onClick={handleSubmit}
                         disabled={!isAvailable || username.length < 3 || isSubmitting}
                         className={`
-                            flex items-center gap-2 px-8 py-3 rounded-full font-black text-lg border-2 border-transparent transition-all
+                            w-full py-5 rounded-2xl font-black text-2xl uppercase border-[3px] border-black transition-all flex items-center justify-center gap-3
                             ${isAvailable && !isSubmitting
-                                ? 'bg-[#F492B7] text-black hover:bg-white hover:scale-105 hover:shadow-[0_0_20px_rgba(244,146,183,0.5)] cursor-pointer'
-                                : 'bg-white/10 text-gray-500 cursor-not-allowed'}
+                                ? 'bg-[#10B981] text-black hover:-translate-y-1 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-y-0 active:shadow-none cursor-pointer'
+                                : 'bg-gray-100 text-gray-400 border-dashed cursor-not-allowed opacity-50'}
                         `}
                     >
-                        {isSubmitting ? <Loader2 className="animate-spin w-5 h-5" /> : null}
-                        {isSubmitting ? 'Minting...' : 'Claim Identity →'}
+                        {isSubmitting ? <Loader2 className="animate-spin w-6 h-6" /> : 'Claim Identity'}
                     </button>
                 </div>
-
             </div>
         </div>
     );

@@ -38,8 +38,8 @@ const OUTCOME_COLORS = [
 export default function OutcomeList({ outcomes, selectedId, onSelect, onBuyClick }: OutcomeListProps) {
     return (
         <div className="w-full">
-            {/* Header Row */}
-            <div className="grid grid-cols-12 gap-4 text-[10px] font-black uppercase text-gray-500 mb-3 px-4 tracking-wider">
+            {/* Header Row - Jim Raptis Principle: Opacity Hack */}
+            <div className="grid grid-cols-12 gap-4 text-[10px] font-black uppercase text-black/60 mb-3 px-4 tracking-wider">
                 <div className="col-span-6">Outcome</div>
                 <div className="col-span-2 text-center">Chance</div>
                 <div className="col-span-4 text-right">Price</div>

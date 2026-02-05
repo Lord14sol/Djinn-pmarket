@@ -13,6 +13,7 @@ import { formatCompact } from '@/lib/utils';
 import PumpEffect from '@/components/PumpEffect';
 import { ADMIN_WALLETS } from '@/lib/whitelist';
 import TheGreatPyramid from '@/components/TheGreatPyramid';
+import { useSound } from '@/components/providers/SoundProvider';
 
 // Fresh start timestamp - hide markets created before this (filtering for clean view)
 const FRESH_START_TIMESTAMP = process.env.NEXT_PUBLIC_FRESH_START_TIMESTAMP
@@ -23,6 +24,7 @@ const FRESH_START_TIMESTAMP = process.env.NEXT_PUBLIC_FRESH_START_TIMESTAMP
 export default function Home() {
   const { activeCategory, activeSubcategory } = useCategory();
   const { publicKey } = useWallet();
+  const { play } = useSound();
   const router = useRouter();
 
   // 1. Mercados iniciales con categorías
@@ -406,7 +408,10 @@ export default function Home() {
               </div>
 
               <button
-                onClick={() => window.dispatchEvent(new CustomEvent('open-create-modal'))}
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('open-create-modal'));
+                  play('click');
+                }}
                 className="bg-[#F492B7] text-black text-lg font-black py-4 px-10 rounded-xl shadow-[0_0_30px_rgba(244,146,183,0.3)] hover:scale-105 active:scale-95 transition-all uppercase mt-4"
               >
                 Create First Market

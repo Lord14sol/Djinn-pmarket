@@ -8,6 +8,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Star } from 'lucide-react';
 import { MarketStatusBadge } from './MarketStatusBadge';
+import { useSound } from './providers/SoundProvider';
 
 interface MarketCardProps {
     title: string;
@@ -63,6 +64,7 @@ const MarketCard: React.FC<MarketCardProps> = React.memo(({
     status = 'PENDING'
 }) => {
     const { publicKey } = useWallet();
+    const { play } = useSound();
     const router = useRouter(); // Using Next.js router
     const [timeLeft, setTimeLeft] = useState('');
     const [isStarred, setIsStarred] = useState(false);
@@ -78,6 +80,7 @@ const MarketCard: React.FC<MarketCardProps> = React.memo(({
     const handleBetClick = (e: React.MouseEvent, outcome: 'yes' | 'no', optionName?: string, optionChance?: number) => {
         e.preventDefault();
         e.stopPropagation();
+        play('click');
         setSelectedOutcome(outcome);
         if (optionName) setSelectedOption(optionName);
         if (optionChance) setSelectedOptionChance(optionChance);
@@ -87,6 +90,7 @@ const MarketCard: React.FC<MarketCardProps> = React.memo(({
 
     const handleNavigate = (e: React.MouseEvent) => {
         e.preventDefault();
+        play('shimmer');
         router.push(`/market/${slug}`);
     };
 
@@ -114,6 +118,7 @@ const MarketCard: React.FC<MarketCardProps> = React.memo(({
         e.preventDefault();
         e.stopPropagation();
         setIsStarred(!isStarred);
+        play('toggle');
         if (!isStarred) {
             setShowSavedAnim(true);
             setTimeout(() => setShowSavedAnim(false), 1000);
@@ -121,12 +126,14 @@ const MarketCard: React.FC<MarketCardProps> = React.memo(({
     };
 
     return (
-        <div
+        <motion.div
             onClick={handleNavigate}
+            whileHover={{ y: -6, scale: 1.01 }}
+            whileTap={{ scale: 0.99 }}
             style={{ borderColor: 'black' }}
             className={`
-                bg-white border-2 !border-black rounded-3xl relative flex flex-col 
-                hover:-translate-y-1 hover:!shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] !shadow-none ring-0 outline-none
+                bg-white border-2 !border-black rounded-2xl relative flex flex-col 
+                hover:!shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] !shadow-none ring-0 outline-none
                 transition-all duration-200 cursor-pointer overflow-visible group/card
                 ${compact ? 'p-3 gap-3 min-h-[220px]' : 'p-5 gap-5 min-h-[420px]'}
             `}
@@ -178,145 +185,85 @@ const MarketCard: React.FC<MarketCardProps> = React.memo(({
                     {title}
                 </h3>
 
-                {/* Category Tag */}
-                {category && (
-                    <span className="pointer-events-auto w-fit bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border border-black/10">
-                        {category}
+                {/* Category & Volume Row */}
+                <div className="flex items-center justify-between gap-2">
+                    {category && (
+                        <span className="pointer-events-auto bg-gray-100 text-gray-700 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide border-2 border-black/20">
+                            {category}
+                        </span>
+                    )}
+                    <span className="pointer-events-auto bg-black text-white px-2.5 py-1 rounded-lg text-[10px] font-black uppercase border-2 border-black ml-auto">
+                        {volume}
                     </span>
-                )}
+                </div>
 
-                {/* MINI PROBABILITY CHART - Neo-Brutalist Style */}
-                {!resolved && (
-                    <div className={`bg-gradient-to-br from-gray-50 to-white border-4 border-black rounded-2xl overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] pointer-events-auto
-                        ${compact ? 'p-2 mb-2' : 'p-4 mb-3'}
-                    `}>
-                        <div className="flex items-end justify-between gap-1 h-16">
-                            {/* Generate sparkline-style bars */}
-                            {Array.from({ length: 12 }).map((_, idx) => {
-                                // Simulate probability trend (replace with real historical data if available)
-                                const baseHeight = chance || 50;
-                                const variance = Math.sin(idx * 0.5) * 10;
-                                const height = Math.max(10, Math.min(90, baseHeight + variance));
-                                const isLast = idx === 11;
-
-                                return (
-                                    <div
-                                        key={idx}
-                                        className="flex-1 flex flex-col justify-end items-center gap-0.5"
-                                    >
-                                        {/* YES bar */}
-                                        <div
-                                            className={`w-full rounded-t-sm transition-all duration-300 ${isLast ? 'bg-emerald-400 border-2 border-black' : 'bg-emerald-300 border border-black/20'}`}
-                                            style={{ height: `${height}%` }}
-                                        />
-                                        {/* NO bar (inverted) */}
-                                        <div
-                                            className={`w-full rounded-b-sm transition-all duration-300 ${isLast ? 'bg-rose-400 border-2 border-black' : 'bg-rose-300 border border-black/20'}`}
-                                            style={{ height: `${100 - height}%` }}
-                                        />
-                                    </div>
-                                );
-                            })}
-                        </div>
-                        {/* Mini Legend */}
-                        <div className="flex items-center justify-center gap-4 mt-3 pt-2 border-t-2 border-black">
-                            <div className="flex items-center gap-1.5">
-                                <div className="w-2 h-2 bg-emerald-400 border border-black rounded-sm" />
-                                <span className="text-[9px] font-black uppercase text-emerald-700">Yes {chance || 50}%</span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                                <div className="w-2 h-2 bg-rose-400 border border-black rounded-sm" />
-                                <span className="text-[9px] font-black uppercase text-rose-700">No {100 - (chance || 50)}%</span>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Outcomes Information */}
-                <div className="mt-auto pointer-events-auto w-full">
+                {/* Outcomes - SIMPLIFIED */}
+                <div className="mt-auto pointer-events-auto w-full space-y-2">
                     {resolved ? (
-                        <div className={`flex items-center justify-center gap-2 bg-gradient-to-br from-emerald-100 to-emerald-50 border-4 border-black rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]
-                             ${compact ? 'p-3' : 'p-4'}
+                        <div className={`flex items-center justify-center gap-2 bg-emerald-500 border-2 border-black rounded-xl
+                             ${compact ? 'p-2' : 'p-3'}
                         `}>
-                            <span className="text-[10px] uppercase font-black text-emerald-800 tracking-[0.3em]">Winner</span>
-                            <span className={`font-black text-black ${compact ? 'text-base' : 'text-xl'}`}>{winningOutcome}</span>
+                            <span className="text-[10px] uppercase font-black text-white tracking-wider">Winner</span>
+                            <span className={`font-black text-white ${compact ? 'text-sm' : 'text-base'}`}>{winningOutcome}</span>
                         </div>
                     ) : isMultiple && options ? (
-                        <div className={`flex flex-col overflow-y-auto pr-1 customize-scrollbar
-                            ${compact ? 'gap-1.5 max-h-[80px]' : 'gap-2 max-h-[140px]'}
-                        `}>
+                        <div className={`flex flex-col gap-1.5 ${compact ? 'max-h-[80px]' : 'max-h-[120px]'} overflow-y-auto`}>
                             {options.map((opt: any, idx: number) => {
                                 let optChance = 0;
                                 if (options.length === 2) {
                                     optChance = idx === 0 ? (chance || 50) : (100 - (chance || 50));
                                 }
-
                                 return (
                                     <div
                                         key={typeof opt === 'string' ? opt : (opt.id || idx)}
-                                        className={`flex items-center justify-between bg-white border-2 border-black rounded-full cursor-pointer transition-all duration-200 shrink-0 group/opt hover:bg-gray-50 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]
-                                            ${compact ? 'text-[10px] py-1.5 px-3' : 'text-xs py-2 px-4'}
-                                        `}
+                                        className={`flex items-center justify-between bg-white border-2 border-black rounded-lg px-3 py-2 hover:bg-gray-50 transition-colors cursor-pointer ${compact ? 'text-[10px]' : 'text-xs'}`}
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             router.push(`/market/${slug}`);
                                         }}
                                     >
-                                        <span className="text-gray-800 group-hover/opt:text-black truncate font-bold max-w-[70%]">{typeof opt === 'string' ? opt : opt.title}</span>
-                                        <span className="text-black font-black">{optChance > 0 ? `${optChance.toFixed(1)}%` : '--%'}</span>
+                                        <span className="font-bold text-gray-800 truncate">{typeof opt === 'string' ? opt : opt.title}</span>
+                                        <span className="font-black text-black ml-2">{optChance > 0 ? `${optChance.toFixed(0)}%` : '--%'}</span>
                                     </div>
                                 );
                             })}
                         </div>
                     ) : (
-                        <div className={`grid grid-cols-2 ${compact ? 'gap-2' : 'gap-3'}`}>
+                        <div className={`grid grid-cols-2 ${compact ? 'gap-2' : 'gap-2.5'}`}>
                             <button
                                 onClick={(e) => handleBetClick(e, 'yes')}
-                                className={`flex flex-col items-center justify-center bg-emerald-400 text-black border-4 border-black hover:brightness-110 hover:-translate-y-1 rounded-2xl group/yes transition-all duration-200 active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]
-                                    ${compact ? 'py-2' : 'py-4'}
+                                className={`bg-emerald-500 text-white border-2 border-black rounded-xl font-black flex flex-col items-center justify-center transition-all hover:scale-105 active:scale-95
+                                    ${compact ? 'py-2 text-xs' : 'py-3 text-sm'}
                                 `}
                             >
-                                <span className={`font-black uppercase tracking-wider mb-1 ${compact ? 'text-[10px]' : 'text-xs'}`}>Yes</span>
-                                <span className={`font-black ${compact ? 'text-lg' : 'text-2xl'}`}>{chance || 50}%</span>
+                                <span className="uppercase mb-0.5">Yes</span>
+                                <span className={compact ? 'text-base' : 'text-xl'}>{chance || 50}%</span>
                             </button>
                             <button
                                 onClick={(e) => handleBetClick(e, 'no')}
-                                className={`flex flex-col items-center justify-center bg-rose-400 text-black border-4 border-black hover:brightness-110 hover:-translate-y-1 rounded-2xl group/no transition-all duration-200 active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]
-                                    ${compact ? 'py-2' : 'py-4'}
+                                className={`bg-red-500 text-white border-2 border-black rounded-xl font-black flex flex-col items-center justify-center transition-all hover:scale-105 active:scale-95
+                                    ${compact ? 'py-2 text-xs' : 'py-3 text-sm'}
                                 `}
                             >
-                                <span className={`font-black uppercase tracking-wider mb-1 ${compact ? 'text-[10px]' : 'text-xs'}`}>No</span>
-                                <span className={`font-black ${compact ? 'text-lg' : 'text-2xl'}`}>{100 - (chance || 50)}%</span>
+                                <span className="uppercase mb-0.5">No</span>
+                                <span className={compact ? 'text-base' : 'text-xl'}>{100 - (chance || 50)}%</span>
                             </button>
                         </div>
                     )}
                 </div>
 
-                {/* Footer: Volume, Time & STAR */}
-                <div className={`flex items-center justify-between font-bold uppercase tracking-wider border-t-2 border-black pointer-events-auto
-                    ${compact ? 'text-[9px] pt-2 mt-auto' : 'text-[11px] pt-4 mt-auto'}
+                {/* Footer: Time & STAR */}
+                <div className={`flex items-center justify-between border-t-2 border-black pointer-events-auto
+                    ${compact ? 'text-[10px] pt-2 mt-2' : 'text-xs pt-3 mt-3'}
                 `}>
-                    <div className="flex items-center gap-3">
-                        <span className="bg-white text-black px-2 py-1 rounded-md border-2 border-black">{volume} Vol</span>
-                        {timeLeft && <span className="text-black bg-white px-2 py-1 rounded-md border-2 border-black">{timeLeft}</span>}
-                    </div>
-
-                    {/* Star - Circle Button */}
+                    {timeLeft && (
+                        <span className="font-black text-gray-600 uppercase">{timeLeft}</span>
+                    )}
                     <button
-                        className="bg-gray-100 border border-black/10 hover:border-black hover:text-black transition-colors w-8 h-8 flex items-center justify-center rounded-full relative group/star"
+                        className="ml-auto p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
                         onClick={handleStarClick}
                     >
-                        <Star className={`w-4 h-4 transition-all duration-300 ${isStarred ? 'fill-[#F492B7] text-[#F492B7] scale-110' : 'text-gray-400 group-hover/star:text-black'}`} style={{ strokeWidth: isStarred ? 0 : 2 }} />
-                        <AnimatePresence>
-                            {showSavedAnim && (
-                                <motion.span
-                                    initial={{ opacity: 0, scale: 0 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    className="absolute -top-1 -right-1 block w-2.5 h-2.5 bg-[#F492B7] rounded-full border border-black"
-                                />
-                            )}
-                        </AnimatePresence>
+                        <Star className={`w-4 h-4 transition-all ${isStarred ? 'fill-[#F492B7] text-[#F492B7]' : 'text-gray-400'}`} strokeWidth={isStarred ? 0 : 2} />
                     </button>
                 </div>
             </div>
@@ -336,7 +283,7 @@ const MarketCard: React.FC<MarketCardProps> = React.memo(({
                 }}
                 outcome={selectedOutcome}
             />
-        </div>
+        </motion.div>
     );
 });
 

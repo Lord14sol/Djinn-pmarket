@@ -4,11 +4,11 @@
  */
 
 export const OUTCOME_COLORS: Record<string, string> = {
-    // Binary outcomes
+    // Binary outcomes (synchronized with CreateMarketModal)
     YES: "#10B981",
-    NO: "#F492B7",
+    NO: "#EF4444",
     Yes: "#10B981",
-    No: "#F492B7",
+    No: "#EF4444",
 
     // Countries
     CHILE: "#EF4444",
@@ -27,15 +27,22 @@ export const OUTCOME_COLORS: Record<string, string> = {
     Bolivia: "#F97316",
 };
 
+// Synchronized with CreateMarketModal COLORS array
 const FALLBACK_PALETTE = [
-    "#3b82f6", // Blue
-    "#F492B7", // Pink
-    "#10B981", // Green
-    "#A78BFA", // Purple
+    "#10B981", // Green (Yes)
+    "#EF4444", // Red (No)
+    "#3B82F6", // Blue
     "#F59E0B", // Amber
-    "#EF4444", // Red
+    "#8B5CF6", // Purple
+    "#EC4899", // Pink
     "#06B6D4", // Cyan
-    "#EC4899", // Pink (Rose)
+    "#14B8A6", // Teal
+    "#6366F1", // Indigo
+    "#84CC16", // Lime
+    "#F97316", // Orange
+    "#D946EF", // Fuchsia
+    "#F43F5E", // Rose
+    "#0EA5E9", // Sky
 ];
 
 /**
@@ -70,13 +77,13 @@ export function getOutcomeColor(title: string, index?: number): string {
     if (lowerTitle.includes('bolivia')) return OUTCOME_COLORS.Bolivia;
 
     // Special case for binary markets with custom names (e.g. "Trump" vs "Harris")
-    // If it's the 2nd outcome and we have no match, pink is a good "Djinn" default
+    // If it's the 2nd outcome and we have no match, use Red (No default)
     if (index === 1 && !OUTCOME_COLORS[title]) {
-        return "#F492B7"; // Pink
+        return "#EF4444"; // Red (No)
     }
 
     if (index === 0 && !OUTCOME_COLORS[title]) {
-        return "#10B981"; // Green/YES default
+        return "#10B981"; // Green (Yes)
     }
 
     // Default fallback using the index to ensure distinction

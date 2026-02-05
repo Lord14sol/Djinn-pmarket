@@ -3,11 +3,12 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // --- SOLANA IMPORTS PARA SALDO REAL ---
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { LAMPORTS_PER_SOL, PublicKey, Transaction } from '@solana/web3.js';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Share2 } from 'lucide-react';
 import { AreaClosed, LinePath } from '@visx/shape';
 import { scaleLinear } from '@visx/scale';
 import { curveMonotoneX } from '@visx/curve';
@@ -24,6 +25,8 @@ import { AnimatedNumber } from '@/components/AnimatedNumber';
 import ImageCropper from '@/components/ImageCropper';
 import { usePrice } from '@/lib/PriceContext';
 import { getSpotPrice } from '@/lib/core-amm';
+import { useSound } from '@/components/providers/SoundProvider';
+import ShareExperience from '@/components/ShareExperience';
 
 // Helper format function
 function formatCompact(num: number) {
@@ -36,6 +39,7 @@ function formatCompact(num: number) {
 export default function ProfilePage() {
     const params = useParams();
     const router = useRouter();
+    const { play } = useSound();
 
     // SOLANA HOOKS
     const { connection } = useConnection();
@@ -187,6 +191,7 @@ export default function ProfilePage() {
         }
     }, [targetWalletAddress]);
 
+    const [showShareModal, setShowShareModal] = useState(false);
     // ... rest of existing state
 
     // 2. CARGA DE PERFIL ROBUSTA (Separation of Concern: Viewer vs Subject)
@@ -611,6 +616,7 @@ export default function ProfilePage() {
             medals: tempMedals // Save the new medals order
         };
         updateAndSave(updated);
+        play('success');
         setIsEditModalOpen(false);
     };
 
@@ -629,6 +635,8 @@ export default function ProfilePage() {
         if (gemReward > 0 && publicKey) {
             supabaseDb.addGems(publicKey.toBase58(), gemReward);
         }
+
+        play('success');
 
         const updated = {
             ...profile,
@@ -649,12 +657,14 @@ export default function ProfilePage() {
             if (publicKey && ['GOLD_TROPHY', 'LEGENDARY_TRADER', 'FIRST_MARKET', 'APEX_PREDATOR'].includes(medal)) {
                 await supabaseDb.grantAchievement(publicKey.toBase58(), medal);
             }
+            play('toggle');
         }
     };
 
     const removeMedal = (index: number) => {
         const newMedals = profile.medals.filter((_, i) => i !== index);
         updateAndSave({ ...profile, medals: newMedals });
+        play('toggle');
     };
 
     const handleToggleFollow = async () => {
@@ -681,6 +691,7 @@ export default function ProfilePage() {
             console.error("Follow error:", err);
         } finally {
             setIsFollowLoading(false);
+            play('click');
         }
     };
 
@@ -805,19 +816,36 @@ export default function ProfilePage() {
                                     })}
                                 </div>
 
-                                {/* EDIT BUTTON */}
                                 {isMyProfile && (
-                                    <button
-                                        onClick={() => {
-                                            setTempName(profile.username);
-                                            setTempBio(profile.bio);
-                                            setTempPfp(profile.pfp);
-                                            setIsEditModalOpen(true);
-                                        }}
-                                        className="border-3 border-black bg-white text-black px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest hover:translate-y-1 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center gap-2"
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => {
+                                                setTempName(profile.username);
+                                                setTempBio(profile.bio);
+                                                setTempPfp(profile.pfp);
+                                                setIsEditModalOpen(true);
+                                            }}
+                                            className="border-3 border-black bg-white text-black px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest hover:translate-y-1 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center gap-2"
+                                        >
+                                            <span>✎</span> Edit Profile
+                                        </button>
+                                        <motion.button
+                                            layoutId="share-experience"
+                                            onClick={() => setShowShareModal(true)}
+                                            className="border-3 border-black bg-[#F492B7] text-black px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest hover:translate-y-1 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center gap-2"
+                                        >
+                                            <Share2 size={14} /> Share
+                                        </motion.button>
+                                    </div>
+                                )}
+                                {!isMyProfile && (
+                                    <motion.button
+                                        layoutId="share-experience"
+                                        onClick={() => setShowShareModal(true)}
+                                        className="border-3 border-black bg-white/10 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest hover:translate-y-1 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center gap-2"
                                     >
-                                        <span>✎</span> Edit Profile
-                                    </button>
+                                        <Share2 size={14} /> Share Profile
+                                    </motion.button>
                                 )}
                             </div>
 
@@ -1004,6 +1032,23 @@ export default function ProfilePage() {
                     </div>
                 </div>
             )}
+            {/* SHARE EXPERIENCE INTEGRATION */}
+            <ShareExperience
+                isOpen={showShareModal}
+                onClose={() => setShowShareModal(false)}
+                layoutId="share-experience"
+                data={{
+                    title: `${profile.username}'s Journey`,
+                    username: profile.username,
+                    imageUrl: profile.pfp,
+                    stats: [
+                        { label: 'Profit', value: (profile.profit || 0).toFixed(2) + ' SOL' },
+                        { label: 'Win Rate', value: (profile.winRate || 0).toFixed(0) + '%' },
+                        { label: 'Portfolio', value: (profile.portfolio || 0).toFixed(2) + ' SOL' }
+                    ],
+                    qrValue: typeof window !== 'undefined' ? window.location.href : `https://djinn.market/profile/${profile.username}`
+                }}
+            />
         </main>
     );
 }
@@ -1083,8 +1128,7 @@ function MarketCard({ market, router }: any) {
     );
 }
 
-function BetCard({ bet, onCashOut, router }: any) {
-    const [showShareModal, setShowShareModal] = useState(false);
+function BetCard({ bet, onCashOut, router, setShowShareModal }: any) {
     const isPositive = bet.profit >= 0;
 
     const handleShare = (e: any) => {
@@ -1168,89 +1212,18 @@ function BetCard({ bet, onCashOut, router }: any) {
                         >
                             Sell
                         </button>
-                        <button
+                        <motion.button
+                            layoutId="share-experience"
                             onClick={handleShare}
                             className="bg-[#F492B7] hover:bg-[#FFB6C1] border-3 border-black text-black w-12 flex items-center justify-center rounded-xl transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
                         >
-                            📤
-                        </button>
+                            <Share2 size={16} />
+                        </motion.button>
                     </div>
 
                 </div>
             </div>
 
-            {/* SHARE MODAL (Preserved) */}
-            {showShareModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/90 backdrop-blur-xl" onClick={(e) => { e.stopPropagation(); setShowShareModal(false); }}>
-                    <div className="relative" onClick={(e) => e.stopPropagation()}>
-                        {/* Share Card Preview */}
-                        <div className="w-[400px] bg-gradient-to-br from-[#0D0D0D] to-black border border-white/20 rounded-3xl p-8 relative overflow-hidden">
-                            {/* Background glow */}
-                            <div className={`absolute top-0 right-0 w-40 h-40 ${isPositive ? 'bg-[#10B981]/20' : 'bg-red-500/20'} rounded-full blur-3xl pointer-events-none`}></div>
-
-                            {/* Djinn Branding */}
-                            <div className="flex items-center gap-2 mb-6">
-                                <img src="/star.png" alt="Djinn" className="w-10 h-10" />
-                                <span className="text-xl font-bold text-white" style={{ fontFamily: 'var(--font-adriane), serif' }}>Djinn</span>
-                            </div>
-
-                            {/* Position */}
-                            <div className="relative z-10">
-                                <span className={`text-xs font-black px-3 py-1.5 rounded-lg ${bet.side === 'YES' ? 'bg-[#10B981]/20 text-[#10B981]' : 'bg-red-500/20 text-red-500'}`}>
-                                    {bet.side}
-                                </span>
-                                <h3 className="text-xl font-bold text-white mt-4 mb-6 leading-tight">{bet.title}</h3>
-
-                                {/* Stats Grid */}
-                                <div className="grid grid-cols-3 gap-4 mb-6">
-                                    <div className="text-center">
-                                        <p className="text-gray-500 text-[10px] uppercase mb-1">Invested</p>
-                                        <p className="text-white text-lg font-black">${bet.invested}</p>
-                                    </div>
-                                    <div className="text-center">
-                                        <p className="text-gray-500 text-[10px] uppercase mb-1">Value</p>
-                                        <p className="text-white text-lg font-black">${bet.current.toFixed(2)}</p>
-                                    </div>
-                                    <div className="text-center">
-                                        <p className="text-gray-500 text-[10px] uppercase mb-1">Return</p>
-                                        <p className={`text-lg font-black ${isPositive ? 'text-[#10B981]' : 'text-red-500'}`}>{bet.change}</p>
-                                    </div>
-                                </div>
-
-                                {/* Big Profit */}
-                                <div className={`text-center py-6 rounded-2xl ${isPositive ? 'bg-[#10B981]/10' : 'bg-red-500/10'}`}>
-                                    <p className={`text-5xl font-[900] ${isPositive ? 'text-[#10B981]' : 'text-red-500'}`}>
-                                        {isPositive ? '+' : ''}{bet.change}
-                                    </p>
-                                    <p className="text-gray-500 text-xs mt-2 uppercase">Profit/Loss</p>
-                                </div>
-
-                                {/* Footer */}
-                                <div className="flex items-center justify-center gap-2 mt-6 pt-4 border-t border-white/10">
-                                    <span className="text-gray-500 text-xs">Trade on</span>
-                                    <span className="text-[#F492B7] font-bold text-sm">djinn.markets</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Actions */}
-                        <div className="flex gap-3 mt-4">
-                            <button
-                                onClick={handleCopyShare}
-                                className="flex-1 bg-[#F492B7] text-black py-3 rounded-xl font-black text-sm uppercase hover:brightness-110 transition-all"
-                            >
-                                📋 Copy Text
-                            </button>
-                            <button
-                                onClick={() => setShowShareModal(false)}
-                                className="flex-1 bg-white/10 text-white py-3 rounded-xl font-black text-sm uppercase hover:bg-white/20 transition-all"
-                            >
-                                Close
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </>
     );
 }

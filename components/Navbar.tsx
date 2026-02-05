@@ -8,21 +8,22 @@ import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { useCategory } from '@/lib/CategoryContext';
 import { useModal } from '@/lib/ModalContext';
+import { useAchievement } from '@/lib/AchievementContext'; // ADDED IMPORT
 import OnboardingModal from './OnboardingModal';
 import CustomWalletModal from './CustomWalletModal';
 import CategoryMegaMenu from './CategoryMegaMenu';
 import WalletProfileMenu from './WalletProfileMenu';
 import GlobalSearch from './GlobalSearch';
 import ClaimUsernameModal from './ClaimUsernameModal';
+import { useSound } from '@/components/providers/SoundProvider';
+import MorphingIcon from '@/components/ui/MorphingIcon';
+import { motion, AnimatePresence } from 'framer-motion';
 
 
 // ... (existing imports)
 
 // ... inside NavbarContent ...
-const MenuIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>);
-const CloseIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>);
-const PodiumIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 18.75h-9m9 0a3 3 0 013 3h-15a3 3 0 013-3m9 0v-3.375c0-.621-.503-1.125-1.125-1.125h-.871M7.5 18.75v-3.375c0-.621.504-1.125 1.125-1.125h.872m5.007 0V9.499a2.25 2.25 0 00-2.25-2.25H11.25a2.25 2.25 0 00-2.25 2.25v5.751m5.007 0H13.5m-2.25 0H9.986" /></svg>);
-const ActivityIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z" /></svg>);
+// Premium Morphing Icons replaced static ones
 // Removed unused icons
 
 const mainCategories = ["Trending", "New", "Earth", "Politics", "Crypto", "Sports", "Culture", "Tech", "Science", "Finance", "Climate", "Mentions", "Movies", "AI", "Gaming", "Music"];
@@ -36,6 +37,8 @@ function NavbarContent() {
     const [username, setUsername] = useState<string>("User");
     const [balance, setBalance] = useState<number>(0);
     const { openCreateMarket, openActivityFeed } = useModal();
+    const { unlockAchievement } = useAchievement(); // HOOK USED HERE
+    const { play } = useSound();
     const router = useRouter();
     const pathname = usePathname();
 
@@ -117,11 +120,43 @@ function NavbarContent() {
     };
 
     // Handler for successful claim
-    const handleClaimSuccess = (newUsername: string) => {
+    const handleClaimSuccess = async (newUsername: string) => {
         setIsClaimModalOpen(false);
         setUsername(newUsername);
         setUserPfp('/pink-pfp.png'); // Default pfp
         console.log('🎉 Profile Created:', newUsername);
+
+        // TRIGGER GENESIS ACHIEVEMENT INSTANTLY
+        if (connected && publicKey) {
+            try {
+                // Check eligibility one last time
+                const { getWhitelistStatus } = await import('@/lib/whitelist');
+                const status = await getWhitelistStatus(publicKey.toBase58());
+                const { getUserAchievements, grantAchievement } = await import('@/lib/supabase-db');
+
+                // If eligible and doesn't have it yet
+                if (status.isRegistered || status.isAdmin) {
+                    const achievements = await getUserAchievements(publicKey.toBase58());
+                    if (!achievements.some(a => a.code === 'GENESIS_MEMBER')) {
+
+                        // Show visual pop-up immediately
+                        unlockAchievement({
+                            name: "Genesis Member",
+                            description: "One of the first 1000 Djinn users",
+                            image_url: "/genesis-medal-v2.png"
+                        });
+
+                        // Persist in DB
+                        grantAchievement(publicKey.toBase58(), 'GENESIS_MEMBER');
+
+                        // Mark local flag to prevent LayoutWrapper from firing again
+                        localStorage.setItem(`djinn_genesis_notified_v16_${publicKey.toBase58()}`, 'true');
+                    }
+                }
+            } catch (e) {
+                console.error("Error triggering instant achievement:", e);
+            }
+        }
     };
 
     // Handler for closing claim (disconnect to prevent limbd)
@@ -190,7 +225,6 @@ function NavbarContent() {
     }, [connected, publicKey]);
 
     // AUTO-OPEN MENU ON CONNECTION
-    // AUTO-OPEN MENU ON CONNECTION (ONCE PER SESSION)
     useEffect(() => {
         if (connected) {
             // Check if we already auto-opened the menu in this session
@@ -248,12 +282,17 @@ function NavbarContent() {
                     <div className="flex items-center gap-4">
                         <div className="hidden sm:flex items-center gap-4">
                             {/* Botón Create Market estilo "Teclado" Pink */}
-                            <button
-                                onClick={openCreateMarket}
+                            <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => {
+                                    openCreateMarket();
+                                    play('click');
+                                }}
                                 className="bg-[#F492B7] text-black text-sm font-black py-3 px-6 rounded-xl hover:brightness-110 active:scale-95 transition-all uppercase tracking-wide shadow-lg"
                             >
                                 Create a Market
-                            </button>
+                            </motion.button>
 
                             {/* HYDRATION FIX: Only render wallet state after mount */}
                             {!mounted ? (
@@ -264,7 +303,7 @@ function NavbarContent() {
                             ) : !connected ? (
                                 /* Desconectado */
                                 <button
-                                    onClick={() => setIsWalletModalOpen(true)}
+                                    onClick={() => { setIsWalletModalOpen(true); play('click'); }}
                                     className="px-5 py-2.5 rounded-xl bg-white text-black border-2 border-black text-[11px] font-black uppercase tracking-wider shadow-[4px_4px_0px_0px_#F492B7] hover:translate-y-1 hover:shadow-[2px_2px_0px_0px_#F492B7] active:translate-y-1 active:shadow-none transition-all duration-300"
                                 >
                                     Connect Wallet
@@ -322,12 +361,17 @@ function NavbarContent() {
 
                                     {/* HAMBURGER MENU - PINK KEYCAP */}
                                     <div className="relative">
-                                        <button
-                                            onClick={() => setIsNavMenuOpen(!isNavMenuOpen)}
+                                        <motion.button
+                                            whileHover={{ scale: 1.05 }}
+                                            whileTap={{ scale: 0.95 }}
+                                            onClick={() => {
+                                                setIsNavMenuOpen(!isNavMenuOpen);
+                                                play('toggle');
+                                            }}
                                             className="p-2 text-black bg-[#F492B7] rounded-xl hover:brightness-110 active:scale-95 transition-all shadow-lg"
                                         >
-                                            <MenuIcon />
-                                        </button>
+                                            <MorphingIcon type={isNavMenuOpen ? "close" : "menu"} size={24} />
+                                        </motion.button>
 
                                         {/* DROPDOWN MENU */}
                                         {isNavMenuOpen && (
@@ -339,7 +383,7 @@ function NavbarContent() {
                                                         onClick={() => setIsNavMenuOpen(false)}
                                                         className="w-full flex items-center gap-3 px-5 py-3 text-white hover:text-black hover:bg-[#F492B7] transition-all text-sm font-bold group"
                                                     >
-                                                        <PodiumIcon />
+                                                        <MorphingIcon type="leaderboard" size={18} />
                                                         <span>Leaderboard</span>
                                                     </Link>
                                                     <Link
@@ -347,7 +391,7 @@ function NavbarContent() {
                                                         onClick={() => setIsNavMenuOpen(false)}
                                                         className="w-full flex items-center gap-3 px-5 py-3 text-white hover:text-black hover:bg-[#F492B7] transition-all text-sm font-bold group text-left"
                                                     >
-                                                        <ActivityIcon />
+                                                        <MorphingIcon type="activity" size={18} />
                                                         <span>Activity Feed</span>
                                                     </Link>
 

@@ -29,11 +29,27 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
                 // 1. Check localStorage AND session ref (fast skip)
                 if (localStorage.getItem(flagKey) || genesisTriggeredRef.current === walletAddr) return;
 
-                // Mark as triggered EARLY to prevent race conditions
+                // 🔴 STRICT TRIGGER CHECK:
+                // 1. MUST NOT be on Landing Page ('/')
+                // 2. MUST have a profile (username claimed)
+                if (pathname === '/') return;
+
+                // Mark as checked for this session to avoid spamming calls
                 genesisTriggeredRef.current = walletAddr;
 
-                // 2. Check if user is in Genesis whitelist (primeros 1000)
                 try {
+                    // Check if profile exists (meaning they finished onboarding)
+                    const { getProfile } = await import('@/lib/supabase-db');
+                    const profile = await getProfile(walletAddr);
+
+                    if (!profile || !profile.username) {
+                        // User hasn't claimed username yet. Do NOT trigger.
+                        // Reset ref so we check again later (e.g. after reload)
+                        genesisTriggeredRef.current = null;
+                        return;
+                    }
+
+                    // 2. Check if user is in Genesis whitelist (primeros 1000)
                     const { getWhitelistStatus } = await import('@/lib/whitelist');
                     const status = await getWhitelistStatus(walletAddr);
 
@@ -73,6 +89,7 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
                     try {
                         localStorage.setItem(flagKey, 'true');
                     } catch (e) {
+                        // LocalStorage quota handling
                         if (e instanceof Error && e.name === 'QuotaExceededError') {
                             try {
                                 Object.keys(localStorage).forEach(k => {
@@ -84,7 +101,7 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
                             } catch (retryErr) { }
                         }
                     }
-                }, 3000);
+                }, 1000); // Faster popup (1s)
 
                 return () => clearTimeout(timer);
             };
@@ -96,7 +113,7 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
         } else if (!connected) {
             genesisTriggeredRef.current = null;
         }
-    }, [connected, publicKey, unlockAchievement]);
+    }, [connected, publicKey, unlockAchievement, pathname]); // Added pathname dependency to re-check on route change
 
     useEffect(() => {
         const checkAccess = async () => {

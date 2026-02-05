@@ -13,6 +13,8 @@ import { AchievementProvider } from "@/lib/AchievementContext";
 import AchievementNotification from "@/components/achievements/AchievementNotification";
 import MinecraftAchievement from "@/components/achievements/MinecraftAchievement";
 import WalletSuccessModal from "@/components/WalletSuccessModal";
+import { SoundProvider } from "@/components/providers/SoundProvider";
+import { MotionConfig } from "framer-motion";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -90,19 +92,23 @@ export default function RootLayout({
           <React.Suspense fallback={null}>
             <CategoryProvider>
               <AchievementProvider>
-                <ModalProvider>
-                  <PriceProvider>
-                    <LayoutWrapper>
-                      <AchievementNotification />
-                      <MinecraftAchievement />
-                      <WalletSuccessModal />
-                      <main className="flex-grow relative z-10">
-                        {children}
-                      </main>
-                    </LayoutWrapper>
-                    <Footer />
-                  </PriceProvider>
-                </ModalProvider>
+                <PriceProvider>
+                  <SoundProvider>
+                    <MotionConfig transition={{ type: "spring", stiffness: 500, damping: 30, mass: 1 }}>
+                      <ModalProvider>
+                        <LayoutWrapper>
+                          <AchievementNotification />
+                          <MinecraftAchievement />
+                          <WalletSuccessModal />
+                          <main className="flex-grow relative z-10">
+                            {children}
+                          </main>
+                        </LayoutWrapper>
+                      </ModalProvider>
+                    </MotionConfig>
+                  </SoundProvider>
+                  <Footer />
+                </PriceProvider>
               </AchievementProvider>
             </CategoryProvider>
           </React.Suspense>

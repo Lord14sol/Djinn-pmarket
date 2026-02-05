@@ -446,39 +446,20 @@ export default React.memo(function ProbabilityChart({
     }, [timeframe, filteredData]);
 
     return (
-        <div className="w-full h-full flex flex-col relative group">
-            {/* FULLY TRANSPARENT - No background, shows stars */}
+        <div className="w-full h-full flex flex-col relative">
+            {/* POLYMARKET STYLE: Minimal overlays */}
 
-            {/* BRAND HEADER */}
-            <div className="absolute top-4 right-4 z-20 flex items-center gap-0 pointer-events-none">
-                <div className="relative w-12 h-12 -mr-1.5">
-                    <Image src="/djinn-logo.png?v=3" alt="Djinn Logo" fill className="object-contain" priority unoptimized />
-                </div>
-                <span className="text-2xl text-white mt-0.5 relative z-10 drop-shadow-lg" style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}>
-                    Djinn
-                </span>
-            </div>
-
-            {/* VOLUME */}
-            <div className="absolute bottom-2 left-4 z-30 pointer-events-none">
-                {volume && (
-                    <span className="bg-white/10 backdrop-blur-md border-2 border-white/30 px-3 py-1.5 rounded-lg text-sm font-black text-white font-mono tracking-tight uppercase">
-                        {volume} <span className="text-white/70 ml-0.5">vol</span>
-                    </span>
-                )}
-            </div>
-
-            {/* TIMEFRAMES - TRANSPARENT */}
-            <div className="absolute bottom-2 right-4 z-30 flex gap-1 pointer-events-auto">
-                {['1m', '5m', '15m', '1H', '6H', '1D', '1W', '1M', 'ALL'].map((tf) => (
+            {/* TIMEFRAMES - Polymarket pill style */}
+            <div className="absolute top-4 left-4 z-30 flex gap-1 pointer-events-auto">
+                {['1H', '1D', '1W', '1M', 'ALL'].map((tf) => (
                     <button
                         key={tf}
                         onClick={() => setTimeframe(tf as any)}
                         className={cn(
-                            "px-2.5 py-1.5 rounded-lg text-[10px] font-black transition-all whitespace-nowrap cursor-pointer border-2 backdrop-blur-md",
+                            "px-3 py-1.5 rounded-full text-xs font-semibold transition-all",
                             timeframe === tf
-                                ? "bg-white text-black border-white"
-                                : "bg-white/10 text-white border-white/30 hover:bg-white/20 hover:border-white/50"
+                                ? "bg-gray-900 text-white"
+                                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                         )}
                     >
                         {tf}
@@ -486,18 +467,17 @@ export default React.memo(function ProbabilityChart({
                 ))}
             </div>
 
-            <div className="absolute top-4 left-4 z-20 flex flex-wrap items-center gap-3 pointer-events-none">
+            {/* OUTCOMES LEGEND - Polymarket style (top left) */}
+            <div className="absolute top-16 left-4 z-20 flex flex-col gap-2 pointer-events-none">
                 {outcomeKeys.map((title, idx) => {
                     const color = getOutcomeColor(title, idx);
                     const val = displayProbs[title] ?? 0;
                     return (
-                        <div key={title} className="flex items-center gap-2 bg-white/10 backdrop-blur-md border-2 border-white/30 px-3 py-1.5 rounded-lg">
-                            <div className="flex items-center gap-1.5">
-                                <div className="w-3 h-3 rounded-full border-2 border-white" style={{ backgroundColor: color }} />
-                                <span className="text-xs font-black text-white uppercase tracking-wider">{title}</span>
-                            </div>
-                            <span className="text-lg font-black tabular-nums tracking-tight leading-none" style={{ color: color }}>
-                                {val.toFixed(0)}<span className="text-[10px] align-top opacity-70 ml-0.5 text-white">%</span>
+                        <div key={title} className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+                            <span className="text-sm font-semibold text-gray-700">{title}</span>
+                            <span className="text-2xl font-bold tabular-nums text-gray-900">
+                                {val.toFixed(0)}<span className="text-sm text-gray-500 ml-0.5">%</span>
                             </span>
                         </div>
                     );
@@ -539,10 +519,10 @@ export default React.memo(function ProbabilityChart({
                     >
                         <CartesianGrid
                             vertical={false}
-                            stroke="#ffffff"
-                            strokeOpacity={0.3}
+                            stroke="#e5e7eb"
+                            strokeOpacity={0.5}
                             strokeWidth={1}
-                            strokeDasharray="4 4"
+                            strokeDasharray="0"
                         />
                         <XAxis
                             dataKey="time"
@@ -552,7 +532,7 @@ export default React.memo(function ProbabilityChart({
                             axisLine={false}
                             tickLine={false}
                             tickFormatter={(timestamp) => formatTimeLabel(timestamp, timeframe)}
-                            tick={{ fill: '#ffffff', fontSize: 12, fontWeight: 700 }}
+                            tick={{ fill: '#9ca3af', fontSize: 11, fontWeight: 500 }}
                             minTickGap={50}
                         />
                         <YAxis
@@ -562,9 +542,9 @@ export default React.memo(function ProbabilityChart({
                             allowDataOverflow={true}
                             axisLine={false}
                             tickLine={false}
-                            tick={{ fill: '#ffffff', fontSize: 11, fontWeight: 700 }}
+                            tick={{ fill: '#9ca3af', fontSize: 11, fontWeight: 500 }}
                             tickFormatter={(val) => `${val}%`}
-                            width={35}
+                            width={40}
                         />
                         <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#ffffff', strokeWidth: 2, strokeDasharray: '5 5' }} />
                         {outcomeKeys.map((title, idx) => {
@@ -587,7 +567,7 @@ export default React.memo(function ProbabilityChart({
                                     isAnimationActive={false}
                                     animationDuration={0}
                                     connectNulls
-                                    style={{ cursor: 'pointer', filter: `drop-shadow(0 0 4px ${color})` }}
+                                    style={{ cursor: 'pointer' }}
                                     onClick={() => onOutcomeChange?.(title)}
                                 />
                             );

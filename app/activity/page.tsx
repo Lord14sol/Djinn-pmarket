@@ -7,6 +7,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { ArrowLeft, ExternalLink, Activity, Clock, TrendingUp, TrendingDown, Filter } from 'lucide-react';
 import { getGlobalActivities, getProfile } from '@/lib/supabase-db';
 import StarBackground from '@/components/ui/StarBackground';
+import { useSound } from '@/components/providers/SoundProvider';
 
 // Mock SOL Price (or fetch real)
 const SOL_PRICE = 185;
@@ -25,6 +26,7 @@ const TYPE_FILTERS = ['All', 'Buys', 'Sells'];
 
 export default function ActivityPage() {
     const [activities, setActivities] = useState<any[]>([]);
+    const { play } = useSound();
     const [loading, setLoading] = useState(true);
     const [profiles, setProfiles] = useState<Record<string, any>>({});
 
@@ -116,7 +118,7 @@ export default function ActivityPage() {
                             {TYPE_FILTERS.map(type => (
                                 <button
                                     key={type}
-                                    onClick={() => setTypeFilter(type)}
+                                    onClick={() => { setTypeFilter(type); play('toggle'); }}
                                     className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase transition-all border-2 relative overflow-hidden ${typeFilter === type
                                         ? type === 'Buys'
                                             ? 'bg-[#10B981] border-black text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
@@ -146,7 +148,7 @@ export default function ActivityPage() {
                             {SIZE_FILTERS.map(filter => (
                                 <button
                                     key={filter.label}
-                                    onClick={() => setSizeFilter(filter)}
+                                    onClick={() => { setSizeFilter(filter); play('toggle'); }}
                                     className={`px-2 py-1 rounded-full text-[10px] font-black transition-all border-2 ${sizeFilter.label === filter.label
                                         ? 'bg-[#F492B7] border-black text-black shadow-[2px_2px_0px_0px_#FFF]'
                                         : 'bg-transparent border-gray-700 text-gray-500 hover:text-white hover:border-gray-500'

@@ -9,8 +9,9 @@ import { uploadToIPFS } from '@/lib/ipfs';
 import { checkMarketMilestones, createMarket, updateMarketPrice } from '@/lib/supabase-db';
 import AchievementToast from './AchievementToast';
 import { useRouter } from 'next/navigation';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ExternalLink } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { useSound } from './providers/SoundProvider';
 
 // --- ICONS ---
 const CloseIcon = () => (
@@ -43,12 +44,19 @@ const COLORS = [
     "#D946EF", // Fuchsia
     "#F43F5E", // Rose
     "#0EA5E9", // Sky
+    "#FACC15", // Yellow
+    "#A855F7", // Bright Purple
+    "#22C55E", // Bright Green
+    "#FB923C", // Bright Orange
+    "#F472B6", // Bright Pink
+    "#34D399", // Emerald
 ];
 
 export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModalProps) {
     const router = useRouter();
     const wallet = useWallet();
     const { publicKey } = wallet;
+    const { play } = useSound();
     const { createMarket: createMarketOnChain, isReady: isContractReady } = useDjinnProtocol();
 
     const [isLoading, setIsLoading] = useState(false);
@@ -277,6 +285,9 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                 slug
             });
 
+            // 🎉 FIREWORKS SOUND
+            play('fireworks');
+
             // 🎉 FIRE CONFETTI - Intense Burst from Center
             const duration = 1.5 * 1000;
             const animationEnd = Date.now() + duration;
@@ -407,12 +418,24 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                         </div>
 
                         {/* Action Primary */}
-                        <button
-                            onClick={() => { onClose(); router.push(`/market/${successData.slug}`); }}
-                            className="w-full py-4 bg-[#F492B7] border-2 border-black rounded-xl font-black text-xl uppercase text-black hover:bg-[#ff85b0] hover:-translate-y-1 hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-0 active:shadow-none transition-all mb-3 flex items-center justify-center gap-2"
-                        >
-                            Open Market
-                        </button>
+                        <div className="w-full space-y-3">
+                            <button
+                                onClick={() => { play('click'); onClose(); router.push(`/market/${successData.slug}`); }}
+                                className="w-full py-4 bg-[#F492B7] border-2 border-black rounded-xl font-black text-xl uppercase text-black hover:bg-[#ff85b0] hover:-translate-y-1 hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-0 active:shadow-none transition-all flex items-center justify-center gap-2"
+                            >
+                                Open Market
+                            </button>
+
+                            <a
+                                href={`https://solscan.io/tx/${successData.txSignature}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={() => play('click')}
+                                className="w-full py-3 bg-white border-2 border-black rounded-xl font-black text-xs uppercase text-black/60 hover:text-black hover:bg-gray-50 hover:-translate-y-1 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0 active:shadow-none transition-all flex items-center justify-center gap-2"
+                            >
+                                <ExternalLink size={14} /> View on Solscan
+                            </a>
+                        </div>
                     </div>
                 ) : (
                     /* --- FORM MODE --- */

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
 import { formatCompact, parseCompactNumber, getOutcomeValue, cn } from '@/lib/utils';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
@@ -12,9 +13,9 @@ import Link from 'next/link';
 import { useDjinnProtocol } from '@/hooks/useDjinnProtocol';
 import { simulateBuy, simulateSell, estimatePayoutInternal, getSpotPrice, calculateImpliedProbability, getIgnitionProgressMcap, getIgnitionStatusMcap } from '@/lib/core-amm';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
-
-import { AnimatePresence, motion } from 'framer-motion';
 import { useMarketData } from '@/hooks/useMarketData';
+import { useSound } from '@/components/providers/SoundProvider';
+import MorphingIcon from '@/components/ui/MorphingIcon';
 
 // Components
 import PrettyChart from '@/components/market/PrettyChart';
@@ -23,7 +24,7 @@ import TheDjinnChart from '@/components/market/TheDjinnChart';
 import CommentsSection from '@/components/market/CommentsSection';
 import OutcomeList, { Outcome } from '@/components/market/OutcomeList';
 import PurchaseToast from '@/components/market/PurchaseToast';
-import ShareModal from '@/components/market/ShareModal';
+import ShareExperience from '@/components/ShareExperience';
 import DjinnToast, { DjinnToastType } from '@/components/ui/DjinnToast';
 import { usePrice } from '@/lib/PriceContext';
 import * as supabaseDb from '@/lib/supabase-db';
@@ -71,7 +72,6 @@ const marketDisplayData: Record<string, any> = {
 
 
 // Generate chart data for single outcome with Bonding Curve "Origin" logic
-// Generate chart data for single outcome with Bonding Curve "Origin" logic
 
 
 // ... (Multi-outcome generator removed or simplified if unused, but let's keep consistent)
@@ -84,9 +84,8 @@ export default function Page() {
     const { publicKey, signTransaction } = useWallet();
     const { connection } = useConnection();
     const { program, buyShares, sellShares, isReady: isContractReady } = useDjinnProtocol();
+    const { play } = useSound();
 
-    // --- STATE ---
-    // Market Data
     // --- STATE ---
     // Market Data
     const { marketData, marketInfo, activityList, holders, isLoading: isMarketLoading, refreshAll, mutateActivity, mutateHolders, mutateMarketData } = useMarketData(slug);
@@ -494,7 +493,7 @@ export default function Page() {
     const [isSuccess, setIsSuccess] = useState(false);
     const [tradeSuccessInfo, setTradeSuccessInfo] = useState<{ shares: number; side: string; txSignature: string } | null>(null);
 
-    const [lastTradeEvent, setLastTradeEvent] = useState<{ id: string; amount: number; side: 'YES' | 'NO'; title?: string; color?: string; } | null>(null);
+    const [lastTradeEvent, setLastTradeEvent] = useState<{ id: string; amount: number; side: 'YES' | 'NO'; outcome?: string; title?: string; color?: string } | null>(null);
     const [tradeMode, setTradeMode] = useState<'BUY' | 'SELL'>('BUY');
     const [isMaxSell, setIsMaxSell] = useState(false);
     const [showPurchaseToast, setShowPurchaseToast] = useState(false);
@@ -1927,11 +1926,15 @@ export default function Page() {
             const finalSharesToSell = (sharesToSell >= availableShares || isMaxSell) ? availableShares : sharesToSell;
 
             if (finalSharesToSell <= 0) {
-                return setDjinnToast({ isVisible: true, type: 'ERROR', title: 'No Shares', message: `You don't hold any ${selectedSide} PREDICTIONS to sell!` });
+                const outcomeLabel = isMultiOutcome ? (selectedOutcomeName || 'Outcome') : selectedSide;
+                return setDjinnToast({ isVisible: true, type: 'ERROR', title: 'No Shares', message: `You don't hold any ${outcomeLabel} PREDICTIONS to sell!` });
             }
 
             setIsPending(true);
             try {
+                // Initial success chime
+                play('success');
+
                 let txSignature = '';
                 const isRealMarket = marketAccount?.market_pda && !marketAccount.market_pda.startsWith('local_');
 
@@ -2215,7 +2218,8 @@ export default function Page() {
                 setLastTradeEvent({
                     id: Date.now().toString(),
                     amount: estimatedSolReturn,
-                    side: selectedSide
+                    side: selectedSide,
+                    outcome: selectedSide // Correct property name for the local state
                 });
 
                 // 5. Optimistic SWR Update to prevent "Reversion" to 50%
@@ -2312,754 +2316,573 @@ export default function Page() {
 
     return (
         <div className="min-h-screen bg-transparent text-white font-sans selection:bg-[#F492B7] selection:text-black overflow-x-hidden">
-
-            {/* Navbar */}
             <Navbar />
-
-            {/* Content Container */}
             <div className="container mx-auto px-4 pt-24 pb-12 max-w-7xl relative z-10">
 
-
-
-
-                {/* HEADER (Restored to Top) */}
-                <div className="flex flex-col lg:flex-row gap-12 items-start relative">
-                    {/* LEFT COLUMN: Header + Chart + Info */}
-                    <div className="flex-1 min-w-0 flex flex-col gap-8 w-full">
-
-                        {/* PREMIUM HEADER - MATCHING SCREENSHOT */}
-                        <div className="flex flex-col md:flex-row items-start gap-8 relative">
-                            {/* 1. LEFT: Banner Image */}
-                            <div className="w-48 h-48 md:w-64 md:h-64 rounded-[2.5rem] overflow-hidden shrink-0 group relative mt-4">
+                {/* 1. HEADER SECTION (FADE IN) */}
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                    className="flex flex-col lg:flex-row gap-12 items-start relative mb-20"
+                >
+                    <div className="flex-1 min-w-0 flex flex-col gap-12 w-full">
+                        <div className="flex flex-col md:flex-row items-center md:items-start gap-10 relative">
+                            {/* Banner */}
+                            <motion.div
+                                whileHover={{ scale: 1.02 }}
+                                className="w-56 h-56 md:w-72 md:h-72 rounded-[3.5rem] overflow-hidden shrink-0 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] bg-white relative"
+                            >
                                 {(marketAccount?.banner_url || (typeof staticMarketInfo.icon === 'string' && (staticMarketInfo.icon.startsWith('http') || staticMarketInfo.icon.startsWith('data:')))) ?
-                                    <img
-                                        src={marketAccount?.banner_url || staticMarketInfo.icon}
-                                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                                        alt="Market banner"
-                                    />
-                                    : <div className="w-full h-full flex items-center justify-center bg-gray-100 text-7xl">
-                                        {staticMarketInfo.icon}
-                                    </div>}
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent pointer-events-none" />
-                            </div>
+                                    <img src={marketAccount?.banner_url || staticMarketInfo.icon} className="w-full h-full object-cover" alt="Banner" />
+                                    : <div className="w-full h-full flex items-center justify-center text-7xl bg-gray-50">{staticMarketInfo.icon}</div>
+                                }
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent pointer-events-none" />
+                            </motion.div>
 
-                            {/* 2. RIGHT: MCAPS + TITLE + CREATOR */}
-                            <div className="flex-1 flex flex-col gap-6 pt-6">
-                                {/* Action Row (Float Top Right) */}
-                                <div className="absolute top-0 right-0 flex items-center gap-2">
-                                    <button onClick={() => setIsStarred(!isStarred)} className="p-3 rounded-full bg-white border-2 border-black hover:bg-[#F492B7] transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none">
-                                        <Star size={18} className={isStarred ? "text-yellow-400 fill-yellow-400" : "text-black"} />
-                                    </button>
-                                    <button onClick={() => setShowShareModal(true)} className="p-3 rounded-full bg-white border-2 border-black hover:bg-[#F492B7] transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none">
-                                        <Share2 size={16} className="text-black" />
-                                    </button>
-                                </div>
+                            {/* Title & Stats Cluster */}
+                            <div className="flex-1 flex flex-col gap-8 pt-6">
+                                {/* Title Area - Jim Raptis Principle: Epic Typography */}
+                                <div className="relative">
+                                    <div className="absolute -top-12 right-0 flex items-center gap-3">
+                                        <motion.button
+                                            whileHover={{ scale: 1.1 }}
+                                            whileTap={{ scale: 0.95 }}
+                                            onClick={() => {
+                                                setIsStarred(!isStarred);
+                                                play('click'); // Standardized sound
+                                            }}
+                                            className="p-3 rounded-full bg-white border-2 border-black hover:bg-[#F492B7] transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none"
+                                        >
+                                            <Star size={20} className={isStarred ? "text-yellow-400 fill-yellow-400" : "text-black"} />
+                                        </motion.button>
+                                        <motion.button
+                                            layoutId="share-experience"
+                                            whileHover={{ scale: 1.1 }}
+                                            whileTap={{ scale: 0.95 }}
+                                            onClick={() => {
+                                                setShowShareModal(true);
+                                                play('click');
+                                            }}
+                                            className="p-3 rounded-full bg-white border-2 border-black hover:bg-[#F492B7] transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none"
+                                        >
+                                            <Share2 size={18} className="text-black" />
+                                        </motion.button>
+                                    </div>
 
-                                {/* TITLE & CREATOR & MCAPS - COMPACT */}
-                                <div className="space-y-4 bg-white border-4 border-black rounded-2xl p-5 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] max-w-[900px]">
-                                    <h1 className="text-3xl lg:text-4xl font-black text-black tracking-tighter leading-tight">
-                                        {marketAccount?.title || staticMarketInfo.title}
-                                    </h1>
+                                    <div className="flex flex-col gap-6">
+                                        <motion.h1
+                                            initial={{ opacity: 0, x: -20 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            transition={{ delay: 0.2 }}
+                                            className="text-5xl lg:text-7xl font-black text-white tracking-tighter leading-none lowercase"
+                                        >
+                                            {marketAccount?.title || staticMarketInfo.title}
+                                        </motion.h1>
 
-                                    <Link href={`/profile/${marketAccount.creator_wallet}`} className="flex items-center gap-2 group w-fit">
-                                        <div className="w-8 h-8 rounded-full overflow-hidden bg-white">
-                                            <img src={creatorDisplay.avatar} className="w-full h-full object-cover" />
+                                        <div className="flex flex-wrap items-center gap-4">
+                                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
+                                                <Link href={`/profile/${marketAccount.creator_wallet}`} className="flex items-center gap-2 group p-2 pr-4 bg-white/5 rounded-full backdrop-blur-md hover:-translate-y-1 transition-all">
+                                                    <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-900">
+                                                        <img src={creatorDisplay.avatar} className="w-full h-full object-cover" />
+                                                    </div>
+                                                    <span className="text-xs font-black text-white/60 uppercase tracking-widest">
+                                                        by <span className="text-white group-hover:underline">{creatorDisplay.username}</span>
+                                                    </span>
+                                                </Link>
+                                            </motion.div>
+
+                                            <div className="px-4 py-2 bg-[#F492B7] border-2 border-black rounded-full shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-[10px] font-black uppercase tracking-widest text-black">
+                                                Verified Market
+                                            </div>
                                         </div>
-                                        <span className="text-xs font-bold text-gray-600">
-                                            by <span className="text-black font-black group-hover:underline">{creatorDisplay.username}</span>
-                                        </span>
-                                    </Link>
-
-                                    {/* MCAPS INLINE - COMPACT */}
-                                    <div className="flex gap-3 pt-3 border-t-2 border-black">
-                                        {marketOutcomes.slice(0, 2).map((outcome, idx) => {
-                                            const color = getOutcomeColor(outcome.title, idx);
-                                            const mcapUSD = (outcome.mcapSOL || 0) * (solPrice || 0);
-                                            return (
-                                                <div key={idx} className="flex-1 bg-gray-50 border-2 border-black px-4 py-3 rounded-xl flex flex-col items-center">
-                                                    <div className="flex items-center gap-1.5 mb-1.5">
-                                                        <div className="w-2.5 h-2.5 rounded-full border-2 border-black" style={{ backgroundColor: color }} />
-                                                        <span className="text-[8px] font-black uppercase tracking-[0.2em] text-black/60">{outcome.title} MCAP</span>
-                                                    </div>
-                                                    <div className="flex flex-col items-center gap-0.5">
-                                                        <span className="text-xl font-black text-black tabular-nums tracking-tighter">
-                                                            <AnimatedNumber value={mcapUSD} decimals={1} prefix="$" />
-                                                        </span>
-                                                        <span className="text-[9px] font-bold text-black/50 uppercase tracking-widest tabular-nums font-mono">
-                                                            {formatCompact(outcome.mcapSOL || 0)} <span className="opacity-50">SOL</span>
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
                                     </div>
                                 </div>
+
+                                {/* MCAPS Cluster */}
+                                <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 }} className="flex gap-6 max-w-[900px]">
+                                    {marketOutcomes.slice(0, 2).map((outcome, idx) => {
+                                        const color = getOutcomeColor(outcome.title, idx);
+                                        const mcapUSD = (outcome.mcapSOL || 0) * (solPrice || 0);
+                                        return (
+                                            <motion.div key={idx} whileHover={{ y: -6, scale: 1.02 }} className="flex-1 bg-white border-4 border-black px-8 py-6 rounded-2xl flex flex-col items-center shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] transition-all">
+                                                <div className="flex items-center gap-2 mb-3">
+                                                    <div className="w-3 h-3 rounded-full border-2 border-black" style={{ backgroundColor: color }} />
+                                                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-black/60">{outcome.title} MCAP</span>
+                                                </div>
+                                                <div className="flex flex-col items-center">
+                                                    <span className="text-3xl font-black text-black tabular-nums tracking-tighter">
+                                                        <AnimatedNumber value={mcapUSD} decimals={1} prefix="$" />
+                                                    </span>
+                                                    <span className="text-xs font-bold text-black/40 uppercase tracking-widest font-mono">
+                                                        {formatCompact(outcome.mcapSOL || 0)} SOL
+                                                    </span>
+                                                </div>
+                                            </motion.div>
+                                        );
+                                    })}
+                                </motion.div>
                             </div>
                         </div>
+                    </div>
+                </motion.div>
 
 
 
 
 
+                {/* 2. MAIN GRID: CHART (80%) + TRADE (20%) */}
+                <div className="flex flex-col lg:flex-row gap-8 items-start relative">
 
-                        <div className="bg-white rounded-[2.5rem] border-2 border-black overflow-hidden relative shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-                            {/* CHART INTEGRATED - Top of Card */}
-                            {/* FLEX CONTAINER FOR CHART + TRADE (Horizontal Split) */}
-                            <div className="flex flex-col lg:flex-row border-b-4 border-black min-h-[600px]">
+                    {/* LEFT AREA: Chart & Holdings & Community */}
+                    <div className="flex-[8] w-full min-w-0 flex flex-col gap-12">
 
-                                {/* 1. GRAPH (Left Side) - Flex 1 */}
-                                <div className="flex-1 relative border-b-4 lg:border-b-0 lg:border-r-4 border-black bg-white min-h-[400px] lg:min-h-full">
-                                    <div className="absolute inset-0">
-                                        <TheDjinnChart
-                                            outcomeNames={marketOutcomes.map(o => o.title)}
-                                            data={historyState.probability}
-                                            outcomeSupplies={outcomeSuppliesMap}
-                                            volume={marketAccount?.volumeTotal ? formatCompact(Number(marketAccount.volumeTotal) / 1e9) + " SOL" : (marketAccount?.volume_usd || "$0")}
-                                            resolutionDate={marketAccount?.market_resolution_date ? new Date(marketAccount.market_resolution_date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : (marketAccount?.end_date || "Unknown")}
-                                            tradeEvent={lastTradeEvent ? {
-                                                id: lastTradeEvent.id,
-                                                outcome: lastTradeEvent.title || lastTradeEvent.side,
-                                                amount: lastTradeEvent.amount,
-                                                color: lastTradeEvent.color || (lastTradeEvent.side === 'YES' ? '#10B981' : '#EF4444')
-                                            } : null}
-                                            selectedOutcome={selectedOutcomeName || (selectedSide === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO'))}
-                                            onOutcomeChange={(name: string) => {
-                                                setSelectedOutcomeName(name);
-                                                // Also find the ID and Side to keep everything in sync
-                                                const outcome = marketOutcomes.find(o => o.title === name);
-                                                if (outcome) {
-                                                    setSelectedOutcomeId(outcome.id);
-                                                    // For binary markets, map to YES/NO sides
-                                                    if (marketOutcomes.length === 2) {
-                                                        setSelectedSide(outcome.title === marketOutcomes[0].title ? 'YES' : 'NO');
-                                                    }
-                                                }
-                                            }}
-                                        />
-                                    </div>
-                                </div>
+                        {/* CHART PANEL */}
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.98 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: 0.5 }}
+                            className="bg-transparent rounded-3xl border-2 border-white/10 overflow-hidden relative backdrop-blur-sm min-h-[550px]"
+                        >
+                            <TheDjinnChart
+                                outcomeNames={marketOutcomes.map(o => o.title)}
+                                data={historyState.probability}
+                                outcomeSupplies={outcomeSuppliesMap}
+                                volume={marketAccount?.volumeTotal ? formatCompact(Number(marketAccount.volumeTotal) / 1e9) + " SOL" : (marketAccount?.volume_usd || "$0")}
+                                resolutionDate={marketAccount?.market_resolution_date ? new Date(marketAccount.market_resolution_date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : (marketAccount?.end_date || "Unknown")}
+                                tradeEvent={lastTradeEvent ? {
+                                    id: lastTradeEvent.id,
+                                    outcome: lastTradeEvent.outcome || lastTradeEvent.side,
+                                    amount: lastTradeEvent.amount,
+                                    side: lastTradeEvent.side
+                                } : null}
+                                selectedOutcome={selectedOutcomeName || (selectedSide === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO'))}
+                                onOutcomeChange={(name: string) => {
+                                    setSelectedOutcomeName(name);
+                                    const outcome = marketOutcomes.find(o => o.title === name);
+                                    if (outcome) {
+                                        setSelectedOutcomeId(outcome.id);
+                                        if (marketOutcomes.length === 2) {
+                                            setSelectedSide(outcome.title === marketOutcomes[0].title ? 'YES' : 'NO');
+                                        }
+                                    }
+                                }}
+                            />
+                        </motion.div>
 
-                                {/* 2. TRADE PANEL (Right Side) - ENHANCED VISIBILITY */}
-                                <div className="w-full lg:w-[440px] shrink-0 bg-gradient-to-br from-white to-gray-50 p-6 overflow-y-auto custom-scrollbar lg:max-h-[850px] border-l-4 border-black">
-                                    {/* 🎯 TRADE HEADER - Eye-catching */}
-                                    <div className="mb-6 bg-black text-white px-6 py-3 -mx-6 -mt-6 border-b-4 border-black flex items-center justify-between">
-                                        <h2 className="text-xl font-black uppercase tracking-wider">Trade Now</h2>
-                                        <div className="w-3 h-3 bg-[#F492B7] rounded-full animate-pulse border-2 border-white" />
-                                    </div>
+                        {/* HOLDINGS SECTION - Jim Raptis Principle: Opacity Hack */}
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }} className="bg-white rounded-3xl border-2 border-black p-8 shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]">
+                            <h3 className="text-2xl font-black text-black uppercase tracking-tighter mb-8 text-center border-b-2 border-black pb-4">Portfolio</h3>
+                            <HoldingsSection
+                                bets={userBets}
+                                outcomeSupplies={marketOutcomes.map(o => o.supply || 0)}
+                                marketOutcomes={marketOutcomes}
+                            />
+                        </motion.div>
 
-                                    {/* TOTAL POOL HEADER - More prominent */}
-                                    <div className="mb-6 w-full flex flex-col items-center px-8 py-6 rounded-2xl bg-gradient-to-br from-[#F492B7] via-[#FFB6C1] to-[#FFC0CB] border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden group/pool hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 transition-all">
-                                        {/* Decorative pattern */}
-                                        <div className="absolute inset-0 opacity-10">
-                                            <div className="absolute top-0 right-0 w-24 h-24 bg-black rounded-full -mr-12 -mt-12" />
-                                            <div className="absolute bottom-0 left-0 w-16 h-16 bg-black rounded-full -ml-8 -mb-8" />
-                                        </div>
-                                        <span className="text-[11px] font-black uppercase tracking-[0.4em] text-black/70 mb-2 relative z-10">
-                                            Total Pool
-                                        </span>
-                                        <span className="text-5xl font-black text-black tracking-tighter relative z-10">
-                                            <AnimatedNumber
-                                                value={totalPoolSol}
-                                                decimals={2}
-                                                className="inline"
-                                            /> <span className="text-white drop-shadow-lg">SOL</span>
-                                        </span>
-                                    </div>
+                        {/* COMMUNITY TABS (Activity, Comments, Rank) - Jim Raptis Principle: Opacity Hack */}
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 }} className="bg-white rounded-3xl border-2 border-black p-8 shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]">
+                            <div className="flex items-center gap-10 mb-8 border-b-2 border-black pb-4">
+                                <TabButton label="Activity" icon={<Activity size={18} />} active={bottomTab === 'ACTIVITY'} onClick={() => { setBottomTab('ACTIVITY'); play('click'); }} />
+                                <TabButton label="Comments" icon={<MessageCircle size={18} />} active={bottomTab === 'COMMENTS'} onClick={() => { setBottomTab('COMMENTS'); play('click'); }} />
+                                <TabButton label="Rank" icon={<Users size={18} />} active={bottomTab === 'HOLDERS'} onClick={() => { setBottomTab('HOLDERS'); play('click'); }} />
+                            </div>
 
-                                    {/* BUY/SELL TOGGLE - Enhanced */}
-                                    <div className="mb-6 p-2 bg-gray-100 border-4 border-black rounded-2xl flex gap-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                                        <button
-                                            onClick={() => setTradeMode('BUY')}
-                                            className={`flex-1 py-4 rounded-xl text-base font-black uppercase tracking-widest transition-all border-4 ${tradeMode === 'BUY' ? 'bg-emerald-400 text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-y-1 scale-105' : 'text-gray-500 border-gray-300 bg-white hover:text-black hover:border-black hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'}`}
-                                        >
-                                            🔥 Buy
-                                        </button>
-                                        <button
-                                            onClick={() => setTradeMode('SELL')}
-                                            className={`flex-1 py-4 rounded-xl text-base font-black uppercase tracking-widest transition-all border-4 ${tradeMode === 'SELL' ? 'bg-rose-400 text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-y-1 scale-105' : 'text-gray-500 border-gray-300 bg-white hover:text-black hover:border-black hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'}`}
-                                        >
-                                            💸 Sell
-                                        </button>
-                                    </div>
-
-                                    {/* INPUT Section - Enhanced Brutalist */}
-                                    <div className="bg-white rounded-2xl border-4 border-black p-8 mb-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 transition-all">
-                                        <label className="text-xs font-black uppercase text-black/80 tracking-[0.35em] mb-4 block border-b-2 border-black pb-2">
-                                            {tradeMode === 'BUY' ? '💳 You Pay' : '📊 Shares to Sell'}
-                                        </label>
-                                        <div className="flex items-center gap-4">
-                                            <input
-                                                type="text"
-                                                inputMode="decimal"
-                                                value={betAmount || ''}
-                                                onChange={(e) => {
-                                                    setBetAmount(e.target.value);
-                                                    setIsMaxSell(false);
-                                                }}
-                                                className="bg-transparent text-6xl md:text-7xl font-black text-black w-full outline-none placeholder-gray-300 tracking-tighter focus:text-[#F492B7] transition-colors"
-                                                placeholder="0"
-                                            />
-                                            {/* SOL BADGE - Enhanced */}
-                                            <div className="flex items-center gap-2 bg-black px-5 py-4 rounded-xl border-4 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,0.3)] shrink-0">
-                                                <img
-                                                    src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
-                                                    className="w-7 h-7"
-                                                    alt="SOL"
-                                                />
-                                                <span className="text-base font-black text-white">{tradeMode === 'BUY' ? 'SOL' : 'SHR'}</span>
+                            <AnimatePresence mode="wait">
+                                <motion.div key={bottomTab} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }} transition={{ duration: 0.4 }}>
+                                    {bottomTab === 'ACTIVITY' && (
+                                        <div className="bg-gray-50 rounded-2xl border-2 border-black overflow-hidden bg-white shadow-inner">
+                                            <div className="grid grid-cols-5 px-8 py-4 text-[10px] font-black uppercase tracking-widest text-black/60 bg-gray-50 border-b-2 border-black">
+                                                <span>Trader</span>
+                                                <span className="text-center">Side</span>
+                                                <span className="text-center">Shares</span>
+                                                <span className="text-right">Value</span>
+                                                <span className="text-right">Time</span>
                                             </div>
-                                        </div>
-                                        {/* Percentage Buttons */}
-                                        {tradeMode === 'SELL' && (
-                                            <div className="flex gap-2 mt-4 pt-4 border-t-2 border-black">
-                                                {[25, 50, 75, 100].map((pct) => (
-                                                    <button
-                                                        key={pct}
-                                                        onClick={() => {
-                                                            const sharesOwned = isMultiOutcome
-                                                                ? (myShares[marketOutcomes.findIndex(o => o.id === selectedOutcomeId)] || 0)
-                                                                : (selectedSide === 'YES' ? (myShares[0] || 0) : (myShares[1] || 0));
-                                                            if (sharesOwned <= 0) return;
-
-                                                            if (pct === 100) {
-                                                                setIsMaxSell(true);
-                                                            } else {
-                                                                setIsMaxSell(false);
-                                                            }
-
-                                                            const sharesToSell = sharesOwned * (pct / 100);
-                                                            const formattedShares = sharesToSell >= 100_000
-                                                                ? formatCompact(sharesToSell)
-                                                                : sharesToSell.toFixed(2);
-
-                                                            setBetAmount(formattedShares);
-                                                        }}
-                                                        className={`flex-1 py-2.5 rounded-lg text-xs font-black transition-all border-2 ${(pct === 100 && isMaxSell)
-                                                            ? 'bg-rose-400 text-black border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] -translate-y-0.5 scale-105'
-                                                            : 'bg-white text-black border-black hover:bg-gray-100 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-0.5 active:shadow-none'
-                                                            } ${pct === 100 ? 'font-black text-base' : ''}`}
-                                                    >
-                                                        {pct === 100 ? '💯 MAX' : `${pct}%`}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* PROBABILITY BAR & OUTCOMES - Enhanced */}
-                                    <div className="mb-6 space-y-4">
-                                        <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-2 border-black rounded-lg">
-                                            <span className="text-xs font-black uppercase text-black tracking-wider">📊 Prediction</span>
-                                            {/* Slippage (Pencil Edit) */}
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-[10px] font-black text-gray-700 bg-white px-2.5 py-1.5 rounded-md border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">{slippageTolerance}% SLIP</span>
-                                                <button onClick={() => {
-                                                    const newSlippage = prompt("Enter new slippage %:", slippageTolerance.toString());
-                                                    if (newSlippage && !isNaN(parseFloat(newSlippage))) setSlippageTolerance(parseFloat(newSlippage));
-                                                }} className="p-2 rounded-md bg-white hover:bg-[#F492B7] text-gray-600 hover:text-black transition-all border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-y-0.5">
-                                                    <Edit2 size={14} />
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        {/* YES/NO BUTTONS - ENHANCED BRUTALIST */}
-                                        <div className="flex gap-4 h-40 md:h-48">
-                                            {isMultiOutcome ? (
-                                                <div className="flex-1 bg-gradient-to-br from-[#F492B7] via-[#FFB6C1] to-[#FFC0CB] rounded-2xl border-4 border-black p-8 flex flex-col justify-center items-center hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all cursor-pointer shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-                                                    <span className="text-xs font-black uppercase text-black/70 tracking-[0.3em] mb-3">🎯 Target</span>
-                                                    <span className="font-black text-black text-2xl truncate max-w-full">{selectedOutcomeName || 'Select First'}</span>
-                                                    <span className="text-xl font-black text-white mt-3 bg-black/20 px-4 py-1 rounded-lg">{(livePrice ?? 0).toFixed(0)}%</span>
-                                                </div>
-                                            ) : (
-                                                <>
-                                                    <button
-                                                        onClick={() => setSelectedSide('YES')}
-                                                        className={`flex-1 rounded-2xl flex flex-col items-center justify-center transition-all duration-200 border-4 relative overflow-hidden group ${selectedSide === 'YES'
-                                                            ? 'bg-emerald-400 border-black text-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] -translate-y-2 scale-105'
-                                                            : 'bg-white border-emerald-400 text-emerald-600 hover:bg-emerald-50 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1'}`}
-                                                    >
-                                                        {/* Decorative corner */}
-                                                        {selectedSide === 'YES' && (
-                                                            <div className="absolute top-2 right-2 w-3 h-3 bg-black rounded-full animate-pulse" />
-                                                        )}
-                                                        <span className="text-base font-black uppercase tracking-[0.2em] mb-3">{marketOutcomes[0]?.title || 'YES'}</span>
-                                                        <span className={`text-5xl font-black ${selectedSide === 'YES' ? 'text-black' : 'text-emerald-600'}`}>
-                                                            {yesPercent.toFixed(0)}%
-                                                        </span>
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setSelectedSide('NO')}
-                                                        className={`flex-1 rounded-2xl flex flex-col items-center justify-center transition-all duration-200 border-4 relative overflow-hidden group ${selectedSide === 'NO'
-                                                            ? 'bg-rose-400 border-black text-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] -translate-y-2 scale-105'
-                                                            : 'bg-white border-rose-400 text-rose-600 hover:bg-rose-50 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1'}`}
-                                                    >
-                                                        {/* Decorative corner */}
-                                                        {selectedSide === 'NO' && (
-                                                            <div className="absolute top-2 right-2 w-3 h-3 bg-black rounded-full animate-pulse" />
-                                                        )}
-                                                        <span className="text-base font-black uppercase tracking-[0.2em] mb-3">{marketOutcomes[1]?.title || 'NO'}</span>
-                                                        <span className={`text-5xl font-black ${selectedSide === 'NO' ? 'text-black' : 'text-rose-600'}`}>
-                                                            {noPercent.toFixed(0)}%
-                                                        </span>
-                                                    </button>
-                                                </>
-                                            )}
-                                        </div>
-
-                                        {/* TRANSACTION SUMMARY */}
-                                        <div className="bg-gradient-to-br from-gray-50 to-white rounded-2xl border-4 border-black p-6 space-y-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                                            {tradeMode === 'BUY' && (
-                                                <>
-                                                    <div className="flex justify-between items-center text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em]">
-                                                        <span>Rate</span>
-                                                        <span className="font-mono text-xs lowercase text-gray-400">
-                                                            1 SOL ≈ {amountNum > 0 ? formatCompact(estimatedShares / amountNum) : formatCompact(1 / getSpotPrice(estimatedSupply))} shares
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex justify-between items-end border-t border-black/10 pt-5">
-                                                        <div>
-                                                            <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">Shares to Receive</span>
-                                                            <span className="text-4xl font-extralight text-black leading-none tracking-tight">
-                                                                {formatCompact(estimatedShares)}
-                                                            </span>
-                                                        </div>
-                                                        <div className="text-right">
-                                                            <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">Cost</span>
-                                                            <span className="text-base font-bold text-[#10B981] font-mono">
-                                                                ${(parseFloat(betAmount || '0') * solPrice).toFixed(2)}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                </>
-                                            )}
-                                            {tradeMode === 'SELL' && (
-                                                <>
-                                                    <div className="flex justify-between items-end border-t border-black/10 pt-5 mt-4">
-                                                        <div>
-                                                            <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">Shares to Sell</span>
-                                                            <span className="text-4xl font-extralight text-black leading-none tracking-tight">
-                                                                {isMaxSell ? formatCompact(myHeldAmount) : formatCompact(parseFloat(betAmount) / (currentPriceForSide / 100) || 0)}
-                                                            </span>
-                                                        </div>
-                                                        <div className="text-right">
-                                                            <span className="block text-gray-500 font-semibold uppercase text-[10px] tracking-[0.2em] mb-2">You Get</span>
-                                                            <span className="text-xl font-bold text-[#10B981] font-mono">
-                                                                ◎{(parseFloat(betAmount || '0') * 0.99).toFixed(4)} SOL
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                </>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* ACTION BUTTON - SUPER PROMINENT */}
-                                    <button
-                                        onClick={handleTrade}
-                                        disabled={isPending || isSuccess}
-                                        className={`w-full py-7 rounded-2xl font-black text-xl uppercase tracking-[0.3em] shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 transition-all duration-200 relative overflow-hidden group mt-4 border-4 border-black ${isSuccess ? 'bg-emerald-400 text-black' :
-                                            'bg-black text-white hover:bg-[#F492B7] hover:text-black hover:scale-[1.02]'
-                                            }`}
-                                    >
-                                        {isPending ? (
-                                            <div className="flex items-center justify-center gap-2">
-                                                <Loader2 className="animate-spin" /> Processing...
-                                            </div>
-                                        ) : isSuccess ? (
-                                            <div className="flex items-center justify-center gap-2">
-                                                <CheckCircle2 /> <span className="text-lg">Success</span>
-                                            </div>
-                                        ) : (
-                                            <span>
-                                                {tradeMode === 'BUY'
-                                                    ? `Buy ${selectedSide === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO')}`
-                                                    : `Sell ${selectedSide === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO')}`}
-                                            </span>
-                                        )}
-                                    </button>
-
-                                    {/* SUCCESS PANEL */}
-                                    {tradeSuccessInfo && (
-                                        <div className="mt-6 animate-in fade-in zoom-in-95 duration-300">
-                                            <div className="bg-emerald-50 border-4 border-black rounded-[1.5rem] p-5 shadow-[4px_4px_0px_0px_#10B981] relative overflow-hidden">
-                                                <div className="absolute top-0 right-0 p-4 opacity-10">
-                                                    <CheckCircle2 size={80} className="text-emerald-500" />
-                                                </div>
-                                                <div className="relative z-10">
-                                                    <h3 className="text-black font-black text-xl uppercase italic tracking-tighter mb-1">
-                                                        BOOM! 💥
-                                                    </h3>
-                                                    <p className="text-black font-bold text-sm leading-tight mb-4">
-                                                        You bought <span className="text-emerald-600 bg-emerald-100 px-1 rounded">{formatCompact(tradeSuccessInfo.shares)} {tradeSuccessInfo.side}</span> shares!
-                                                    </p>
-                                                    {tradeSuccessInfo.txSignature && (
-                                                        <div className="mb-4">
-                                                            <a
-                                                                href={`https://solscan.io/tx/${tradeSuccessInfo.txSignature}?cluster=devnet`}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="flex items-center gap-1 text-xs font-bold uppercase tracking-widest text-black/60 hover:text-black hover:underline transition-colors"
-                                                            >
-                                                                View TX <ExternalLink size={12} />
-                                                            </a>
-                                                        </div>
-                                                    )}
-                                                    <button
-                                                        onClick={() => setShowShareModal(true)}
-                                                        className="w-full py-3 bg-black text-white rounded-xl font-black uppercase tracking-widest hover:bg-[#F492B7] hover:text-black hover:scale-[1.02] transition-all flex items-center justify-center gap-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.2)]"
-                                                    >
-                                                        <Share2 size={16} /> Share Trade
-                                                    </button>
-                                                </div>
+                                            <div className="max-h-[700px] overflow-y-auto custom-scrollbar">
+                                                {activityList.length === 0 ? (
+                                                    <div className="p-20 text-center text-black/20 font-black uppercase tracking-[0.4em] italic">Ghost Town</div>
+                                                ) : (
+                                                    activityList.map((act, i) => (
+                                                        <ActivityRow key={i} act={act} marketOutcomes={marketOutcomes} solPrice={solPrice} />
+                                                    ))
+                                                )}
                                             </div>
                                         </div>
                                     )}
 
-                                    {/* Terms */}
-                                    <div className="mt-4 text-center">
-                                        <p className="text-[10px] text-gray-500">
-                                            By trading, you agree to the <Link href="/legal" className="text-[#F492B7] hover:underline hover:text-black transition-colors">Terms of Use</Link>
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="px-6 pt-6 mb-4">
-                                <HoldingsSection
-                                    bets={userBets}
-                                    outcomeSupplies={marketOutcomes.map(o => o.supply || 0)}
-                                    marketOutcomes={marketOutcomes}
-                                />
-                            </div>
-
-                            {/* Multi-outcome Selector (if applicable) */}
-                            {isMultiOutcome && (
-                                <div className="px-6 mt-4 mb-4">
-                                    <div className="pt-6 border-t border-white/10">
-                                        <h3 className="text-sm font-black uppercase text-gray-500 mb-4 tracking-wider">Select an outcome to trade</h3>
-                                        <OutcomeList
-                                            outcomes={marketOutcomes}
-                                            selectedId={selectedOutcomeId}
-                                            onSelect={setSelectedOutcomeId}
-                                            onBuyClick={handleOutcomeBuyClick}
+                                    {bottomTab === 'COMMENTS' && (
+                                        <CommentsSection
+                                            marketSlug={effectiveSlug}
+                                            publicKey={publicKey ? publicKey.toBase58() : null}
+                                            userProfile={userProfile}
+                                            marketOutcomes={marketOutcomes}
+                                            myHeldPosition={null}
+                                            myHeldAmount={"0"}
                                         />
-                                    </div>
-                                </div>
-                            )}
+                                    )}
 
-                            {/* CERBERUS AI - Only available for VERIFIED markets */}
-                            {marketAccount?.status === 'VERIFIED' ? (
-                                <div className="px-6 mt-4 mb-2 group cursor-pointer" onClick={() => console.log('Cerberus AI clicked - Market is verified')}>
-                                    <div className="relative overflow-hidden rounded-xl border border-[#F492B7]/30 bg-[#F492B7]/5 p-3 flex items-center justify-between hover:bg-[#F492B7]/10 transition-colors">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-full bg-[#F492B7]/20 flex items-center justify-center">
-                                                <Bot size={18} className="text-[#F492B7]" />
-                                            </div>
-                                            <span className="text-sm font-medium text-white group-hover:text-[#F492B7] transition-colors">
-                                                Click <span className="font-bold text-[#F492B7]">Cerberus AI</span> to find resolution info
-                                            </span>
-                                        </div>
-                                        <ChevronRight size={16} className="text-[#F492B7]/50 group-hover:text-[#F492B7]" />
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="px-6 mt-4 mb-2">
-                                    <div className="relative overflow-hidden rounded-xl border border-white/5 bg-white/[0.02] p-3 flex items-center justify-between opacity-50 cursor-not-allowed">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-full bg-gray-500/10 flex items-center justify-center">
-                                                <Bot size={18} className="text-gray-600" />
-                                            </div>
-                                            <span className="text-sm font-medium text-gray-500">
-                                                Cerberus AI <span className="text-xs text-gray-600">(Available after verification)</span>
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* RESOLUTION CRITERIA (Relocated Here) */}
-                            <div className="px-6 mb-6">
-                                <div className="bg-[#0E0E0E] rounded-xl border border-white/5 p-6">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <h3 className="text-sm font-bold text-white uppercase tracking-wider">Resolution Criteria</h3>
-                                        {/* Oracle Source Badge */}
-                                        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/5">
-                                            <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest mr-1">Oracle</span>
-                                            {marketAccount?.resolution_source ? (
-                                                <a href={marketAccount.resolution_source} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[#10B981] hover:underline font-mono text-xs">
-                                                    <span>{marketAccount.resolution_source.slice(0, 15)}...</span> <ExternalLink size={10} />
-                                                </a>
-                                            ) : (
-                                                <div className="flex items-center gap-1 text-white">
-                                                    <img src="/pyth-logo.png" className="w-3 h-3 rounded-full" onError={(e) => e.currentTarget.style.display = 'none'} />
-                                                    <span className="font-bold text-xs">Pyth</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    <p className="text-gray-400 text-sm leading-relaxed mb-0 font-light">
-                                        This market will resolve to "YES" if the specific outcome defined in the title occurs by the resolution date.
-                                        The resolution is decentralized and verified by the oracle.
-                                    </p>
+                                    {bottomTab === 'HOLDERS' && <HoldersList holders={holders} marketOutcomes={marketOutcomes} publicKey={publicKey} />}
+                                </motion.div>
+                            </AnimatePresence>
+                        </motion.div>
+                        {/* RESOLUTION CRITERIA */}
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }} className="bg-black text-white rounded-3xl border-2 border-black p-10 shadow-[12px_12px_0px_0px_rgba(255,255,255,0.05)]">
+                            <div className="flex items-center justify-between mb-8">
+                                <h3 className="text-xl font-black uppercase tracking-widest text-[#F492B7]">Resolution Protocol</h3>
+                                <div className="flex items-center gap-3 px-5 py-2 rounded-full bg-white/5 border border-white/10">
+                                    <span className="text-[10px] font-black uppercase text-white/60 tracking-widest">Oracle</span>
+                                    {marketAccount?.resolution_source ? (
+                                        <a href={marketAccount.resolution_source} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[#F492B7] hover:underline font-black text-xs">
+                                            <span>SOURCE</span> <ExternalLink size={12} />
+                                        </a>
+                                    ) : (
+                                        <span className="font-black text-xs text-emerald-400">DECENTRALIZED</span>
+                                    )}
                                 </div>
                             </div>
+                            <p className="text-white/60 text-lg leading-relaxed font-medium">
+                                {marketAccount?.description || staticMarketInfo.description}
+                            </p>
+                        </motion.div>
+                    </div>
 
-                            {/* TABS (Relocated UP - as requested) */}
-                            <div className="px-6 mb-8 mt-2">
-                                <div className="flex items-center gap-6 mb-6 border-b border-white/5 pb-2">
-                                    <TabButton label="Activity" icon={<Activity size={14} />} active={bottomTab === 'ACTIVITY'} onClick={() => setBottomTab('ACTIVITY')} />
-                                    <TabButton label="Comments" icon={<MessageCircle size={14} />} active={bottomTab === 'COMMENTS'} onClick={() => setBottomTab('COMMENTS')} />
-                                    <TabButton label="Top Holders" icon={<Users size={14} />} active={bottomTab === 'HOLDERS'} onClick={() => setBottomTab('HOLDERS')} />
+                    {/* RIGHT AREA: Trade Panel & Multi-Outcome */}
+                    <div className="flex-[2] w-full min-w-[340px] sticky top-28 flex flex-col gap-8">
+
+                        {/* THE TRADE PANEL */}
+                        <motion.div
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.6 }}
+                            whileHover={{ y: -8 }}
+                            className="bg-white rounded-3xl border-2 border-black p-6 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden"
+                        >
+                            {/* Header Gradient - Jim Raptis Principle: Epic Data Visualization */}
+                            <div className="w-full flex flex-col items-center px-6 py-10 rounded-3xl bg-gradient-to-br from-[#FF92C6] via-[#FFB6C1] to-[#F492CC] border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden mb-8 group/pool">
+                                <motion.div
+                                    animate={{
+                                        scale: [1, 1.05, 1],
+                                        rotate: [0, 1, 0]
+                                    }}
+                                    transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                                    className="absolute inset-0 opacity-20 pointer-events-none"
+                                >
+                                    <div className="absolute top-0 right-0 w-32 h-32 bg-white rounded-full -mr-16 -mt-16 blur-2xl" />
+                                    <div className="absolute bottom-0 left-0 w-24 h-24 bg-black rounded-full -ml-12 -mb-12 blur-xl" />
+                                </motion.div>
+                                <span className="text-[11px] font-black uppercase tracking-[0.6em] text-black/80 mb-3 relative z-10 drop-shadow-sm">Total Pool</span>
+                                <div className="flex items-baseline gap-2 relative z-10">
+                                    <span className="text-6xl font-black text-black tracking-tighter drop-shadow-[0_2px_2px_rgba(255,255,255,0.5)]">
+                                        <AnimatedNumber value={totalPoolSol} decimals={2} className="inline" />
+                                    </span>
+                                    <span className="text-3xl font-black text-white drop-shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">SOL</span>
                                 </div>
-
-                                {/* TAB CONTENT */}
-                                {bottomTab === 'COMMENTS' && (
-                                    <CommentsSection
-                                        marketSlug={effectiveSlug}
-                                        publicKey={publicKey ? publicKey.toBase58() : null}
-                                        userProfile={userProfile}
-                                        marketOutcomes={marketOutcomes}
-                                        myHeldPosition={null} // Pass null or actual position if available
-                                        myHeldAmount={"0"}
+                                <motion.div
+                                    initial={{ width: 0 }}
+                                    animate={{ width: "80%" }}
+                                    className="h-1 bg-black/10 rounded-full mt-6 relative z-10 overflow-hidden"
+                                >
+                                    <motion.div
+                                        animate={{ x: ["-100%", "100%"] }}
+                                        transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                                        className="w-full h-full bg-gradient-to-r from-transparent via-white/40 to-transparent"
                                     />
-                                )}
+                                </motion.div>
+                            </div>
 
-                                {bottomTab === 'ACTIVITY' && (
-                                    <div className="bg-white rounded-xl border-2 border-black overflow-hidden">
-                                        <div className="grid grid-cols-5 px-6 py-3 text-[10px] font-black uppercase tracking-widest text-black/60 bg-gray-100 border-b-2 border-black">
-                                            <span className="col-span-1">Trader</span>
-                                            <span className="text-center col-span-1">Side</span>
-                                            <span className="text-center col-span-1">Shares</span>
-                                            <span className="text-right col-span-1">Value</span>
-                                            <span className="text-right col-span-1">Time</span>
-                                        </div>
-                                        <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
-                                            {activityList.length === 0 ? (
-                                                <div className="p-8 text-center text-gray-600 italic">No orders yet</div>
-                                            ) : (
-                                                activityList.map((act, i) => {
-                                                    const isBuy = act.order_type === 'BUY' || !act.order_type;
+                            {/* Buy/Sell Toggles - Jim Raptis Principle: Drastic Selected Items */}
+                            <div className="mb-8 p-1.5 bg-gray-100 border-4 border-black rounded-2xl flex gap-1.5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+                                <button onClick={() => { setTradeMode('BUY'); play('click'); }} className={`flex-1 py-4 rounded-xl text-xs font-black tracking-widest uppercase transition-all border-4 ${tradeMode === 'BUY' ? 'bg-emerald-400 text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-y-1' : 'text-black/60 border-transparent bg-transparent hover:text-black'}`}>BUY</button>
+                                <button onClick={() => { setTradeMode('SELL'); play('click'); }} className={`flex-1 py-4 rounded-xl text-xs font-black tracking-widest uppercase transition-all border-4 ${tradeMode === 'SELL' ? 'bg-rose-400 text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-y-1' : 'text-black/60 border-transparent bg-transparent hover:text-black'}`}>SELL</button>
+                            </div>
 
-                                                    // FIX: Resolve "YES"/"NO" to Outcome Titles
-                                                    let displayAction = act.action;
-                                                    let actionColor = '#808080';
-
-                                                    // Helper to find outcome index safely
-                                                    const findOutcomeIndex = (name: string) => marketOutcomes.findIndex(o => o.title === name);
-
-                                                    if (act.action === 'YES' || act.action === 'NO') {
-                                                        const outcomeIdx = act.action === 'YES' ? 0 : 1;
-                                                        if (marketOutcomes[outcomeIdx]) {
-                                                            displayAction = marketOutcomes[outcomeIdx].title;
-                                                            actionColor = getOutcomeColor(displayAction, outcomeIdx);
-                                                        } else {
-                                                            actionColor = getOutcomeColor(act.action, outcomeIdx);
-                                                        }
-                                                    } else {
-                                                        // It's already an outcome name
-                                                        const outcomeIdx = findOutcomeIndex(act.action);
-                                                        actionColor = getOutcomeColor(act.action, outcomeIdx !== -1 ? outcomeIdx : undefined);
-                                                    }
-
-                                                    return (
-                                                        <div key={i} className="grid grid-cols-5 items-center px-6 py-4 border-b-2 border-black hover:bg-[#F492B7] transition-colors group">
-                                                            <div className="flex items-center gap-3 col-span-1">
-                                                                <Link
-                                                                    href={`/profile/${act.username || act.wallet_address}`}
-                                                                    className="w-8 h-8 rounded-full bg-white flex items-center justify-center border-2 border-black overflow-hidden shrink-0 hover:scale-110 transition-transform"
-                                                                >
-                                                                    <img
-                                                                        src={act.avatar_url || '/pink-pfp.png'}
-                                                                        className="w-full h-full object-cover"
-                                                                        onError={(e) => {
-                                                                            e.currentTarget.src = '/pink-pfp.png';
-                                                                        }}
-                                                                    />
-                                                                </Link>
-                                                                <div className="flex flex-col overflow-hidden">
-                                                                    <Link href={`/profile/${act.username || act.wallet_address}`} className="flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity">
-                                                                        <span className="text-xs font-bold text-black group-hover:underline transition-colors font-mono truncate">
-                                                                            {act.username || `${act.wallet_address.slice(0, 4)}...`}
-                                                                        </span>
-                                                                    </Link>
-                                                                </div>
-                                                            </div>
-                                                            <div className="text-center col-span-1">
-                                                                <span
-                                                                    className={`text-[9px] font-black uppercase px-2 py-1 rounded whitespace-nowrap`}
-                                                                    style={{
-                                                                        backgroundColor: `${actionColor}20`,
-                                                                        color: actionColor,
-                                                                        border: `1px solid ${actionColor}40`
-                                                                    }}
-                                                                >
-                                                                    {act.order_type || 'BUY'} {displayAction}
-                                                                </span>
-                                                            </div>
-                                                            <div className="text-center col-span-1">
-                                                                <span className="text-xs font-mono text-gray-700 font-bold">{formatCompact(act.shares || 0)}</span>
-                                                            </div>
-                                                            <div className="text-right col-span-1">
-                                                                <div className="text-sm font-black text-black">${act.amount?.toFixed(2)}</div>
-                                                                <div className="text-[10px] font-mono text-gray-600">{act.sol_amount?.toFixed(3)} SOL</div>
-                                                            </div>
-                                                            <div className="text-right text-[10px] font-mono text-gray-500 col-span-1">
-                                                                {timeAgo(act.created_at)}
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })
-                                            )}
-                                        </div>
+                            {/* Outcome Selector - Jim Raptis Principle: Frictionless Selection */}
+                            <div className="mb-8">
+                                <label className="text-[10px] font-black uppercase text-black/60 tracking-widest mb-4 block">Select Outcome</label>
+                                {isMultiOutcome ? (
+                                    <div className="flex flex-wrap gap-2">
+                                        {marketOutcomes.map((outcome) => (
+                                            <button
+                                                key={outcome.id}
+                                                onClick={() => {
+                                                    setSelectedOutcomeId(outcome.id);
+                                                    setSelectedOutcomeName(outcome.title);
+                                                    play('click');
+                                                }}
+                                                className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all border-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none ${selectedOutcomeId === outcome.id
+                                                    ? 'bg-black text-white border-black -translate-y-0.5'
+                                                    : 'bg-white text-black border-black hover:bg-gray-50'
+                                                    }`}
+                                            >
+                                                {outcome.title}
+                                            </button>
+                                        ))}
                                     </div>
-                                )}
-
-                                {bottomTab === 'HOLDERS' && (
-                                    <div className={`grid gap-12 ${marketOutcomes.length > 2 ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
-                                        {marketOutcomes.map((outcome, idx) => {
-                                            const title = outcome.title;
-                                            const color = getOutcomeColor(title, idx);
-
-                                            // ✅ MULTI-OUTCOME SUPPORT: Use outcome title directly as key
-                                            // holders is now Record<string, Holder[]> where keys are outcome names
-                                            const outcomeHolders = (holders && holders[title]) ? holders[title] : [];
-
-                                            return (
-                                                <div key={title}>
-                                                    <div className="mb-4">
-                                                        <h3 className="text-sm font-bold text-white mb-2 uppercase tracking-wider" style={{ color: color }}>
-                                                            {title} Holders
-                                                        </h3>
-                                                        <div className="h-0.5 w-full bg-white/10" style={{ backgroundColor: `${color}20` }} />
-                                                    </div>
-                                                    <div className="space-y-0">
-                                                        {outcomeHolders.length === 0 ? (
-                                                            <div className="py-6 text-gray-500 text-sm italic">No holders</div>
-                                                        ) : (
-                                                            outcomeHolders.map((h: any, i: number) => {
-                                                                const isMe = publicKey && h.wallet_address === publicKey.toBase58();
-                                                                // Get shares directly from the holder's positions for THIS outcome
-                                                                const shares = h.positions[title] || 0;
-
-                                                                return (
-                                                                    <div
-                                                                        key={i}
-                                                                        className={`flex items-center justify-between py-3 border-b border-white/5 group hover:bg-white/5 hover:px-2 rounded transition-all -mx-2 px-2 cursor-pointer ${isMe ? 'bg-white/5' : ''}`}
-                                                                        style={isMe ? { borderLeft: `2px solid ${color}` } : {}}
-                                                                        onClick={() => window.location.href = `/profile/${h.wallet_address}`}
-                                                                    >
-                                                                        <div className="flex items-center gap-3">
-                                                                            <div className="relative">
-                                                                                <div className="w-8 h-8 rounded-full bg-[#1A1A1A] overflow-hidden border border-white/10">
-                                                                                    {h.avatar ? <img src={h.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full opacity-80" style={{ background: `linear-gradient(135deg, ${color}, #000)` }} />}
-                                                                                </div>
-                                                                                <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold border border-[#0B0E14] ${i === 0 ? 'bg-gradient-to-br from-yellow-300 to-amber-500 text-black' : i === 1 ? 'bg-gradient-to-br from-gray-300 to-gray-400 text-black' : i === 2 ? 'bg-gradient-to-br from-orange-300 to-amber-700 text-white' : 'bg-gray-800 text-gray-400'}`}>
-                                                                                    {i + 1}
-                                                                                </div>
-                                                                            </div>
-                                                                            <div>
-                                                                                <div className="text-sm font-bold text-white group-hover:text-[#F492B7] transition-colors truncate max-w-[120px]">
-                                                                                    {h.name} {isMe && <span className="text-[9px] px-1 rounded ml-1 text-black" style={{ backgroundColor: color }}>YOU</span>}
-                                                                                </div>
-                                                                                <div className="text-xs font-medium font-mono flex items-center gap-1" style={{ color: color }}>
-                                                                                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
-                                                                                    {formatCompact(shares)} <span className="text-[10px] text-gray-500 uppercase">{title}</span>
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                );
-                                                            })
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
+                                ) : (
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => { setSelectedSide('YES'); play('click'); }}
+                                            className={`flex-1 py-4 rounded-2xl text-xs font-black uppercase transition-all border-4 relative overflow-hidden group shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:shadow-none ${selectedSide === 'YES'
+                                                ? 'bg-emerald-400 text-black border-black -translate-y-1'
+                                                : 'bg-white text-black border-black hover:bg-emerald-50'
+                                                }`}
+                                        >
+                                            <span className="relative z-10">{marketOutcomes[0]?.title || 'YES'}</span>
+                                        </button>
+                                        <button
+                                            onClick={() => { setSelectedSide('NO'); play('click'); }}
+                                            className={`flex-1 py-4 rounded-2xl text-xs font-black uppercase transition-all border-4 relative overflow-hidden group shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:shadow-none ${selectedSide === 'NO'
+                                                ? 'bg-rose-400 text-black border-black -translate-y-1'
+                                                : 'bg-white text-black border-black hover:bg-rose-50'
+                                                }`}
+                                        >
+                                            <span className="relative z-10">{marketOutcomes[1]?.title || 'NO'}</span>
+                                        </button>
                                     </div>
                                 )}
                             </div>
 
-                            {/* TABS (Relocated Inside Container) */}
-                            {isMultiOutcome && (
-                                <div className="mt-6 pt-6 border-t border-white/10">
-                                    <h3 className="text-sm font-black uppercase text-gray-500 mb-4 tracking-wider">Select an outcome to trade</h3>
-                                    <OutcomeList
-                                        outcomes={marketOutcomes}
-                                        selectedId={selectedOutcomeId}
-                                        onSelect={setSelectedOutcomeId}
-                                        onBuyClick={handleOutcomeBuyClick}
-                                    />
+                            {/* Main Input - Jim Raptis Principle: Labels Above Inputs */}
+                            <div className="bg-white rounded-2xl border-4 border-black p-6 mb-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+                                <label className="text-[10px] font-black uppercase text-black/60 tracking-widest mb-4 block">{tradeMode === 'BUY' ? 'Principal (SOL)' : 'Volume (Shares)'}</label>
+                                <div className="flex items-center gap-3">
+                                    <input type="text" inputMode="decimal" value={betAmount || ''} onChange={(e) => { setBetAmount(e.target.value); setIsMaxSell(false); }} className="bg-transparent text-5xl font-black text-black w-full outline-none placeholder-gray-100 tracking-tighter focus:text-[#F492B7] tabular-nums" placeholder="0" />
+                                    <div className="flex items-center gap-2 bg-black px-4 py-2 rounded-xl border-2 border-black shrink-0 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                                        <span className="text-xs font-black text-white">{tradeMode === 'BUY' ? 'SOL' : 'SHR'}</span>
+                                    </div>
                                 </div>
-                            )}
+                                {tradeMode === 'SELL' && (
+                                    <div className="flex gap-2 mt-6 pt-6 border-t-2 border-black/5">
+                                        {[50, 100].map((pct) => (
+                                            <button key={pct} onClick={() => {
+                                                const sharesOwned = isMultiOutcome ? (myShares[marketOutcomes.findIndex(o => o.id === selectedOutcomeId)] || 0) : (selectedSide === 'YES' ? (myShares[0] || 0) : (myShares[1] || 0));
+                                                if (sharesOwned <= 0) return;
+                                                play('click');
+                                                if (pct === 100) { setIsMaxSell(true); } else { setIsMaxSell(false); }
+                                                const sharesToSell = sharesOwned * (pct / 100);
+                                                setBetAmount(sharesToSell >= 100_000 ? formatCompact(sharesToSell) : sharesToSell.toFixed(2));
+                                            }} className="flex-1 py-2.5 rounded-xl text-[10px] font-bold bg-white text-black border-2 border-black hover:bg-gray-50 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:shadow-none transition-all">
+                                                {pct === 100 ? 'MAX OUT' : `${pct}%`}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
 
-                            {/* TABS (Relocated Inside Container) */}
+                            {/* Estimates Grid */}
+                            <div className="bg-gray-50 rounded-2xl border-2 border-black p-5 space-y-4 mb-8">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-[9px] font-black uppercase text-black/60">Expected Yield</span>
+                                    <span className="text-lg font-black text-black">{formatCompact(estimatedShares)} <span className="text-[10px] text-black/60">SHR</span></span>
+                                </div>
+                                <div className="flex justify-between items-center pt-3 border-t border-black/10">
+                                    <span className="text-[9px] font-black uppercase text-black/40">Drift Impact</span>
+                                    <span className={`text-xs font-black ${amountNum > 0.5 ? 'text-rose-500' : 'text-emerald-500'}`}>
+                                        {(amountNum * 0.12).toFixed(2)}%
+                                    </span>
+                                </div>
+                            </div>
 
-                        </div>
+                            {/* Execute Action */}
+                            <motion.button
+                                whileHover={{ scale: 1.02, y: -2 }}
+                                whileTap={{ scale: 0.98 }}
+                                onClick={() => {
+                                    handleTrade();
+                                    play('click');
+                                }}
+                                disabled={isPending || isSuccess}
+                                className={`w-full py-6 rounded-2xl font-black text-xl uppercase tracking-[0.2em] shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] active:shadow-none transition-all border-4 border-black ${isSuccess ? 'bg-emerald-400 text-black' : 'bg-black text-white hover:bg-[#F492B7] hover:text-black'}`}
+                            >
+                                {isPending ? 'TRANSACTING...' : isSuccess ? 'CONFIRMED!' : 'EXECUTE'}
+                            </motion.button>
+                        </motion.div>
 
-
-
-
-
-
-
-
-                        {/* TABS (Activity, Opinions, Holders) */}
-
-
-                    </div> {/* End of LEFT COLUMN */}
-
-
-
-                    {/* Share Modal */}
-                    {
-                        lastBetDetails && (
-                            <ShareModal
-                                isOpen={showShareModal}
-                                onClose={() => setShowShareModal(false)}
-                                betDetails={lastBetDetails}
-                            />
-                        )
-                    }
-
-                    {/* DEBUG: STRESS TEST WIDGET (User Request) */}
-                    {marketAccount && marketAccount.marketPDA && (
-                        <StressTestWidget marketPda={marketAccount.marketPDA} />
-                    )}
-
-                    <DjinnToast
-                        isVisible={djinnToast.isVisible}
-                        onClose={() => setDjinnToast(prev => ({ ...prev, isVisible: false }))}
-                        type={djinnToast.type}
-                        title={djinnToast.title}
-                        message={djinnToast.message}
-                        actionLink={djinnToast.actionLink}
-                        actionLabel={djinnToast.actionLabel}
-                    />
+                        {/* OUTCOME SELECTOR FOR MULTI-OUTCOME */}
+                        {isMultiOutcome && (
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 }} className="bg-white rounded-[2.5rem] border-2 border-black p-6 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]">
+                                <h3 className="text-[10px] font-black uppercase text-black/40 tracking-widest mb-6 text-center">Available Targets</h3>
+                                <OutcomeList
+                                    outcomes={marketOutcomes}
+                                    selectedId={selectedOutcomeId}
+                                    onSelect={setSelectedOutcomeId}
+                                    onBuyClick={handleOutcomeBuyClick}
+                                />
+                            </motion.div>
+                        )}
+                    </div>
                 </div>
+
+                {/* SHARE EXPERIENCE INTEGRATION */}
+                <ShareExperience
+                    isOpen={showShareModal}
+                    onClose={() => setShowShareModal(false)}
+                    layoutId="share-experience"
+                    data={{
+                        title: marketAccount?.title || staticMarketInfo.title,
+                        username: userProfile?.username || 'agent-alpha',
+                        imageUrl: marketAccount?.icon || (typeof staticMarketInfo.icon === 'string' && staticMarketInfo.icon.startsWith('http') ? staticMarketInfo.icon : undefined),
+                        stats: [
+                            { label: 'Volume', value: formatCompact(parseInt(marketAccount?.total_pool || '0') / LAMPORTS_PER_SOL) + ' SOL' },
+                            { label: 'Market Cap', value: formatCompact(parseInt(marketAccount?.mcap || '0') / LAMPORTS_PER_SOL) + ' SOL' },
+                            { label: 'Phase', value: 'Alpha' }
+                        ],
+                        qrValue: typeof window !== 'undefined' ? window.location.href : `https://djinn.market/market/${effectiveSlug}`
+                    }}
+                />
+
+                {marketAccount && marketAccount.marketPDA && (
+                    <StressTestWidget marketPda={marketAccount.marketPDA} />
+                )}
+
+                <DjinnToast
+                    isVisible={djinnToast.isVisible}
+                    onClose={() => setDjinnToast(prev => ({ ...prev, isVisible: false }))}
+                    type={djinnToast.type}
+                    title={djinnToast.title}
+                    message={djinnToast.message}
+                    actionLink={djinnToast.actionLink}
+                    actionLabel={djinnToast.actionLabel}
+                />
             </div>
         </div>
     );
 }
 
+// --- SUB COMPONENTS ---
 
-function TabButton({ label, icon, active, onClick }: any) { return <button onClick={onClick} className={`flex items-center gap-2 text-xs font-black uppercase tracking-widest transition-colors pb-2 ${active ? 'text-white border-b-2 border-[#F492B7]' : 'text-gray-600 hover:text-gray-400'}`}>{icon} {label}</button>; }
+function TabButton({ label, icon, active, onClick }: any) {
+    return (
+        <button
+            onClick={onClick}
+            className={`flex items-center gap-3 text-xs font-black uppercase tracking-[0.2em] transition-all pb-3 relative ${active ? 'text-black' : 'text-gray-400 hover:text-gray-600'}`}
+        >
+            {icon} {label}
+            {active && (
+                <motion.div layoutId="tab-underline" className="absolute bottom-0 left-0 right-0 h-1 bg-[#F492B7] rounded-full" />
+            )}
+        </button>
+    );
+}
+
+function ActivityRow({ act, marketOutcomes, solPrice }: any) {
+    const isBuy = act.order_type === 'BUY' || !act.order_type;
+    let displayAction = act.action;
+    let actionColor = '#808080';
+
+    const findOutcomeIndex = (name: string) => marketOutcomes.findIndex((o: any) => o.title === name);
+
+    if (act.action === 'YES' || act.action === 'NO') {
+        const outcomeIdx = act.action === 'YES' ? 0 : 1;
+        if (marketOutcomes[outcomeIdx]) {
+            displayAction = marketOutcomes[outcomeIdx].title;
+            actionColor = getOutcomeColor(displayAction, outcomeIdx);
+        } else {
+            actionColor = getOutcomeColor(act.action, outcomeIdx);
+        }
+    } else {
+        const outcomeIdx = findOutcomeIndex(act.action);
+        actionColor = getOutcomeColor(act.action, outcomeIdx !== -1 ? outcomeIdx : undefined);
+    }
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="grid grid-cols-5 items-center px-8 py-5 border-b-2 border-black/5 hover:bg-[#F492B7]/5 transition-colors group"
+        >
+            <div className="flex items-center gap-4 col-span-1">
+                <Link href={`/profile/${act.wallet_address}`} className="w-10 h-10 rounded-full bg-white flex items-center justify-center border-2 border-black overflow-hidden shrink-0 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:scale-110 transition-transform">
+                    <img src={act.avatar_url || '/pink-pfp.png'} className="w-full h-full object-cover" onError={(e) => e.currentTarget.src = '/pink-pfp.png'} />
+                </Link>
+                <Link href={`/profile/${act.wallet_address}`} className="text-xs font-black text-black group-hover:underline truncate max-w-[80px]">
+                    {act.username || `${act.wallet_address.slice(0, 4)}...`}
+                </Link>
+            </div>
+            <div className="text-center col-span-1">
+                <span className="text-[9px] font-black uppercase px-3 py-1.5 rounded-lg border-2" style={{ backgroundColor: `${actionColor}15`, color: actionColor, borderColor: `${actionColor}30` }}>
+                    {act.order_type || 'BUY'} {displayAction}
+                </span>
+            </div>
+            <div className="text-center col-span-1">
+                <span className="text-xs font-black text-black/60 tabular-nums">{formatCompact(act.shares || 0)}</span>
+            </div>
+            <div className="text-right col-span-1">
+                <div className="text-sm font-black text-black">${act.amount?.toFixed(2)}</div>
+                <div className="text-[10px] font-bold text-black/30">{act.sol_amount?.toFixed(3)} SOL</div>
+            </div>
+            <div className="text-right text-[10px] font-bold text-black/20 col-span-1 uppercase">
+                {timeAgo(act.created_at)}
+            </div>
+        </motion.div>
+    );
+}
+
+function HoldersList({ holders, marketOutcomes, publicKey }: any) {
+    return (
+        <div className={`grid gap-12 ${marketOutcomes.length > 2 ? 'grid-cols-1 md:grid-cols-2' : 'lg:grid-cols-2'}`}>
+            {marketOutcomes.map((outcome: any, idx: number) => {
+                const title = outcome.title;
+                const color = getOutcomeColor(title, idx);
+                const outcomeHolders = (holders && holders[title]) ? holders[title] : [];
+
+                return (
+                    <div key={title} className="bg-gray-50 rounded-2xl border-2 border-black p-6">
+                        <div className="flex items-center justify-between mb-6 pb-4 border-b-2 border-black/5">
+                            <h3 className="text-xs font-black uppercase tracking-[0.3em]" style={{ color }}>{title} WHALES</h3>
+                            <span className="text-[8px] font-black text-black/20 uppercase">Top 100</span>
+                        </div>
+                        <div className="space-y-3">
+                            {outcomeHolders.length === 0 ? (
+                                <div className="py-10 text-center text-black/20 font-black italic uppercase tracking-widest">No holders</div>
+                            ) : (
+                                outcomeHolders.slice(0, 10).map((h: any, i: number) => {
+                                    const isMe = publicKey && h.wallet_address === publicKey.toBase58();
+                                    const shares = h.positions[title] || 0;
+                                    return (
+                                        <div key={i} className={`flex items-center justify-between p-3 rounded-xl border-2 border-transparent hover:border-black/10 hover:bg-white transition-all cursor-pointer ${isMe ? 'bg-white border-black/20 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.05)]' : ''}`}>
+                                            <div className="flex items-center gap-4">
+                                                <div className="relative">
+                                                    <div className="w-10 h-10 rounded-full border-2 border-black overflow-hidden">
+                                                        {h.avatar ? <img src={h.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full" style={{ background: `linear-gradient(135deg, ${color}, #000)` }} />}
+                                                    </div>
+                                                    <div className={`absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black border-2 border-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${i === 0 ? 'bg-yellow-400' : i === 1 ? 'bg-gray-300' : i === 2 ? 'bg-orange-400' : 'bg-white'}`}>
+                                                        {i + 1}
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-col">
+                                                    <span className="text-xs font-black text-black truncate max-w-[120px]">{h.name}</span>
+                                                    <span className="text-[9px] font-bold text-black/40 uppercase tracking-widest">Collector</span>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-xs font-black text-black tabular-nums">{formatCompact(shares)}</div>
+                                                <div className="text-[8px] font-bold uppercase tracking-tighter" style={{ color }}>Shares</div>
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
 
 function timeAgo(dateString?: string) {
-    if (!dateString) return 'Just now';
+    if (!dateString) return 'Now';
     const date = new Date(dateString);
     const now = new Date();
     const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-    let interval = seconds / 31536000;
-    if (interval > 1) return Math.floor(interval) + "y ago";
-    interval = seconds / 2592000;
-    if (interval > 1) return Math.floor(interval) + "mo ago";
-    interval = seconds / 86400;
-    if (interval > 1) return Math.floor(interval) + "d ago";
-    interval = seconds / 3600;
-    if (interval > 1) return Math.floor(interval) + "h ago";
-    interval = seconds / 60;
-    if (interval > 1) return Math.floor(interval) + "m ago";
-    return Math.floor(seconds) + "s ago";
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days}d`;
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }

@@ -51,34 +51,32 @@ export default function DjinnToast({
 
     if (!isVisible && !show) return null;
 
-    // Styles based on type
     const styles = {
         SUCCESS: {
-            // Elegant Pink Glass
-            container: 'bg-gradient-to-br from-[#F492B7]/20 to-[#FFD1DC]/10 border-[#F492B7]/30 shadow-[0_8px_32px_rgba(244,146,183,0.25)]',
-            iconBg: 'bg-white/20',
-            iconColor: 'text-[#F492B7]',
-            titleColor: 'text-white',
-            msgColor: 'text-white/80',
-            button: 'bg-white/10 hover:bg-white/20 text-white border border-white/20 shadow-lg backdrop-blur-md',
+            container: 'bg-[#F492B7] border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]',
+            iconBg: 'bg-black/10',
+            iconColor: 'text-black',
+            titleColor: 'text-black',
+            msgColor: 'text-black/80',
+            button: 'bg-white border-2 border-black text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]',
             icon: CheckCircle2
         },
         ERROR: {
-            container: 'bg-gradient-to-br from-red-500/20 to-black/40 border-red-500/30 shadow-[0_8px_32px_rgba(239,68,68,0.25)]',
-            iconBg: 'bg-red-500/10',
-            iconColor: 'text-red-500',
-            titleColor: 'text-white',
-            msgColor: 'text-white/80',
-            button: 'bg-red-500/80 hover:bg-red-500 text-white shadow-lg',
+            container: 'bg-red-400 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]',
+            iconBg: 'bg-black/10',
+            iconColor: 'text-black',
+            titleColor: 'text-black',
+            msgColor: 'text-black/80',
+            button: 'bg-white border-2 border-black text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]',
             icon: AlertCircle
         },
         INFO: {
-            container: 'bg-gradient-to-br from-blue-500/20 to-black/40 border-blue-500/30 shadow-[0_8px_32px_rgba(59,130,246,0.25)]',
-            iconBg: 'bg-blue-500/10',
-            iconColor: 'text-blue-500',
-            titleColor: 'text-white',
-            msgColor: 'text-white/80',
-            button: 'bg-blue-500/80 hover:bg-blue-500 text-white shadow-lg',
+            container: 'bg-white border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]',
+            iconBg: 'bg-black/5',
+            iconColor: 'text-black',
+            titleColor: 'text-black',
+            msgColor: 'text-black/60',
+            button: 'bg-gray-100 border-2 border-black text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]',
             icon: Info
         }
     };
@@ -87,18 +85,15 @@ export default function DjinnToast({
     const Icon = currentStyle.icon;
 
     return (
-        <div className={`fixed top-24 right-6 z-[100] transition-all duration-700 cubic-bezier(0.34, 1.56, 0.64, 1) ${show ? 'translate-x-0 opacity-100 scale-100' : 'translate-x-[120%] opacity-0 scale-90'}`}>
-            <div className={`relative w-96 backdrop-blur-3xl border rounded-[2rem] p-6 overflow-hidden ${currentStyle.container}`}>
+        <div className={`fixed bottom-12 left-1/2 -translate-x-1/2 z-[100] transition-all duration-500 ${show ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-24 opacity-0 scale-95'}`}>
+            <div className={`relative w-[28rem] border-4 border-black rounded-3xl p-6 overflow-hidden ${currentStyle.container}`}>
 
-                {/* Subtle sheen effect */}
-                <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent pointer-events-none" />
-
-                {/* Close Button */}
+                {/* Close Button - Bright Red & Visible */}
                 <button
                     onClick={() => { setShow(false); setTimeout(onClose, 300); }}
-                    className="absolute top-5 right-5 text-white/40 hover:text-white transition-colors z-20"
+                    className="absolute top-4 right-4 bg-red-500 border-2 border-black text-white p-1.5 rounded-full hover:bg-red-600 transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[1px] active:shadow-none z-20"
                 >
-                    <X size={18} />
+                    <X size={16} strokeWidth={4} />
                 </button>
 
                 <div className="flex gap-4 items-start relative z-10">

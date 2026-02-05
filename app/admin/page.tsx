@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, AlertTriangle, X, ExternalLink, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { Check, AlertTriangle, X, ExternalLink, ChevronDown, ChevronUp, Loader2, Brain, Activity, ShieldAlert } from 'lucide-react';
+import CerberusThought from '@/components/admin/CerberusThought';
 
 const ADMIN_WALLET = "C31JQfZBVRsnvFqiNptD95rvbEx8fsuPwdZn62yEWx9X";
 
@@ -46,6 +47,7 @@ export default function DracoDashboard() {
     const [markets, setMarkets] = useState<any[]>([]);
     const [expandedLogs, setExpandedLogs] = useState<string | null>(null);
     const [processingQueue, setProcessingQueue] = useState<string[]>([]);
+    const [activeTab, setActiveTab] = useState<'MARKETS' | 'BRAIN'>('MARKETS');
 
     const fetchMarkets = async () => {
         try {
@@ -171,69 +173,132 @@ export default function DracoDashboard() {
                     </p>
                 </div>
                 <div className="flex items-center gap-6">
+                    <div className="flex bg-white/5 p-1 rounded-xl border border-white/10 gap-1">
+                        <button
+                            onClick={() => setActiveTab('MARKETS')}
+                            className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'MARKETS' ? 'bg-green-500 text-black' : 'text-gray-500 hover:text-white'}`}
+                        >
+                            Markets
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('BRAIN')}
+                            className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'BRAIN' ? 'bg-green-500 text-black' : 'text-gray-500 hover:text-white'}`}
+                        >
+                            Cognitive Trace
+                        </button>
+                    </div>
                     <div className="text-right font-mono">
                         <p className="text-[10px] text-gray-500 uppercase">Markets in Queue</p>
                         <p className="text-lg text-green-500 tabular-nums font-black">{markets.length}</p>
                     </div>
-                    <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.5)]" />
                 </div>
             </header>
 
-            {/* ACTIVE PROCESSING SECTION */}
-            <section className="max-w-7xl mx-auto mb-10">
-                <div className="flex items-center gap-3 mb-4">
-                    <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                    <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest">Active Processing</h2>
-                </div>
-                {activeMarkets.length === 0 ? (
-                    <div className="border border-dashed border-green-900/30 rounded-xl p-8 text-center text-green-900 font-mono text-sm">
-                        No markets currently being analyzed. Awaiting submissions...
-                    </div>
+            <AnimatePresence mode="wait">
+                {activeTab === 'MARKETS' ? (
+                    <motion.div
+                        key="markets"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.3 }}
+                    >
+                        {/* ACTIVE PROCESSING SECTION */}
+                        <section className="max-w-7xl mx-auto mb-10">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                                <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest">Active Processing</h2>
+                            </div>
+                            {activeMarkets.length === 0 ? (
+                                <div className="border border-dashed border-green-900/30 rounded-xl p-8 text-center text-green-900 font-mono text-sm">
+                                    No markets currently being analyzed. Awaiting submissions...
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {activeMarkets.map((m) => (
+                                        <MarketRow key={m.id} market={m} expandedLogs={expandedLogs} setExpandedLogs={setExpandedLogs} updateStatus={updateStatus} processingQueue={processingQueue} />
+                                    ))}
+                                </div>
+                            )}
+                        </section>
+
+                        {/* NEEDS REVIEW */}
+                        {queuedMarkets.length > 0 && (
+                            <section className="max-w-7xl mx-auto mb-10">
+                                <div className="flex items-center gap-3 mb-4">
+                                    <AlertTriangle size={14} className="text-amber-500" />
+                                    <h2 className="text-sm font-black text-amber-500 uppercase tracking-widest">Needs Human Review</h2>
+                                </div>
+                                <div className="space-y-4">
+                                    {queuedMarkets.map((m) => (
+                                        <MarketRow key={m.id} market={m} expandedLogs={expandedLogs} setExpandedLogs={setExpandedLogs} updateStatus={updateStatus} processingQueue={processingQueue} />
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+
+                        {/* COMPLETED */}
+                        {completedMarkets.length > 0 && (
+                            <section className="max-w-7xl mx-auto">
+                                <div className="flex items-center gap-3 mb-4">
+                                    <Check size={14} className="text-[#F492B7]" />
+                                    <h2 className="text-sm font-black text-gray-500 uppercase tracking-widest">Completed</h2>
+                                </div>
+                                <div className="space-y-3 opacity-60">
+                                    {completedMarkets.slice(0, 10).map((m) => (
+                                        <MarketRow key={m.id} market={m} expandedLogs={expandedLogs} setExpandedLogs={setExpandedLogs} updateStatus={updateStatus} processingQueue={processingQueue} isCompact />
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+
+                        {markets.length === 0 && (
+                            <div className="h-[50vh] flex flex-col items-center justify-center opacity-30 grayscale saturate-0">
+                                <div className="w-20 h-20 border-4 border-dashed border-green-500 rounded-full animate-spin mb-6" />
+                                <p className="text-green-500 font-mono text-sm animate-pulse tracking-widest uppercase">Scanning empty sectors...</p>
+                            </div>
+                        )}
+                    </motion.div>
                 ) : (
-                    <div className="space-y-4">
-                        {activeMarkets.map((m) => (
-                            <MarketRow key={m.id} market={m} expandedLogs={expandedLogs} setExpandedLogs={setExpandedLogs} updateStatus={updateStatus} processingQueue={processingQueue} />
-                        ))}
-                    </div>
+                    <motion.div
+                        key="brain"
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        transition={{ duration: 0.4 }}
+                        className="max-w-6xl mx-auto"
+                    >
+                        <div className="mb-8 flex items-center justify-between">
+                            <div>
+                                <h2 className="text-2xl font-black text-white uppercase tracking-tighter">Cerberus Live Reasoning</h2>
+                                <p className="text-xs text-green-500 font-mono">Real-time simulation of self-correcting AI agent logic</p>
+                            </div>
+                            <div className="bg-white/5 border border-white/10 px-4 py-2 rounded-full flex items-center gap-2 text-[10px] font-bold text-gray-400">
+                                <Activity size={12} className="text-green-500" /> SYSTEM_UPTIME: 99.9%
+                            </div>
+                        </div>
+                        <CerberusThought />
+                        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6 pb-20">
+                            <div className="p-6 bg-green-500/5 border border-green-500/20 rounded-2xl">
+                                <h3 className="text-sm font-black text-green-500 uppercase mb-3 flex items-center gap-2">
+                                    <ShieldAlert size={14} /> Recovery Protocol
+                                </h3>
+                                <p className="text-xs text-gray-500 leading-relaxed font-mono">
+                                    Cerberus identifies critical failures via the <span className="text-red-500">DRAW_TRACE</span> module. Upon detection, it triggers a recursive reflection loop to recalculate the optimal path (DAG) before final verification.
+                                </p>
+                            </div>
+                            <div className="p-6 bg-white/5 border border-white/10 rounded-2xl">
+                                <h3 className="text-sm font-black text-white uppercase mb-3 flex items-center gap-2">
+                                    <Brain size={14} /> Cognitive Architecture
+                                </h3>
+                                <p className="text-xs text-gray-500 leading-relaxed font-mono">
+                                    Built on aDirected Acyclic Graph (DAG) system, allowing for non-linear reasoning. Each node represents a discrete cognitive step in the verification process.
+                                </p>
+                            </div>
+                        </div>
+                    </motion.div>
                 )}
-            </section>
-
-            {/* NEEDS REVIEW */}
-            {queuedMarkets.length > 0 && (
-                <section className="max-w-7xl mx-auto mb-10">
-                    <div className="flex items-center gap-3 mb-4">
-                        <AlertTriangle size={14} className="text-amber-500" />
-                        <h2 className="text-sm font-black text-amber-500 uppercase tracking-widest">Needs Human Review</h2>
-                    </div>
-                    <div className="space-y-4">
-                        {queuedMarkets.map((m) => (
-                            <MarketRow key={m.id} market={m} expandedLogs={expandedLogs} setExpandedLogs={setExpandedLogs} updateStatus={updateStatus} processingQueue={processingQueue} />
-                        ))}
-                    </div>
-                </section>
-            )}
-
-            {/* COMPLETED */}
-            {completedMarkets.length > 0 && (
-                <section className="max-w-7xl mx-auto">
-                    <div className="flex items-center gap-3 mb-4">
-                        <Check size={14} className="text-[#F492B7]" />
-                        <h2 className="text-sm font-black text-gray-500 uppercase tracking-widest">Completed</h2>
-                    </div>
-                    <div className="space-y-3 opacity-60">
-                        {completedMarkets.slice(0, 10).map((m) => (
-                            <MarketRow key={m.id} market={m} expandedLogs={expandedLogs} setExpandedLogs={setExpandedLogs} updateStatus={updateStatus} processingQueue={processingQueue} isCompact />
-                        ))}
-                    </div>
-                </section>
-            )}
-
-            {markets.length === 0 && (
-                <div className="h-[50vh] flex flex-col items-center justify-center opacity-30 grayscale saturate-0">
-                    <div className="w-20 h-20 border-4 border-dashed border-green-500 rounded-full animate-spin mb-6" />
-                    <p className="text-green-500 font-mono text-sm animate-pulse tracking-widest uppercase">Scanning empty sectors...</p>
-                </div>
-            )}
+            </AnimatePresence>
         </div>
     );
 }

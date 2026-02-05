@@ -8,6 +8,7 @@ import { Loader2, ArrowRight, Lock, Zap, Ticket } from 'lucide-react';
 import { getWhitelistStatus, registerForWhitelist } from '@/lib/whitelist';
 import CustomWalletModal from '@/components/CustomWalletModal';
 import { useRouter } from 'next/navigation';
+import PhysicsCard from '@/components/PhysicsCard';
 
 // FORCE UPDATE: v1.0.5
 export default function GenesisPage() {
@@ -58,100 +59,94 @@ export default function GenesisPage() {
             {/* --- DOT GRID BACKGROUND --- */}
             <div className="fixed inset-0 z-0 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none"></div>
 
-            {/* MAIN CONTENT CARD */}
-            <motion.main
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.5 }}
-                className="relative z-10 w-full max-w-xl mx-4 my-auto pt-24 pb-12"
-            >
-                <div className="bg-white border-2 border-black rounded-3xl p-8 md:p-12 shadow-[8px_8px_0_0_#F492B7] relative">
+            {/* MAIN CONTENT - SPLIT SCREEN */}
+            <div className="relative z-10 w-full min-h-screen flex flex-col md:flex-row">
 
-                    {/* Floating Badge */}
-                    <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-[#F492B7] text-black border-2 border-black px-6 py-2 rounded-full font-black uppercase tracking-widest text-xs shadow-[2px_2px_0_0_black]">
-                        Genesis Pass
-                    </div>
-
-                    {/* Branding Section */}
-                    <div className="text-center mb-10">
-                        <div className="w-24 h-24 mx-auto mb-6 relative hover:scale-110 transition-transform duration-300">
-                            <Image src="/djinn-logo.png?v=3" alt="Logo" fill className="object-contain" priority unoptimized />
+                {/* LADO IZQUIERDO: CONTENIDO */}
+                <motion.div
+                    initial={{ opacity: 0, x: -50 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="flex-1 flex flex-col justify-center px-8 md:px-20 py-12 bg-black/40 backdrop-blur-sm"
+                >
+                    <div className="max-w-md w-full">
+                        <div className="w-16 h-16 mb-8 relative">
+                            <Image src="/djinn-logo.png?v=3" alt="Djinn" fill className="object-contain" priority unoptimized />
                         </div>
 
-                        {/* THE BRAND FONT MATCHING NAVBAR */}
-                        <h1 className="text-6xl md:text-8xl font-bold tracking-tight text-black mb-2" style={{ fontFamily: 'var(--font-adriane), serif' }}>
-                            Djinn
+                        <h1 className="text-5xl md:text-7xl font-bold tracking-tighter text-white mb-6 leading-none" style={{ fontFamily: 'var(--font-adriane), serif' }}>
+                            DJINN: <br />
+                            <span className="text-[#00FF41]">INTELLIGENCE</span> <br />
+                            PROTOCOL
                         </h1>
-                        {/* ABSOLUTELY NO SUBTITLE HERE */}
-                    </div>
 
-                    {/* Interactive Area */}
-                    <div className="w-full">
-                        <AnimatePresence mode="wait">
-                            {loading ? (
-                                <motion.div key="load" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-center py-8">
-                                    <Loader2 className="w-10 h-10 text-[#F492B7] animate-spin mx-auto mb-4" />
-                                    <div className="text-xs font-black uppercase tracking-widest text-gray-400">Loading System...</div>
-                                </motion.div>
-                            ) : status.isAdmin ? (
-                                <motion.div key="admin" className="text-center">
-                                    <div className="bg-black text-white p-4 rounded-xl border-2 border-black mb-6">
-                                        <Lock className="w-6 h-6 mx-auto mb-2 text-[#F492B7]" />
-                                        <div className="font-bold uppercase tracking-wider text-sm">God Mode Active</div>
+                        <p className="text-sm font-mono text-white/40 mb-12 leading-relaxed uppercase tracking-widest">
+                            The first decentralized oracle network powered by agentic intelligence.
+                            Zero-trust verification for any prediction market.
+                        </p>
+
+                        <div className="space-y-6">
+                            <AnimatePresence mode="wait">
+                                {loading ? (
+                                    <div className="flex items-center gap-3 text-[#00FF41] font-mono text-xs uppercase tracking-widest">
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Syncing Neural Link...
                                     </div>
-                                    <button
-                                        onClick={() => router.push('/markets')}
-                                        className="w-full bg-[#F492B7] text-black border-2 border-black py-4 rounded-2xl font-black uppercase tracking-widest hover:translate-y-1 hover:shadow-none shadow-[4px_4px_0_0_black] transition-all"
-                                    >
-                                        Enter Markets
-                                    </button>
-                                </motion.div>
-                            ) : status.isRegistered ? (
-                                <motion.div key="reg" className="text-center">
-                                    <div className="border-2 border-dashed border-gray-300 rounded-2xl p-6 mb-6 bg-gray-50">
-                                        <div className="flex items-center justify-center gap-2 mb-2">
-                                            <div className="w-3 h-3 bg-[#F492B7] rounded-full animate-pulse"></div>
-                                            <span className="font-bold uppercase text-sm text-gray-400">Waitlist Confirmed</span>
+                                ) : status.isRegistered ? (
+                                    <div className="p-6 border border-[#00FF41]/20 bg-[#00FF41]/5 rounded-xl">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <div className="w-2 h-2 bg-[#00FF41] rounded-full animate-pulse" />
+                                            <span className="font-mono text-[10px] uppercase text-[#00FF41]">Registration Confirmed</span>
                                         </div>
-                                        <div className="text-4xl font-black text-black mb-1">#{status.count}</div>
-                                        <div className="text-[10px] font-mono text-gray-400 truncate w-full px-4">{publicKey?.toBase58()}</div>
+                                        <div className="text-3xl font-black text-white tabular-nums">#{status.count}</div>
+                                        <p className="text-[9px] font-mono text-white/20 mt-2 truncate">{publicKey?.toBase58()}</p>
                                     </div>
-
-                                    <div className="bg-black text-white py-3 px-4 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2">
-                                        <Ticket className="w-4 h-4 text-[#F492B7]" />
-                                        You are on the list
+                                ) : (
+                                    <div className="space-y-4">
+                                        {!connected ? (
+                                            <button
+                                                onClick={() => setIsWalletModalOpen(true)}
+                                                className="group w-full bg-white text-black py-4 px-8 rounded-full font-black uppercase tracking-widest text-xs flex items-center justify-between hover:bg-[#00FF41] transition-all"
+                                            >
+                                                Request Access <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={handleConnect}
+                                                className="w-full bg-[#00FF41] text-black py-4 px-8 rounded-full font-black uppercase tracking-widest text-xs shadow-[0_0_20px_rgba(0,255,65,0.3)] hover:scale-[1.02] transition-all"
+                                            >
+                                                Secure Identity_
+                                            </button>
+                                        )}
+                                        <p className="text-[10px] font-mono text-white/20 uppercase tracking-[0.2em] text-center">
+                                            Currently in: Private Alpha Phase 1
+                                        </p>
                                     </div>
-                                </motion.div>
-                            ) : !status.isFull ? (
-                                <motion.div key="join" className="w-full space-y-6">
-                                    {/* Stats Row REMOVED COMPLETELY */}
-
-                                    {!connected ? (
-                                        <button
-                                            onClick={() => setIsWalletModalOpen(true)}
-                                            className="w-full bg-white text-black border-2 border-black py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-gray-50 hover:translate-y-1 hover:shadow-none shadow-[4px_4px_0_0_black] transition-all flex items-center justify-center gap-3"
-                                        >
-                                            Connect Wallet <ArrowRight className="w-5 h-5" />
-                                        </button>
-                                    ) : (
-                                        <button
-                                            onClick={handleConnect}
-                                            className="w-full bg-[#F492B7] text-black border-2 border-black py-4 rounded-2xl font-black uppercase tracking-widest hover:brightness-105 hover:translate-y-1 hover:shadow-none shadow-[4px_4px_0_0_black] transition-all flex items-center justify-center gap-2"
-                                        >
-                                            <Zap className="w-5 h-5" /> Secure Spot
-                                        </button>
-                                    )}
-                                </motion.div>
-                            ) : (
-                                <motion.div className="bg-red-50 text-red-500 border-2 border-red-100 p-6 rounded-2xl text-center font-bold uppercase tracking-widest">
-                                    Sold Out
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
+                                )}
+                            </AnimatePresence>
+                        </div>
                     </div>
+                </motion.div>
 
+                {/* LADO DERECHO: EL PLAYGROUND (PHYSICS CARD) */}
+                <div className="flex-1 relative bg-black flex items-center justify-center p-12 overflow-hidden border-l border-white/5">
+                    {/* Shadow underneath */}
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,255,65,0.05)_0%,transparent_70%)]" />
+
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: 0.4, duration: 0.8 }}
+                        className="w-full h-full"
+                    >
+                        <PhysicsCard />
+                    </motion.div>
+
+                    {/* Hint */}
+                    <div className="absolute bottom-8 right-8 text-[10px] font-mono text-white/20 flex items-center gap-2">
+                        <Zap size={10} /> GRAB_TO_STRETCH_PROTOCOL
+                    </div>
                 </div>
-            </motion.main>
+            </div>
 
             {/* Footer Brand */}
             <div className="relative z-10 pb-8 text-center text-gray-400">
