@@ -95,7 +95,20 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
     );
 
     // 4. Transform / Derived Hooks
+    useAnimationFrame((t) => {
+        if (!isDragging) {
+            floatY.set(Math.sin(t / 1500) * 6);
+        }
+    });
+
+    const [isClient, setIsClient] = useState(false);
     useEffect(() => {
+        setIsClient(true);
+    }, []);
+
+    // Celebration on Mount
+    useEffect(() => {
+        if (!isClient) return;
         const duration = 3 * 1000;
         const animationEnd = Date.now() + duration;
         const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
@@ -115,7 +128,9 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
         }, 250);
 
         return () => clearInterval(interval);
-    }, []);
+    }, [isClient]);
+
+    if (!isClient) return null;
 
     return (
         <div
