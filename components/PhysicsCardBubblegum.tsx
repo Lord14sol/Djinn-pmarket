@@ -236,55 +236,49 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                     {/* Content */}
                     <div className="p-10 flex flex-col h-full relative z-10">
 
-                        {/* Center Branding Area */}
-                        <div className="flex-1 flex flex-col items-center justify-center space-y-2">
-                            <motion.span
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="text-[14px] tracking-[0.6em] uppercase font-light text-white/40"
-                                style={{ fontFamily: 'var(--font-adriane), serif' }}
-                            >
-                                WELCOME
-                            </motion.span>
-
-                            <motion.span
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 0.1 }}
-                                className="text-[12px] tracking-[0.4em] uppercase font-bold text-[#FF69B4]"
-                                style={{ fontFamily: 'var(--font-adriane), serif' }}
-                            >
-                                NEW
-                            </motion.span>
-
+                        {/* Top Left Branding */}
+                        <div className="pt-4">
                             <motion.h1
-                                initial={{ opacity: 0, scale: 0.9 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                transition={{ delay: 0.2 }}
-                                className="text-[100px] font-black tracking-tighter text-white drop-shadow-2xl"
-                                style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700, lineHeight: 0.8 }}
+                                className="text-3xl font-black tracking-tighter"
+                                style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}
+                                animate={{
+                                    color: ['#FF69B4', '#fff', '#FF69B4']
+                                }}
+                                transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
                             >
                                 Djinn
                             </motion.h1>
+                        </div>
 
-                            <motion.div
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 0.4 }}
-                                className="pt-12"
-                            >
+                        {/* Middle Identity Area */}
+                        <div className="flex-1 flex flex-col justify-center gap-12">
+                            <div className="flex items-center gap-6">
                                 <span
-                                    className="text-4xl font-bold tracking-tight lowercase text-white/80"
+                                    className="text-5xl font-bold tracking-tight lowercase text-white"
                                     style={{ fontFamily: 'var(--font-adriane), serif' }}
                                 >
                                     @{username || 'agent'}
                                 </span>
-                            </motion.div>
+
+                                <div className="h-10 w-[1px] bg-white/20" />
+
+                                <span
+                                    className="text-2xl font-mono text-white/30 tracking-widest"
+                                >
+                                    #084
+                                </span>
+                            </div>
                         </div>
 
-                        {/* Bottom Space / Subtle Indicator */}
-                        <div className="pb-10 flex justify-center">
-                            <div className="w-1.5 h-1.5 rounded-full bg-white/10" />
+                        {/* Bottom Status */}
+                        <div className="pb-10 flex flex-col items-center">
+                            <p
+                                className="text-[10px] tracking-[0.5em] uppercase font-bold text-[#FF69B4] text-center"
+                                style={{ fontFamily: 'var(--font-adriane), serif' }}
+                            >
+                                djinn mode active
+                            </p>
+                            <div className="w-1.5 h-1.5 rounded-full bg-[#00FF41] mt-4 shadow-[0_0_8px_#00FF41] animate-pulse" />
                         </div>
                     </div>
 
@@ -293,7 +287,7 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                         style={{
                             background: useTransform(
                                 [glareX, glareY],
-                                ([gx, gy]) => `radial-gradient(circle at ${gx}% ${gy}%, rgba(255, 255, 255, 0.2) 0%, transparent 60%)`
+                                ([gx, gy]) => `radial-gradient(circle at ${gx}% ${gy}%, rgba(255, 255, 255, 0.15) 0%, transparent 60%)`
                             )
                         }}
                         className="absolute inset-0 pointer-events-none mix-blend-overlay z-30"
