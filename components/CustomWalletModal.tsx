@@ -11,8 +11,16 @@ interface CustomWalletModalProps {
 }
 
 export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModalProps) {
-    const { wallets, select, connect, connecting, connected, wallet, publicKey } = useWallet();
+    const { wallets, select, connect, disconnect, connecting, connected, wallet, publicKey } = useWallet();
     const [isConnecting, setIsConnecting] = useState(false);
+
+    // Reset stale wallet state when modal opens
+    useEffect(() => {
+        if (isOpen && wallet && !connected && !connecting) {
+            console.log('[Modal] Clearing stale wallet selection...');
+            disconnect().catch(() => {});
+        }
+    }, [isOpen]); // Only on modal open, intentionally not including other deps
 
     // Debug: Log state changes
     useEffect(() => {
@@ -94,15 +102,47 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
             console.log('[Modal] Wallet hook updated! Calling connect()...');
 
             const doConnect = async () => {
-                try {
-                    await connect();
-                    console.log('[Modal] SUCCESS! Connected.');
-                } catch (err: any) {
-                    console.error('[Modal] Connection error:', err?.name, err?.message);
-                } finally {
-                    setPendingWallet(null);
-                    setIsConnecting(false);
+                const maxRetries = 3;
+
+                for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                    try {
+                        // Small delay before each attempt
+                        if (attempt > 1) {
+                            console.log(`[Modal] Retry attempt ${attempt}/${maxRetries}...`);
+                            await new Promise(r => setTimeout(r, 500));
+                        }
+
+                        await connect();
+                        console.log('[Modal] SUCCESS! Connected.');
+                        return; // Success, exit loop
+
+                    } catch (err: any) {
+                        const isUnexpectedError = err?.message?.includes('Unexpected error');
+                        const isUserRejected = err?.message?.includes('User rejected') ||
+                                               err?.message?.includes('user rejected');
+
+                        console.warn(`[Modal] Attempt ${attempt} error:`, err?.name, err?.message);
+
+                        // User rejected - don't retry
+                        if (isUserRejected) {
+                            console.log('[Modal] User rejected, stopping.');
+                            break;
+                        }
+
+                        // Unexpected error - retry if attempts remain
+                        if (isUnexpectedError && attempt < maxRetries) {
+                            continue;
+                        }
+
+                        // Final failure or non-retriable error
+                        if (attempt === maxRetries) {
+                            console.error('[Modal] All retries failed');
+                        }
+                    }
                 }
+
+                setPendingWallet(null);
+                setIsConnecting(false);
             };
 
             doConnect();
