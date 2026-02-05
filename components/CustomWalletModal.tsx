@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useCallback, useEffect, useState } from 'react';
+import React, { useMemo, useCallback, useEffect, useState, useRef } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { WalletReadyState, WalletName } from '@solana/wallet-adapter-base';
 import { ShieldCheck, X } from 'lucide-react';
@@ -69,33 +69,57 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
             connectionAttemptRef.current = true;
 
             const connectWallet = async () => {
+                const maxAttempts = 3;
+
+                const attemptConnect = async (attempts: number): Promise<void> => {
+                    try {
+                        // Delay scales with attempt: 500ms, 800ms, 1200ms
+                        const delay = 500 + (attempts - 1) * 300;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+
+                        // Re-check conditions after delay (critical: state may have changed)
+                        if (
+                            wallet?.adapter.name === selectedWalletName &&
+                            !connected &&
+                            !connecting &&
+                            isOpen
+                        ) {
+                            console.log(`[CustomWalletModal] Calling connect() [Attempt ${attempts}]`);
+                            await connect();
+                        }
+                    } catch (error: unknown) {
+                        const err = error as { name?: string; message?: string };
+                        console.error(`[CustomWalletModal] Connection failed [Attempt ${attempts}]:`, error);
+
+                        // Identify known recoverable/ignorable errors
+                        const isUserRejected = err.name === 'WalletConnectionError' && err.message?.includes('User rejected');
+                        const isUnexpected = err.message?.includes('Unexpected error');
+                        const isMissingAdapter = err.message?.includes('Adapter is not connected');
+                        const isNotReady = err.name === 'WalletNotReadyError';
+
+                        // User explicitly rejected — don't retry
+                        if (isUserRejected) {
+                            setSelectedWalletName(null);
+                            return;
+                        }
+
+                        // Transient errors — retry if attempts remain
+                        if ((isUnexpected || isMissingAdapter || isNotReady) && attempts < maxAttempts) {
+                            console.log(`[CustomWalletModal] Retrying... (${attempts}/${maxAttempts})`);
+                            return attemptConnect(attempts + 1);
+                        }
+
+                        // Final failure — only alert on genuine unknown errors
+                        if (!isUnexpected && !isMissingAdapter && !isNotReady) {
+                            alert(`Connection Failed: ${err.message || 'Unknown error'}`);
+                        }
+
+                        setSelectedWalletName(null);
+                    }
+                };
+
                 try {
-                    // Significant delay to ensure adapter internal state is settled
-                    await new Promise(resolve => setTimeout(resolve, 500));
-
-                    // Re-check conditions after delay
-                    if (
-                        wallet?.adapter.name === selectedWalletName &&
-                        !connected &&
-                        !connecting &&
-                        isOpen
-                    ) {
-                        await connect();
-                    }
-                } catch (error: any) {
-                    console.error('[CustomWalletModal] Connection failed:', error);
-
-                    // Swallowing known white-noise errors
-                    const isUserRejected = error.name === 'WalletConnectionError' && error.message?.includes('User rejected');
-                    const isUnexpected = error.message?.includes('Unexpected error');
-                    const isMissingAdapter = error.message?.includes('Adapter is not connected');
-
-                    if (!isUserRejected && !isUnexpected && !isMissingAdapter) {
-                        alert(`Connection Failed: ${error.message || 'Unknown error'}`);
-                    }
-
-                    // Reset name so user can try again
-                    setSelectedWalletName(null);
+                    await attemptConnect(1);
                 } finally {
                     setIsConnecting(false);
                     connectionAttemptRef.current = false;
