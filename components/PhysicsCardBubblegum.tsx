@@ -95,6 +95,13 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
     );
 
     // 4. Transform / Derived Hooks
+    const cardY = useTransform([mouseY, floatY], ([my, fy]) => (my as number) + (fy as number));
+    const dynamicGlare = useTransform([glareX, glareY], ([gx, gy]) => `radial-gradient(circle at ${gx}% ${gy}%, rgba(255, 255, 255, 0.15) 0%, transparent 60%)`);
+    const shimmerX = useTransform(mouseX, (v) => v * 0.3);
+    const shimmerY = useTransform(mouseY, (v) => v * 0.3);
+    const foilX = useTransform(mouseX, (v) => v * -0.1);
+    const foilY = useTransform(mouseY, (v) => v * -0.1);
+
     useAnimationFrame((t) => {
         if (!isDragging) {
             floatY.set(Math.sin(t / 1500) * 6);
@@ -229,7 +236,7 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                 onDragEnd={onDragEnd}
                 style={{
                     x: mouseX,
-                    y: useTransform([mouseY, floatY], ([my, fy]) => (my as number) + (fy as number)),
+                    y: cardY,
                     rotateX,
                     rotateY,
                     transformStyle: 'preserve-3d'
@@ -252,8 +259,8 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                         className="absolute inset-x-[-100%] inset-y-[-100%] pointer-events-none opacity-20 mix-blend-overlay"
                         style={{
                             background: `linear-gradient(135deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.4) 50%, rgba(255,255,255,0) 100%)`,
-                            x: useTransform(mouseX, (v) => v * 0.3),
-                            y: useTransform(mouseY, (v) => v * 0.3),
+                            x: shimmerX,
+                            y: shimmerY,
                         }}
                     />
 
@@ -264,23 +271,23 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                             background: `radial-gradient(circle at 50% 50%, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff)`,
                             filter: 'blur(80px)',
                             scale: 2,
-                            x: useTransform(mouseX, (v) => v * -0.1),
-                            y: useTransform(mouseY, (v) => v * -0.1),
+                            x: foilX,
+                            y: foilY,
                         }}
                     />
 
                     {/* Top Hole */}
                     <div className="relative z-20 w-24 h-2.5 bg-black/40 border border-white/5 rounded-full mx-auto mt-8 mb-6 shadow-inner pointer-events-none" />
 
-                    {/* WATERMARK - Top Right Corner (Largest) */}
-                    <div className="absolute top-10 right-10 w-32 h-32 opacity-15 pointer-events-none z-10">
+                    {/* WATERMARK - Top Right Corner (Largest Elite) */}
+                    <div className="absolute top-10 right-10 w-36 h-36 opacity-20 pointer-events-none z-10">
                         <div className="relative w-full h-full">
                             <Image
                                 src="/djinn-logo.png"
                                 alt=""
                                 fill
                                 className="object-contain grayscale brightness-200"
-                                sizes="128px"
+                                sizes="144px"
                             />
                         </div>
                     </div>
@@ -302,23 +309,25 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                             </motion.h1>
                         </div>
 
-                        {/* Middle Identity Area */}
-                        <div className="flex-1 flex flex-col justify-center gap-12">
-                            <div className="flex items-center gap-6">
+                        {/* Identity Centered Below */}
+                        <div className="flex-1 flex flex-col justify-end gap-6 mb-12">
+                            <div className="flex flex-col gap-2">
                                 <span
-                                    className="text-6xl font-bold tracking-tight lowercase text-white"
+                                    className="text-7xl font-bold tracking-tight lowercase text-white"
                                     style={{ fontFamily: 'var(--font-adriane), serif' }}
                                 >
                                     @{username || 'agent'}
                                 </span>
 
-                                <div className="h-12 w-0.5 bg-gradient-to-b from-[#FF69B4]/0 via-[#FF69B4]/50 to-[#FF69B4]/0" />
-
-                                <span
-                                    className="text-3xl font-mono text-white/50 tracking-[0.2em] font-black"
-                                >
-                                    #084
-                                </span>
+                                <div className="flex items-center gap-4">
+                                    <div className="h-0.5 flex-1 bg-gradient-to-r from-white/0 via-[#FF69B4]/50 to-white/0" />
+                                    <span
+                                        className="text-2xl font-mono text-white tracking-[0.4em] font-black"
+                                    >
+                                        #084
+                                    </span>
+                                    <div className="h-0.5 flex-1 bg-gradient-to-r from-white/0 via-[#FF69B4]/50 to-white/0" />
+                                </div>
                             </div>
                         </div>
 
@@ -347,10 +356,7 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                     {/* Dynamic Glare */}
                     <motion.div
                         style={{
-                            background: useTransform(
-                                [glareX, glareY],
-                                ([gx, gy]) => `radial-gradient(circle at ${gx}% ${gy}%, rgba(255, 255, 255, 0.15) 0%, transparent 60%)`
-                            )
+                            background: dynamicGlare
                         }}
                         className="absolute inset-0 pointer-events-none mix-blend-overlay z-30"
                     />
