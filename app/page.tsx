@@ -103,7 +103,7 @@ export default function DjinnLanding() {
             {/* Top Navigation - Neo-Brutalist Disconnect */}
             <nav className="relative z-20 w-full flex items-center justify-end px-8 py-8 max-w-7xl mx-auto">
                 <AnimatePresence>
-                    {connected && (
+                    {isMounted && connected && (
                         <motion.button
                             initial={{ opacity: 0, x: 20 }}
                             animate={{ opacity: 1, x: 0 }}
@@ -125,11 +125,11 @@ export default function DjinnLanding() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1 }}
-                    className="flex items-center gap-1 md:gap-2 mb-16 select-none"
+                    className="flex items-center gap-2 md:gap-4 mb-16 select-none"
                     style={{ cursor: 'pointer' }}
-                    onClick={() => connected && profile ? router.push('/markets') : null}
+                    onClick={() => isMounted && connected && profile ? router.push('/markets') : null}
                 >
-                    <div className="w-32 h-32 md:w-52 md:h-52 relative">
+                    <div className="w-40 h-40 md:w-56 md:h-56 relative">
                         <Image
                             src="/djinn-logo.png"
                             alt="Djinn"

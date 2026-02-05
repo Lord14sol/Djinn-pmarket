@@ -92,6 +92,14 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
         }
     );
 
+    // Subtle floating
+    const floatY = useMotionValue(0);
+    useAnimationFrame((t) => {
+        if (!isDragging) {
+            floatY.set(Math.sin(t / 1500) * 6);
+        }
+    });
+
     // Celebration on Mount
     useEffect(() => {
         const duration = 3 * 1000;
