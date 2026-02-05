@@ -12,6 +12,10 @@ export function WalletAuthWrapper({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         if (connected && publicKey) {
             const checkAuth = async () => {
+                // ADDED: Small delay to let adapter state settle after connection
+                // to avoid "Unexpected error" in modals trying to connect() simultaneously
+                await new Promise(resolve => setTimeout(resolve, 500));
+
                 const walletAddress = publicKey.toBase58();
                 const key = `djinn_auth_signature_${walletAddress}`;
                 const storedSig = localStorage.getItem(key);

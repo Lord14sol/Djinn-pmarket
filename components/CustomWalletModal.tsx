@@ -112,6 +112,8 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
                         }
 
                         // NOTIFY USER only for critical, non-transient errors
+                        // We SWALLOW isUnexpected on the last attempt too because if it still fails with that, 
+                        // it might actually be connected (check connected state in finally or next effect).
                         if (!isUserRejected && !isUnexpected && !isMissingAdapter) {
                             alert(`Connection Failed: ${error.message || 'Unknown error code'}`);
                         }
