@@ -50,8 +50,11 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
         });
     }, [wallets]);
 
-    // Handle wallet click - SIMPLE: select then connect
-    const handleWalletClick = useCallback(async (walletName: WalletName) => {
+    // Track which wallet we're trying to connect
+    const [pendingWallet, setPendingWallet] = useState<WalletName | null>(null);
+
+    // Handle wallet click - just select, useEffect will handle connect
+    const handleWalletClick = useCallback((walletName: WalletName) => {
         console.log('[Modal] handleWalletClick:', walletName);
 
         // Prevent double-clicks
@@ -76,38 +79,35 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
             return;
         }
 
+        console.log('[Modal] Selecting wallet and waiting for hook to update...');
         setIsConnecting(true);
+        setPendingWallet(walletName);
+        select(walletName);
+    }, [wallets, select, isConnecting, connecting, connected]);
 
-        try {
-            // Step 1: Select the wallet
-            console.log('[Modal] Calling select()...');
-            select(walletName);
+    // Effect: Connect when wallet hook updates to match our selection
+    useEffect(() => {
+        if (!pendingWallet || connected || connecting) return;
 
-            // Step 2: Small delay for selection to propagate
-            await new Promise(r => setTimeout(r, 200));
+        // Wait for the hook's wallet to match our selection
+        if (wallet?.adapter.name === pendingWallet) {
+            console.log('[Modal] Wallet hook updated! Calling connect()...');
 
-            // Step 3: Connect
-            console.log('[Modal] Calling connect()...');
-            await connect();
+            const doConnect = async () => {
+                try {
+                    await connect();
+                    console.log('[Modal] SUCCESS! Connected.');
+                } catch (err: any) {
+                    console.error('[Modal] Connection error:', err?.name, err?.message);
+                } finally {
+                    setPendingWallet(null);
+                    setIsConnecting(false);
+                }
+            };
 
-            console.log('[Modal] SUCCESS! Connected.');
-            // Modal will close via the useEffect below
-
-        } catch (err: any) {
-            console.error('[Modal] Connection error:', err?.name, err?.message);
-
-            // Don't alert for user rejections
-            if (!err?.message?.includes('User rejected') &&
-                !err?.message?.includes('user rejected') &&
-                err?.message !== '' &&
-                !err?.message?.includes('Unexpected error')) {
-                // Real error - but don't spam alerts
-                console.error('[Modal] Genuine error:', err);
-            }
-        } finally {
-            setIsConnecting(false);
+            doConnect();
         }
-    }, [wallets, select, connect, isConnecting, connecting, connected]);
+    }, [wallet, pendingWallet, connected, connecting, connect]);
 
     // Auto-close modal when connected
     useEffect(() => {
@@ -121,6 +121,7 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
     useEffect(() => {
         if (!isOpen) {
             setIsConnecting(false);
+            setPendingWallet(null);
         }
     }, [isOpen]);
 
