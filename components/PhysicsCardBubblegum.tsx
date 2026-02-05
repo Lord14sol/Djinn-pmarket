@@ -10,14 +10,15 @@ interface PhysicsCardProps {
 }
 
 export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
+    // 1. Refs
     const cardRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
-    // State
+    // 2. States
     const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
     const [isDragging, setIsDragging] = useState(false);
 
-    // Mouse/Drag Position
+    // 3. Raw Motion Values
     const x = useMotionValue(0);
     const y = useMotionValue(0);
     const floatY = useMotionValue(0);
@@ -93,14 +94,7 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
         }
     );
 
-    // Subtle floating
-    useAnimationFrame((t) => {
-        if (!isDragging) {
-            floatY.set(Math.sin(t / 1500) * 6);
-        }
-    });
-
-    // Celebration on Mount
+    // 4. Transform / Derived Hooks
     useEffect(() => {
         const duration = 3 * 1000;
         const animationEnd = Date.now() + duration;
