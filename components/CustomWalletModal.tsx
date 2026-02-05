@@ -61,41 +61,58 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
 
     // Trigger Connection when wallet updates
     useEffect(() => {
-        if (!selectedWalletName || connected || connecting || connectionAttemptRef.current) return;
+        if (!selectedWalletName || connected || connectionAttemptRef.current) return;
 
         // If the selected wallet matches the current wallet adapter, try connecting
         if (wallet?.adapter.name === selectedWalletName) {
-            console.log('[CustomWalletModal] Wallet ready, attempting connect flow...');
+            console.log('[CustomWalletModal] Wallet adapter matched. Initiating isolation sequence...');
             connectionAttemptRef.current = true;
 
             const connectWallet = async () => {
                 let attempts = 0;
                 const maxAttempts = 2;
 
+                // Add a global timeout for this specific connection flow
+                const timeoutId = setTimeout(() => {
+                    if (connectionAttemptRef.current && !connected) {
+                        console.warn('[CustomWalletModal] Connection flow timed out (10s). Resetting.');
+                        connectionAttemptRef.current = false;
+                        setIsConnecting(false);
+                        setSelectedWalletName(null);
+                    }
+                }, 10000);
+
                 const attemptConnect = async (): Promise<void> => {
                     attempts++;
                     try {
-                        // Wait for adapter state to settle
-                        await new Promise(resolve => setTimeout(resolve, 500));
+                        // 1. EXTENDED INITIAL STABILIZATION (1.5s)
+                        // Vital for slow extensions/providers to initialize after selection
+                        await new Promise(resolve => setTimeout(resolve, 1500));
 
-                        // 1. FINAL CHECK OF EXTERNAL STATE
-                        // If autoConnect already worked or it's already connecting, we're done
-                        if (connected || connecting) {
-                            console.log('[CustomWalletModal] Already connected or connecting, skipping manual call');
-                            return;
-                        }
-
-                        // 2. VERIFY MODAL IS STILL OPEN
+                        // 2. MODAL STATE CHECK
                         if (!isOpen) return;
 
-                        // 3. READY STATE CHECK
-                        const readyState = wallet.adapter.readyState;
-                        if (readyState !== WalletReadyState.Installed && readyState !== WalletReadyState.Loadable) {
-                            console.warn('[CustomWalletModal] Wallet not ready for connection:', readyState);
+                        // 3. DIRECT ADAPTER STATE VERIFICATION (Bypass hook lag)
+                        const adapter = wallet.adapter;
+                        if (adapter.connected) {
+                            console.log('[CustomWalletModal] Adapter already connected (Direct check). Early exit.');
                             return;
                         }
 
-                        console.log(`[CustomWalletModal] Calling connect() [Attempt ${attempts}]`);
+                        if (adapter.connecting) {
+                            console.log('[CustomWalletModal] Adapter already connecting (Direct check). Waiting...');
+                            // If it's already connecting, don't call connect() again, just wait for the effect to resolve
+                            return;
+                        }
+
+                        // 4. READY STATE CHECK
+                        const readyState = adapter.readyState;
+                        if (readyState !== WalletReadyState.Installed && readyState !== WalletReadyState.Loadable) {
+                            console.warn('[CustomWalletModal] Adapter not ready for connection:', readyState);
+                            return;
+                        }
+
+                        console.log(`[CustomWalletModal] Executing manual connect() [Attempt ${attempts}]`);
                         await connect();
                     } catch (error: any) {
                         console.error(`[CustomWalletModal] Connection failed [Attempt ${attempts}]:`, error);
@@ -104,24 +121,26 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
                         const isUnexpected = error.message?.includes('Unexpected error');
                         const isMissingAdapter = error.message?.includes('Adapter is not connected');
 
-                        // SILENT RETRY for "Unexpected error" - with longer delay
+                        // SILENT RETRY for "Unexpected error" - with longer interval
                         if (isUnexpected && attempts < maxAttempts) {
-                            console.log('[CustomWalletModal] Retrying connection due to "Unexpected error" in 1s...');
+                            console.log('[CustomWalletModal] Retrying with second isolation window (1s)...');
                             await new Promise(resolve => setTimeout(resolve, 1000));
                             return attemptConnect();
                         }
 
-                        // NOTIFY USER only for critical, non-transient errors
-                        // We SWALLOW isUnexpected on the last attempt too because if it still fails with that, 
-                        // it might actually be connected (check connected state in finally or next effect).
+                        // AGGRESSIVE SWALLOWING for "Unexpected error"
+                        // If it fails on second attempt with this, it often means a promt is busy. 
+                        // Don't alert the user, let them try again later if the timeout clears.
                         if (!isUserRejected && !isUnexpected && !isMissingAdapter) {
-                            alert(`Connection Failed: ${error.message || 'Unknown error code'}`);
+                            alert(`Connection Failed: ${error.message || 'Transient error'}`);
                         }
 
-                        // Reset so user can try again manually
+                        // Reset so user can try again manually if needed
                         setSelectedWalletName(null);
                     } finally {
-                        if (attempts === maxAttempts || !selectedWalletName) {
+                        // Only clear if we're done with all attempts or a success happened
+                        if (attempts === maxAttempts || !selectedWalletName || connected) {
+                            clearTimeout(timeoutId);
                             setIsConnecting(false);
                             connectionAttemptRef.current = false;
                         }
