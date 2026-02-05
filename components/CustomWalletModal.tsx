@@ -41,14 +41,10 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
             const walletToConnect = wallets.find(w => w.adapter.name === walletName);
 
             if (walletToConnect) {
-                // 1. SELECT first
+                // 1. SELECT first (updates context)
                 select(walletName);
 
-                // 2. WAIT A TINY TICK (0ms) to let select set the wallet, 
-                // but stay in the same event loop if possible for gesture
-                await new Promise(resolve => setTimeout(resolve, 50));
-
-                // 3. CONNECT manually
+                // 2. CONNECT IMMEDIATELY (must be in the same execution stack for gesture trust)
                 await walletToConnect.adapter.connect();
             }
         } catch (error: any) {

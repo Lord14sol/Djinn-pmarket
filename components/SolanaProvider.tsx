@@ -32,7 +32,7 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
                 wallets={wallets}
                 autoConnect={false}
                 // App Identity for wallet signatures
-                localStorageKey="djinn-wallet-v5"
+                localStorageKey="djinn-wallet-v10"
             >
                 <WalletAuthWrapper>
                     {children}
