@@ -26,6 +26,11 @@ import ClaimUsernameModal from '@/components/ClaimUsernameModal';
 import { getProfile } from '@/lib/supabase-db';
 
 export default function DjinnLanding() {
+    const [isMounted, setIsMounted] = useState(false);
+    useEffect(() => {
+        setIsMounted(true);
+    }, []);
+
     const router = useRouter();
     const { publicKey, connected, disconnect } = useWallet();
     const [status, setStatus] = useState({
@@ -40,12 +45,7 @@ export default function DjinnLanding() {
     const [isClaimModalOpen, setIsClaimModalOpen] = useState(false);
     const [isRegistering, setIsRegistering] = useState(false);
 
-    const [isMounted, setIsMounted] = useState(false);
     const walletAddress = useMemo(() => publicKey?.toBase58(), [publicKey]);
-
-    useEffect(() => {
-        setIsMounted(true);
-    }, []);
 
     const refreshStatus = useCallback(async () => {
         if (!walletAddress) {
