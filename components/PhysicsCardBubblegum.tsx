@@ -13,12 +13,6 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
     const cardRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
-    // Subtle floating
-    const floatY = useMotionValue(0);
-    useAnimationFrame((t) => {
-        floatY.set(Math.sin(t / 1500) * 6);
-    });
-
     // Mouse/Drag Position
     const x = useMotionValue(0);
     const y = useMotionValue(0);
@@ -93,6 +87,14 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
             return `M ${startX} ${startY} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${endX} ${endY}`;
         }
     );
+
+    // Subtle floating
+    const floatY = useMotionValue(0);
+    useAnimationFrame((t) => {
+        if (!isDragging) {
+            floatY.set(Math.sin(t / 1500) * 6);
+        }
+    });
 
     // State
     const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
