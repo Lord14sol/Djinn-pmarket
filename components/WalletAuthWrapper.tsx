@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import bs58 from 'bs58';
 
@@ -8,13 +8,15 @@ export function WalletAuthWrapper({ children }: { children: React.ReactNode }) {
     const { publicKey, signMessage, connected, disconnect } = useWallet();
     const [isVerifying, setIsVerifying] = useState(false);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const authTriggeredRef = useRef(false);
 
     useEffect(() => {
-        if (connected && publicKey) {
+        if (connected && publicKey && signMessage && !isAuthenticated && !authTriggeredRef.current) {
             const checkAuth = async () => {
-                // ADDED: Small delay to let adapter state settle after connection
-                // to avoid "Unexpected error" in modals trying to connect() simultaneously
-                await new Promise(resolve => setTimeout(resolve, 500));
+                authTriggeredRef.current = true;
+
+                // Allow adapter to settle COMPLETELY before signing
+                await new Promise(resolve => setTimeout(resolve, 1000));
 
                 const walletAddress = publicKey.toBase58();
                 const key = `djinn_auth_signature_${walletAddress}`;
@@ -25,63 +27,31 @@ export function WalletAuthWrapper({ children }: { children: React.ReactNode }) {
                     return;
                 }
 
-                if (signMessage) {
-                    setIsVerifying(true);
-                    try {
-                        const messageContent = `Welcome to Djinn Markets!\n\nPlease sign this message to verify ownership of your wallet.\n\nWallet: ${walletAddress}\nTimestamp: ${Date.now()}`;
-                        const message = new TextEncoder().encode(messageContent);
+                setIsVerifying(true);
+                try {
+                    const messageContent = `Welcome to Djinn Markets!\n\nPlease sign this message to verify ownership of your wallet.\n\nWallet: ${walletAddress}\nTimestamp: ${Date.now()}`;
+                    const message = new TextEncoder().encode(messageContent);
 
-                        const signature = await signMessage(message);
+                    const signature = await signMessage(message);
+                    localStorage.setItem(key, bs58.encode(signature));
 
-                        try {
-                            localStorage.setItem(key, bs58.encode(signature));
-                        } catch (quotaError) {
-                            if (quotaError instanceof Error && (quotaError.name === 'QuotaExceededError' || quotaError.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
-                                console.warn("⚠️ LocalStorage full! Executing emergency purge of non-essential data...");
-
-                                // 1. Purge high-memory items first (PFPs and custom profiles)
-                                Object.keys(localStorage).forEach(k => {
-                                    if (k.startsWith('djinn_pfp_') ||
-                                        k.startsWith('djinn_profile_') ||
-                                        k.startsWith('djinn_markets') ||
-                                        k.startsWith('djinn_created_markets')) {
-                                        localStorage.removeItem(k);
-                                    }
-                                });
-
-                                // 2. Retry saving the critical signature
-                                try {
-                                    localStorage.setItem(key, bs58.encode(signature));
-                                } catch (retryError) {
-                                    console.error("❌ Critical: Still cannot save auth signature after purge!", retryError);
-                                    // If even after purge it fails, we clear EVERYTHING starting with djinn_
-                                    Object.keys(localStorage).forEach(k => {
-                                        if (k.startsWith('djinn_')) localStorage.removeItem(k);
-                                    });
-                                    localStorage.setItem(key, bs58.encode(signature));
-                                }
-                            } else {
-                                throw quotaError;
-                            }
-                        }
-
-                        setIsAuthenticated(true);
-                        console.log("✅ Wallet Authenticated & Signed");
-                    } catch (error) {
-                        console.error("User rejected signature", error);
-                        disconnect();
-                    } finally {
-                        setIsVerifying(false);
-                    }
+                    setIsAuthenticated(true);
+                    console.log("✅ Wallet Authenticated & Signed");
+                } catch (error) {
+                    console.error("User rejected signature", error);
+                    authTriggeredRef.current = false;
+                    disconnect();
+                } finally {
+                    setIsVerifying(false);
                 }
             };
 
             checkAuth();
-        } else {
-            // Not connected, so "authenticated" in the sense that we show public UI
-            setIsAuthenticated(true);
+        } else if (!connected) {
+            setIsAuthenticated(false);
+            authTriggeredRef.current = false;
         }
-    }, [connected, publicKey, signMessage, disconnect]);
+    }, [connected, publicKey, signMessage, disconnect, isAuthenticated]);
 
     // BLOCK UI IF CONNECTED BUT NOT YET SIGNED
     if (connected && !isAuthenticated) {

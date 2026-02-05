@@ -17,7 +17,7 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
         return clusterApiUrl(network);
     }, [network]);
 
-    // Explicitly add adapters to ensure detection
+    // Explicitly add adapters
     const wallets = useMemo(
         () => [
             new PhantomWalletAdapter(),
@@ -31,10 +31,8 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
             <WalletProvider
                 wallets={wallets}
                 autoConnect={true}
-                // App Identity for wallet signatures
                 localStorageKey="djinn-wallet"
             >
-                {/* ✅ NO uses WalletModalProvider aquí */}
                 <WalletAuthWrapper>
                     {children}
                 </WalletAuthWrapper>
