@@ -69,13 +69,11 @@ export default function ClaimUsernameModal({ isOpen, walletAddress, onSuccess, o
             {/* Backdrop: Subtle dark blur */}
             <div className="absolute inset-0 bg-black/40 backdrop-blur-sm pointer-events-auto" onClick={onClose} />
 
-            {/* NEO-BRUTALIST CONTAINER: Positioned Bottom-Center */}
             <div className={`
                 relative w-full max-w-md pointer-events-auto
                 bg-white border-[4px] border-black rounded-[2.5rem] p-8
                 shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]
                 animate-in slide-in-from-bottom-12 duration-500
-                fixed bottom-12 left-1/2 -translate-x-1/2
             `}>
 
                 {/* Header: Title + Close Button */}
@@ -156,6 +154,6 @@ export default function ClaimUsernameModal({ isOpen, walletAddress, onSuccess, o
                     </button>
                 </div>
             </div>
-        </div>
+        </div >
     );
 }
