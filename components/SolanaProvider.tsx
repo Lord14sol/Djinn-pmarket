@@ -31,12 +31,17 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
             <WalletProvider
                 wallets={wallets}
                 autoConnect={false}
-                // App Identity for wallet signatures
-                localStorageKey="djinn-wallet"
                 onError={(error) => {
-                    // Silently swallow "Unexpected error" from adapter race conditions
-                    if (error.message?.includes('Unexpected error')) {
-                        console.warn('[SolanaProvider] Suppressed transient error:', error.message);
+                    // Silently swallow transient/empty errors from adapter race conditions
+                    const msg = error.message || '';
+                    const isTransient =
+                        msg.includes('Unexpected error') ||
+                        msg.includes('User rejected') ||
+                        msg === '' ||
+                        error.name === 'WalletConnectionError';
+
+                    if (isTransient) {
+                        console.warn('[SolanaProvider] Suppressed error:', error.name, msg || '(empty)');
                         return;
                     }
                     console.error('[SolanaProvider] Wallet error:', error);
