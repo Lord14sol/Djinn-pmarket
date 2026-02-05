@@ -65,41 +65,68 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
 
         // If the selected wallet matches the current wallet adapter, try connecting
         if (wallet?.adapter.name === selectedWalletName) {
-            console.log('[CustomWalletModal] Wallet ready, attempting connect...');
+            console.log('[CustomWalletModal] Wallet ready, attempting connect flow...');
             connectionAttemptRef.current = true;
 
             const connectWallet = async () => {
-                try {
-                    // Significant delay to ensure adapter internal state is settled
-                    await new Promise(resolve => setTimeout(resolve, 500));
+                let attempts = 0;
+                const maxAttempts = 2;
 
-                    // Re-check conditions after delay
-                    if (
-                        wallet?.adapter.name === selectedWalletName &&
-                        !connected &&
-                        !connecting &&
-                        isOpen
-                    ) {
+                const attemptConnect = async (): Promise<void> => {
+                    attempts++;
+                    try {
+                        // Wait for adapter state to settle
+                        await new Promise(resolve => setTimeout(resolve, 500));
+
+                        // 1. FINAL CHECK OF EXTERNAL STATE
+                        // If autoConnect already worked or it's already connecting, we're done
+                        if (connected || connecting) {
+                            console.log('[CustomWalletModal] Already connected or connecting, skipping manual call');
+                            return;
+                        }
+
+                        // 2. VERIFY MODAL IS STILL OPEN
+                        if (!isOpen) return;
+
+                        // 3. READY STATE CHECK
+                        const readyState = wallet.adapter.readyState;
+                        if (readyState !== WalletReadyState.Installed && readyState !== WalletReadyState.Loadable) {
+                            console.warn('[CustomWalletModal] Wallet not ready for connection:', readyState);
+                            return;
+                        }
+
+                        console.log(`[CustomWalletModal] Calling connect() [Attempt ${attempts}]`);
                         await connect();
+                    } catch (error: any) {
+                        console.error(`[CustomWalletModal] Connection failed [Attempt ${attempts}]:`, error);
+
+                        const isUserRejected = error.name === 'WalletConnectionError' && error.message?.includes('User rejected');
+                        const isUnexpected = error.message?.includes('Unexpected error');
+                        const isMissingAdapter = error.message?.includes('Adapter is not connected');
+
+                        // SILENT RETRY for "Unexpected error"
+                        if (isUnexpected && attempts < maxAttempts) {
+                            console.log('[CustomWalletModal] Retrying connection due to "Unexpected error"...');
+                            await new Promise(resolve => setTimeout(resolve, 350));
+                            return attemptConnect();
+                        }
+
+                        // NOTIFY USER only for critical, non-transient errors
+                        if (!isUserRejected && !isUnexpected && !isMissingAdapter) {
+                            alert(`Connection Failed: ${error.message || 'Unknown error code'}`);
+                        }
+
+                        // Reset so user can try again manually
+                        setSelectedWalletName(null);
+                    } finally {
+                        if (attempts === maxAttempts || !selectedWalletName) {
+                            setIsConnecting(false);
+                            connectionAttemptRef.current = false;
+                        }
                     }
-                } catch (error: any) {
-                    console.error('[CustomWalletModal] Connection failed:', error);
+                };
 
-                    // Swallowing known white-noise errors
-                    const isUserRejected = error.name === 'WalletConnectionError' && error.message?.includes('User rejected');
-                    const isUnexpected = error.message?.includes('Unexpected error');
-                    const isMissingAdapter = error.message?.includes('Adapter is not connected');
-
-                    if (!isUserRejected && !isUnexpected && !isMissingAdapter) {
-                        alert(`Connection Failed: ${error.message || 'Unknown error'}`);
-                    }
-
-                    // Reset name so user can try again
-                    setSelectedWalletName(null);
-                } finally {
-                    setIsConnecting(false);
-                    connectionAttemptRef.current = false;
-                }
+                await attemptConnect();
             };
 
             connectWallet();
