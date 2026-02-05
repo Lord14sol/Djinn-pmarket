@@ -11,7 +11,7 @@ interface CustomWalletModalProps {
 }
 
 export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModalProps) {
-    const { wallets, select, connecting, connected } = useWallet();
+    const { wallets, select, connect, connecting, connected } = useWallet();
     const [selectedWalletName, setSelectedWalletName] = useState<WalletName | null>(null);
 
     // Filter valid wallets
@@ -20,9 +20,8 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
         const list = [];
         for (const w of wallets) {
             if (seen.has(w.adapter.name)) continue;
-            const isImportant = ['Phantom', 'Solflare'].includes(w.adapter.name);
-            const isInstalled = w.readyState === WalletReadyState.Installed;
-            if (isImportant || isInstalled) {
+            const isReady = w.readyState === WalletReadyState.Installed || w.readyState === WalletReadyState.Loadable;
+            if (isReady) {
                 seen.add(w.adapter.name);
                 list.push(w);
             }
@@ -30,18 +29,39 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
         return list;
     }, [wallets]);
 
-    // Handle Wallet Selection - THE ONLY RELEVANT ACTION
-    const handleWalletSelect = useCallback((walletName: WalletName) => {
+    // Handle Wallet Selection - GESTURE SAFE
+    const handleWalletSelect = useCallback(async (walletName: WalletName) => {
         if (connected || connecting) return;
-        console.log('[CustomWalletModal] User selected:', walletName);
+
+        console.log('[CustomWalletModal] Attempting manual connection to:', walletName);
         setSelectedWalletName(walletName);
 
-        // This is a direct user-triggered action. 
-        // With autoConnect={true} in Provider, this will trigger the connection.
-        select(walletName);
-    }, [connected, connecting, select]);
+        try {
+            // Find the adapter in the wallets list
+            const walletToConnect = wallets.find(w => w.adapter.name === walletName);
 
-    // Simple closing logic
+            if (walletToConnect) {
+                // 1. SELECT first
+                select(walletName);
+
+                // 2. WAIT A TINY TICK (0ms) to let select set the wallet, 
+                // but stay in the same event loop if possible for gesture
+                await new Promise(resolve => setTimeout(resolve, 50));
+
+                // 3. CONNECT manually
+                await walletToConnect.adapter.connect();
+            }
+        } catch (error: any) {
+            console.error('[CustomWalletModal] Connection failed:', error);
+            // Silence "Unexpected error" as it's often a transient state
+            if (!error.message?.includes('Unexpected error')) {
+                alert(`Error: ${error.message}`);
+            }
+            setSelectedWalletName(null);
+        }
+    }, [connected, connecting, select, wallets]);
+
+    // Close on connection successful
     useEffect(() => {
         if (connected && isOpen) {
             onClose();
@@ -55,12 +75,12 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
             <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={onClose} />
             <div className="relative w-full max-w-sm bg-[#1A1A1A] border border-white/10 rounded-[2rem] shadow-2xl flex flex-col max-h-[90vh] z-10 overflow-hidden">
 
-                {connecting ? (
+                {(connecting || (selectedWalletName && !connected)) ? (
                     <div className="flex flex-col items-center justify-center py-16 px-8 text-center space-y-8">
                         <div className="w-20 h-20 rounded-full border-4 border-t-[#F492B7] border-white/10 animate-spin"></div>
                         <div className="space-y-3">
-                            <h3 className="text-2xl font-black text-white py-4">Connecting...</h3>
-                            <p className="text-gray-400 text-sm">Please approve the request in your wallet.</p>
+                            <h3 className="text-2xl font-black text-white">Connecting...</h3>
+                            <p className="text-gray-400 text-sm">Please approve in your {selectedWalletName || 'wallet'}.</p>
                         </div>
                     </div>
                 ) : (
@@ -71,15 +91,13 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
                             </button>
                             <h2 className="text-white/50 font-bold text-xs uppercase tracking-[0.2em] mt-2">Sign In</h2>
                         </div>
-
                         <div className="flex flex-col items-center justify-center py-6 gap-4">
-                            <div className="relative w-48 h-48">
-                                <img src="/djinn-logo.png?v=3" alt="Djinn" className="w-full h-full object-contain" />
+                            <div className="relative w-40 h-40">
+                                <img src="/djinn-logo.png?v=3" alt="Djinn" className="w-full h-full object-contain drop-shadow-[0_0_20px_rgba(244,146,183,0.3)]" />
                             </div>
-                            <p className="text-[#F492B7] text-sm font-bold tracking-wide">Choose your wallet to continue</p>
+                            <p className="text-[#F492B7] text-sm font-bold tracking-wide">Select your wallet</p>
                         </div>
-
-                        <div className="px-6 space-y-3 pb-8 overflow-y-auto">
+                        <div className="px-6 space-y-3 pb-8 overflow-y-auto scrollbar-hide">
                             {uniqueWallets.map((wallet: any) => (
                                 <button
                                     key={wallet.adapter.name}
@@ -93,13 +111,10 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
                                         <span className="font-bold text-white text-base">{wallet.adapter.name}</span>
                                     </div>
                                     {wallet.readyState === WalletReadyState.Installed && (
-                                        <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                                        <span className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]"></span>
                                     )}
                                 </button>
                             ))}
-                        </div>
-                        <div className="bg-[#151515] p-4 flex items-center justify-center text-[#FF0096]/60 border-t border-white/5 rounded-b-[2rem]">
-                            <ShieldCheck size={18} />
                         </div>
                     </>
                 )}
