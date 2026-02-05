@@ -94,13 +94,6 @@ export default function DjinnLanding() {
 
     const handleClaimSuccess = async (newUsername: string) => {
         setIsClaimModalOpen(false);
-        // Celebration!
-        confetti({
-            particleCount: 150,
-            spread: 70,
-            origin: { y: 0.6 },
-            colors: ['#FF69B4', '#00FF41', '#FF6B35', '#ffffff']
-        });
         await refreshStatus();
     };
 

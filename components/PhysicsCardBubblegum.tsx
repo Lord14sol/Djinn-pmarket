@@ -3,6 +3,7 @@
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import Image from 'next/image';
 import { motion, useMotionValue, useSpring, useTransform, useAnimationFrame } from 'framer-motion';
+import confetti from 'canvas-confetti';
 
 interface PhysicsCardProps {
     username?: string;
@@ -91,13 +92,28 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
         }
     );
 
-    // Subtle floating
-    const floatY = useMotionValue(0);
-    useAnimationFrame((t) => {
-        if (!isDragging) {
-            floatY.set(Math.sin(t / 1500) * 6);
-        }
-    });
+    // Celebration on Mount
+    useEffect(() => {
+        const duration = 3 * 1000;
+        const animationEnd = Date.now() + duration;
+        const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
+
+        const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
+
+        const interval: any = setInterval(function () {
+            const timeLeft = animationEnd - Date.now();
+
+            if (timeLeft <= 0) {
+                return clearInterval(interval);
+            }
+
+            const particleCount = 50 * (timeLeft / duration);
+            confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } });
+            confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } });
+        }, 250);
+
+        return () => clearInterval(interval);
+    }, []);
 
     return (
         <div
@@ -220,15 +236,15 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                     {/* Top Hole */}
                     <div className="relative z-20 w-24 h-2.5 bg-black/40 border border-white/5 rounded-full mx-auto mt-8 mb-6 shadow-inner pointer-events-none" />
 
-                    {/* WATERMARK - Top Right Corner */}
-                    <div className="absolute top-12 right-12 w-20 h-20 opacity-20 pointer-events-none z-10">
+                    {/* WATERMARK - Top Right Corner (Larger) */}
+                    <div className="absolute top-10 right-10 w-28 h-28 opacity-15 pointer-events-none z-10">
                         <div className="relative w-full h-full">
                             <Image
                                 src="/djinn-logo.png"
                                 alt=""
                                 fill
                                 className="object-contain grayscale brightness-200"
-                                sizes="80px"
+                                sizes="112px"
                             />
                         </div>
                     </div>
@@ -236,10 +252,10 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                     {/* Content */}
                     <div className="p-10 flex flex-col h-full relative z-10">
 
-                        {/* Top Left Branding */}
-                        <div className="pt-4">
+                        {/* Top Right Branding (Larger) */}
+                        <div className="flex justify-end pt-2 pr-4">
                             <motion.h1
-                                className="text-3xl font-black tracking-tighter"
+                                className="text-6xl font-black tracking-tighter"
                                 style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}
                                 animate={{
                                     color: ['#FF69B4', '#fff', '#FF69B4']
@@ -270,17 +286,29 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                             </div>
                         </div>
 
-                        {/* Bottom Status */}
-                        <div className="pb-10 flex flex-col items-center">
-                            <p
-                                className="text-[10px] tracking-[0.5em] uppercase font-bold text-[#FF69B4] text-center"
-                                style={{ fontFamily: 'var(--font-adriane), serif' }}
-                            >
-                                djinn mode active
-                            </p>
-                            <div className="w-1.5 h-1.5 rounded-full bg-[#00FF41] mt-4 shadow-[0_0_8px_#00FF41] animate-pulse" />
+                        {/* Bottom Status (Reduced to simple indicator) */}
+                        <div className="pb-10 flex justify-center">
+                            <div className="w-2 h-2 rounded-full bg-[#00FF41] shadow-[0_0_12px_#00FF41] animate-pulse" />
                         </div>
                     </div>
+
+                    {/* CRYSTAL CHROME SHINE */}
+                    <motion.div
+                        className="absolute inset-x-[-150%] inset-y-0 pointer-events-none opacity-40 mix-blend-color-dodge z-30"
+                        style={{
+                            background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0) 30%, rgba(255,255,255,0.8) 50%, rgba(255,255,255,0) 70%, transparent 100%)',
+                            skewX: -20
+                        }}
+                        animate={{
+                            x: ['-100%', '200%']
+                        }}
+                        transition={{
+                            duration: 4,
+                            repeat: Infinity,
+                            ease: "easeInOut",
+                            repeatDelay: 2
+                        }}
+                    />
 
                     {/* Dynamic Glare */}
                     <motion.div
