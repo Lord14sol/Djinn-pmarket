@@ -611,7 +611,6 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                         >
                             Early Pass
                         </motion.h2>
-                        <span className="text-[10px] font-mono text-[#FF69B4] tracking-[0.5em] font-bold">Priority verified Agent</span>
                     </div>
 
                     {/* MANIFESTO TEXT FROM IMAGE */}

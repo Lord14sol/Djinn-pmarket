@@ -156,8 +156,8 @@ export default function DjinnLanding() {
                 </motion.div>
 
                 <AnimatePresence mode="wait">
-                    {/* Only show card IF profile exists */}
-                    {connected && profile ? (
+                    {/* Show card IMMEDIATELY once connected for feedback */}
+                    {connected ? (
                         <motion.div
                             key="card-section"
                             initial={{ opacity: 0, scale: 0.8, y: 50 }}
@@ -166,7 +166,7 @@ export default function DjinnLanding() {
                             transition={{ type: "spring", stiffness: 100, damping: 15 }}
                             className="w-full max-w-md h-[520px] relative mb-12"
                         >
-                            <PhysicsCardBubblegum username={profile.username} />
+                            <PhysicsCardBubblegum username={profile?.username || 'agent'} />
                         </motion.div>
                     ) : (
                         <motion.div

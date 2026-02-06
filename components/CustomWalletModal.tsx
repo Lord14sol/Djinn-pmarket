@@ -29,33 +29,41 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
         return list;
     }, [wallets]);
 
-    // Handle Wallet Selection - GESTURE SAFE
+    // Handle Wallet Selection - ROBUST FLOW (Select -> Delay -> Connect)
     const handleWalletSelect = useCallback(async (walletName: WalletName) => {
-        if (connected || connecting) return;
+        if (connected || connecting) {
+            console.log('[CustomWalletModal] Already connected or connecting, skipping.');
+            return;
+        }
 
-        console.log('[CustomWalletModal] Attempting manual connection to:', walletName);
+        console.log('[CustomWalletModal] Initiating robust connection flow for:', walletName);
         setSelectedWalletName(walletName);
 
         try {
-            // Find the adapter in the wallets list
-            const walletToConnect = wallets.find(w => w.adapter.name === walletName);
+            // 1. SELECT first (this updates the internal wallet context)
+            console.log('[CustomWalletModal] 1. Selecting wallet...');
+            select(walletName);
 
-            if (walletToConnect) {
-                // 1. SELECT first (updates context)
-                select(walletName);
+            // 2. DELAY (allow context/adapters to settle)
+            // This is crucial for Phantom and other extensions to stabilize their internal state
+            await new Promise(resolve => setTimeout(resolve, 250));
 
-                // 2. CONNECT IMMEDIATELY (must be in the same execution stack for gesture trust)
-                await walletToConnect.adapter.connect();
-            }
+            // 3. CONNECT using the hook's connect function
+            // The hook will now use the previously selected wallet adapter
+            console.log('[CustomWalletModal] 2. Attempting connection via useWallet hook...');
+            await connect();
+            
+            console.log('[CustomWalletModal] Connection sequence triggered successfully');
         } catch (error: any) {
             console.error('[CustomWalletModal] Connection failed:', error);
-            // Silence "Unexpected error" as it's often a transient state
+            
+            // Silence "Unexpected error" as it's often a transient state during modal transitions
             if (!error.message?.includes('Unexpected error')) {
-                alert(`Error: ${error.message}`);
+                alert(`Connection Error: ${error.message || 'Unknown error'}`);
             }
             setSelectedWalletName(null);
         }
-    }, [connected, connecting, select, wallets]);
+    }, [connected, connecting, select, connect]);
 
     // Close on connection successful
     useEffect(() => {
