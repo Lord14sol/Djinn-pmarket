@@ -52,6 +52,10 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
     const idParallaxX = useTransform(mouseX, (v: number) => v * 0.1);
     const idParallaxY = useTransform(mouseY, (v: number) => v * 0.1);
 
+    // Star Sniper 3D Parallax (like Pokemon card / SwiftUI style)
+    const starParallaxX = useTransform(mouseX, (v: number) => v * 0.12);
+    const starParallaxY = useTransform(mouseY, (v: number) => v * 0.12);
+
     // Measure container size
     useEffect(() => {
         if (!containerRef.current) return;
@@ -315,6 +319,24 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                 />
             </svg>
 
+
+            {/* 🆕 GLOBAL PARALLAX BACKGROUND SCENE (Atras de la pagina) */}
+            <motion.div
+                style={{
+                    x: useTransform(mouseX, (v: number) => v * -0.05),
+                    y: useTransform(mouseY, (v: number) => v * -0.05),
+                    opacity: 0.1,
+                    scale: 1.4,
+                }}
+                className="absolute inset-0 pointer-events-none z-0 flex items-center justify-center overflow-hidden"
+            >
+                <img
+                    src="/star-sniper-new.png?v=10"
+                    alt=""
+                    className="w-[800px] h-[800px] object-contain opacity-40 mix-blend-screen"
+                />
+            </motion.div>
+
             {/* AMBIENT GLOW BEHIND CARD */}
             <motion.div
                 style={{
@@ -442,7 +464,30 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                     {/* Content */}
                     <div className="p-10 flex flex-col h-full relative z-10">
                         {/* Top Left Branding */}
-                        <div className="flex justify-start pt-2 pl-2">
+                        <div className="flex justify-start pt-2 pl-2 relative">
+                            {/* 🆕 FLOATING COLORED LOGO NEXT TO TITLE */}
+                            <motion.div
+                                className="absolute -left-12 top-0 w-12 h-12 pointer-events-none z-20"
+                                style={{
+                                    x: textParallaxX,
+                                    y: textParallaxY,
+                                    transform: 'translateZ(20px)'
+                                }}
+                                animate={{
+                                    y: [-2, 2, -2],
+                                    rotate: [0, 5, 0]
+                                }}
+                                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                            >
+                                <Image
+                                    src="/djinn-logo.png"
+                                    alt="Djinn Logo"
+                                    fill
+                                    className="object-contain selection:bg-transparent brightness-125 contrast-125 hover:brightness-150 transition-all"
+                                    priority
+                                />
+                            </motion.div>
+
                             <motion.h1
                                 className="text-6xl font-black tracking-tighter"
                                 style={{
@@ -534,70 +579,38 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                 >
                     {/* CHROME / MIRROR EFFECT OVERLAY */}
                     <div className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-white/5 pointer-events-none" />
+                    {/* 1. HOLOGRAPHIC FOIL LAYER (Pokemon Style IRIDESCENCE) */}
                     <motion.div
-                        className="absolute inset-[-100%] pointer-events-none opacity-30 mix-blend-overlay"
+                        className="absolute inset-0 pointer-events-none z-10 opacity-[0.25] mix-blend-color-dodge"
                         style={{
-                            background: 'linear-gradient(45deg, transparent 45%, rgba(255,255,255,0.8) 50%, transparent 55%)',
+                            background: `linear-gradient(110deg, transparent 20%, rgba(255,255,255,0.7) 50%, transparent 80%)`,
                             x: shimmerX,
-                            y: shimmerY
+                            y: shimmerY,
+                            filter: 'blur(20px)',
+                        }}
+                    />
+                    <motion.div
+                        className="absolute inset-0 pointer-events-none z-10 opacity-[0.15] mix-blend-screen"
+                        style={{
+                            background: `radial-gradient(circle at 50% 50%, #ff00ff, #00ffff, #ffff00)`,
+                            scale: 2,
+                            x: foilX,
+                            y: foilY,
+                            filter: 'blur(100px)',
                         }}
                     />
 
-                    {/* 🆕 STAR SNIPER 3D Asset - Layered for depth */}
-                    <motion.div
-                        className="relative w-56 h-56 mb-2 mt-4"
-                        style={{
-                            transformStyle: 'preserve-3d',
-                        }}
-                    >
-                        {/* Underglow/Shadow layer */}
-                        <div className="absolute inset-0" style={{ transform: 'translateZ(-20px) scale(0.9)' }}>
-                            <Image
-                                src="/star-sniper-new.png"
-                                alt=""
-                                fill
-                                className="object-contain opacity-20 blur-xl grayscale brightness-0"
-                            />
-                        </div>
+                    {/* 3. SIMPLIFIED CHARACTER ASSET (NEW FIXED BACKGROUND) */}
+                    <div className="relative w-80 h-80 mb-6 mt-2 z-20">
+                        <img
+                            src="/star-sniper-new.png?v=10"
+                            alt="Star Sniper New"
+                            className="w-full h-full object-contain"
+                        />
+                    </div>
 
-                        {/* Mid Depth Layer */}
-                        <div className="absolute inset-0" style={{ transform: 'translateZ(-10px)' }}>
-                            <Image
-                                src="/star-sniper-new.png"
-                                alt=""
-                                fill
-                                className="object-contain opacity-40 brightness-125"
-                            />
-                        </div>
-
-                        {/* Main Asset */}
-                        <div className="relative w-full h-full" style={{ transform: 'translateZ(0px)' }}>
-                            <Image
-                                src="/star-sniper-new.png"
-                                alt="Star Sniper"
-                                fill
-                                className="object-contain"
-                                priority
-                            />
-                        </div>
-
-                        {/* Front Detail layer (More intense highlights) */}
-                        <div className="absolute inset-0" style={{ transform: 'translateZ(15px)' }}>
-                            <Image
-                                src="/star-sniper-new.png"
-                                alt=""
-                                fill
-                                className="object-contain opacity-50 brightness-150 contrast-125 selection:bg-transparent"
-                                style={{ mixBlendMode: 'soft-light' }}
-                            />
-                        </div>
-                    </motion.div>
-
-                    {/* EARLY PASS BRANDING */}
-                    <div
-                        className="flex flex-col items-center gap-1 mb-6"
-                        style={{ transform: 'translateZ(15px)' }}
-                    >
+                    {/* 4. CONTENT / TEXT (Simplified) */}
+                    <div className="flex flex-col items-center gap-1 mb-6">
                         <motion.h2
                             className="text-4xl font-black tracking-[0.4em] uppercase"
                             style={{
@@ -613,19 +626,40 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                         </motion.h2>
                     </div>
 
-                    {/* MANIFESTO TEXT FROM IMAGE */}
-                    <div
-                        className="flex flex-col gap-1 w-full max-w-[280px]"
-                        style={{ transform: 'translateZ(10px)' }}
-                    >
+                    <div className="flex flex-col gap-1 w-full max-w-[280px]">
                         <div className="flex flex-col items-center gap-0">
                             <span className="text-[13px] font-black text-white/90 uppercase tracking-tighter">Born to Trench</span>
                             <span className="text-[11px] font-bold text-white/70 uppercase tracking-tight">World is a Casino</span>
                         </div>
 
-                        <div className="flex flex-col items-center gap-0 mt-2">
-                            <span className="text-[16px] font-black text-[#FF69B4] uppercase tracking-[-0.05em]" style={{ textShadow: '0 0 15px rgba(255,105,180,0.4)' }}>I AM A DJINN</span>
+                        <div className="flex flex-col items-center gap-0 mt-2 relative">
+                            {/* Decorative Flanking Logo Icons */}
+                            <motion.div
+                                className="absolute -left-12 top-1/2 -translate-y-1/2 w-10 h-10 z-50 pointer-events-none drop-shadow-lg"
+                                style={{ transform: 'translateZ(10px)' }}
+                                animate={{
+                                    y: [-4, 4, -4],
+                                    rotate: [-10, 10, -10]
+                                }}
+                                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                            >
+                                <img src="/djinn-logo.png" alt="" className="w-full h-full object-contain brightness-125" />
+                            </motion.div>
+
+                            <span className="text-[18px] font-black text-[#FF69B4] uppercase tracking-[-0.05em]" style={{ textShadow: '0 0 20px rgba(255,105,180,0.5)' }}>I AM A DJINN</span>
                             <span className="text-[10px] font-bold text-white/50 uppercase tracking-[0.2em]">I predict the future</span>
+
+                            <motion.div
+                                className="absolute -right-12 top-1/2 -translate-y-1/2 w-10 h-10 z-50 pointer-events-none drop-shadow-lg"
+                                style={{ transform: 'translateZ(10px)' }}
+                                animate={{
+                                    y: [4, -4, 4],
+                                    rotate: [10, -10, 10]
+                                }}
+                                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
+                            >
+                                <img src="/djinn-logo.png" alt="" className="w-full h-full object-contain brightness-125" />
+                            </motion.div>
                         </div>
 
                         <div className="w-full h-[1px] bg-white/10 my-2" />
