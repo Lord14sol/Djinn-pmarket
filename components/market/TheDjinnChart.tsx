@@ -442,6 +442,8 @@ export default function TheDjinnChart({
                                 stroke="#000000"
                                 tickLine={false}
                                 axisLine={{ stroke: '#000000', strokeWidth: 1 }}
+                                minTickGap={60}
+                                interval="preserveStartEnd"
                             />
 
                             <YAxis
