@@ -340,43 +340,48 @@ export default function TheDjinnChart({
                 />
             )}
 
-            {/* Selector de Timeframes */}
+            {/* Header with Djinn Logo and Probabilities - TOP LEFT */}
             <div className="flex items-center justify-between px-6 pt-4 pb-2 border-b border-gray-100">
-                <div className="flex gap-1">
-                    {TIMEFRAMES.map((tf) => (
-                        <button
-                            key={tf.key}
-                            onClick={() => setTimeframe(tf)}
-                            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${timeframe.key === tf.key
-                                ? 'bg-gray-900 text-white'
-                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                }`}
-                        >
-                            {tf.label}
-                        </button>
-                    ))}
+                {/* Left: Djinn Logo + Outcome Probabilities */}
+                <div className="flex items-center gap-4">
+                    {/* Djinn Logo */}
+                    <div className="flex items-center gap-2">
+                        <img
+                            src="/djinn-logo.png"
+                            alt="Djinn"
+                            className="w-6 h-6 rounded-full"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        />
+                        <span className="text-sm font-bold text-gray-900">Djinn</span>
+                    </div>
+
+                    {/* Separator */}
+                    <div className="w-px h-6 bg-gray-200" />
+
+                    {/* Outcome Probabilities */}
+                    <div className="flex gap-4">
+                        {outcomeNames.map((outcome, idx) => (
+                            <div key={outcome} className="flex items-center gap-2">
+                                <div
+                                    className="w-3 h-3 rounded-full"
+                                    style={{ backgroundColor: outcomeColors[idx] }}
+                                />
+                                <span className="text-xs font-bold text-gray-900">{outcome}</span>
+                                {filteredLineData.length > 0 && (
+                                    <span
+                                        className="text-lg font-black"
+                                        style={{ color: outcomeColors[idx] }}
+                                    >
+                                        {Math.round(filteredLineData[filteredLineData.length - 1][outcome] || 0)}%
+                                    </span>
+                                )}
+                            </div>
+                        ))}
+                    </div>
                 </div>
 
-                {/* Estadísticas de outcomes */}
-                <div className="flex gap-4">
-                    {outcomeNames.map((outcome, idx) => (
-                        <div key={outcome} className="flex items-center gap-2">
-                            <div
-                                className="w-3 h-3 rounded-full"
-                                style={{ backgroundColor: outcomeColors[idx] }}
-                            />
-                            <span className="text-xs font-bold text-gray-900">{outcome}</span>
-                            {filteredLineData.length > 0 && (
-                                <span
-                                    className="text-sm font-black"
-                                    style={{ color: outcomeColors[idx] }}
-                                >
-                                    {Math.round(filteredLineData[filteredLineData.length - 1][outcome] || 0)}%
-                                </span>
-                            )}
-                        </div>
-                    ))}
-                </div>
+                {/* Right: Empty for balance */}
+                <div />
             </div>
 
             {/* Trade Indicators */}
@@ -487,12 +492,37 @@ export default function TheDjinnChart({
                 )}
             </div>
 
-            {/* Footer con manejo seguro de fecha */}
-            <div className="px-6 py-3 border-t border-gray-100 flex justify-between items-center text-xs text-gray-500">
-                <span>Live updates • Real-time probability</span>
-                {props.resolutionDate && (
-                    <span>Resolves: {safeFormatDate(props.resolutionDate)}</span>
-                )}
+            {/* Footer with Timeframes - BOTTOM RIGHT */}
+            <div className="px-6 py-3 border-t border-gray-100 flex justify-between items-center">
+                {/* Left: Resolution date and live status */}
+                <div className="flex items-center gap-3 text-xs text-gray-500">
+                    <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                        Live
+                    </span>
+                    {props.resolutionDate && (
+                        <>
+                            <span className="text-gray-300">•</span>
+                            <span>Resolves: {safeFormatDate(props.resolutionDate)}</span>
+                        </>
+                    )}
+                </div>
+
+                {/* Right: Timeframe Selector */}
+                <div className="flex gap-1">
+                    {TIMEFRAMES.map((tf) => (
+                        <button
+                            key={tf.key}
+                            onClick={() => setTimeframe(tf)}
+                            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${timeframe.key === tf.key
+                                ? 'bg-black text-white'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }`}
+                        >
+                            {tf.label}
+                        </button>
+                    ))}
+                </div>
             </div>
         </div>
     );
