@@ -47,10 +47,6 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
     const glareY = useTransform(mouseY, [-200, 200], [100, 0]);
 
     // Magnetic Parallax Logic
-    const textParallaxX = useTransform(mouseX, (v: number) => v * 0.05);
-    const textParallaxY = useTransform(mouseY, (v: number) => v * 0.05);
-    const idParallaxX = useTransform(mouseX, (v: number) => v * 0.1);
-    const idParallaxY = useTransform(mouseY, (v: number) => v * 0.1);
 
     // Star Sniper 3D Parallax (like Pokemon card / SwiftUI style)
     const starParallaxX = useTransform(mouseX, (v: number) => v * 0.12);
@@ -469,8 +465,6 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                             <motion.div
                                 className="absolute -left-12 top-0 w-12 h-12 pointer-events-none z-20"
                                 style={{
-                                    x: textParallaxX,
-                                    y: textParallaxY,
                                     transform: 'translateZ(20px)'
                                 }}
                                 animate={{
@@ -493,8 +487,6 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                                 style={{
                                     fontFamily: 'var(--font-adriane), serif',
                                     fontWeight: 700,
-                                    x: textParallaxX,
-                                    y: textParallaxY,
                                     color: '#fff'
                                 }}
                                 animate={{
@@ -518,8 +510,6 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                                         className="text-6xl font-bold tracking-tight lowercase text-white"
                                         style={{
                                             fontFamily: 'var(--font-adriane), serif',
-                                            x: textParallaxX,
-                                            y: textParallaxY,
                                         }}
                                     >
                                         @{username || 'agent'}
@@ -527,8 +517,7 @@ export default function PhysicsCardBubblegum({ username }: PhysicsCardProps) {
                                     <motion.span
                                         className="text-2xl font-mono text-[#FF69B4] tracking-[0.2em] font-black opacity-80"
                                         style={{
-                                            x: idParallaxX,
-                                            y: idParallaxY,
+                                            opacity: 0.8
                                         }}
                                     >
                                         #084
