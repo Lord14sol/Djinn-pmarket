@@ -33,8 +33,11 @@ interface TheDjinnChartProps {
     debug?: boolean;
 }
 
-// Timeframes
+// Timeframes - Including smaller intervals
 const TIMEFRAMES = [
+    { label: '5M', value: 5 * 60 * 1000, key: '5M' },
+    { label: '15M', value: 15 * 60 * 1000, key: '15M' },
+    { label: '30M', value: 30 * 60 * 1000, key: '30M' },
     { label: '1H', value: 60 * 60 * 1000, key: '1H' },
     { label: '6H', value: 6 * 60 * 60 * 1000, key: '6H' },
     { label: '24H', value: 24 * 60 * 60 * 1000, key: '24H' },
@@ -265,12 +268,58 @@ export default function TheDjinnChart({
                         point[outcome] = isNaN(value) ? 0 : value;
                     } else {
                         console.warn(`⚠️ Data point missing outcome "${outcome}":`, d);
-                        point[outcome] = 0;
+                        // Don't default to 0 - skip invalid points instead
+                        point[outcome] = null;
                     }
                 });
 
+                // Filter out points where all outcomes are null/0
+                const hasValidValue = outcomeNames.some(name => point[name] !== null && point[name] > 0);
+                if (!hasValidValue && outcomeNames.length > 0) {
+                    // If no valid values, use the last known good values or 50
+                    outcomeNames.forEach(outcome => {
+                        if (point[outcome] === null) point[outcome] = 50;
+                    });
+                }
+
                 return point;
             });
+
+        // If we have very few points, interpolate to create smooth chart
+        if (filtered.length >= 2 && filtered.length < 10) {
+            const interpolated: any[] = [];
+            const numPoints = 20; // Target number of points for smooth chart
+
+            for (let i = 0; i < filtered.length - 1; i++) {
+                const curr = filtered[i];
+                const next = filtered[i + 1];
+                const timeDiff = next.time - curr.time;
+                const pointsToAdd = Math.min(Math.floor(numPoints / (filtered.length - 1)), 10);
+
+                for (let j = 0; j <= pointsToAdd; j++) {
+                    const ratio = j / pointsToAdd;
+                    const interpPoint: any = {
+                        time: curr.time + (timeDiff * ratio)
+                    };
+
+                    outcomeNames.forEach(outcome => {
+                        const currVal = curr[outcome] || 0;
+                        const nextVal = next[outcome] || 0;
+                        interpPoint[outcome] = currVal + (nextVal - currVal) * ratio;
+                    });
+
+                    interpolated.push(interpPoint);
+                }
+            }
+            // Add last point
+            interpolated.push(filtered[filtered.length - 1]);
+
+            if (debug) {
+                console.log('📊 Interpolated from', filtered.length, 'to', interpolated.length, 'points');
+            }
+
+            return interpolated;
+        }
 
         if (debug) {
             console.log('📊 Filtered data length:', filtered.length);
@@ -283,18 +332,30 @@ export default function TheDjinnChart({
         return filtered;
     }, [data, timeframe, outcomeNames, debug]);
 
-    // Formato de eje X
+    // Formato de eje X - Actualizado para todas las temporalidades
     const formatXAxis = (timestamp: number) => {
         try {
             const date = new Date(timestamp);
             if (isNaN(date.getTime())) return '';
 
-            if (timeframe.key === '1H' || timeframe.key === '6H' || timeframe.key === '24H') {
+            if (timeframe.key === '5M' || timeframe.key === '15M' || timeframe.key === '30M') {
+                // Para intervalos pequeños, mostrar HH:mm:ss
+                return format(date, 'HH:mm:ss');
+            } else if (timeframe.key === '1H' || timeframe.key === '6H') {
+                // Para 1H y 6H mostrar HH:mm
                 return format(date, 'HH:mm');
-            } else if (timeframe.key === '7D' || timeframe.key === '1M') {
+            } else if (timeframe.key === '24H') {
+                // Para 24H mostrar hora
+                return format(date, 'HH:mm');
+            } else if (timeframe.key === '7D') {
+                // Para 7D mostrar día y hora
+                return format(date, 'EEE HH:mm');
+            } else if (timeframe.key === '1M') {
+                // Para 1M mostrar mes y día
                 return format(date, 'MMM d');
             } else {
-                return format(date, 'MMM');
+                // ALL - mostrar mes y día
+                return format(date, 'MMM d');
             }
         } catch (e) {
             return '';
@@ -449,7 +510,12 @@ export default function TheDjinnChart({
                             <YAxis
                                 orientation="right"
                                 domain={[0, 100]}
-                                ticks={[0, 20, 40, 60, 80, 100]}
+                                ticks={
+                                    // More granular ticks for smaller timeframes
+                                    (timeframe.key === '5M' || timeframe.key === '15M' || timeframe.key === '30M')
+                                        ? [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+                                        : [0, 20, 40, 60, 80, 100]
+                                }
                                 tickFormatter={formatYAxis}
                                 tick={{ fill: '#000000', fontSize: 11, fontWeight: 600 }}
                                 stroke="#000000"
