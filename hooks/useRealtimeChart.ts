@@ -2,14 +2,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 export interface ChartDataPoint {
-    time: number;
+    time: number; // ms timestamp (always milliseconds)
     [outcome: string]: number;
 }
 
 export interface TradeEvent {
     id: string;
     side: string;
-    amount: number;
+    amount: number;       // SOL amount
+    amountUsd?: number;   // USD amount (for bubble display)
     outcome: string;
     timestamp: number;
 }
@@ -18,27 +19,56 @@ interface UseRealtimeChartOptions {
     marketId: string;
     outcomeNames: string[];
     initialData?: ChartDataPoint[];
-    updateInterval?: number; // ms entre actualizaciones
-    maxDataPoints?: number; // máximo de puntos a mantener
+    outcomeSupplies?: Record<string, number>; // current supplies for each outcome
+    maxDataPoints?: number;
+}
+
+/**
+ * Normalizes a chart data point's time to milliseconds.
+ * Detects if time is in seconds (< 1e12) and converts to ms.
+ */
+function normalizeTimeMs(time: number): number {
+    if (time < 1e12) {
+        return time * 1000; // was in seconds, convert to ms
+    }
+    return time;
 }
 
 export function useRealtimeChart({
     marketId,
     outcomeNames,
     initialData = [],
-    updateInterval = 5000,
+    outcomeSupplies,
     maxDataPoints = 1000
 }: UseRealtimeChartOptions) {
-    const [chartData, setChartData] = useState<ChartDataPoint[]>(initialData);
+    // Normalize initial data times to ms
+    const normalizedInitial = initialData.map(d => ({
+        ...d,
+        time: normalizeTimeMs(d.time)
+    }));
+
+    const [chartData, setChartData] = useState<ChartDataPoint[]>(normalizedInitial);
     const [latestTrade, setLatestTrade] = useState<TradeEvent | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const wsRef = useRef<WebSocket | null>(null);
+    const prevSuppliesRef = useRef<Record<string, number> | undefined>(undefined);
 
-    // Función para añadir un nuevo punto de datos
+    // Sync initial data when it changes (e.g. restored from localStorage)
+    useEffect(() => {
+        if (initialData.length > 0 && chartData.length === 0) {
+            setChartData(initialData.map(d => ({
+                ...d,
+                time: normalizeTimeMs(d.time)
+            })));
+        }
+    }, [initialData]);
+
+    // Add a new data point
     const addDataPoint = useCallback((newPoint: ChartDataPoint) => {
+        // Ensure time is in ms
+        const normalized = { ...newPoint, time: normalizeTimeMs(newPoint.time) };
         setChartData(prev => {
-            const updated = [...prev, newPoint];
-            // Limitar el número de puntos para evitar problemas de rendimiento
+            const updated = [...prev, normalized];
             if (updated.length > maxDataPoints) {
                 return updated.slice(updated.length - maxDataPoints);
             }
@@ -46,7 +76,7 @@ export function useRealtimeChart({
         });
     }, [maxDataPoints]);
 
-    // Función para actualizar el último punto (si la actualización es muy reciente)
+    // Update the last data point if recent, else add new
     const updateLastDataPoint = useCallback((updates: Partial<ChartDataPoint>) => {
         setChartData(prev => {
             if (prev.length === 0) return prev;
@@ -54,91 +84,93 @@ export function useRealtimeChart({
             const lastPoint = prev[prev.length - 1];
             const now = Date.now();
 
-            // Si el último punto fue hace menos de 30 segundos, actualízalo
             if (now - lastPoint.time < 30000) {
                 const updatedLast = { ...lastPoint, ...updates, time: now };
                 return [...prev.slice(0, -1), updatedLast];
             } else {
-                // Si no, añade un nuevo punto
                 return [...prev, { time: now, ...updates } as ChartDataPoint];
             }
         });
     }, []);
 
-    // Conectar a WebSocket para actualizaciones en tiempo real
+    // React to supply changes (real trades) - NO random simulation
     useEffect(() => {
-        // Simula una conexión WebSocket
-        // En producción, conectarías a tu servidor WebSocket real
+        if (!outcomeSupplies) return;
 
-        // Ejemplo de endpoint WebSocket:
-        // const ws = new WebSocket(`wss://tu-servidor.com/market/${marketId}`);
+        const prevSupplies = prevSuppliesRef.current;
+        prevSuppliesRef.current = outcomeSupplies;
 
-        // Por ahora, simula actualizaciones aleatorias
-        const simulateRealtimeUpdates = () => {
-            const interval = setInterval(() => {
-                const lastPoint = chartData[chartData.length - 1];
-                if (!lastPoint) return;
+        // Skip the first render (initial load) if we already have data
+        if (!prevSupplies && chartData.length > 0) return;
 
-                // Simula pequeños cambios en las probabilidades
-                const updates: any = { time: Date.now() };
+        // Check if supplies actually changed
+        if (prevSupplies) {
+            const changed = outcomeNames.some(name =>
+                (outcomeSupplies[name] || 0) !== (prevSupplies[name] || 0)
+            );
+            if (!changed) return;
+        }
 
-                outcomeNames.forEach(outcome => {
-                    const currentValue = lastPoint[outcome] || 50;
-                    const change = (Math.random() - 0.5) * 3; // Cambio de ±1.5%
-                    updates[outcome] = Math.min(100, Math.max(0, currentValue + change));
-                });
+        // Build probability point from actual supplies using PROBABILITY_BUFFER
+        const VIRTUAL_FLOOR = 15_000_000; // Must match core-amm.ts
+        const adjustedSupplies: Record<string, number> = {};
+        let totalAdjusted = 0;
 
-                // Normalizar para que sumen 100
-                const total = outcomeNames.reduce((sum, outcome) => sum + updates[outcome], 0);
-                outcomeNames.forEach(outcome => {
-                    updates[outcome] = (updates[outcome] / total) * 100;
-                });
+        outcomeNames.forEach(name => {
+            const supply = outcomeSupplies[name] || 0;
+            const adjusted = supply + VIRTUAL_FLOOR;
+            adjustedSupplies[name] = adjusted;
+            totalAdjusted += adjusted;
+        });
 
-                addDataPoint(updates);
-            }, updateInterval);
+        const newPoint: ChartDataPoint = { time: Date.now() };
+        outcomeNames.forEach(name => {
+            newPoint[name] = totalAdjusted > 0
+                ? (adjustedSupplies[name] / totalAdjusted) * 100
+                : 100 / outcomeNames.length;
+        });
 
-            return interval;
-        };
+        // If no data yet, seed with an initial anchor point 1 minute ago at same values
+        if (chartData.length === 0) {
+            const anchorPoint: ChartDataPoint = { time: Date.now() - 60000 };
+            outcomeNames.forEach(name => {
+                anchorPoint[name] = 100 / outcomeNames.length; // Start at equal probability
+            });
+            setChartData([anchorPoint, newPoint]);
+        } else {
+            addDataPoint(newPoint);
+        }
 
-        const interval = simulateRealtimeUpdates();
         setIsLoading(false);
+    }, [outcomeSupplies, outcomeNames]);
 
-        return () => {
-            clearInterval(interval);
-            if (wsRef.current) {
-                wsRef.current.close();
-            }
-        };
-    }, [marketId, updateInterval, chartData, outcomeNames, addDataPoint]);
-
-    // Simula eventos de trading
+    // Initial loading state - seed chart with 50/50 anchor if no data
     useEffect(() => {
-        const tradeInterval = setInterval(() => {
-            // 30% de probabilidad de un trade en cada intervalo
-            if (Math.random() > 0.7) {
-                const randomOutcome = outcomeNames[Math.floor(Math.random() * outcomeNames.length)];
+        if (chartData.length === 0 && outcomeNames.length > 0) {
+            const now = Date.now();
+            const equalProb = 100 / outcomeNames.length;
 
-                const trade: TradeEvent = {
-                    id: `trade-${Date.now()}-${Math.random()}`,
-                    side: randomOutcome,
-                    amount: Math.random() * 1000 + 10,
-                    outcome: randomOutcome,
-                    timestamp: Date.now()
-                };
+            const anchorPoint: ChartDataPoint = { time: now - 60000 };
+            const currentPoint: ChartDataPoint = { time: now };
+            outcomeNames.forEach(name => {
+                anchorPoint[name] = equalProb;
+                currentPoint[name] = equalProb;
+            });
 
-                setLatestTrade(trade);
-
-                // Limpia el trade después de 3 segundos
-                setTimeout(() => {
-                    setLatestTrade(null);
-                }, 3000);
-            }
-        }, 2000);
-
-        return () => clearInterval(tradeInterval);
+            setChartData([anchorPoint, currentPoint]);
+            setIsLoading(false);
+        }
     }, [outcomeNames]);
 
-    // Función para conectar a WebSocket real (para implementación en producción)
+    // Emit trade event (called externally via setLatestTrade)
+    const emitTradeEvent = useCallback((trade: TradeEvent) => {
+        setLatestTrade(trade);
+        setTimeout(() => {
+            setLatestTrade(null);
+        }, 3000);
+    }, []);
+
+    // WebSocket connection for production
     const connectWebSocket = useCallback((wsUrl: string) => {
         if (wsRef.current) {
             wsRef.current.close();
@@ -148,7 +180,6 @@ export function useRealtimeChart({
 
         ws.onopen = () => {
             console.log('WebSocket connected');
-            // Suscribirse a actualizaciones del mercado
             ws.send(JSON.stringify({
                 type: 'subscribe',
                 marketId: marketId
@@ -162,10 +193,11 @@ export function useRealtimeChart({
                 if (data.type === 'probability_update') {
                     updateLastDataPoint(data.probabilities);
                 } else if (data.type === 'trade') {
-                    setLatestTrade({
+                    emitTradeEvent({
                         id: data.id,
                         side: data.side,
                         amount: data.amount,
+                        amountUsd: data.amountUsd,
                         outcome: data.outcome,
                         timestamp: data.timestamp
                     });
@@ -181,14 +213,13 @@ export function useRealtimeChart({
 
         ws.onclose = () => {
             console.log('WebSocket disconnected');
-            // Intentar reconectar después de 5 segundos
             setTimeout(() => {
                 connectWebSocket(wsUrl);
             }, 5000);
         };
 
         wsRef.current = ws;
-    }, [marketId, updateLastDataPoint]);
+    }, [marketId, updateLastDataPoint, emitTradeEvent]);
 
     return {
         chartData,
@@ -196,11 +227,12 @@ export function useRealtimeChart({
         isLoading,
         addDataPoint,
         updateLastDataPoint,
-        connectWebSocket // Para usar en producción con WebSocket real
+        emitTradeEvent,
+        connectWebSocket
     };
 }
 
-// Hook adicional para calcular estadísticas del gráfico
+// Hook for chart statistics
 export function useChartStats(data: ChartDataPoint[], outcomeNames: string[]) {
     const [stats, setStats] = useState<{
         current: Record<string, number>;
