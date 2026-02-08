@@ -111,32 +111,11 @@ export function useRealtimeChart({
         };
     }, [marketId, updateInterval, chartData, outcomeNames, addDataPoint]);
 
-    // Simula eventos de trading
-    useEffect(() => {
-        const tradeInterval = setInterval(() => {
-            // 30% de probabilidad de un trade en cada intervalo
-            if (Math.random() > 0.7) {
-                const randomOutcome = outcomeNames[Math.floor(Math.random() * outcomeNames.length)];
-
-                const trade: TradeEvent = {
-                    id: `trade-${Date.now()}-${Math.random()}`,
-                    side: randomOutcome,
-                    amount: Math.random() * 1000 + 10,
-                    outcome: randomOutcome,
-                    timestamp: Date.now()
-                };
-
-                setLatestTrade(trade);
-
-                // Limpia el trade después de 3 segundos
-                setTimeout(() => {
-                    setLatestTrade(null);
-                }, 3000);
-            }
-        }, 2000);
-
-        return () => clearInterval(tradeInterval);
-    }, [outcomeNames]);
+    // NO SIMULATION: Trade events only come from real WebSocket connection
+    // latestTrade is set to null by default and only populated when:
+    // 1. A real WebSocket message of type 'trade' is received
+    // 2. Or when the buyShares/sellShares transaction completes in page.tsx
+    // This ensures the +$USD indicators ONLY appear on actual trades
 
     // Función para conectar a WebSocket real (para implementación en producción)
     const connectWebSocket = useCallback((wsUrl: string) => {
