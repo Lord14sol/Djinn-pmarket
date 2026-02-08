@@ -1653,14 +1653,13 @@ export default function Page() {
                 // Update live price immediately
                 setLivePrice(newProbability);
 
-                // Update history state immediately for chart
+                // Update history state immediately for chart (use ms timestamps)
                 setHistoryState(prevHistory => {
-                    const now = Math.floor(Date.now() / 1000);
+                    const now = Date.now();
                     const newPoint: any = {
                         time: now,
                         YES: isMultiOutcome ? 0 : newProbability,
                         NO: isMultiOutcome ? 0 : (100 - newProbability),
-                        dateStr: new Date(now * 1000).toLocaleString()
                     };
 
                     // For multi-outcome, calculate all probabilities
@@ -2474,6 +2473,7 @@ export default function Page() {
                                 outcomeNames={marketOutcomes.map(o => o.title)}
                                 data={historyState.probability || []}
                                 outcomeSupplies={outcomeSuppliesMap}
+                                solPrice={solPrice || 100}
                                 volume={marketAccount?.volumeTotal ? formatCompact(Number(marketAccount.volumeTotal) / 1e9) + " SOL" : (marketAccount?.volume_usd || "$0")}
                                 resolutionDate={marketAccount?.resolution_date}
                                 outcomeColors={

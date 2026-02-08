@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid
 } from 'recharts';
@@ -9,13 +9,13 @@ import { format } from 'date-fns';
 // --- TYPES ---
 export interface ChartDataPoint {
     time: number; // ms
-    [key: string]: any;
+    [key: string]: number;
 }
 
 interface TradeBubble {
     id: string;
     side: string;
-    amountSol: number;
+    amountUsd: number;
     outcomeName: string;
 }
 
@@ -23,13 +23,14 @@ interface TheDjinnChartProps {
     data: ChartDataPoint[];
     volume?: string;
     onHover?: (val: number | null) => void;
-    tradeEvent?: { id: string; side: string, amount: number, outcome: string } | null;
+    tradeEvent?: { id: string; side: string; amount: number; amountUsd?: number; outcome: string } | null;
     outcomeNames?: string[];
     selectedOutcome?: string;
     onOutcomeChange?: (name: string) => void;
     outcomeSupplies?: Record<string, number>;
     resolutionDate?: string;
     outcomeColors?: string[];
+    solPrice?: number;
     debug?: boolean;
 }
 
@@ -43,20 +44,39 @@ const TIMEFRAMES = [
     { label: 'ALL', value: Infinity, key: 'ALL' }
 ];
 
-// Custom Tooltip
-const CustomTooltip = ({ active, payload, outcomeColors, outcomeNames }: any) => {
+/**
+ * Normalize time to milliseconds. Detects seconds (< 1e12) and converts.
+ */
+function normalizeTimeMs(time: number): number {
+    if (time < 1e12) return time * 1000;
+    return time;
+}
+
+// Custom Tooltip - Kalshi style with date and percentage per outcome
+const CustomTooltip = ({ active, payload, outcomeColors, outcomeNames }: {
+    active?: boolean;
+    payload?: Array<{ payload: ChartDataPoint }>;
+    outcomeColors: string[];
+    outcomeNames: string[];
+}) => {
     if (!active || !payload || !payload.length) return null;
 
     const data = payload[0].payload;
-    const timeStr = format(new Date(data.time), 'MMM d, h:mm a');
+    const timeMs = normalizeTimeMs(data.time);
+    const date = new Date(timeMs);
+    const isValidDate = !isNaN(date.getTime());
+
+    const timeStr = isValidDate
+        ? format(date, 'MMM d, yyyy h:mm a')
+        : '';
 
     return (
-        <div className="bg-white border-2 border-gray-900 rounded-xl px-4 py-3 shadow-2xl">
+        <div className="bg-white border-2 border-gray-900 rounded-xl px-4 py-3 shadow-2xl min-w-[200px]">
             <div className="text-xs text-gray-500 font-semibold mb-3">{timeStr}</div>
             <div className="space-y-2">
                 {outcomeNames.map((outcome: string, idx: number) => {
                     const value = data[outcome];
-                    if (value === undefined) return null;
+                    if (value === undefined || value === null) return null;
 
                     return (
                         <div key={outcome} className="flex items-center justify-between gap-6">
@@ -68,10 +88,10 @@ const CustomTooltip = ({ active, payload, outcomeColors, outcomeNames }: any) =>
                                 <span className="text-sm font-bold text-gray-900">{outcome}</span>
                             </div>
                             <span
-                                className="text-3xl font-black"
+                                className="text-2xl font-black"
                                 style={{ color: outcomeColors[idx] }}
                             >
-                                {Math.round(value)}%
+                                {Number(value).toFixed(1)}%
                             </span>
                         </div>
                     );
@@ -81,89 +101,35 @@ const CustomTooltip = ({ active, payload, outcomeColors, outcomeNames }: any) =>
     );
 };
 
-// Trade indicators
-const TradeIndicator = ({ trade, color }: { trade: TradeBubble, color: string }) => {
+// Trade bubble indicator - shows USD amount on purchase
+const TradeIndicator = ({ trade, color }: { trade: TradeBubble; color: string }) => {
     return (
         <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="flex items-center gap-2 text-xs font-bold"
-            style={{ color }}
+            initial={{ opacity: 0, x: -20, scale: 0.8 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: -30, scale: 0.6 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border backdrop-blur-sm"
+            style={{
+                color,
+                borderColor: `${color}40`,
+                backgroundColor: `${color}10`
+            }}
         >
-            <span className="text-lg">{trade.side === 'YES' || trade.side === trade.outcomeName ? '+' : '−'}</span>
-            <span>${Math.round(trade.amountSol)}</span>
+            <span className="text-base font-black">+</span>
+            <span className="text-sm font-black">${trade.amountUsd.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
         </motion.div>
     );
 };
 
-// Debug Panel Component - MEJORADO
-const DebugPanel = ({ data, outcomeNames, filteredData, outcomeColors }: any) => {
-    if (!data) return null;
-
-    const checks = [
-        { name: 'Data exists', pass: data.length > 0, value: `${data.length} points` },
-        { name: 'Outcome names', pass: outcomeNames?.length > 0, value: outcomeNames?.join(', ') },
-        { name: 'Colors', pass: outcomeColors?.length > 0, value: outcomeColors?.join(', ') },
-        {
-            name: 'Data has outcomes',
-            pass: data.length > 0 && outcomeNames.every((n: string) => data[0].hasOwnProperty(n)),
-            value: data.length > 0 ? Object.keys(data[0]).filter(k => k !== 'time').join(', ') : 'N/A'
-        },
-        {
-            name: 'Values in range',
-            pass: data.length > 0 && outcomeNames.every((n: string) => {
-                const v = data[0][n];
-                return typeof v === 'number' && v >= 0 && v <= 100;
-            }),
-            value: data.length > 0 ? JSON.stringify(outcomeNames.reduce((acc: any, n: string) => { acc[n] = data[0][n]; return acc; }, {})) : 'N/A'
-        }
-    ];
-
-    return (
-        <div className="absolute top-2 left-2 bg-white border-4 border-red-500 rounded-lg p-3 text-xs z-50 max-w-md shadow-2xl">
-            <div className="font-bold text-red-900 mb-2 text-sm">🐛 CHART DEBUG</div>
-
-            <div className="space-y-1 mb-3">
-                {checks.map((check, idx) => (
-                    <div key={idx} className={`flex items-start gap-2 p-1 rounded ${check.pass ? 'bg-green-50' : 'bg-red-50'}`}>
-                        <span>{check.pass ? '✅' : '❌'}</span>
-                        <div className="flex-1">
-                            <div className="font-semibold">{check.name}</div>
-                            <div className="text-[10px] text-gray-600 break-all">{check.value}</div>
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            <div className="border-t border-gray-300 pt-2 mt-2">
-                <div className="font-semibold mb-1">Data Sample:</div>
-                {data.length > 0 && (
-                    <pre className="text-[9px] overflow-auto max-h-32 bg-gray-50 p-2 rounded">
-                        {JSON.stringify(data[0], null, 2)}
-                    </pre>
-                )}
-            </div>
-
-            <div className="mt-2 text-[10px] text-gray-600">
-                Filtered: {filteredData?.length || 0} points
-            </div>
-        </div>
-    );
-};
-
-// Helper para formatear fecha de forma segura
-const safeFormatDate = (dateValue: any): string => {
+// Helper for safe date formatting
+const safeFormatDate = (dateValue: string | number | Date): string => {
     if (!dateValue) return '';
-
     try {
         const date = new Date(dateValue);
-        if (isNaN(date.getTime())) {
-            return String(dateValue); // Devuelve el string original si no es válido
-        }
+        if (isNaN(date.getTime())) return String(dateValue);
         return format(date, 'MMM d, yyyy');
-    } catch (error) {
-        console.error('Error formatting date:', error);
+    } catch {
         return String(dateValue);
     }
 };
@@ -176,6 +142,7 @@ export default function TheDjinnChart({
     outcomeColors = ['#2563EB', '#DC2626'],
     outcomeNames = ['YES', 'NO'],
     outcomeSupplies,
+    solPrice = 100,
     debug = false,
     ...props
 }: TheDjinnChartProps) {
@@ -183,45 +150,17 @@ export default function TheDjinnChart({
     const [bubbles, setBubbles] = useState<TradeBubble[]>([]);
     const [hoveredValue, setHoveredValue] = useState<number | null>(null);
 
-    // Debug logs mejorados
-    useEffect(() => {
-        if (debug) {
-            console.group('🐛 TheDjinnChart Debug');
-            console.log('Raw data length:', data?.length || 0);
-            console.log('Outcome names:', outcomeNames);
-            console.log('Outcome colors:', outcomeColors);
-
-            if (data && data.length > 0) {
-                console.log('First data point:', data[0]);
-                console.log('Last data point:', data[data.length - 1]);
-
-                // Check estructura
-                console.log('Data structure check:');
-                outcomeNames.forEach(outcome => {
-                    const hasKey = data[0].hasOwnProperty(outcome);
-                    console.log(`  - Has "${outcome}":`, hasKey);
-                    if (hasKey) {
-                        const value = data[0][outcome];
-                        console.log(`    Type:`, typeof value);
-                        console.log(`    Value:`, value);
-                        console.log(`    In range (0-100):`, typeof value === 'number' && value >= 0 && value <= 100);
-                    }
-                });
-            } else {
-                console.error('❌ NO DATA PROVIDED');
-            }
-            console.groupEnd();
-        }
-    }, [data, outcomeNames, outcomeColors, debug]);
-
-    // Manejo de bubbles
+    // Handle trade event bubbles - only show on actual purchases with USD conversion
     useEffect(() => {
         if (!tradeEvent) return;
+
+        // Convert SOL amount to USD for display
+        const usdAmount = tradeEvent.amountUsd || (tradeEvent.amount * solPrice);
 
         const newBubble: TradeBubble = {
             id: tradeEvent.id,
             side: tradeEvent.side,
-            amountSol: tradeEvent.amount,
+            amountUsd: usdAmount,
             outcomeName: tradeEvent.outcome
         };
 
@@ -229,79 +168,72 @@ export default function TheDjinnChart({
 
         const timer = setTimeout(() => {
             setBubbles(prev => prev.filter(b => b.id !== newBubble.id));
-        }, 3000);
+        }, 4000);
 
         return () => clearTimeout(timer);
-    }, [tradeEvent]);
+    }, [tradeEvent, solPrice]);
 
-    // Filtrar y validar datos
+    // Filter and normalize data for selected timeframe
     const filteredLineData = useMemo(() => {
-        if (!data || data.length === 0) {
-            console.warn('⚠️ No data provided to chart');
-            return [];
-        }
+        if (!data || data.length === 0) return [];
 
         const now = Date.now();
         const cutoff = now - timeframe.value;
 
-        let filtered = data
-            .filter(d => {
-                if (!d.time || typeof d.time !== 'number') {
-                    console.warn('⚠️ Data point missing valid time:', d);
-                    return false;
-                }
-                return timeframe.value === Infinity || d.time >= cutoff;
-            })
+        const filtered = data
             .map(d => {
-                const point: any = { time: d.time };
+                if (!d.time || typeof d.time !== 'number') return null;
+
+                const timeMs = normalizeTimeMs(d.time);
+                const point: Record<string, number> = { time: timeMs };
 
                 outcomeNames.forEach(outcome => {
                     if (d.hasOwnProperty(outcome)) {
                         const value = Number(d[outcome]);
                         point[outcome] = isNaN(value) ? 0 : value;
                     } else {
-                        console.warn(`⚠️ Data point missing outcome "${outcome}":`, d);
                         point[outcome] = 0;
                     }
                 });
 
                 return point;
-            });
-
-        if (debug) {
-            console.log('📊 Filtered data length:', filtered.length);
-            if (filtered.length > 0) {
-                console.log('📊 Sample filtered point:', filtered[0]);
-                console.log('📊 Last filtered point:', filtered[filtered.length - 1]);
-            }
-        }
+            })
+            .filter((d): d is Record<string, number> => {
+                if (!d) return false;
+                return timeframe.value === Infinity || d.time >= cutoff;
+            })
+            .sort((a, b) => a.time - b.time);
 
         return filtered;
-    }, [data, timeframe, outcomeNames, debug]);
+    }, [data, timeframe, outcomeNames]);
 
-    // Formato de eje X
+    // X-axis formatting based on timeframe
     const formatXAxis = (timestamp: number) => {
         try {
-            const date = new Date(timestamp);
+            const timeMs = normalizeTimeMs(timestamp);
+            const date = new Date(timeMs);
             if (isNaN(date.getTime())) return '';
 
-            if (timeframe.key === '1H' || timeframe.key === '6H' || timeframe.key === '24H') {
+            if (timeframe.key === '1H') {
                 return format(date, 'HH:mm');
-            } else if (timeframe.key === '7D' || timeframe.key === '1M') {
+            } else if (timeframe.key === '6H' || timeframe.key === '24H') {
+                return format(date, 'HH:mm');
+            } else if (timeframe.key === '7D') {
+                return format(date, 'EEE d');
+            } else if (timeframe.key === '1M') {
                 return format(date, 'MMM d');
             } else {
-                return format(date, 'MMM');
+                // ALL
+                return format(date, 'MMM d');
             }
-        } catch (e) {
+        } catch {
             return '';
         }
     };
 
-    const formatYAxis = (value: number) => {
-        return `${value}%`;
-    };
+    const formatYAxis = (value: number) => `${value}%`;
 
-    // Si no hay datos, mostrar mensaje
+    // Empty state
     if (!data || data.length === 0) {
         return (
             <div className="flex flex-col w-full h-full bg-white relative rounded-2xl overflow-hidden border border-gray-200 shadow-sm">
@@ -309,14 +241,7 @@ export default function TheDjinnChart({
                     <div className="text-center">
                         <div className="text-6xl mb-4">📊</div>
                         <div className="text-xl font-bold text-gray-900 mb-2">No Data Available</div>
-                        <div className="text-sm text-gray-500">
-                            Waiting for probability history data...
-                        </div>
-                        {debug && (
-                            <div className="mt-4 text-xs text-red-600">
-                                Debug mode: Check console for details
-                            </div>
-                        )}
+                        <div className="text-sm text-gray-500">Waiting for probability history data...</div>
                     </div>
                 </div>
             </div>
@@ -326,17 +251,7 @@ export default function TheDjinnChart({
     return (
         <div className="flex flex-col w-full h-full bg-white relative rounded-2xl overflow-hidden border border-gray-200 shadow-sm">
 
-            {/* Debug Panel */}
-            {debug && (
-                <DebugPanel
-                    data={data}
-                    outcomeNames={outcomeNames}
-                    filteredData={filteredLineData}
-                    outcomeColors={outcomeColors}
-                />
-            )}
-
-            {/* Selector de Timeframes */}
+            {/* Timeframe Selector */}
             <div className="flex items-center justify-between px-6 pt-4 pb-2 border-b border-gray-100">
                 <div className="flex gap-1">
                     {TIMEFRAMES.map((tf) => (
@@ -353,7 +268,7 @@ export default function TheDjinnChart({
                     ))}
                 </div>
 
-                {/* Estadísticas de outcomes */}
+                {/* Current outcome stats */}
                 <div className="flex gap-4">
                     {outcomeNames.map((outcome, idx) => (
                         <div key={outcome} className="flex items-center gap-2">
@@ -375,12 +290,12 @@ export default function TheDjinnChart({
                 </div>
             </div>
 
-            {/* Trade Indicators */}
-            <div className="absolute left-2 top-20 z-10 space-y-1 max-h-[300px] overflow-hidden">
+            {/* Trade Purchase Bubbles - Left side, only on real purchases */}
+            <div className="absolute left-3 top-20 z-10 space-y-2 max-h-[300px] overflow-hidden">
                 <AnimatePresence>
                     {bubbles.map((bubble) => {
                         const outcomeIdx = outcomeNames.findIndex(n => n === bubble.outcomeName);
-                        const color = outcomeColors[outcomeIdx] || outcomeColors[0];
+                        const color = outcomeColors[outcomeIdx >= 0 ? outcomeIdx : 0];
                         return (
                             <TradeIndicator key={bubble.id} trade={bubble} color={color} />
                         );
@@ -388,19 +303,14 @@ export default function TheDjinnChart({
                 </AnimatePresence>
             </div>
 
-            {/* AREA DEL GRAFICO */}
+            {/* Chart Area */}
             <div className="flex-1 w-full relative min-h-[400px] px-2 py-4">
                 {filteredLineData.length === 0 ? (
                     <div className="flex items-center justify-center h-full">
                         <div className="text-center">
                             <div className="text-4xl mb-2">⏳</div>
                             <div className="text-sm font-bold text-gray-900">No data in selected timeframe</div>
-                            <div className="text-xs text-gray-500 mt-1">Try selecting "ALL"</div>
-                            {debug && (
-                                <div className="mt-3 text-xs text-red-600">
-                                    Data points: {data.length} → Filtered: {filteredLineData.length}
-                                </div>
-                            )}
+                            <div className="text-xs text-gray-500 mt-1">Try selecting &quot;ALL&quot;</div>
                         </div>
                     </div>
                 ) : (
@@ -433,6 +343,9 @@ export default function TheDjinnChart({
                                 stroke="#000000"
                                 tickLine={false}
                                 axisLine={{ stroke: '#000000', strokeWidth: 1 }}
+                                type="number"
+                                domain={['dataMin', 'dataMax']}
+                                scale="time"
                             />
 
                             <YAxis
@@ -451,14 +364,8 @@ export default function TheDjinnChart({
                                 cursor={{ stroke: '#000', strokeWidth: 1, strokeDasharray: '5 5' }}
                             />
 
-                            {/* Renderizado de líneas */}
                             {outcomeNames.map((outcome, index) => {
                                 const color = outcomeColors[index] || '#2563EB';
-
-                                if (debug) {
-                                    console.log(`Rendering line for "${outcome}" with color ${color}`);
-                                }
-
                                 return (
                                     <Line
                                         key={outcome}
@@ -470,7 +377,7 @@ export default function TheDjinnChart({
                                         activeDot={{
                                             r: 6,
                                             fill: color,
-                                            stroke: "#fff",
+                                            stroke: '#fff',
                                             strokeWidth: 2
                                         }}
                                         isAnimationActive={false}
@@ -483,9 +390,9 @@ export default function TheDjinnChart({
                 )}
             </div>
 
-            {/* Footer con manejo seguro de fecha */}
+            {/* Footer */}
             <div className="px-6 py-3 border-t border-gray-100 flex justify-between items-center text-xs text-gray-500">
-                <span>Live updates • Real-time probability</span>
+                <span>Live updates &bull; Real-time probability</span>
                 {props.resolutionDate && (
                     <span>Resolves: {safeFormatDate(props.resolutionDate)}</span>
                 )}
