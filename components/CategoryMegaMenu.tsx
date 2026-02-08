@@ -148,6 +148,11 @@ export default function CategoryMegaMenu() {
     const router = useRouter();
 
     const handleCategoryClick = (category: Category) => {
+        // Special routing for Crypto category -> Majors page
+        if (category.id === 'crypto') {
+            router.push('/crypto/majors');
+            return;
+        }
         setActiveCategory(category.slug);
         setActiveSubcategory('');
     };

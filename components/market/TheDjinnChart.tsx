@@ -401,52 +401,32 @@ export default function TheDjinnChart({
                 />
             )}
 
-            {/* Header with Djinn Logo and Probabilities - TOP LEFT */}
+            {/* Header with Outcome Probabilities */}
             <div className="flex items-center justify-between px-6 pt-4 pb-2 border-b border-gray-100">
-                {/* Left: Djinn Logo + Outcome Probabilities */}
-                <div className="flex items-center gap-4">
-                    {/* Djinn Logo */}
-                    <div className="flex items-center gap-2">
-                        <img
-                            src="/djinn-logo.png"
-                            alt="Djinn"
-                            className="w-6 h-6 rounded-full"
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                        />
-                        <span className="text-sm font-bold text-gray-900">Djinn</span>
-                    </div>
-
-                    {/* Separator */}
-                    <div className="w-px h-6 bg-gray-200" />
-
-                    {/* Outcome Probabilities */}
-                    <div className="flex gap-4">
-                        {outcomeNames.map((outcome, idx) => (
-                            <div key={outcome} className="flex items-center gap-2">
-                                <div
-                                    className="w-3 h-3 rounded-full"
-                                    style={{ backgroundColor: outcomeColors[idx] }}
-                                />
-                                <span className="text-xs font-bold text-gray-900">{outcome}</span>
-                                {filteredLineData.length > 0 && (
-                                    <span
-                                        className="text-lg font-black"
-                                        style={{ color: outcomeColors[idx] }}
-                                    >
-                                        {Math.round(filteredLineData[filteredLineData.length - 1][outcome] || 0)}%
-                                    </span>
-                                )}
-                            </div>
-                        ))}
-                    </div>
+                <div className="flex gap-4">
+                    {outcomeNames.map((outcome, idx) => (
+                        <div key={outcome} className="flex items-center gap-2">
+                            <div
+                                className="w-3 h-3 rounded-full"
+                                style={{ backgroundColor: outcomeColors[idx] }}
+                            />
+                            <span className="text-xs font-bold text-gray-900">{outcome}</span>
+                            {filteredLineData.length > 0 && (
+                                <span
+                                    className="text-lg font-black"
+                                    style={{ color: outcomeColors[idx] }}
+                                >
+                                    {Math.round(filteredLineData[filteredLineData.length - 1][outcome] || 0)}%
+                                </span>
+                            )}
+                        </div>
+                    ))}
                 </div>
-
-                {/* Right: Empty for balance */}
                 <div />
             </div>
 
             {/* Trade Indicators */}
-            <div className="absolute left-2 top-20 z-10 space-y-1 max-h-[300px] overflow-hidden">
+            <div className="absolute left-4 top-24 z-10 space-y-1 max-h-[200px] overflow-hidden">
                 <AnimatePresence>
                     {bubbles.map((bubble) => {
                         const outcomeIdx = outcomeNames.findIndex(n => n === bubble.outcomeName);
@@ -458,8 +438,19 @@ export default function TheDjinnChart({
                 </AnimatePresence>
             </div>
 
-            {/* AREA DEL GRAFICO */}
+            {/* Chart Area */}
             <div className="flex-1 w-full relative min-h-[400px] px-2 py-4">
+                {/* Djinn Watermark - Right Side */}
+                <div className="absolute right-8 top-1/2 -translate-y-1/2 z-0 opacity-[0.08] pointer-events-none flex flex-col items-center gap-2">
+                    <img
+                        src="/djinn-logo.png"
+                        alt="Djinn"
+                        className="w-24 h-24"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                    <span className="text-3xl font-black text-gray-900 tracking-tight">Djinn</span>
+                </div>
+
                 {filteredLineData.length === 0 ? (
                     <div className="flex items-center justify-center h-full">
                         <div className="text-center">
@@ -511,7 +502,6 @@ export default function TheDjinnChart({
                                 orientation="right"
                                 domain={[0, 100]}
                                 ticks={
-                                    // More granular ticks for smaller timeframes
                                     (timeframe.key === '5M' || timeframe.key === '15M' || timeframe.key === '30M')
                                         ? [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
                                         : [0, 20, 40, 60, 80, 100]
@@ -528,7 +518,6 @@ export default function TheDjinnChart({
                                 cursor={{ stroke: '#000', strokeWidth: 1, strokeDasharray: '5 5' }}
                             />
 
-                            {/* Renderizado de líneas */}
                             {outcomeNames.map((outcome, index) => {
                                 const color = outcomeColors[index] || '#2563EB';
 
@@ -560,19 +549,12 @@ export default function TheDjinnChart({
                 )}
             </div>
 
-            {/* Footer with Timeframes - BOTTOM RIGHT */}
+            {/* Footer with Timeframes */}
             <div className="px-6 py-3 border-t border-gray-100 flex justify-between items-center">
-                {/* Left: Resolution date and live status */}
+                {/* Left: Resolution date only - NO LIVE INDICATOR */}
                 <div className="flex items-center gap-3 text-xs text-gray-500">
-                    <span className="flex items-center gap-1">
-                        <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                        Live
-                    </span>
                     {props.resolutionDate && (
-                        <>
-                            <span className="text-gray-300">•</span>
-                            <span>Resolves: {safeFormatDate(props.resolutionDate)}</span>
-                        </>
+                        <span>Resolves: {safeFormatDate(props.resolutionDate)}</span>
                     )}
                 </div>
 
@@ -583,8 +565,8 @@ export default function TheDjinnChart({
                             key={tf.key}
                             onClick={() => setTimeframe(tf)}
                             className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${timeframe.key === tf.key
-                                ? 'bg-black text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    ? 'bg-black text-white'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                 }`}
                         >
                             {tf.label}

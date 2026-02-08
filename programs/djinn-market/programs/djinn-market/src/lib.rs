@@ -1,6 +1,9 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::hash;
 
+// Chronos Market Module - Automated Time-Based Crypto Markets
+pub mod chronos_market;
+
 declare_id!("Fdbhx4cN5mPWzXneDm9XjaRgjYVjyXtpsJLGeQLPr7hg");
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -574,6 +577,199 @@ pub mod djinn_market {
         
         Ok(())
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CHRONOS MARKET INSTRUCTIONS (Automated Crypto Majors)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Initialize a new Chronos market (called by keeper bot)
+    pub fn initialize_chronos_market(
+        ctx: Context<InitializeChronosMarket>,
+        asset: u8,           // 0=BTC, 1=ETH, 2=SOL
+        interval: u8,        // 0=15min, 1=1hour
+        round_number: u64,
+        target_price: u64,   // Strike price in USD cents
+    ) -> Result<()> {
+        use chronos_market::*;
+        
+        let market = &mut ctx.accounts.chronos_market;
+        let clock = Clock::get()?;
+        
+        // Parse asset type
+        let asset_type = match asset {
+            0 => AssetType::BTC,
+            1 => AssetType::ETH,
+            2 => AssetType::SOL,
+            _ => return Err(ChronosError::InvalidAsset.into()),
+        };
+        
+        // Parse interval type
+        let interval_type = match interval {
+            0 => MarketInterval::FifteenMinutes,
+            1 => MarketInterval::OneHour,
+            _ => return Err(ChronosError::InvalidInterval.into()),
+        };
+        
+        // Set market fields
+        market.asset = asset_type;
+        market.interval = interval_type;
+        market.round_number = round_number;
+        market.target_price = target_price;
+        market.final_price = None;
+        market.pyth_price_feed = ctx.accounts.pyth_price_feed.key();
+        market.start_time = clock.unix_timestamp;
+        market.end_time = clock.unix_timestamp + interval_type.duration_seconds();
+        market.resolution_time = None;
+        market.status = ChronosStatus::Active;
+        market.winning_outcome = None;
+        market.outcome_supplies = [0; 2];
+        market.vault_balance = 0;
+        market.total_pot_at_resolution = 0;
+        market.bump = ctx.bumps.chronos_market;
+        market.keeper = ctx.accounts.keeper.key();
+        
+        // Calculate vault bump
+        let (_, vault_bump) = Pubkey::find_program_address(
+            &[b"chronos_vault", market.key().as_ref()],
+            ctx.program_id
+        );
+        market.vault_bump = vault_bump;
+        
+        Ok(())
+    }
+
+    /// Buy shares in a Chronos market
+    pub fn buy_chronos_shares(
+        ctx: Context<BuyChronosShares>,
+        outcome_index: u8,    // 0 = YES (above target), 1 = NO (below target)
+        sol_in: u64,
+        min_shares_out: u64,
+    ) -> Result<()> {
+        use chronos_market::*;
+        
+        let market = &mut ctx.accounts.chronos_market;
+        let clock = Clock::get()?;
+        
+        // Check market is active for trading
+        require!(market.is_trading_active(clock.unix_timestamp), ChronosError::MarketNotActive);
+        require!(outcome_index < 2, ChronosError::InvalidOutcome);
+        
+        let sol_in_u128 = sol_in as u128;
+        
+        // Calculate entry fee (1%)
+        let fee = (sol_in_u128 * ENTRY_FEE_BPS) / BPS_DENOMINATOR;
+        let net_sol = sol_in_u128 - fee;
+        
+        // Get current supply for outcome
+        let current_supply = market.outcome_supplies[outcome_index as usize];
+        
+        // Calculate shares using existing bonding curve
+        let shares = calculate_shares_from_sol(net_sol, current_supply)?;
+        require!(shares >= min_shares_out as u128, ChronosError::SlippageExceeded);
+        
+        // Update market state
+        market.outcome_supplies[outcome_index as usize] = current_supply.checked_add(shares).unwrap();
+        market.vault_balance = market.vault_balance.checked_add(net_sol).unwrap();
+        
+        // Update user position
+        let position = &mut ctx.accounts.user_position;
+        position.market = market.key();
+        position.outcome = outcome_index;
+        position.shares = position.shares.checked_add(shares).unwrap();
+        
+        // Transfer SOL to vault
+        anchor_lang::system_program::transfer(
+            CpiContext::new(
+                ctx.accounts.system_program.to_account_info(),
+                anchor_lang::system_program::Transfer {
+                    from: ctx.accounts.user.to_account_info(),
+                    to: ctx.accounts.chronos_vault.to_account_info(),
+                },
+            ),
+            net_sol as u64,
+        )?;
+        
+        // Transfer fee to treasury
+        if fee > 0 {
+            anchor_lang::system_program::transfer(
+                CpiContext::new(
+                    ctx.accounts.system_program.to_account_info(),
+                    anchor_lang::system_program::Transfer {
+                        from: ctx.accounts.user.to_account_info(),
+                        to: ctx.accounts.protocol_treasury.to_account_info(),
+                    },
+                ),
+                fee as u64,
+            )?;
+        }
+        
+        Ok(())
+    }
+
+    /// Resolve a Chronos market using Pyth price
+    pub fn resolve_chronos_market(
+        ctx: Context<ResolveChronosMarket>,
+    ) -> Result<()> {
+        use chronos_market::*;
+        
+        let market = &mut ctx.accounts.chronos_market;
+        let clock = Clock::get()?;
+        
+        // Check market can be resolved
+        require!(market.can_resolve(clock.unix_timestamp), ChronosError::MarketNotEnded);
+        require!(market.status != ChronosStatus::Resolved, ChronosError::AlreadyResolved);
+        
+        // Parse Pyth price
+        let pyth_data = ctx.accounts.pyth_price_feed.try_borrow_data()?;
+        
+        // Verify price is fresh
+        require!(
+            is_pyth_price_fresh(&pyth_data, clock.unix_timestamp)?,
+            ChronosError::StalePythPrice
+        );
+        
+        // Get final price
+        let final_price = parse_pyth_price(&pyth_data)?;
+        
+        // Determine winner: YES (0) if price >= target, NO (1) if price < target
+        let winning_outcome = if final_price >= market.target_price { 0 } else { 1 };
+        
+        // Extract resolution fee (2%)
+        let resolution_fee = (market.vault_balance * RESOLUTION_FEE_BPS) / BPS_DENOMINATOR;
+        
+        if resolution_fee > 0 {
+            let market_key = market.key();
+            let seeds = &[
+                b"chronos_vault",
+                market_key.as_ref(),
+                &[market.vault_bump],
+            ];
+            let signer = &[&seeds[..]];
+            
+            anchor_lang::system_program::transfer(
+                CpiContext::new_with_signer(
+                    ctx.accounts.system_program.to_account_info(),
+                    anchor_lang::system_program::Transfer {
+                        from: ctx.accounts.chronos_vault.to_account_info(),
+                        to: ctx.accounts.protocol_treasury.to_account_info(),
+                    },
+                    signer,
+                ),
+                resolution_fee as u64,
+            )?;
+            
+            market.vault_balance = market.vault_balance.checked_sub(resolution_fee).unwrap();
+        }
+        
+        // Update market state
+        market.final_price = Some(final_price);
+        market.winning_outcome = Some(winning_outcome);
+        market.total_pot_at_resolution = market.vault_balance as u64;
+        market.status = ChronosStatus::Resolved;
+        market.resolution_time = Some(clock.unix_timestamp);
+        
+        Ok(())
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -725,6 +921,98 @@ pub struct ClaimWinnings<'info> {
     
     #[account(mut)]
     pub user: Signer<'info>,
+    
+    pub system_program: Program<'info, System>,
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CHRONOS MARKET ACCOUNT CONTEXTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+#[derive(Accounts)]
+#[instruction(asset: u8, interval: u8, round_number: u64, target_price: u64)]
+pub struct InitializeChronosMarket<'info> {
+    #[account(
+        init,
+        payer = keeper,
+        space = chronos_market::ChronosMarket::LEN,
+        seeds = [
+            b"chronos",
+            asset.to_le_bytes().as_ref(),
+            interval.to_le_bytes().as_ref(),
+            round_number.to_le_bytes().as_ref()
+        ],
+        bump
+    )]
+    pub chronos_market: Box<Account<'info, chronos_market::ChronosMarket>>,
+    
+    /// CHECK: Chronos Vault PDA
+    #[account(
+        mut,
+        seeds = [b"chronos_vault", chronos_market.key().as_ref()],
+        bump
+    )]
+    pub chronos_vault: AccountInfo<'info>,
+    
+    /// CHECK: Pyth price feed account
+    pub pyth_price_feed: AccountInfo<'info>,
+    
+    /// Keeper bot that creates markets
+    #[account(mut)]
+    pub keeper: Signer<'info>,
+    
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(outcome_index: u8)]
+pub struct BuyChronosShares<'info> {
+    #[account(mut)]
+    pub chronos_market: Box<Account<'info, chronos_market::ChronosMarket>>,
+    
+    /// CHECK: Chronos Vault PDA
+    #[account(mut)]
+    pub chronos_vault: AccountInfo<'info>,
+    
+    #[account(
+        init_if_needed,
+        payer = user,
+        space = chronos_market::ChronosPosition::LEN,
+        seeds = [
+            b"chronos_pos",
+            chronos_market.key().as_ref(),
+            user.key().as_ref(),
+            &[outcome_index]
+        ],
+        bump
+    )]
+    pub user_position: Box<Account<'info, chronos_market::ChronosPosition>>,
+    
+    #[account(mut)]
+    pub user: Signer<'info>,
+    
+    /// CHECK: Treasury for fee collection
+    #[account(mut, address = G1_TREASURY)]
+    pub protocol_treasury: AccountInfo<'info>,
+    
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ResolveChronosMarket<'info> {
+    #[account(mut)]
+    pub chronos_market: Box<Account<'info, chronos_market::ChronosMarket>>,
+    
+    /// CHECK: Chronos Vault PDA
+    #[account(mut)]
+    pub chronos_vault: AccountInfo<'info>,
+    
+    /// CHECK: Pyth price feed for resolution
+    pub pyth_price_feed: AccountInfo<'info>,
+    
+    /// CHECK: Treasury for resolution fee
+    #[account(mut, address = G1_TREASURY)]
+    pub protocol_treasury: AccountInfo<'info>,
     
     pub system_program: Program<'info, System>,
 }
