@@ -2515,7 +2515,7 @@ export default function Page() {
                             <div className="flex items-center gap-10 mb-8 border-b-2 border-black pb-4">
                                 <TabButton label="Activity" icon={<Activity size={18} />} active={bottomTab === 'ACTIVITY'} onClick={() => { setBottomTab('ACTIVITY'); play('click'); }} />
                                 <TabButton label="Comments" icon={<MessageCircle size={18} />} active={bottomTab === 'COMMENTS'} onClick={() => { setBottomTab('COMMENTS'); play('click'); }} />
-                                <TabButton label="Rank" icon={<Users size={18} />} active={bottomTab === 'HOLDERS'} onClick={() => { setBottomTab('HOLDERS'); play('click'); }} />
+                                <TabButton label="Top Holders" icon={<Users size={18} />} active={bottomTab === 'HOLDERS'} onClick={() => { setBottomTab('HOLDERS'); play('click'); }} />
                             </div>
 
                             <AnimatePresence mode="wait">
@@ -2865,14 +2865,14 @@ function HoldersList({ holders, marketOutcomes, publicKey }: any) {
                 return (
                     <div key={title} className="bg-gray-50 rounded-2xl border-2 border-black p-6">
                         <div className="flex items-center justify-between mb-6 pb-4 border-b-2 border-black/5">
-                            <h3 className="text-xs font-black uppercase tracking-[0.3em]" style={{ color }}>{title} WHALES</h3>
-                            <span className="text-[8px] font-black text-black/20 uppercase">Top 100</span>
+                            <h3 className="text-xs font-black uppercase tracking-[0.3em]" style={{ color }}>{title}</h3>
+                            <span className="text-[8px] font-black text-black/20 uppercase">Top 5</span>
                         </div>
                         <div className="space-y-3">
                             {outcomeHolders.length === 0 ? (
                                 <div className="py-10 text-center text-black/20 font-black italic uppercase tracking-widest">No holders</div>
                             ) : (
-                                outcomeHolders.slice(0, 10).map((h: any, i: number) => {
+                                outcomeHolders.slice(0, 5).map((h: any, i: number) => {
                                     const isMe = publicKey && h.wallet_address === publicKey.toBase58();
                                     const shares = h.positions[title] || 0;
                                     return (

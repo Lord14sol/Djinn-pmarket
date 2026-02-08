@@ -84,18 +84,18 @@ const CustomTooltip = ({ active, payload, outcomeColors, outcomeNames }: any) =>
     );
 };
 
-// Trade indicators
+// Trade indicators - Simple text only
 const TradeIndicator = ({ trade, color }: { trade: TradeBubble, color: string }) => {
     return (
         <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="flex items-center gap-2 text-xs font-bold"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.3 }}
+            className="text-sm font-black"
             style={{ color }}
         >
-            <span className="text-lg">{trade.side === 'YES' || trade.side === trade.outcomeName ? '+' : '−'}</span>
-            <span>${Math.round(trade.amountSol)}</span>
+            +${Math.round(trade.amountSol)}
         </motion.div>
     );
 };
