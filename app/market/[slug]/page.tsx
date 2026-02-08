@@ -2485,12 +2485,7 @@ export default function Page() {
                                     outcome: realtimeTradeEvent.outcome,
                                     amount: realtimeTradeEvent.amount,
                                     side: realtimeTradeEvent.side
-                                } : (lastTradeEvent ? {
-                                    id: lastTradeEvent.id,
-                                    outcome: lastTradeEvent.outcome || lastTradeEvent.side,
-                                    amount: lastTradeEvent.amount,
-                                    side: lastTradeEvent.side
-                                } : null)}
+                                } : null}
                                 selectedOutcome={selectedOutcomeName || (selectedSide === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO'))}
                                 onOutcomeChange={(name: string) => {
                                     setSelectedOutcomeName(name);
