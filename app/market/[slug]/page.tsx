@@ -4,7 +4,6 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import { useRouter } from 'next/navigation';
-import { ChartDebugHelper } from '@/components/ChartDebugHelper';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatCompact, parseCompactNumber, getOutcomeValue, cn } from '@/lib/utils';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
