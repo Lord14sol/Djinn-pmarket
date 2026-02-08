@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useMemo, useCallback, useEffect, useState } from 'react';
+import React, { useMemo } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { WalletReadyState, WalletName } from '@solana/wallet-adapter-base';
-import { ShieldCheck, X } from 'lucide-react';
+import { X, Zap } from 'lucide-react';
+import { useWalletConnection } from '@/hooks/useWalletConnection';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface CustomWalletModalProps {
     isOpen: boolean;
@@ -11,118 +13,231 @@ interface CustomWalletModalProps {
 }
 
 export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModalProps) {
-    const { wallets, select, connect, connecting, connected } = useWallet();
-    const [selectedWalletName, setSelectedWalletName] = useState<WalletName | null>(null);
+    const { wallets } = useWallet();
+    const { connectWallet, isConnecting, error, canRetry, retry } = useWalletConnection();
 
-    // Filter valid wallets
     const uniqueWallets = useMemo(() => {
         const seen = new Set();
         const list = [];
+        const preferredOrder = ['Phantom', 'Solflare', 'Backpack', 'Jupiter'];
+        // MetaMask is EVM-only, not compatible with Solana - exclude it
+        const blocklist = ['MetaMask'];
+
         for (const w of wallets) {
             if (seen.has(w.adapter.name)) continue;
+            if (blocklist.includes(w.adapter.name)) continue;
             const isReady = w.readyState === WalletReadyState.Installed || w.readyState === WalletReadyState.Loadable;
             if (isReady) {
                 seen.add(w.adapter.name);
                 list.push(w);
             }
         }
-        return list;
+
+        return list.sort((a, b) => {
+            const idxA = preferredOrder.indexOf(a.adapter.name);
+            const idxB = preferredOrder.indexOf(b.adapter.name);
+            return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
+        });
     }, [wallets]);
 
-    // Handle Wallet Selection - ROBUST FLOW (Select -> Delay -> Connect)
-    const handleWalletSelect = useCallback(async (walletName: WalletName) => {
-        if (connected || connecting) {
-            console.log('[CustomWalletModal] Already connected or connecting, skipping.');
-            return;
-        }
-
-        console.log('[CustomWalletModal] Initiating robust connection flow for:', walletName);
-        setSelectedWalletName(walletName);
-
-        try {
-            // 1. SELECT first (this updates the internal wallet context)
-            console.log('[CustomWalletModal] 1. Selecting wallet...');
-            select(walletName);
-
-            // 2. DELAY (allow context/adapters to settle)
-            // This is crucial for Phantom and other extensions to stabilize their internal state
-            await new Promise(resolve => setTimeout(resolve, 250));
-
-            // 3. CONNECT using the hook's connect function
-            // The hook will now use the previously selected wallet adapter
-            console.log('[CustomWalletModal] 2. Attempting connection via useWallet hook...');
-            await connect();
-            
-            console.log('[CustomWalletModal] Connection sequence triggered successfully');
-        } catch (error: any) {
-            console.error('[CustomWalletModal] Connection failed:', error);
-            
-            // Silence "Unexpected error" as it's often a transient state during modal transitions
-            if (!error.message?.includes('Unexpected error')) {
-                alert(`Connection Error: ${error.message || 'Unknown error'}`);
-            }
-            setSelectedWalletName(null);
-        }
-    }, [connected, connecting, select, connect]);
-
-    // Close on connection successful
-    useEffect(() => {
-        if (connected && isOpen) {
+    const handleWalletClick = async (walletName: WalletName) => {
+        const result = await connectWallet(walletName);
+        if (result.success) {
             onClose();
         }
-    }, [connected, isOpen, onClose]);
+    };
 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center h-screen w-screen p-4 overflow-hidden">
-            <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={onClose} />
-            <div className="relative w-full max-w-sm bg-[#1A1A1A] border border-white/10 rounded-[2rem] shadow-2xl flex flex-col max-h-[90vh] z-10 overflow-hidden">
+        <AnimatePresence>
+            {isOpen && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center h-screen w-screen p-4 overflow-hidden">
+                    {/* Backdrop */}
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="absolute inset-0 bg-black/70"
+                        onClick={onClose}
+                    />
 
-                {(connecting || (selectedWalletName && !connected)) ? (
-                    <div className="flex flex-col items-center justify-center py-16 px-8 text-center space-y-8">
-                        <div className="w-20 h-20 rounded-full border-4 border-t-[#F492B7] border-white/10 animate-spin"></div>
-                        <div className="space-y-3">
-                            <h3 className="text-2xl font-black text-white">Connecting...</h3>
-                            <p className="text-gray-400 text-sm">Please approve in your {selectedWalletName || 'wallet'}.</p>
-                        </div>
-                    </div>
-                ) : (
-                    <>
-                        <div className="relative pt-6 pb-2 text-center">
-                            <button onClick={onClose} className="absolute right-6 top-6 text-gray-400 hover:text-white p-2 hover:bg-white/5 rounded-full">
-                                <X size={20} />
-                            </button>
-                            <h2 className="text-white/50 font-bold text-xs uppercase tracking-[0.2em] mt-2">Sign In</h2>
-                        </div>
-                        <div className="flex flex-col items-center justify-center py-6 gap-4">
-                            <div className="relative w-40 h-40">
-                                <img src="/djinn-logo.png?v=3" alt="Djinn" className="w-full h-full object-contain drop-shadow-[0_0_20px_rgba(244,146,183,0.3)]" />
-                            </div>
-                            <p className="text-[#F492B7] text-sm font-bold tracking-wide">Select your wallet</p>
-                        </div>
-                        <div className="px-6 space-y-3 pb-8 overflow-y-auto scrollbar-hide">
-                            {uniqueWallets.map((wallet: any) => (
-                                <button
-                                    key={wallet.adapter.name}
-                                    onClick={() => handleWalletSelect(wallet.adapter.name)}
-                                    className="w-full bg-[#252525] hover:bg-[#333] border border-white/5 rounded-xl p-4 flex items-center justify-between transition-all group active:scale-[0.98]"
-                                >
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-10 h-10 rounded-lg overflow-hidden bg-black/20 flex items-center justify-center border border-white/5">
-                                            <img src={wallet.adapter.icon} alt={wallet.adapter.name} className="w-6 h-6" />
-                                        </div>
-                                        <span className="font-bold text-white text-base">{wallet.adapter.name}</span>
+                    {/* Modal */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 50, rotate: -2 }}
+                        animate={{ opacity: 1, y: 0, rotate: 0 }}
+                        exit={{ opacity: 0, y: 40, rotate: 1 }}
+                        transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                        className="relative w-full max-w-[380px] flex flex-col max-h-[90vh] z-10"
+                    >
+                        {/* Offset shadow layer */}
+                        <div className="absolute inset-0 bg-[#FF69B4] rounded-3xl translate-x-[8px] translate-y-[8px]" />
+
+                        {/* Main card */}
+                        <div className="relative bg-white border-[3px] border-black rounded-3xl overflow-hidden">
+
+                            {isConnecting ? (
+                                <div className="flex flex-col items-center justify-center py-20 px-8 text-center space-y-7">
+                                    <motion.div
+                                        className="relative w-20 h-20 flex items-center justify-center"
+                                        animate={{ rotate: 360 }}
+                                        transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
+                                    >
+                                        <div className="absolute inset-0 rounded-full border-[3px] border-black/10 border-t-[#FF69B4] border-r-black" />
+                                        <Zap className="w-7 h-7 text-[#FF69B4]" strokeWidth={3} />
+                                    </motion.div>
+                                    <div className="space-y-2">
+                                        <h3
+                                            className="text-2xl font-black text-black uppercase tracking-tight"
+                                            style={{ fontFamily: 'var(--font-unbounded), sans-serif' }}
+                                        >
+                                            Connecting...
+                                        </h3>
+                                        <p className="text-black/40 text-xs font-bold uppercase tracking-[0.2em]">
+                                            Approve in your wallet
+                                        </p>
                                     </div>
-                                    {wallet.readyState === WalletReadyState.Installed && (
-                                        <span className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]"></span>
+                                </div>
+                            ) : (
+                                <>
+                                    {/* Header */}
+                                    <div className="bg-black px-6 py-4 flex items-center justify-between rounded-t-[calc(1.5rem-3px)]">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="w-2.5 h-2.5 rounded-full bg-[#FF69B4]" />
+                                            <h2
+                                                className="text-white font-black text-[11px] uppercase tracking-[0.3em]"
+                                                style={{ fontFamily: 'var(--font-unbounded), sans-serif' }}
+                                            >
+                                                Connect
+                                            </h2>
+                                        </div>
+                                        <button
+                                            onClick={onClose}
+                                            className="bg-white/10 text-white w-8 h-8 rounded-xl flex items-center justify-center hover:bg-[#FF69B4] hover:scale-110 transition-all duration-150"
+                                        >
+                                            <X size={14} strokeWidth={3} />
+                                        </button>
+                                    </div>
+
+                                    {/* Logo + Title */}
+                                    <div className="flex flex-col items-center pt-7 pb-5 px-6">
+                                        <div className="w-20 h-20 rounded-2xl border-[3px] border-black overflow-hidden flex items-center justify-center bg-black/[0.03] shadow-[4px_4px_0px_#000] mb-5">
+                                            <img
+                                                src="/djinn-logo.png?v=3"
+                                                alt="Djinn"
+                                                className="w-14 h-14 object-contain"
+                                            />
+                                        </div>
+                                        <h3
+                                            className="text-black text-2xl font-bold"
+                                            style={{ fontFamily: 'var(--font-adriane), serif' }}
+                                        >
+                                            Djinn
+                                        </h3>
+                                        <p className="text-black/30 text-[10px] font-black uppercase tracking-[0.3em] mt-2">
+                                            Choose your wallet
+                                        </p>
+                                    </div>
+
+                                    {/* Divider */}
+                                    <div className="mx-6 border-t-[3px] border-black/10 rounded-full" />
+
+                                    {/* Error */}
+                                    {error && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: -10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="mx-5 mt-4"
+                                        >
+                                            <div className="p-3 rounded-2xl bg-red-50 border-[3px] border-red-400 shadow-[4px_4px_0px_#dc2626]">
+                                                <p className="text-red-600 text-[11px] font-black uppercase tracking-wide text-center">
+                                                    {error}
+                                                </p>
+                                                {canRetry && (
+                                                    <button
+                                                        onClick={retry}
+                                                        className="w-full mt-2 py-2 bg-red-500 text-white text-[10px] font-black uppercase tracking-widest rounded-xl border-[2px] border-black shadow-[3px_3px_0px_#000] hover:shadow-none hover:translate-x-[3px] hover:translate-y-[3px] transition-all duration-100"
+                                                    >
+                                                        Try Again
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </motion.div>
                                     )}
-                                </button>
-                            ))}
+
+                                    {/* Wallet List */}
+                                    <div className="p-5 space-y-2.5 overflow-y-auto max-h-[40vh]">
+                                        {uniqueWallets.map((w, i) => (
+                                            <motion.button
+                                                key={w.adapter.name}
+                                                initial={{ opacity: 0, x: -16 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                transition={{ delay: i * 0.06, type: 'spring', stiffness: 500, damping: 30 }}
+                                                onClick={() => handleWalletClick(w.adapter.name as WalletName)}
+                                                className="w-full bg-white rounded-2xl p-3.5 flex items-center justify-between
+                                                    border-[3px] border-black
+                                                    shadow-[5px_5px_0px_#000000]
+                                                    hover:shadow-[2px_2px_0px_#FF69B4] hover:translate-x-[3px] hover:translate-y-[3px] hover:border-[#FF69B4]
+                                                    active:shadow-none active:translate-x-[5px] active:translate-y-[5px]
+                                                    transition-all duration-100 group cursor-pointer"
+                                            >
+                                                <div className="flex items-center gap-3.5">
+                                                    <div className="w-11 h-11 rounded-xl border-[2px] border-black overflow-hidden flex items-center justify-center bg-black/[0.03] group-hover:border-[#FF69B4] transition-colors duration-100">
+                                                        <img src={w.adapter.icon} alt={w.adapter.name} className="w-6 h-6 object-contain" />
+                                                    </div>
+                                                    <div className="flex flex-col items-start gap-0.5">
+                                                        <span
+                                                            className="font-black text-black text-[12px] uppercase tracking-wide"
+                                                            style={{ fontFamily: 'var(--font-unbounded), sans-serif' }}
+                                                        >
+                                                            {w.adapter.name}
+                                                        </span>
+                                                        {w.readyState === WalletReadyState.Installed && (
+                                                            <span className="text-[9px] font-bold text-black/25 uppercase tracking-widest">
+                                                                Detected
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    {w.readyState === WalletReadyState.Installed && (
+                                                        <span className="w-3 h-3 rounded-full bg-[#00FF41] border-[2px] border-black" />
+                                                    )}
+                                                    <span className="text-black/15 group-hover:text-[#FF69B4] group-hover:translate-x-1 transition-all duration-150 font-black text-base">
+                                                        &rarr;
+                                                    </span>
+                                                </div>
+                                            </motion.button>
+                                        ))}
+
+                                        {uniqueWallets.length === 0 && (
+                                            <div className="text-center py-10 px-4">
+                                                <p className="text-black/40 text-xs font-black uppercase tracking-wider">
+                                                    No wallets found
+                                                </p>
+                                                <p className="text-black/20 text-[10px] mt-2 font-bold">
+                                                    Install a Solana wallet extension
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Footer */}
+                                    <div className="bg-[#FF69B4] border-t-[3px] border-black px-4 py-3 flex items-center justify-center rounded-b-[calc(1.5rem-3px)]">
+                                        <span
+                                            className="text-black text-[9px] font-black uppercase tracking-[0.35em]"
+                                            style={{ fontFamily: 'var(--font-unbounded), sans-serif' }}
+                                        >
+                                            Djinn Protocol
+                                        </span>
+                                    </div>
+                                </>
+                            )}
                         </div>
-                    </>
-                )}
-            </div>
-        </div>
+                    </motion.div>
+                </div>
+            )}
+        </AnimatePresence>
     );
 }

@@ -1,14 +1,10 @@
 'use client';
+
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import dynamic from 'next/dynamic';
-import { ADMIN_WALLETS } from '@/lib/whitelist';
 
-const PhysicsCardBubblegum = dynamic(() => import('./PhysicsCardBubblegum'), {
-    ssr: false,
-    loading: () => <div className="w-20 h-20 rounded-full border-2 border-dashed border-gray-700 animate-pulse" />
-});
+import { ADMIN_WALLETS } from '@/lib/whitelist';
 
 interface WalletProfileMenuProps {
     isOpen: boolean;
@@ -52,34 +48,60 @@ export default function WalletProfileMenu({
             {/* BACKDROP */}
             <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm" onClick={onClose} />
 
-            {/* MODAL MENU - Raised and resized for Card */}
-            <div className="fixed bottom-[15%] left-1/2 -translate-x-1/2 w-[380px] bg-white border-2 border-black rounded-[2.5rem] shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] z-[70] overflow-hidden flex flex-col items-center pt-6 pb-8 animate-in fade-in slide-in-from-bottom-8 duration-300">
+            {/* MODAL MENU - Raised 30% from bottom */}
+            <div className="fixed bottom-[35%] left-1/2 -translate-x-1/2 w-[340px] bg-white border-2 border-black rounded-3xl shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] z-[70] overflow-hidden flex flex-col items-center pt-8 pb-8 animate-in fade-in slide-in-from-bottom-8 duration-300">
 
                 {/* CLOSE BUTTON (X) */}
                 <button
                     onClick={onClose}
-                    className="absolute top-6 right-8 text-black hover:text-[#F492B7] transition-colors font-black text-xl z-[80]"
+                    className="absolute top-4 right-4 text-black hover:text-[#F492B7] transition-colors font-black text-xl"
                 >
                     ✕
                 </button>
 
-                {/* 1. AGENT CARD (The main attraction) */}
-                <div className="relative w-full h-[400px] mb-2 pointer-events-auto">
-                    <PhysicsCardBubblegum username={username} />
-                </div>
+                {/* 1. USERNAME */}
+                <Link
+                    href={`/profile/${username}`}
+                    onClick={onClose}
+                    className="text-black text-2xl font-black mb-1 hover:text-[#F492B7] transition-colors uppercase tracking-tight"
+                >
+                    @{username}
+                </Link>
 
-                {/* 2. USERNAME & IDENTITY */}
-                <div className="flex flex-col items-center mb-6">
+                {/* 2. PROFILE LINK (Mock) */}
+                <Link href={`/profile/${username}`} className="text-gray-500 text-xs mb-6 hover:text-black transition-colors font-mono">
+                    djinn.markets/profile/{username}
+                </Link>
+
+                {/* 2.5 ADMIN LINK (CONDITIONAL) */}
+                {isAdmin && (
                     <Link
-                        href={`/profile/${username}`}
+                        href="/admin"
                         onClick={onClose}
-                        className="text-black text-3xl font-black hover:text-[#F492B7] transition-colors uppercase tracking-tight"
+                        className="mb-4 bg-[#F492B7] text-black text-xs font-black uppercase tracking-widest border-2 border-black hover:translate-y-[2px] hover:shadow-none shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 rounded-xl px-5 py-2.5 transition-all"
                     >
-                        @{username}
+                        ⚡ Admin Dashboard
                     </Link>
-                    <Link href={`/profile/${username}`} className="text-gray-500 text-[10px] hover:text-black transition-colors font-mono">
-                        djinn.markets/profile/{username}
-                    </Link>
+                )}
+
+                {/* 3. EDIT PROFILE BUTTON */}
+                <button
+                    onClick={() => { onClose(); onEditProfile(); }}
+                    className="flex items-center gap-2 px-6 py-2 rounded-xl border-2 border-black bg-white text-black text-xs font-black uppercase tracking-wider hover:bg-[#F492B7] transition-all mb-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[2px] hover:shadow-none"
+                >
+                    Edit profile <span className="text-[10px]">✎</span>
+                </button>
+
+                {/* 4. CIRCLE PFP */}
+                <div className="relative mb-6">
+                    <div className="w-20 h-20 rounded-full overflow-hidden bg-black shadow-none">
+                        <img
+                            src={pfp || '/pink-pfp.png'}
+                            alt={username}
+                            className="w-full h-full object-cover"
+                            onError={(e) => { e.currentTarget.src = '/pink-pfp.png'; }}
+                        />
+                    </div>
                 </div>
 
                 {/* 5. WALLET ADDRESS & COPY (Original Keycap Style) */}

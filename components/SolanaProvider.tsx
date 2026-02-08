@@ -2,7 +2,6 @@
 
 import React, { useMemo } from 'react';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
-import { PhantomWalletAdapter, SolflareWalletAdapter } from '@solana/wallet-adapter-wallets';
 import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
 import { clusterApiUrl } from '@solana/web3.js';
 import { WalletAuthWrapper } from './WalletAuthWrapper';
@@ -17,14 +16,9 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
         return clusterApiUrl(network);
     }, [network]);
 
-    // Explicitly add adapters
-    const wallets = useMemo(
-        () => [
-            new PhantomWalletAdapter(),
-            new SolflareWalletAdapter(),
-        ],
-        []
-    );
+    // Let wallet-standard auto-detect wallets (Phantom, Solflare, etc.)
+    // DO NOT add explicit adapters - they conflict with wallet-standard detection
+    const wallets = useMemo(() => [], []);
 
     return (
         <ConnectionProvider endpoint={endpoint}>
@@ -32,8 +26,23 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
                 wallets={wallets}
                 autoConnect={false}
                 // App Identity for wallet signatures
-                localStorageKey="djinn-wallet-v10"
+                localStorageKey="djinn-wallet-final-v15"
+                onError={(error) => {
+                    const msg = error.message || '';
+                    // Only suppress truly transient errors - NOT connection errors
+                    const isTransient =
+                        msg.includes('User rejected') ||
+                        msg.includes('Already connected') ||
+                        msg === '';
+
+                    if (isTransient) {
+                        console.warn('[SolanaProvider] Suppressed:', error.name, msg || '(empty)');
+                        return;
+                    }
+                    console.error('[SolanaProvider] Wallet error:', error.name, msg);
+                }}
             >
+                {/* ✅ NO uses WalletModalProvider aquí */}
                 <WalletAuthWrapper>
                     {children}
                 </WalletAuthWrapper>

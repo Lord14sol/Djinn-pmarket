@@ -90,23 +90,40 @@ export default function DjinnLanding() {
         }
     }, [connected, loading, status.isAdmin, router]);
 
+    // Instantly open claim modal when wallet connects and no profile
+    useEffect(() => {
+        if (connected && !loading && !profile && !isClaimModalOpen) {
+            setIsClaimModalOpen(true);
+        }
+    }, [connected, loading, profile, isClaimModalOpen]);
+
     const handleConnect = useCallback(async () => {
         if (!connected) {
             setIsWalletModalOpen(true);
             return;
         }
-    }, [connected]);
 
-    const handleClaimSuccess = async (newUsername: string) => {
+        // Si ya está conectado pero no tiene perfil, forzamos abrir el modal de claim
+        if (connected && !profile) {
+            console.log("💎 User connected but no profile, opening Claim Modal...");
+            setIsClaimModalOpen(true);
+        }
+    }, [connected, profile]);
+
+    const handleClaimSuccess = (newUsername: string) => {
+        // Close modal instantly so confetti is visible
         setIsClaimModalOpen(false);
-        await refreshStatus();
+        // Set profile immediately so card renders right away (triggers confetti)
+        setProfile({ username: newUsername, wallet_address: walletAddress });
+        // Refresh full data in background
+        refreshStatus();
     };
 
     return (
         <div className="relative w-full min-h-screen bg-transparent text-white font-sans selection:bg-[#FF69B4] selection:text-white overflow-x-hidden flex flex-col">
 
             {/* Top Navigation - Neo-Brutalist Disconnect */}
-            <nav className="relative z-20 w-full flex items-center justify-end px-8 py-8 max-w-7xl mx-auto">
+            <nav className="fixed top-0 right-0 z-20 flex items-center justify-end px-4 py-4">
                 <AnimatePresence>
                     {isMounted && connected && (
                         <motion.button
@@ -114,9 +131,9 @@ export default function DjinnLanding() {
                             animate={{ opacity: 1, x: 0 }}
                             exit={{ opacity: 0, x: 20 }}
                             onClick={() => disconnect()}
-                            className="flex items-center gap-2 bg-[#FF69B4] text-white px-4 py-2 rounded-lg border-2 border-black shadow-[4px_4px_0px_#000000] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all font-black uppercase text-xs tracking-widest"
+                            className="flex items-center gap-2.5 bg-white text-black px-6 py-3 border-3 border-black shadow-[6px_6px_0px_#000000] hover:shadow-[2px_2px_0px_#000000] hover:translate-x-[4px] hover:translate-y-[4px] active:shadow-none active:translate-x-[6px] active:translate-y-[6px] transition-all duration-150 font-black uppercase text-[11px] tracking-[0.2em]"
                         >
-                            <LogOut className="w-4 h-4" />
+                            <LogOut className="w-4 h-4" strokeWidth={3} />
                             Disconnect
                         </motion.button>
                     )}
@@ -126,47 +143,60 @@ export default function DjinnLanding() {
             {/* Main Content - Centered */}
             <div className="relative z-10 flex flex-col items-center justify-center flex-1 w-full px-8 py-12">
 
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 }}
-                    className="flex items-center gap-1 md:gap-1.5 mb-16 select-none"
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => isMounted && connected && profile ? router.push('/markets') : null}
-                >
-                    <div className="w-40 h-40 md:w-56 md:h-56 relative">
-                        <Image
-                            src="/djinn-logo.png"
-                            alt="Djinn"
-                            fill
-                            className="object-contain"
-                            priority
-                            sizes="(max-width: 768px) 144px, 208px"
-                            unoptimized
-                        />
-                    </div>
-                    <div className="flex flex-col items-start leading-none">
-                        <h1
-                            className="text-7xl md:text-9xl text-white"
-                            style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}
-                        >
-                            Djinn
-                        </h1>
-                    </div>
-                </motion.div>
+                {!(connected && profile) && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1 }}
+                        className="flex items-center gap-0 mb-16 select-none"
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => isMounted && connected && profile ? router.push('/markets') : null}
+                    >
+                        <div className="w-40 h-40 md:w-56 md:h-56 relative -mr-3 md:-mr-4">
+                            <Image
+                                src="/djinn-logo.png?v=3"
+                                alt="Djinn"
+                                fill
+                                className="object-contain"
+                                priority
+                                sizes="(max-width: 768px) 144px, 208px"
+                                unoptimized
+                            />
+                        </div>
+                        <div className="flex flex-col items-start leading-none">
+                            <h1
+                                className="text-7xl md:text-9xl text-white relative z-10"
+                                style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}
+                            >
+                                Djinn
+                            </h1>
+                        </div>
+                    </motion.div>
+                )}
 
                 <AnimatePresence mode="wait">
-                    {/* Show card IMMEDIATELY once connected for feedback */}
-                    {connected ? (
+                    {/* Show card IF profile exists */}
+                    {connected && profile ? (
                         <motion.div
                             key="card-section"
                             initial={{ opacity: 0, scale: 0.8, y: 50 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.8, y: 50 }}
                             transition={{ type: "spring", stiffness: 100, damping: 15 }}
-                            className="w-full max-w-md h-[520px] relative mb-12"
+                            className="w-full max-w-xl h-[680px] relative"
                         >
-                            <PhysicsCardBubblegum username={profile?.username || 'agent'} />
+                            <PhysicsCardBubblegum username={profile.username} memberNumber={status.count} />
+                        </motion.div>
+                    ) : (loading && connected) ? (
+                        /* Loading state after connection but before profile load */
+                        <motion.div
+                            key="loading-profile"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="w-full max-w-lg flex flex-col items-center gap-4 py-8"
+                        >
+                            <Loader2 className="w-10 h-10 animate-spin text-[#FF69B4]" />
+                            <p className="text-[#FF69B4] font-black uppercase tracking-[0.2em] text-xs">Loading Profile...</p>
                         </motion.div>
                     ) : (
                         <motion.div
@@ -174,22 +204,35 @@ export default function DjinnLanding() {
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -20 }}
-                            className="w-full max-w-md"
+                            className="w-full max-w-lg flex justify-center"
                         >
                             <motion.button
+                                id="join-djinn-btn"
                                 onClick={handleConnect}
                                 disabled={isRegistering}
-                                className="group w-full relative py-6 px-10 rounded-xl font-black uppercase tracking-[0.4em] text-lg transition-all bg-[#FF69B4] text-white border-2 border-black shadow-[10px_10px_0px_#000000] hover:shadow-none hover:translate-x-[4px] hover:translate-y-[4px] active:scale-95"
-                                whileHover={{ scale: 1.01 }}
-                                whileTap={{ scale: 0.96 }}
+                                className="group relative py-4 px-16 font-black uppercase text-sm
+                                    bg-white text-black
+                                    rounded-full
+                                    border-[3px] border-black
+                                    shadow-[6px_6px_0px_#FF69B4]
+                                    hover:shadow-[3px_3px_0px_#FF69B4] hover:translate-x-[3px] hover:translate-y-[3px]
+                                    active:shadow-none active:translate-x-[6px] active:translate-y-[6px]
+                                    transition-all duration-150
+                                    disabled:opacity-50 disabled:cursor-not-allowed"
+                                whileTap={{ scale: 0.97 }}
                             >
-                                <span className="relative z-10 flex items-center justify-center gap-3">
+                                <span className="flex items-center justify-center gap-3">
                                     {loading || isRegistering ? (
-                                        <Loader2 className="w-5 h-5 animate-spin" />
+                                        <Loader2 className="w-5 h-5 animate-spin text-black" />
                                     ) : (
                                         <>
-                                            Join Djinn
-                                            <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                                            <span
+                                                className="tracking-[0.25em] text-[13px] font-black"
+                                                style={{ fontFamily: 'var(--font-unbounded), sans-serif' }}
+                                            >
+                                                {connected ? 'Finish Setup' : 'Enter Djinn'}
+                                            </span>
+                                            <ArrowRight className="w-5 h-5 group-hover:translate-x-1.5 transition-transform duration-150" strokeWidth={3} />
                                         </>
                                     )}
                                 </span>

@@ -35,7 +35,8 @@ import { getOutcomeColor } from '@/lib/market-colors';
 import { Bet, getUserMarketBets } from '@/lib/supabase-db';
 
 import IgnitionBar from '@/components/market/IgnitionBar';
-import bs58 from 'bs58';
+import bs58Module from 'bs58';
+const bs58 = (bs58Module as any).default || bs58Module;
 import { ADMIN_WALLETS } from '@/lib/whitelist';
 import StressTestWidget from '@/components/market/StressTestWidget';
 
