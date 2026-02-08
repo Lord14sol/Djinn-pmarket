@@ -21,6 +21,12 @@ const PhysicsCardBubblegum = dynamic(() => import('@/components/PhysicsCardBubbl
     )
 });
 
+// Lazy load Galaxy background
+const Galaxy = dynamic(() => import('@/components/Galaxy'), {
+    ssr: false,
+    loading: () => null
+});
+
 // FORCE UPDATE: v1.0.8
 import ClaimUsernameModal from '@/components/ClaimUsernameModal';
 import { getProfile } from '@/lib/supabase-db';
@@ -120,7 +126,25 @@ export default function DjinnLanding() {
     };
 
     return (
-        <div className="relative w-full min-h-screen bg-transparent text-white font-sans selection:bg-[#FF69B4] selection:text-white overflow-x-hidden flex flex-col">
+        <div className="relative w-full min-h-screen bg-black text-white font-sans selection:bg-[#FF69B4] selection:text-white overflow-x-hidden flex flex-col">
+            {/* Galaxy Background */}
+            <div className="fixed inset-0 z-0">
+                <Galaxy
+                    mouseRepulsion
+                    mouseInteraction
+                    density={1}
+                    glowIntensity={0.3}
+                    saturation={0}
+                    hueShift={320}
+                    twinkleIntensity={0.3}
+                    rotationSpeed={0.1}
+                    repulsionStrength={2}
+                    autoCenterRepulsion={0}
+                    starSpeed={0.5}
+                    speed={1}
+                    transparent={false}
+                />
+            </div>
 
             {/* Top Navigation - Neo-Brutalist Disconnect */}
             <nav className="fixed top-0 right-0 z-20 flex items-center justify-end px-4 py-4">
@@ -131,9 +155,18 @@ export default function DjinnLanding() {
                             animate={{ opacity: 1, x: 0 }}
                             exit={{ opacity: 0, x: 20 }}
                             onClick={() => disconnect()}
-                            className="flex items-center gap-2.5 bg-white text-black px-6 py-3 border-3 border-black shadow-[6px_6px_0px_#000000] hover:shadow-[2px_2px_0px_#000000] hover:translate-x-[4px] hover:translate-y-[4px] active:shadow-none active:translate-x-[6px] active:translate-y-[6px] transition-all duration-150 font-black uppercase text-[11px] tracking-[0.2em]"
+                            className="flex items-center gap-2.5 
+                                bg-[#FF0055] text-white 
+                                px-6 py-3 
+                                rounded-full
+                                border-[3px] border-black 
+                                shadow-[6px_6px_0px_#000000] 
+                                hover:shadow-[2px_2px_0px_#000000] hover:translate-x-[4px] hover:translate-y-[4px] 
+                                active:shadow-none active:translate-x-[6px] active:translate-y-[6px] 
+                                transition-all duration-150 
+                                font-black uppercase text-[11px] tracking-[0.2em]"
                         >
-                            <LogOut className="w-4 h-4" strokeWidth={3} />
+                            <LogOut className="w-4 h-4 text-white" strokeWidth={3} />
                             Disconnect
                         </motion.button>
                     )}

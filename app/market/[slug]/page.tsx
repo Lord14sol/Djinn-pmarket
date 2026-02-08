@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import { useRouter } from 'next/navigation';
+import { ChartDebugHelper } from '@/components/ChartDebugHelper';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatCompact, parseCompactNumber, getOutcomeValue, cn } from '@/lib/utils';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
@@ -14,6 +15,7 @@ import { useDjinnProtocol } from '@/hooks/useDjinnProtocol';
 import { simulateBuy, simulateSell, estimatePayoutInternal, getSpotPrice, calculateImpliedProbability, getIgnitionProgressMcap, getIgnitionStatusMcap } from '@/lib/core-amm';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { useMarketData } from '@/hooks/useMarketData';
+import { useRealtimeChart } from '@/hooks/useRealtimeChart';
 import { useSound } from '@/components/providers/SoundProvider';
 import MorphingIcon from '@/components/ui/MorphingIcon';
 
@@ -186,6 +188,10 @@ export default function Page() {
 
 
 
+
+
+
+
     // --- DJINN V3 METRICS ---
     const {
         yesMcap,
@@ -305,10 +311,11 @@ export default function Page() {
                     yesPrice: spotPrice * 100,
                     noPrice: 100 - (spotPrice * 100),
                     chance: 0,
-                    mcapSOL: mcapSOL, // ✅ Added independent MCAP
-                    supply: supply // ✅ Expose raw supply
+                    mcapSOL: mcapSOL,
+                    supply: supply
                 };
             });
+
 
             // Normalize Probabilities (Chances)
             // FIX: Use Supply Ratio logic to match core-amm.ts calculateImpliedProbability exactly
@@ -384,6 +391,21 @@ export default function Page() {
 
         return base;
     }, [slug, livePrice, marketAccount]);
+
+    // --- REALTIME CHART DATA ---
+    // Using useRealtimeChart to get live data and trades
+    const { chartData, latestTrade: realtimeTradeEvent } = useRealtimeChart({
+        marketId: slug,
+        outcomeNames: marketOutcomes.map(o => o.title),
+        initialData: historyState.probability // feed persisted data if any
+    });
+
+    // Update historyState when chartData changes (for persistence)
+    useEffect(() => {
+        if (chartData.length > 0) {
+            setHistoryState(prev => ({ ...prev, probability: chartData }));
+        }
+    }, [chartData]);
 
 
     // User Data
@@ -2438,25 +2460,38 @@ export default function Page() {
                     {/* LEFT AREA: Chart & Holdings & Community */}
                     <div className="flex-[8] w-full min-w-0 flex flex-col gap-12">
 
+
+
+
                         {/* CHART PANEL */}
                         <motion.div
                             initial={{ opacity: 0, scale: 0.98 }}
                             animate={{ opacity: 1, scale: 1 }}
                             transition={{ delay: 0.5 }}
-                            className="bg-transparent rounded-3xl border-2 border-white/10 overflow-hidden relative backdrop-blur-sm min-h-[550px]"
+                            className="bg-transparent rounded-3xl border-2 border-white/10 overflow-hidden relative backdrop-blur-sm h-[600px] min-h-[600px]"
                         >
                             <TheDjinnChart
                                 outcomeNames={marketOutcomes.map(o => o.title)}
-                                data={historyState.probability}
+                                data={historyState.probability || []}
                                 outcomeSupplies={outcomeSuppliesMap}
                                 volume={marketAccount?.volumeTotal ? formatCompact(Number(marketAccount.volumeTotal) / 1e9) + " SOL" : (marketAccount?.volume_usd || "$0")}
-                                resolutionDate={marketAccount?.market_resolution_date ? new Date(marketAccount.market_resolution_date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : (marketAccount?.end_date || "Unknown")}
-                                tradeEvent={lastTradeEvent ? {
+                                resolutionDate={marketAccount?.resolution_date}
+                                outcomeColors={
+                                    (marketAccount?.outcome_colors && marketAccount.outcome_colors.length > 0)
+                                        ? marketAccount.outcome_colors
+                                        : ['#2563EB', '#DC2626', '#10B981', '#F59E0B']
+                                }
+                                tradeEvent={realtimeTradeEvent ? {
+                                    id: realtimeTradeEvent.id,
+                                    outcome: realtimeTradeEvent.outcome,
+                                    amount: realtimeTradeEvent.amount,
+                                    side: realtimeTradeEvent.side
+                                } : (lastTradeEvent ? {
                                     id: lastTradeEvent.id,
                                     outcome: lastTradeEvent.outcome || lastTradeEvent.side,
                                     amount: lastTradeEvent.amount,
                                     side: lastTradeEvent.side
-                                } : null}
+                                } : null)}
                                 selectedOutcome={selectedOutcomeName || (selectedSide === 'YES' ? (marketOutcomes[0]?.title || 'YES') : (marketOutcomes[1]?.title || 'NO'))}
                                 onOutcomeChange={(name: string) => {
                                     setSelectedOutcomeName(name);
@@ -2620,6 +2655,7 @@ export default function Page() {
                                             </button>
                                         ))}
                                     </div>
+
                                 ) : (
                                     <div className="flex gap-2">
                                         <button
@@ -2643,6 +2679,8 @@ export default function Page() {
                                     </div>
                                 )}
                             </div>
+
+
 
                             {/* Main Input - Jim Raptis Principle: Labels Above Inputs */}
                             <div className="bg-white rounded-2xl border-4 border-black p-6 mb-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
@@ -2733,9 +2771,11 @@ export default function Page() {
                     }}
                 />
 
-                {marketAccount && marketAccount.marketPDA && (
-                    <StressTestWidget marketPda={marketAccount.marketPDA} />
-                )}
+                {
+                    marketAccount && marketAccount.marketPDA && (
+                        <StressTestWidget marketPda={marketAccount.marketPDA} />
+                    )
+                }
 
                 <DjinnToast
                     isVisible={djinnToast.isVisible}
@@ -2746,8 +2786,8 @@ export default function Page() {
                     actionLink={djinnToast.actionLink}
                     actionLabel={djinnToast.actionLabel}
                 />
-            </div>
-        </div>
+            </div >
+        </div >
     );
 }
 

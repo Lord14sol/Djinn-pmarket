@@ -286,7 +286,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
             });
 
             // 🎉 FIREWORKS SOUND
-            play('fireworks');
+            play('success');
 
             // 🎉 FIRE CONFETTI - Intense Burst from Center
             const duration = 1.5 * 1000;
@@ -343,6 +343,8 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
             window.dispatchEvent(new Event('storage'));
             window.dispatchEvent(new CustomEvent('market-created', { detail: optimisticMarket }));
 
+            // Achievement check removed as requested
+            /*
             import('@/lib/supabase-db').then(async mod => {
                 try {
                     const achievements = await mod.checkMarketMilestones(publicKey.toString());
@@ -355,6 +357,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                     }
                 } catch (e) { console.error("Milestone check failed", e); }
             });
+            */
 
         } catch (error: any) {
             console.error("❌ Error:", error);
@@ -384,7 +387,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                     <div className="p-8 text-center flex flex-col items-center">
                         {/* Header: Title + Close */}
                         <div className="w-full flex justify-end mb-4">
-                            <button onClick={onClose} className="bg-white border-2 border-black p-2 rounded-full hover:bg-gray-100 hover:scale-105 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:shadow-none transition-all">
+                            <button onClick={onClose} className="bg-red-500 text-white border-2 border-black p-2 rounded-full hover:bg-red-600 hover:scale-105 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:shadow-none transition-all">
                                 <CloseIcon />
                             </button>
                         </div>

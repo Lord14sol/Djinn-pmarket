@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 
+
 interface Loser {
     rank: number;
     wallet: string;
@@ -30,7 +31,9 @@ export default function LostSOLLeaderboard({ losers }: LostSOLLeaderboardProps) 
     }
 
     return (
-        <div className="border-3 border-black rounded-[2rem] bg-white overflow-hidden shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+        <div className="border-3 border-black rounded-[2rem] bg-white overflow-hidden shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] relative group/board">
+
+
             {/* Header */}
             <div className="px-6 py-6 bg-[#FFB6C1] border-b-3 border-black flex items-center justify-between">
                 <div className="flex items-center gap-3">

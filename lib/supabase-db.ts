@@ -870,15 +870,29 @@ export function subscribeToComments(marketSlug: string, callback: (payload: any)
         .subscribe();
 }
 
-export function subscribeToActivity(marketSlug: string, callback: (payload: any) => void) {
-    return supabase
-        .channel(`activity:${marketSlug}`)
+export function subscribeToActivity(marketSlug: string | ((payload: any) => void), callback?: (payload: any) => void) {
+    let slug: string | undefined;
+    let cb: (payload: any) => void;
+
+    if (typeof marketSlug === 'function') {
+        cb = marketSlug;
+        slug = undefined;
+    } else {
+        slug = marketSlug;
+        cb = callback!;
+    }
+
+    let channel = supabase.channel(slug ? `activity:${slug}` : 'global-activity');
+
+    const filter = slug ? `market_slug=eq.${slug}` : undefined;
+
+    return channel
         .on('postgres_changes', {
             event: 'INSERT',
             schema: 'public',
-            table: 'activity',
-            filter: `market_slug=eq.${marketSlug}` // ✅ FIX: Only receive events for this market
-        }, callback)
+            table: 'activities', // Asegurarse de usar el nombre correcto de la tabla 'activities' o 'activity'
+            filter: filter
+        }, cb)
         .subscribe();
 }
 

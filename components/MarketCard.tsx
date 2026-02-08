@@ -10,6 +10,7 @@ import { Star } from 'lucide-react';
 import { MarketStatusBadge } from './MarketStatusBadge';
 import { useSound } from './providers/SoundProvider';
 
+
 interface MarketCardProps {
     title: string;
     slug: string;
@@ -134,7 +135,7 @@ const MarketCard: React.FC<MarketCardProps> = React.memo(({
             className={`
                 bg-white border-2 !border-black rounded-2xl relative flex flex-col 
                 hover:!shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] !shadow-none ring-0 outline-none
-                transition-all duration-200 cursor-pointer overflow-visible group/card
+                transition-all duration-200 cursor-pointer overflow-hidden group/card
                 ${compact ? 'p-3 gap-3 min-h-[220px]' : 'p-5 gap-5 min-h-[420px]'}
             `}
         >
@@ -142,12 +143,13 @@ const MarketCard: React.FC<MarketCardProps> = React.memo(({
             <div className={`w-full overflow-hidden bg-gray-100 relative z-10 border-2 border-black rounded-2xl shadow-inner
                 aspect-square
             `}>
+
                 {/* ... existing image logic ... */}
                 {typeof icon === 'string' && (icon.startsWith('http') || icon.startsWith('/') || icon.startsWith('data:image')) ? (
                     <img
                         src={icon}
                         alt=""
-                        className="w-full h-full object-cover group-hover/card:scale-105 transition-all duration-500"
+                        className="w-full h-full object-cover group-hover/card:scale-105 transition-all duration-500 relative z-10"
                         onError={(e) => {
                             e.currentTarget.style.display = 'none';
                             e.currentTarget.parentElement?.classList.add('flex', 'items-center', 'justify-center', 'text-6xl', 'opacity-50');
@@ -155,7 +157,7 @@ const MarketCard: React.FC<MarketCardProps> = React.memo(({
                         }}
                     />
                 ) : (
-                    <div className="w-full h-full flex items-center justify-center text-6xl opacity-50">{icon || '🔮'}</div>
+                    <div className="w-full h-full flex items-center justify-center text-6xl opacity-50 relative z-10">{icon || '🔮'}</div>
                 )}
 
                 {/* Status Badge Overlay - Pill Style */}
@@ -185,17 +187,14 @@ const MarketCard: React.FC<MarketCardProps> = React.memo(({
                     {title}
                 </h3>
 
-                {/* Category & Volume Row */}
-                <div className="flex items-center justify-between gap-2">
-                    {category && (
-                        <span className="pointer-events-auto bg-gray-100 text-gray-700 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide border-2 border-black/20">
+                {/* Category Badge (Moved Body) */}
+                {category && (
+                    <div className="flex items-center pointer-events-auto">
+                        <span className="bg-gray-100/90 backdrop-blur-sm text-gray-700 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide border-2 border-black/20">
                             {category}
                         </span>
-                    )}
-                    <span className="pointer-events-auto bg-black text-white px-2.5 py-1 rounded-lg text-[10px] font-black uppercase border-2 border-black ml-auto">
-                        {volume}
-                    </span>
-                </div>
+                    </div>
+                )}
 
                 {/* Outcomes - SIMPLIFIED */}
                 <div className="mt-auto pointer-events-auto w-full space-y-2">
@@ -216,7 +215,7 @@ const MarketCard: React.FC<MarketCardProps> = React.memo(({
                                 return (
                                     <div
                                         key={typeof opt === 'string' ? opt : (opt.id || idx)}
-                                        className={`flex items-center justify-between bg-white border-2 border-black rounded-lg px-3 py-2 hover:bg-gray-50 transition-colors cursor-pointer ${compact ? 'text-[10px]' : 'text-xs'}`}
+                                        className={`flex items-center justify-between bg-white/90 backdrop-blur-sm border-2 border-black rounded-lg px-3 py-2 hover:bg-gray-50 transition-colors cursor-pointer ${compact ? 'text-[10px]' : 'text-xs'}`}
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             router.push(`/market/${slug}`);
@@ -252,18 +251,29 @@ const MarketCard: React.FC<MarketCardProps> = React.memo(({
                     )}
                 </div>
 
-                {/* Footer: Time & STAR */}
-                <div className={`flex items-center justify-between border-t-2 border-black pointer-events-auto
-                    ${compact ? 'text-[10px] pt-2 mt-2' : 'text-xs pt-3 mt-3'}
+                {/* Footer: SOL Price & X Logo */}
+                <div className={`flex items-center justify-between border-t-2 border-black pt-3 mt-3 pointer-events-auto
+                    ${compact ? 'text-[10px]' : 'text-xs'}
                 `}>
-                    {timeLeft && (
-                        <span className="font-black text-gray-600 uppercase">{timeLeft}</span>
-                    )}
+                    {/* SOL Price / Volume */}
+                    <div className="flex items-center gap-1.5 bg-black text-white px-2 py-1 rounded-lg border-2 border-black shadow-[2px_2px_0px_rgba(0,0,0,0.2)]">
+                        <img src="/solana-logo.png" alt="SOL" className="w-3 h-3 invert" />
+                        <span className="font-black tracking-wide">{volume || '0 SOL'}</span>
+                    </div>
+
+                    {/* X (Twitter) Share */}
                     <button
-                        className="ml-auto p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-                        onClick={handleStarClick}
+                        className="bg-black text-white p-1.5 rounded-lg border-2 border-black hover:bg-[#FF69B4] hover:border-black transition-all hover:shadow-[2px_2px_0px_#000]"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            window.open(`https://twitter.com/intent/tweet?text=Check out this market on Djinn!&url=${window.location.origin}/market/${slug}`, '_blank');
+                        }}
                     >
-                        <Star className={`w-4 h-4 transition-all ${isStarred ? 'fill-[#F492B7] text-[#F492B7]' : 'text-gray-400'}`} strokeWidth={isStarred ? 0 : 2} />
+                        {/* X Logo SVG */}
+                        <svg viewBox="0 0 24 24" aria-hidden="true" className="w-3.5 h-3.5 fill-current">
+                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path>
+                        </svg>
                     </button>
                 </div>
             </div>

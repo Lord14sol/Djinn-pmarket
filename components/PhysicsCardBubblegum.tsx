@@ -56,18 +56,18 @@ export default function PhysicsCardBubblegum({ username, memberNumber }: Physics
 
     useEffect(() => {
         if (!containerRef.current) return;
-        const resizeObserver = new ResizeObserver(() => {});
+        const resizeObserver = new ResizeObserver(() => { });
         resizeObserver.observe(containerRef.current);
         return () => resizeObserver.disconnect();
     }, []);
 
     // No mouse-move tilt — only drag moves the card
-    const handleMouseMove = useCallback((_e: React.MouseEvent) => {}, []);
-    const handleMouseLeaveContainer = useCallback(() => {}, []);
+    const handleMouseMove = useCallback((_e: React.MouseEvent) => { }, []);
+    const handleMouseLeaveContainer = useCallback(() => { }, []);
 
     const autoRotateOffset = useRef(0);
 
-    const handleCardClick = useCallback(() => {}, []);
+    const handleCardClick = useCallback(() => { }, []);
 
     const onDragStart = useCallback(() => {
         setIsDragging(true);

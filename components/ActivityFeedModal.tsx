@@ -6,6 +6,7 @@ import { X, ArrowRight, TrendingUp, TrendingDown, Clock } from 'lucide-react';
 import { formatCompact } from '@/lib/utils';
 import Image from 'next/image';
 
+
 // Helper: Simple Time Ago (No date-fns dependency)
 function timeAgo(timestamp: number): string {
     const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -74,7 +75,8 @@ export default function ActivityFeedModal() {
             />
 
             {/* Modal Content */}
-            <div className="relative w-full max-w-lg bg-[#0E0E0E] rounded-[2rem] border border-white/10 shadow-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
+            <div className="relative w-full max-w-lg bg-[#0E0E0E] rounded-[2rem] border border-white/10 shadow-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200 overflow-hidden">
+
 
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-white/5">

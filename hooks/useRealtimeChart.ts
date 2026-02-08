@@ -1,0 +1,249 @@
+
+import { useState, useEffect, useRef, useCallback } from 'react';
+
+export interface ChartDataPoint {
+    time: number;
+    [outcome: string]: number;
+}
+
+export interface TradeEvent {
+    id: string;
+    side: string;
+    amount: number;
+    outcome: string;
+    timestamp: number;
+}
+
+interface UseRealtimeChartOptions {
+    marketId: string;
+    outcomeNames: string[];
+    initialData?: ChartDataPoint[];
+    updateInterval?: number; // ms entre actualizaciones
+    maxDataPoints?: number; // máximo de puntos a mantener
+}
+
+export function useRealtimeChart({
+    marketId,
+    outcomeNames,
+    initialData = [],
+    updateInterval = 5000,
+    maxDataPoints = 1000
+}: UseRealtimeChartOptions) {
+    const [chartData, setChartData] = useState<ChartDataPoint[]>(initialData);
+    const [latestTrade, setLatestTrade] = useState<TradeEvent | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const wsRef = useRef<WebSocket | null>(null);
+
+    // Función para añadir un nuevo punto de datos
+    const addDataPoint = useCallback((newPoint: ChartDataPoint) => {
+        setChartData(prev => {
+            const updated = [...prev, newPoint];
+            // Limitar el número de puntos para evitar problemas de rendimiento
+            if (updated.length > maxDataPoints) {
+                return updated.slice(updated.length - maxDataPoints);
+            }
+            return updated;
+        });
+    }, [maxDataPoints]);
+
+    // Función para actualizar el último punto (si la actualización es muy reciente)
+    const updateLastDataPoint = useCallback((updates: Partial<ChartDataPoint>) => {
+        setChartData(prev => {
+            if (prev.length === 0) return prev;
+
+            const lastPoint = prev[prev.length - 1];
+            const now = Date.now();
+
+            // Si el último punto fue hace menos de 30 segundos, actualízalo
+            if (now - lastPoint.time < 30000) {
+                const updatedLast = { ...lastPoint, ...updates, time: now };
+                return [...prev.slice(0, -1), updatedLast];
+            } else {
+                // Si no, añade un nuevo punto
+                return [...prev, { time: now, ...updates } as ChartDataPoint];
+            }
+        });
+    }, []);
+
+    // Conectar a WebSocket para actualizaciones en tiempo real
+    useEffect(() => {
+        // Simula una conexión WebSocket
+        // En producción, conectarías a tu servidor WebSocket real
+
+        // Ejemplo de endpoint WebSocket:
+        // const ws = new WebSocket(`wss://tu-servidor.com/market/${marketId}`);
+
+        // Por ahora, simula actualizaciones aleatorias
+        const simulateRealtimeUpdates = () => {
+            const interval = setInterval(() => {
+                const lastPoint = chartData[chartData.length - 1];
+                if (!lastPoint) return;
+
+                // Simula pequeños cambios en las probabilidades
+                const updates: any = { time: Date.now() };
+
+                outcomeNames.forEach(outcome => {
+                    const currentValue = lastPoint[outcome] || 50;
+                    const change = (Math.random() - 0.5) * 3; // Cambio de ±1.5%
+                    updates[outcome] = Math.min(100, Math.max(0, currentValue + change));
+                });
+
+                // Normalizar para que sumen 100
+                const total = outcomeNames.reduce((sum, outcome) => sum + updates[outcome], 0);
+                outcomeNames.forEach(outcome => {
+                    updates[outcome] = (updates[outcome] / total) * 100;
+                });
+
+                addDataPoint(updates);
+            }, updateInterval);
+
+            return interval;
+        };
+
+        const interval = simulateRealtimeUpdates();
+        setIsLoading(false);
+
+        return () => {
+            clearInterval(interval);
+            if (wsRef.current) {
+                wsRef.current.close();
+            }
+        };
+    }, [marketId, updateInterval, chartData, outcomeNames, addDataPoint]);
+
+    // Simula eventos de trading
+    useEffect(() => {
+        const tradeInterval = setInterval(() => {
+            // 30% de probabilidad de un trade en cada intervalo
+            if (Math.random() > 0.7) {
+                const randomOutcome = outcomeNames[Math.floor(Math.random() * outcomeNames.length)];
+
+                const trade: TradeEvent = {
+                    id: `trade-${Date.now()}-${Math.random()}`,
+                    side: randomOutcome,
+                    amount: Math.random() * 1000 + 10,
+                    outcome: randomOutcome,
+                    timestamp: Date.now()
+                };
+
+                setLatestTrade(trade);
+
+                // Limpia el trade después de 3 segundos
+                setTimeout(() => {
+                    setLatestTrade(null);
+                }, 3000);
+            }
+        }, 2000);
+
+        return () => clearInterval(tradeInterval);
+    }, [outcomeNames]);
+
+    // Función para conectar a WebSocket real (para implementación en producción)
+    const connectWebSocket = useCallback((wsUrl: string) => {
+        if (wsRef.current) {
+            wsRef.current.close();
+        }
+
+        const ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+            console.log('WebSocket connected');
+            // Suscribirse a actualizaciones del mercado
+            ws.send(JSON.stringify({
+                type: 'subscribe',
+                marketId: marketId
+            }));
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+
+                if (data.type === 'probability_update') {
+                    updateLastDataPoint(data.probabilities);
+                } else if (data.type === 'trade') {
+                    setLatestTrade({
+                        id: data.id,
+                        side: data.side,
+                        amount: data.amount,
+                        outcome: data.outcome,
+                        timestamp: data.timestamp
+                    });
+                }
+            } catch (error) {
+                console.error('Error parsing WebSocket message:', error);
+            }
+        };
+
+        ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+        };
+
+        ws.onclose = () => {
+            console.log('WebSocket disconnected');
+            // Intentar reconectar después de 5 segundos
+            setTimeout(() => {
+                connectWebSocket(wsUrl);
+            }, 5000);
+        };
+
+        wsRef.current = ws;
+    }, [marketId, updateLastDataPoint]);
+
+    return {
+        chartData,
+        latestTrade,
+        isLoading,
+        addDataPoint,
+        updateLastDataPoint,
+        connectWebSocket // Para usar en producción con WebSocket real
+    };
+}
+
+// Hook adicional para calcular estadísticas del gráfico
+export function useChartStats(data: ChartDataPoint[], outcomeNames: string[]) {
+    const [stats, setStats] = useState<{
+        current: Record<string, number>;
+        change24h: Record<string, number>;
+        high24h: Record<string, number>;
+        low24h: Record<string, number>;
+    }>({
+        current: {},
+        change24h: {},
+        high24h: {},
+        low24h: {}
+    });
+
+    useEffect(() => {
+        if (data.length === 0) return;
+
+        const now = Date.now();
+        const oneDayAgo = now - (24 * 60 * 60 * 1000);
+        const last24h = data.filter(d => d.time >= oneDayAgo);
+
+        const newStats: typeof stats = {
+            current: {},
+            change24h: {},
+            high24h: {},
+            low24h: {}
+        };
+
+        outcomeNames.forEach(outcome => {
+            const current = data[data.length - 1][outcome] || 0;
+            newStats.current[outcome] = current;
+
+            if (last24h.length > 0) {
+                const start24h = last24h[0][outcome] || 0;
+                newStats.change24h[outcome] = current - start24h;
+
+                const values24h = last24h.map(d => d[outcome] || 0);
+                newStats.high24h[outcome] = Math.max(...values24h);
+                newStats.low24h[outcome] = Math.min(...values24h);
+            }
+        });
+
+        setStats(newStats);
+    }, [data, outcomeNames]);
+
+    return stats;
+}

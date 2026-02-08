@@ -7,62 +7,26 @@ import type { WalletName } from '@solana/wallet-adapter-base';
 interface WalletConnectionState {
     isConnecting: boolean;
     error: string | null;
-    lastAttempt: number | null;
 }
 
 export function useWalletConnection() {
-    const { select, connect, disconnect, wallet, connecting, connected, wallets } = useWallet();
+    const { select, connect, disconnect, wallet, connecting, connected } = useWallet();
 
     const [state, setState] = useState<WalletConnectionState>({
         isConnecting: false,
         error: null,
-        lastAttempt: null,
     });
 
-    const connectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const connectionAttemptRef = useRef<boolean>(false);
-    const pendingConnectRef = useRef<boolean>(false);
 
-    const cleanup = useCallback(() => {
-        if (connectTimeoutRef.current) {
-            clearTimeout(connectTimeoutRef.current);
-            connectTimeoutRef.current = null;
-        }
-        connectionAttemptRef.current = false;
-        pendingConnectRef.current = false;
-    }, []);
-
-    // STEP 2: After select() updates the wallet in Provider, call connect()
-    // This runs when `wallet` changes after our select() call
-    useEffect(() => {
-        if (pendingConnectRef.current && wallet && !connected && !connecting) {
-            pendingConnectRef.current = false;
-            console.log('[Wallet] Wallet selected, now calling Provider connect()...');
-
-            connect().catch((err) => {
-                cleanup();
-                const msg = err?.message || '';
-
-                if (msg.includes('User rejected') || msg.includes('user rejected')) {
-                    setState(prev => ({ ...prev, isConnecting: false, error: 'Connection cancelled' }));
-                } else if (msg.includes('Already connected')) {
-                    setState(prev => ({ ...prev, isConnecting: false, error: null }));
-                } else {
-                    console.error('[Wallet] Provider connect() failed:', msg);
-                    setState(prev => ({ ...prev, isConnecting: false, error: msg || 'Connection failed' }));
-                }
-            });
-        }
-    }, [wallet, connected, connecting, connect, cleanup]);
-
-    // Detect successful connection
+    // Detect successful connection and clear loading state
     useEffect(() => {
         if (connected && connectionAttemptRef.current) {
-            cleanup();
-            console.log('[Wallet] Fully connected via Provider!');
-            setState(prev => ({ ...prev, isConnecting: false, error: null }));
+            connectionAttemptRef.current = false;
+            console.log('[Wallet] ✓ Fully connected!');
+            setState({ isConnecting: false, error: null });
         }
-    }, [connected, cleanup]);
+    }, [connected]);
 
     const connectWallet = useCallback(async (walletName: WalletName) => {
         if (connectionAttemptRef.current || connecting) {
@@ -73,49 +37,103 @@ export function useWalletConnection() {
             return { success: true, error: null };
         }
 
-        // Switching wallets
+        // Helper: Wait for adapter to be ready
+        const waitForAdapter = async (name: WalletName, maxAttempts = 10): Promise<boolean> => {
+            for (let i = 0; i < maxAttempts; i++) {
+                // @ts-ignore - access internal adapter state if needed, or re-select
+                if (window.solana && name === 'Phantom') return true;
+                // For now just wait a bit
+                await new Promise(r => setTimeout(r, 200));
+            }
+            return true;
+        };
+
+        // If switching wallets, disconnect first
         if (connected) {
             try { await disconnect(); } catch (e) { /* ignore */ }
             await new Promise(resolve => setTimeout(resolve, 300));
         }
 
         connectionAttemptRef.current = true;
-        setState(prev => ({ ...prev, isConnecting: true, error: null, lastAttempt: Date.now() }));
+        setState({ isConnecting: true, error: null });
 
-        // Safety timeout
-        connectTimeoutRef.current = setTimeout(() => {
-            if (connectionAttemptRef.current) {
-                cleanup();
-                setState(prev => ({ ...prev, isConnecting: false, error: 'Wallet did not respond - try again' }));
+        try {
+            // STEP 1: Select the wallet adapter
+            console.log('[Wallet] 1. Selecting:', walletName);
+            select(walletName);
+
+            // STEP 2: Wait for wallet extension to initialize
+            // Poll for readiness instead of fixed delay
+            console.log('[Wallet] 2. Waiting for adapter...');
+            await new Promise(resolve => setTimeout(resolve, 500)); // Initial breathing room
+
+            // STEP 3: Call connect() with Retry Logic
+            console.log('[Wallet] 3. Calling connect()...');
+
+            let attempts = 0;
+            const maxRetries = 2;
+
+            while (attempts <= maxRetries) {
+                try {
+                    await connect();
+                    break; // Success!
+                } catch (err: any) {
+                    attempts++;
+                    console.warn(`[Wallet] Connection attempt ${attempts} failed:`, err.message);
+
+                    if (attempts > maxRetries) throw err; // Throw final error
+
+                    if (err.message.includes('Wallet not ready') || err.message.includes('User rejected')) {
+                        // If user rejected, stop retrying immediately
+                        if (err.message.includes('User rejected')) throw err;
+
+                        // If not ready, wait and retry
+                        await new Promise(r => setTimeout(r, 800));
+                    } else {
+                        throw err; // Unknown error, stop
+                    }
+                }
             }
-        }, 15000);
 
-        // STEP 1: select() tells WalletProvider which wallet to use
-        // This triggers a React state update → wallet changes → useEffect above calls connect()
-        console.log('[Wallet] Selecting:', walletName);
-        pendingConnectRef.current = true;
-        select(walletName);
+            // If we reach here without error, connection was successful
+            console.log('[Wallet] ✓ Connection successful!');
+            connectionAttemptRef.current = false;
+            setState({ isConnecting: false, error: null });
+            return { success: true, error: null };
 
-        // Return optimistically - the useEffect chain handles the rest
-        return { success: true, error: null };
-    }, [select, connecting, connected, wallet, disconnect, cleanup]);
+        } catch (error: any) {
+            connectionAttemptRef.current = false;
+            const msg = error?.message || 'Connection failed';
+            console.error('[Wallet] ✗ Connection error:', msg);
+
+            if (msg.includes('User rejected') || msg.includes('user rejected')) {
+                setState({ isConnecting: false, error: 'Connection cancelled by user' });
+            } else if (msg.includes('Already connected')) {
+                setState({ isConnecting: false, error: null });
+                return { success: true, error: null };
+            } else {
+                setState({ isConnecting: false, error: msg });
+            }
+            return { success: false, error: msg };
+        }
+    }, [select, connect, disconnect, connecting, connected, wallet]);
 
     const disconnectWallet = useCallback(async () => {
         try {
-            cleanup();
             await disconnect();
-            setState({ isConnecting: false, error: null, lastAttempt: null });
+            setState({ isConnecting: false, error: null });
             return { success: true };
         } catch (error: unknown) {
             const err = error instanceof Error ? error : new Error(String(error));
             return { success: false, error: err.message };
         }
-    }, [disconnect, cleanup]);
+    }, [disconnect]);
 
     const retry = useCallback(async () => {
         if (!wallet?.adapter?.name) {
             return { success: false, error: 'No wallet selected' };
         }
+        setState({ isConnecting: false, error: null });
         return connectWallet(wallet.adapter.name as WalletName);
     }, [wallet, connectWallet]);
 

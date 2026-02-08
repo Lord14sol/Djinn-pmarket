@@ -14,6 +14,7 @@ import PumpEffect from '@/components/PumpEffect';
 import { ADMIN_WALLETS } from '@/lib/whitelist';
 import TheGreatPyramid from '@/components/TheGreatPyramid';
 import { useSound } from '@/components/providers/SoundProvider';
+import Galaxy from '@/components/Galaxy';
 
 // Fresh start timestamp - hide markets created before this (filtering for clean view)
 const FRESH_START_TIMESTAMP = process.env.NEXT_PUBLIC_FRESH_START_TIMESTAMP
@@ -366,17 +367,39 @@ export default function Home() {
   }, [markets]);
 
   return (
-    <div className="min-h-screen w-full bg-transparent text-white font-sans selection:bg-[#F492B7] selection:text-black">
+    <div className="min-h-screen w-full bg-black text-white font-sans selection:bg-[#F492B7] selection:text-black relative">
+      {/* Galaxy Background */}
+      <div className="fixed inset-0 z-0">
+        <Galaxy
+          mouseRepulsion
+          mouseInteraction
+          density={1}
+          glowIntensity={0.3}
+          saturation={0}
+          hueShift={320}
+          twinkleIntensity={0.3}
+          rotationSpeed={0.1}
+          repulsionStrength={2}
+          autoCenterRepulsion={0}
+          starSpeed={0.5}
+          speed={1}
+          transparent={false}
+        />
+      </div>
 
       {/* Hero Section con Callback para crear mercados */}
-      <Hero onMarketCreated={handleCreateMarket} />
+      <div className="relative z-10">
+        <Hero onMarketCreated={handleCreateMarket} />
+      </div>
 
       {/* The Great Pyramid - Top 3 Podium */}
       {activeCategory === 'Trending' && top3Markets && top3Markets.length > 0 && (
-        <TheGreatPyramid topMarkets={top3Markets} />
+        <div className="relative z-10">
+          <TheGreatPyramid topMarkets={top3Markets} />
+        </div>
       )}
 
-      <section className="px-6 md:px-12 pb-20 max-w-[1600px] mx-auto mt-10">
+      <section className="px-6 md:px-12 pb-20 max-w-[1600px] mx-auto mt-10 relative z-10">
         {!(activeCategory === 'Trending' && top3Markets && top3Markets.length > 0) && (
           <h2 className="text-3xl font-bold mb-8 tracking-tight text-white">
             {getCategoryTitle()}

@@ -72,37 +72,37 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
                         className="relative w-full max-w-[380px] flex flex-col max-h-[90vh] z-10"
                     >
                         {/* Offset shadow layer */}
-                        <div className="absolute inset-0 bg-[#FF69B4] rounded-3xl translate-x-[8px] translate-y-[8px]" />
+                        <div className="absolute inset-0 bg-[#FF69B4] rounded-[2.5rem] translate-x-[8px] translate-y-[8px]" />
 
                         {/* Main card */}
-                        <div className="relative bg-white border-[3px] border-black rounded-3xl overflow-hidden">
+                        <div className="relative bg-white border-[3px] border-black rounded-[2.5rem] overflow-hidden">
 
                             {isConnecting ? (
-                                <div className="flex flex-col items-center justify-center py-20 px-8 text-center space-y-7">
+                                <div className="flex flex-col items-center justify-center py-16 px-8 text-center space-y-8 bg-[#FF69B4] text-white">
                                     <motion.div
-                                        className="relative w-20 h-20 flex items-center justify-center"
+                                        className="relative w-24 h-24 flex items-center justify-center"
                                         animate={{ rotate: 360 }}
-                                        transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
+                                        transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
                                     >
-                                        <div className="absolute inset-0 rounded-full border-[3px] border-black/10 border-t-[#FF69B4] border-r-black" />
-                                        <Zap className="w-7 h-7 text-[#FF69B4]" strokeWidth={3} />
+                                        <div className="absolute inset-0 rounded-full border-[6px] border-black/20 border-t-white border-l-white" />
+                                        <Zap className="w-10 h-10 text-white fill-white" strokeWidth={0} />
                                     </motion.div>
-                                    <div className="space-y-2">
+                                    <div className="space-y-3">
                                         <h3
-                                            className="text-2xl font-black text-black uppercase tracking-tight"
+                                            className="text-3xl font-black uppercase tracking-tighter"
                                             style={{ fontFamily: 'var(--font-unbounded), sans-serif' }}
                                         >
-                                            Connecting...
+                                            Connecting
                                         </h3>
-                                        <p className="text-black/40 text-xs font-bold uppercase tracking-[0.2em]">
-                                            Approve in your wallet
+                                        <p className="text-white/80 text-xs font-bold uppercase tracking-[0.2em] px-4 py-2 border-[2px] border-black bg-black shadow-[4px_4px_0px_#000]">
+                                            Approve in Wallet
                                         </p>
                                     </div>
                                 </div>
                             ) : (
                                 <>
                                     {/* Header */}
-                                    <div className="bg-black px-6 py-4 flex items-center justify-between rounded-t-[calc(1.5rem-3px)]">
+                                    <div className="bg-black px-6 py-4 flex items-center justify-between rounded-t-[calc(2.5rem-3px)]">
                                         <div className="flex items-center gap-2.5">
                                             <div className="w-2.5 h-2.5 rounded-full bg-[#FF69B4]" />
                                             <h2
@@ -122,7 +122,7 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
 
                                     {/* Logo + Title */}
                                     <div className="flex flex-col items-center pt-7 pb-5 px-6">
-                                        <div className="w-20 h-20 rounded-2xl border-[3px] border-black overflow-hidden flex items-center justify-center bg-black/[0.03] shadow-[4px_4px_0px_#000] mb-5">
+                                        <div className="w-20 h-20 rounded-[1.5rem] border-[3px] border-black overflow-hidden flex items-center justify-center bg-black/[0.03] shadow-[4px_4px_0px_#000] mb-5">
                                             <img
                                                 src="/djinn-logo.png?v=3"
                                                 alt="Djinn"
@@ -175,7 +175,7 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
                                                 animate={{ opacity: 1, x: 0 }}
                                                 transition={{ delay: i * 0.06, type: 'spring', stiffness: 500, damping: 30 }}
                                                 onClick={() => handleWalletClick(w.adapter.name as WalletName)}
-                                                className="w-full bg-white rounded-2xl p-3.5 flex items-center justify-between
+                                                className="w-full bg-white rounded-3xl p-3.5 flex items-center justify-between
                                                     border-[3px] border-black
                                                     shadow-[5px_5px_0px_#000000]
                                                     hover:shadow-[2px_2px_0px_#FF69B4] hover:translate-x-[3px] hover:translate-y-[3px] hover:border-[#FF69B4]
@@ -224,7 +224,7 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
                                     </div>
 
                                     {/* Footer */}
-                                    <div className="bg-[#FF69B4] border-t-[3px] border-black px-4 py-3 flex items-center justify-center rounded-b-[calc(1.5rem-3px)]">
+                                    <div className="bg-[#FF69B4] border-t-[3px] border-black px-4 py-3 flex items-center justify-center rounded-b-[calc(2.5rem-3px)]">
                                         <span
                                             className="text-black text-[9px] font-black uppercase tracking-[0.35em]"
                                             style={{ fontFamily: 'var(--font-unbounded), sans-serif' }}

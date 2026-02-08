@@ -1,0 +1,42 @@
+.glare-hover {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    border-radius: var(--gh-br);
+    border: none;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.glare-hover::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(var(--gh-angle),
+            hsla(0, 0%, 0%, 0) 40%,
+            var(--gh-rgba) 50%,
+            hsla(0, 0%, 0%, 0) 60%);
+    transition: var(--gh-duration) ease;
+    background-size: 200% 200%;
+    background-repeat: no-repeat;
+    background-position: -100% -100%;
+    pointer-events: none;
+    z-index: 100;
+    border-radius: inherit;
+}
+
+/* Parent container hover triggers the glare */
+.glare-hover-parent:hover .glare-hover::before {
+    background-position: 100% 100%;
+}
+
+.glare-hover--play-once::before {
+    transition: none;
+}
+
+.glare-hover-parent:hover .glare-hover--play-once::before {
+    transition: var(--gh-duration) ease;
+    background-position: 100% 100%;
+}

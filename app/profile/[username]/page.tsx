@@ -27,6 +27,7 @@ import { usePrice } from '@/lib/PriceContext';
 import { getSpotPrice } from '@/lib/core-amm';
 import { useSound } from '@/components/providers/SoundProvider';
 import ShareExperience from '@/components/ShareExperience';
+import Galaxy from '@/components/Galaxy';
 
 // Helper format function
 function formatCompact(num: number) {
@@ -752,8 +753,25 @@ export default function ProfilePage() {
                 />
             )}
             {/* NO BANNER - Space Theme Background from global or main */}
+            <div className="fixed inset-0 z-0">
+                <Galaxy
+                    mouseRepulsion
+                    mouseInteraction
+                    density={1}
+                    glowIntensity={0.3}
+                    saturation={0}
+                    hueShift={320}
+                    twinkleIntensity={0.3}
+                    rotationSpeed={0.1}
+                    repulsionStrength={2}
+                    autoCenterRepulsion={0}
+                    starSpeed={0.5}
+                    speed={1}
+                    transparent={false}
+                />
+            </div>
 
-            <div className="max-w-[1600px] mx-auto px-14 pt-2">
+            <div className="max-w-[1600px] mx-auto px-14 pt-2 relative z-10">
                 {/* PROFILE INFO - NO BACKGROUND */}
                 <div className="mb-12">
                     {/* GRID LAYOUT: FOTO (LEFT) | INFO (RIGHT) */}
