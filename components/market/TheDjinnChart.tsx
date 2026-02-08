@@ -241,8 +241,9 @@ export default function TheDjinnChart({
             return [];
         }
 
-        const now = Date.now();
-        const cutoff = now - timeframe.value;
+        // FIX: Data comes in SECONDS from page.tsx, convert to MS for consistency
+        const nowMs = Date.now();
+        const cutoff = nowMs - timeframe.value;
 
         let filtered = data
             .filter(d => {
@@ -250,10 +251,14 @@ export default function TheDjinnChart({
                     console.warn('⚠️ Data point missing valid time:', d);
                     return false;
                 }
-                return timeframe.value === Infinity || d.time >= cutoff;
+                // Convert seconds to ms if needed (detect by magnitude)
+                const timeMs = d.time < 1e12 ? d.time * 1000 : d.time;
+                return timeframe.value === Infinity || timeMs >= cutoff;
             })
             .map(d => {
-                const point: any = { time: d.time };
+                // Convert seconds to ms if needed
+                const timeMs = d.time < 1e12 ? d.time * 1000 : d.time;
+                const point: any = { time: timeMs };
 
                 outcomeNames.forEach(outcome => {
                     if (d.hasOwnProperty(outcome)) {
