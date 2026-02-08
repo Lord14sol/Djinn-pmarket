@@ -715,8 +715,8 @@ export default function Page() {
                             }
                             // 2. Try On-Chain/DB Supplies
                             else if (marketAccount?.outcome_supplies && marketAccount.outcome_supplies.length >= 2) {
-                                const sYes = Number(marketAccount.outcome_supplies[0]);
-                                const sNo = Number(marketAccount.outcome_supplies[1]);
+                                const sYes = Number(marketAccount.outcome_supplies[0]) / 1e9;
+                                const sNo = Number(marketAccount.outcome_supplies[1]) / 1e9;
                                 if (sYes > 0 || sNo > 0) {
                                     // ✅ RESTORED: Use Supply with 15M buffer for stable probability
                                     seedYes = calculateImpliedProbability(sYes, sNo);
@@ -1139,8 +1139,8 @@ export default function Page() {
 
                     if (marketAccInfo) {
                         const decodedMarket = program.coder.accounts.decode('Market', marketAccInfo.data);
-                        const sYes = Number(decodedMarket.outcomeSupplies[0]);
-                        const sNo = Number(decodedMarket.outcomeSupplies[1]);
+                        const sYes = Number(decodedMarket.outcomeSupplies[0]) / 1e9;
+                        const sNo = Number(decodedMarket.outcomeSupplies[1]) / 1e9;
 
                         // GUARD: Prevent stale data from overwriting optimistic updates
                         if (!priceLockoutRef.current) {

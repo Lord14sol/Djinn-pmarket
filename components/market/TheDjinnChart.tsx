@@ -250,10 +250,14 @@ export default function TheDjinnChart({
                     console.warn('⚠️ Data point missing valid time:', d);
                     return false;
                 }
-                return timeframe.value === Infinity || d.time >= cutoff;
+                // Auto-detect seconds vs ms: timestamps < 1e12 are in seconds
+                const timeMs = d.time < 1e12 ? d.time * 1000 : d.time;
+                return timeframe.value === Infinity || timeMs >= cutoff;
             })
             .map(d => {
-                const point: any = { time: d.time };
+                // Convert seconds to ms for consistent rendering
+                const timeMs = d.time < 1e12 ? d.time * 1000 : d.time;
+                const point: any = { time: timeMs };
 
                 outcomeNames.forEach(outcome => {
                     if (d.hasOwnProperty(outcome)) {
