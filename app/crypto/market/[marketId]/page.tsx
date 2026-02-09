@@ -437,6 +437,8 @@ interface RoundData {
     upPool?: number;
     downPool?: number;
     totalPool?: number;
+    startTime?: number;
+    endTime?: number;
 }
 
 function RoundSelector({
@@ -811,7 +813,9 @@ export default function ChronosMarketPage() {
                     endPrice: endP,
                     upPool: upShares,
                     downPool: downShares,
-                    totalPool: totalPot / 1e9 // Store as SOL
+                    totalPool: totalPot / 1e9, // Store as SOL
+                    startTime: startTime,
+                    endTime: endTime
                 };
             });
 
@@ -948,8 +952,11 @@ export default function ChronosMarketPage() {
             const seededRandom2 = (((seed * 2) * 9301 + 49297) % 233280) / 233280;
             const seededRandom3 = (((seed * 3) * 9301 + 49297) % 233280) / 233280;
 
-            // Generate deterministic mock data
-            const basePrice = 97000; // Fixed base price for consistency
+            // Generate deterministic mock data - Dynamic Base Price
+            let basePrice = 97000; // Default BTC
+            if (asset.symbol === 'ETH') basePrice = 2700;
+            if (asset.symbol === 'SOL') basePrice = 195;
+
             const mockStrikePrice = basePrice + (seededRandom1 - 0.5) * basePrice * 0.003;
             const priceChange = (seededRandom2 - 0.5) * basePrice * 0.006;
             const mockEndPrice = mockStrikePrice + priceChange;
@@ -963,6 +970,8 @@ export default function ChronosMarketPage() {
                 status: 'ENDED',
                 strikePrice: mockStrikePrice,
                 endPrice: mockEndPrice,
+                startTime: slotStart / 1000,
+                endTime: slotEnd / 1000
             });
         }
 
@@ -981,17 +990,17 @@ export default function ChronosMarketPage() {
                     status: 'LIVE', // Mark as "upcoming"
                     strikePrice: 0,
                     endPrice: 0,
+                    startTime: slotStart / 1000,
+                    endTime: slotEnd / 1000
                 });
             }
         }
 
         merged.sort((a, b) => b.id - a.id);
         return merged;
-    }, [rounds, completedRounds, getDuration, interval, liveRoundNumber, effectivePriceToBeat]);
+    }, [rounds, completedRounds, getDuration, interval, liveRoundNumber, effectivePriceToBeat, asset.symbol]);
 
-    const formattedChartData = useMemo(() => {
-        return priceHistory.map(p => ({ time: p.time, price: p.price }));
-    }, [priceHistory]);
+
 
     // Social Tabs State
     const [bottomTab, setBottomTab] = useState<'ACTIVITY' | 'COMMENTS' | 'HOLDERS'>('ACTIVITY');
@@ -1072,6 +1081,44 @@ export default function ChronosMarketPage() {
     const displayedFinalPrice = isViewingPastRound && selectedRoundData
         ? selectedRoundData.endPrice
         : effectiveCurrentPrice;
+
+    // Synthesize Chart Data for Past Rounds (or Mock Demo)
+    const formattedChartData = useMemo(() => {
+        if (isViewingPastRound && selectedRoundData && selectedRoundData.startTime && selectedRoundData.endTime) {
+            const start = selectedRoundData.startTime * 1000; // Convert to ms
+            const end = selectedRoundData.endTime * 1000;     // Convert to ms
+            const strike = selectedRoundData.strikePrice;
+            const finalP = selectedRoundData.endPrice;
+
+            const points = [];
+            const steps = 40; // More points for smoother line
+            const duration = end - start;
+            const priceDiff = finalP - strike;
+
+            // Generate seeded random walk
+            for (let i = 0; i <= steps; i++) {
+                const progress = i / steps;
+                const time = Math.floor(start + duration * progress);
+
+                // Linear Base
+                let price = strike + priceDiff * progress;
+
+                // Add deterministic noise (mid-path volatility)
+                if (i > 0 && i < steps) {
+                    // Pseudo-random based on Round ID and step index
+                    const seed = (selectedRoundData.id * 100) + i;
+                    // Simple deterministic noise function
+                    const noise = Math.sin(seed * 0.1) * Math.cos(seed * 0.05);
+                    // Scale noise relative to price (0.1% volatility)
+                    const noiseFactor = noise * (strike * 0.001);
+                    price += noiseFactor;
+                }
+                points.push({ time, price });
+            }
+            return points;
+        }
+        return priceHistory.map(p => ({ time: p.time, price: p.price }));
+    }, [isViewingPastRound, selectedRoundData, priceHistory]);
 
     return (
         <div className="min-h-screen relative overflow-hidden bg-black text-black font-sans selection:bg-[#F492B7] selection:text-black">
