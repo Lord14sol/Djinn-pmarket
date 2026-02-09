@@ -52,6 +52,10 @@ const COLORS = [
     "#34D399", // Emerald
 ];
 
+const CATEGORIES = [
+    'Crypto', 'Politics', 'Sports', 'Business', 'Science', 'Tech/AI', 'Gaming', 'Pop Culture', 'Global', 'Other'
+];
+
 export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModalProps) {
     const router = useRouter();
     const wallet = useWallet();
@@ -67,6 +71,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
     const [mainImage, setMainImage] = useState<string | null>(null);
     const [sourceUrl, setSourceUrl] = useState('');
     const [activeColorPicker, setActiveColorPicker] = useState<number | null>(null);
+    const [selectedCategory, setSelectedCategory] = useState<string>('Crypto');
 
     // Updated Option State with Color
     const [options, setOptions] = useState<{ id: number; name: string; color: string }[]>([
@@ -100,6 +105,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                 setInitialBuySide('yes');
                 setSuccessData(null);
                 setSourceUrl('');
+                setSelectedCategory('Crypto');
             }, 300);
             return () => clearTimeout(t);
         }
@@ -134,29 +140,6 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
         }
     };
 
-    // Auto-detect category from market title using keywords
-    const autoDetectCategory = (title: string): string => {
-        const lowerTitle = title.toLowerCase();
-        const patterns = {
-            'Crypto': ['bitcoin', 'btc', 'ethereum', 'eth', 'crypto', 'solana', 'sol', 'token', 'nft', 'defi'],
-            'Politics': ['election', 'president', 'trump', 'biden', 'vote', 'political', 'government'],
-            'Sports': ['match', 'game', 'score', 'team', 'player', 'win'],
-            'Movies': ['movie', 'film', 'oscar', 'cinema', 'actor'],
-            'Tech': ['apple', 'google', 'microsoft', 'ai', 'tech', 'startup', 'launch'],
-            'Science': ['space', 'nasa', 'science', 'research'],
-            'Finance': ['stock', 'market', 'price', 'economy'],
-            'Gaming': ['game', 'xbox', 'playstation', 'nintendo'],
-            'Culture': ['music', 'song', 'artist', 'concert']
-        };
-
-        for (const [category, keywords] of Object.entries(patterns)) {
-            if (keywords.some(keyword => lowerTitle.includes(keyword))) {
-                return category;
-            }
-        }
-        return 'Trending';
-    };
-
     // --- MAIN LOGIC ---
     const handleCreateMarket = async () => {
         if (!isSupabaseConfigured) {
@@ -170,7 +153,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
         }
         if (!poolName) return alert("Please enter a question");
 
-        const finalCategory = autoDetectCategory(poolName);
+        const finalCategory = selectedCategory;
         setIsLoading(true);
 
         try {
@@ -343,22 +326,6 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
             window.dispatchEvent(new Event('storage'));
             window.dispatchEvent(new CustomEvent('market-created', { detail: optimisticMarket }));
 
-            // Achievement check removed as requested
-            /*
-            import('@/lib/supabase-db').then(async mod => {
-                try {
-                    const achievements = await mod.checkMarketMilestones(publicKey.toString());
-                    if (achievements && achievements.length > 0) {
-                        const withImages = achievements.map(a => {
-                            if (a.code === 'FIRST_MARKET') return { ...a, name: 'Genesis Creator', image_url: 'https://arweave.net/placeholder-medal' };
-                            return a;
-                        });
-                        setNewAchievements(withImages);
-                    }
-                } catch (e) { console.error("Milestone check failed", e); }
-            });
-            */
-
         } catch (error: any) {
             console.error("❌ Error:", error);
             setError(error.message || 'Unknown error');
@@ -498,6 +465,25 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                                     </div>
                                 </div>
 
+                                {/* Category Selector */}
+                                <div>
+                                    <label className="text-black font-black lowercase mb-2 block tracking-tight">Category</label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {CATEGORIES.map((cat) => (
+                                            <button
+                                                key={cat}
+                                                onClick={() => setSelectedCategory(cat)}
+                                                className={`px-4 py-2 rounded-xl text-xs font-black uppercase border-2 border-black transition-all ${selectedCategory === cat
+                                                    ? 'bg-[#FFD600] text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-y-1'
+                                                    : 'bg-white text-gray-500 hover:text-black hover:bg-gray-50'
+                                                    }`}
+                                            >
+                                                {cat}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
                                 {/* Source URL */}
                                 <div>
                                     <label className="text-black font-black lowercase mb-2 block tracking-tight">resolution source</label>
@@ -581,7 +567,7 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                                                 />
 
                                                 {/* RIGHT: Delete Button */}
-                                                {marketType === 'multiple' && options.length > 2 && (
+                                                {marketType === 'multiple' && options.length > 3 && (
                                                     <button
                                                         onClick={() => setOptions(options.filter((_, i) => i !== index))}
                                                         className="w-10 h-10 flex items-center justify-center text-black bg-red-100 border-2 border-black rounded-xl hover:bg-red-200 transition-colors shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:shadow-none shrink-0"

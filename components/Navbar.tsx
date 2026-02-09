@@ -8,23 +8,17 @@ import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { useCategory } from '@/lib/CategoryContext';
 import { useModal } from '@/lib/ModalContext';
-import { useAchievement } from '@/lib/AchievementContext'; // ADDED IMPORT
+import { useAchievement } from '@/lib/AchievementContext';
 import OnboardingModal from './OnboardingModal';
 import CustomWalletModal from './CustomWalletModal';
 import CategoryMegaMenu from './CategoryMegaMenu';
 import WalletProfileMenu from './WalletProfileMenu';
 import GlobalSearch from './GlobalSearch';
 import ClaimUsernameModal from './ClaimUsernameModal';
+import HowItWorksModal from './HowItWorksModal';
 import { useSound } from '@/components/providers/SoundProvider';
 import MorphingIcon from '@/components/ui/MorphingIcon';
 import { motion, AnimatePresence } from 'framer-motion';
-
-
-// ... (existing imports)
-
-// ... inside NavbarContent ...
-// Premium Morphing Icons replaced static ones
-// Removed unused icons
 
 const mainCategories = ["Trending", "New", "Earth", "Politics", "Crypto", "Sports", "Culture", "Tech", "Science", "Finance", "Climate", "Mentions", "Movies", "AI", "Gaming", "Music"];
 const earthSubcategories = ["North America", "Central America", "South America", "Europe", "Africa", "Asia", "Oceania"];
@@ -32,12 +26,11 @@ const earthSubcategories = ["North America", "Central America", "South America",
 function NavbarContent() {
     const [isOpen, setIsOpen] = useState(false);
     const [isNavMenuOpen, setIsNavMenuOpen] = useState(false);
-    // const { activeCategory, setActiveCategory, activeSubcategory, setActiveSubcategory } = useCategory(); // UNUSED
     const [userPfp, setUserPfp] = useState<string | null>(null);
     const [username, setUsername] = useState<string>("User");
     const [balance, setBalance] = useState<number>(0);
     const { openCreateMarket, openActivityFeed } = useModal();
-    const { unlockAchievement } = useAchievement(); // HOOK USED HERE
+    const { unlockAchievement } = useAchievement();
     const { play } = useSound();
     const router = useRouter();
     const pathname = usePathname();
@@ -45,26 +38,18 @@ function NavbarContent() {
     // Hide navbar search on home/markets page (has its own big search bar)
     const isHomePage = pathname === '/' || pathname === '/markets';
 
-    // HYDRATION FIX: Prevent SSR/client mismatch for wallet-dependent content
     const [mounted, setMounted] = useState(false);
     useEffect(() => { setMounted(true); }, []);
 
-    // Hooks de Solana Wallet Adapter
     const { connected, publicKey, disconnect } = useWallet();
     const { connection } = useConnection();
 
-
-    // ... (existing imports)
-
-    // ... inside NavbarContent ...
     const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
-
-    // NEW: Claim Username Modal State
     const [isClaimModalOpen, setIsClaimModalOpen] = useState(false);
+    const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false);
     const [tempConnectedWallet, setTempConnectedWallet] = useState<string | null>(null);
 
     // Cargar perfil (Local + Supabase + Balance)
-    // 🔥 FUNCIÓN PARA CARGAR PERFIL (Cache-First Strategy)
     const loadProfile = async () => {
         if (!connected || !publicKey) {
             setUsername('');
@@ -74,22 +59,19 @@ function NavbarContent() {
 
         const walletAddress = publicKey.toBase58();
 
-        // 1️⃣ PRIMERO: Intentar cargar desde localStorage (INSTANTÁNEO)
         try {
             const cachedProfile = localStorage.getItem(`djinn_profile_${walletAddress}`);
             if (cachedProfile) {
                 const profile = JSON.parse(cachedProfile);
                 setUsername(profile.username || 'Anon');
                 setUserPfp(profile.avatar_url && profile.avatar_url.trim() ? profile.avatar_url : '/pink-pfp.png');
-                console.log('✅ Profile loaded from cache');
             }
         } catch (e) {
             console.error('Cache read error:', e);
         }
 
-        // 2️⃣ SEGUNDO: Sincronizar con la base de datos (BACKGROUND)
         try {
-            const { getProfile, upsertProfile } = await import('@/lib/supabase-db');
+            const { getProfile } = await import('@/lib/supabase-db');
             const dbProfile = await getProfile(walletAddress);
 
             if (dbProfile) {
@@ -99,7 +81,6 @@ function NavbarContent() {
                     bio: dbProfile.bio || ''
                 };
 
-                // ALWAYS update state from DB (DB is source of truth)
                 setUsername(profileData.username);
                 setUserPfp(profileData.avatar_url);
 
@@ -109,7 +90,6 @@ function NavbarContent() {
                     console.warn('⚠️ LocalStorage full, skipped profile cache update');
                 }
             } else {
-                // DO NOT AUTO-CREATE. OPEN CLAIM MODAL.
                 console.log('✨ New User Detected! Opening Claim Flow...');
                 setTempConnectedWallet(walletAddress);
                 setIsClaimModalOpen(true);
@@ -119,37 +99,26 @@ function NavbarContent() {
         }
     };
 
-    // Handler for successful claim
     const handleClaimSuccess = async (newUsername: string) => {
         setIsClaimModalOpen(false);
         setUsername(newUsername);
-        setUserPfp('/pink-pfp.png'); // Default pfp
-        console.log('🎉 Profile Created:', newUsername);
+        setUserPfp('/pink-pfp.png');
 
-        // TRIGGER GENESIS ACHIEVEMENT INSTANTLY
         if (connected && publicKey) {
             try {
-                // Check eligibility one last time
                 const { getWhitelistStatus } = await import('@/lib/whitelist');
                 const status = await getWhitelistStatus(publicKey.toBase58());
                 const { getUserAchievements, grantAchievement } = await import('@/lib/supabase-db');
 
-                // If eligible and doesn't have it yet
                 if (status.isRegistered || status.isAdmin) {
                     const achievements = await getUserAchievements(publicKey.toBase58());
                     if (!achievements.some(a => a.code === 'GENESIS_MEMBER')) {
-
-                        // Show visual pop-up immediately
                         unlockAchievement({
                             name: "Genesis Member",
                             description: "One of the first 1000 Djinn users",
                             image_url: "/genesis-medal-v2.png"
                         });
-
-                        // Persist in DB
                         grantAchievement(publicKey.toBase58(), 'GENESIS_MEMBER');
-
-                        // Mark local flag to prevent LayoutWrapper from firing again
                         localStorage.setItem(`djinn_genesis_notified_v16_${publicKey.toBase58()}`, 'true');
                     }
                 }
@@ -159,7 +128,6 @@ function NavbarContent() {
         }
     };
 
-    // Handler for closing claim (disconnect to prevent limbd)
     const handleClaimClose = () => {
         setIsClaimModalOpen(false);
         disconnect();
@@ -171,12 +139,10 @@ function NavbarContent() {
         if (connected && publicKey) {
             loadProfile();
 
-            // Fetch initial balance
             connection.getBalance(publicKey).then((bal) => {
                 setBalance(bal / LAMPORTS_PER_SOL);
             }).catch(e => console.error("Initial balance fetch error:", e));
 
-            // Real-time balance updates
             try {
                 subscriptionId = connection.onAccountChange(
                     publicKey,
@@ -189,9 +155,7 @@ function NavbarContent() {
                 console.error("Failed to subscribe to account changes:", e);
             }
 
-            // GLOBAL SYNC: Listen for profile updates from other components
             const handleProfileUpdate = () => {
-                console.log("🔄 Navbar received profile update event");
                 loadProfile();
             };
             window.addEventListener('djinn-profile-updated', handleProfileUpdate);
@@ -203,35 +167,27 @@ function NavbarContent() {
         }
     }, [connected, publicKey, connection]);
 
-    // Initial Load & Polling Fallback (60s - Less aggressive)
     useEffect(() => {
         let isAborted = false;
-
         const safeLoad = async () => {
             if (isAborted) return;
             try {
                 await loadProfile();
             } catch (e: any) {
                 if (e.message?.includes('quota') || e.message?.includes('429')) {
-                    console.warn('⚠️ Polling stopped due to quota limit');
-                    isAborted = true; // Stop polling
+                    isAborted = true;
                 }
             }
         };
-
         safeLoad();
-        const interval = setInterval(safeLoad, 60000); // Increased to 60s
+        const interval = setInterval(safeLoad, 60000);
         return () => clearInterval(interval);
     }, [connected, publicKey]);
 
-    // AUTO-OPEN MENU ON CONNECTION
     useEffect(() => {
         if (connected) {
-            // Check if we already auto-opened the menu in this session
             const hasAutoOpened = sessionStorage.getItem('djinn_menu_auto_opened');
-
             if (!hasAutoOpened) {
-                // Short delay to allow UI to settle
                 setTimeout(() => {
                     setIsOpen(true);
                     sessionStorage.setItem('djinn_menu_auto_opened', 'true');
@@ -239,7 +195,6 @@ function NavbarContent() {
             }
         } else {
             setIsOpen(false);
-            // Reset flag on disconnect so it opens again next time
             sessionStorage.removeItem('djinn_menu_auto_opened');
         }
     }, [connected]);
@@ -272,7 +227,6 @@ function NavbarContent() {
                         </span>
                     </Link>
 
-                    {/* GLOBAL SEARCH - Hidden on home page (has its own big search bar) */}
                     {!isHomePage && (
                         <div className="hidden md:flex flex-1 justify-center z-50 px-4">
                             {mounted && <GlobalSearch />}
@@ -281,7 +235,14 @@ function NavbarContent() {
 
                     <div className="flex items-center gap-4">
                         <div className="hidden sm:flex items-center gap-4">
-                            {/* Botón Create Market estilo "Teclado" Pink */}
+                            {/* How It Works Button */}
+                            <button
+                                onClick={() => { setIsHowItWorksOpen(true); play('click'); }}
+                                className="text-white/60 hover:text-white font-bold text-xs uppercase tracking-widest transition-colors mr-2"
+                            >
+                                How It Works
+                            </button>
+
                             <motion.button
                                 whileHover={{ scale: 1.05 }}
                                 whileTap={{ scale: 0.95 }}
@@ -294,14 +255,11 @@ function NavbarContent() {
                                 Create a Market
                             </motion.button>
 
-                            {/* HYDRATION FIX: Only render wallet state after mount */}
                             {!mounted ? (
-                                /* Placeholder during SSR */
                                 <div className="px-5 py-2.5 rounded-xl bg-[#1A1A1A] text-gray-400 text-[11px] font-black uppercase tracking-wider border-2 border-white/10">
                                     Loading...
                                 </div>
                             ) : !connected ? (
-                                /* Desconectado */
                                 <button
                                     onClick={() => { setIsWalletModalOpen(true); play('click'); }}
                                     className="px-5 py-2.5 rounded-xl bg-white text-black border-2 border-black text-[11px] font-black uppercase tracking-wider shadow-[4px_4px_0px_0px_#F492B7] hover:translate-y-1 hover:shadow-[2px_2px_0px_0px_#F492B7] active:translate-y-1 active:shadow-none transition-all duration-300"
@@ -310,32 +268,19 @@ function NavbarContent() {
                                 </button>
                             ) : (
                                 <>
-                                    {/* Conectado: Rediseño estilo usuario - Clean Transparent */}
                                     <div className="flex items-center gap-3">
-                                        {/* Avatar Trigger Area */}
                                         <div
                                             className="relative w-10 h-10 rounded-full overflow-hidden bg-black cursor-pointer hover:scale-105 transition-transform"
                                             onClick={() => setIsOpen(!isOpen)}
                                         >
-                                            {userPfp ? (
-                                                <img
-                                                    src={userPfp}
-                                                    alt="Profile"
-                                                    className="w-full h-full object-cover"
-                                                    onError={(e) => {
-                                                        setUserPfp(null);
-                                                    }}
-                                                />
-                                            ) : (
-                                                <img
-                                                    src="/pink-pfp.png"
-                                                    alt="Default Profile"
-                                                    className="w-full h-full object-cover"
-                                                />
-                                            )}
+                                            <img
+                                                src={userPfp || "/pink-pfp.png"}
+                                                alt="Profile"
+                                                className="w-full h-full object-cover"
+                                                onError={(e) => { setUserPfp(null); }}
+                                            />
                                         </div>
 
-                                        {/* Identity Link */}
                                         <Link
                                             href="/profile/me"
                                             className="flex flex-col items-start leading-none group hover:opacity-80 transition-all"
@@ -359,7 +304,6 @@ function NavbarContent() {
                                         </span>
                                     </div>
 
-                                    {/* HAMBURGER MENU - PINK KEYCAP */}
                                     <div className="relative">
                                         <motion.button
                                             whileHover={{ scale: 1.05 }}
@@ -373,7 +317,6 @@ function NavbarContent() {
                                             <MorphingIcon type={isNavMenuOpen ? "close" : "menu"} size={24} />
                                         </motion.button>
 
-                                        {/* DROPDOWN MENU */}
                                         {isNavMenuOpen && (
                                             <>
                                                 <div className="fixed inset-0 z-[100]" onClick={() => setIsNavMenuOpen(false)} />
@@ -405,6 +348,13 @@ function NavbarContent() {
                                                         <span className="text-lg">👤</span>
                                                         <span>Profile</span>
                                                     </Link>
+
+                                                    <button
+                                                        onClick={() => { setIsHowItWorksOpen(true); setIsNavMenuOpen(false); }}
+                                                        className="w-full flex items-center gap-3 px-5 py-3 text-white/50 hover:bg-white/10 transition-all text-xs font-bold uppercase tracking-widest text-left"
+                                                    >
+                                                        <span>❓ How It Works</span>
+                                                    </button>
                                                 </div>
                                             </>
                                         )}
@@ -413,14 +363,11 @@ function NavbarContent() {
                             )}
                         </div>
                     </div>
-
                 </div>
 
-                {/* --- CATEGORY SELECTOR (Integrated) --- */}
                 <CategoryMegaMenu />
             </nav>
 
-            {/* Wallet Profile Menu OUTSIDE nav to allow world-space absolute/fixed positioning */}
             <WalletProfileMenu
                 isOpen={isOpen}
                 onClose={() => setIsOpen(false)}
@@ -438,24 +385,26 @@ function NavbarContent() {
                 publicKey={publicKey}
             />
 
-            {/* Custom Wallet Modal */}
             <CustomWalletModal
                 isOpen={isWalletModalOpen}
                 onClose={() => setIsWalletModalOpen(false)}
             />
 
-            {/* Claim Username Modal (Neo-Brutalism) */}
             <ClaimUsernameModal
                 isOpen={isClaimModalOpen}
                 walletAddress={tempConnectedWallet || publicKey?.toBase58() || ''}
                 onSuccess={handleClaimSuccess}
                 onClose={handleClaimClose}
             />
+
+            <HowItWorksModal
+                isOpen={isHowItWorksOpen}
+                onClose={() => setIsHowItWorksOpen(false)}
+            />
         </>
     );
 }
 
-// 2. Export the wrapped component
 export default function Navbar() {
     return (
         <React.Suspense fallback={<div className="h-20 bg-black/50 backdrop-blur-md border-b border-white/5" />}>

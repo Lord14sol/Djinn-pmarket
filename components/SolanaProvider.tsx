@@ -24,9 +24,9 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
         <ConnectionProvider endpoint={endpoint}>
             <WalletProvider
                 wallets={wallets}
-                autoConnect={false}
+                autoConnect={true}
                 // App Identity for wallet signatures
-                localStorageKey="djinn-wallet-final-v15"
+                localStorageKey="djinn-wallet-final-v16"
                 onError={(error) => {
                     const msg = error.message || '';
                     // Only suppress truly transient errors - NOT connection errors

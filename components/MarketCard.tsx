@@ -207,26 +207,45 @@ const MarketCard: React.FC<MarketCardProps> = React.memo(({
                                 />
                             </div>
 
-                            {/* Up / Down Buttons */}
+                            {/* Yes/No or Up/Down Buttons */}
                             <div className="grid grid-cols-2 gap-2">
-                                <button
-                                    onClick={(e) => handleBetClick(e, 'yes')}
-                                    className="bg-emerald-500 text-white border-2 border-black rounded-xl font-bold py-2.5 text-xs transition-all hover:brightness-110 active:scale-95 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:shadow-none flex items-center justify-center gap-1.5"
-                                >
-                                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0">
-                                        <path d="M6 2L10 7H2L6 2Z" fill="currentColor"/>
-                                    </svg>
-                                    <span>up</span>
-                                </button>
-                                <button
-                                    onClick={(e) => handleBetClick(e, 'no')}
-                                    className="bg-red-500 text-white border-2 border-black rounded-xl font-bold py-2.5 text-xs transition-all hover:brightness-110 active:scale-95 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:shadow-none flex items-center justify-center gap-1.5"
-                                >
-                                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0">
-                                        <path d="M6 10L2 5H10L6 10Z" fill="currentColor"/>
-                                    </svg>
-                                    <span>down</span>
-                                </button>
+                                {category?.toLowerCase() === 'crypto' ? (
+                                    <>
+                                        <button
+                                            onClick={(e) => handleBetClick(e, 'yes')}
+                                            className="bg-emerald-500 text-white border-2 border-black rounded-xl font-bold py-2.5 text-xs transition-all hover:brightness-110 active:scale-95 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:shadow-none flex items-center justify-center gap-1.5"
+                                        >
+                                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0">
+                                                <path d="M6 2L10 7H2L6 2Z" fill="currentColor"/>
+                                            </svg>
+                                            <span>up</span>
+                                        </button>
+                                        <button
+                                            onClick={(e) => handleBetClick(e, 'no')}
+                                            className="bg-red-500 text-white border-2 border-black rounded-xl font-bold py-2.5 text-xs transition-all hover:brightness-110 active:scale-95 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:shadow-none flex items-center justify-center gap-1.5"
+                                        >
+                                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0">
+                                                <path d="M6 10L2 5H10L6 10Z" fill="currentColor"/>
+                                            </svg>
+                                            <span>down</span>
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <button
+                                            onClick={(e) => handleBetClick(e, 'yes')}
+                                            className="bg-emerald-500 text-white border-2 border-black rounded-xl font-bold py-2.5 text-xs transition-all hover:brightness-110 active:scale-95 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:shadow-none flex items-center justify-center gap-1.5"
+                                        >
+                                            <span>yes</span>
+                                        </button>
+                                        <button
+                                            onClick={(e) => handleBetClick(e, 'no')}
+                                            className="bg-red-500 text-white border-2 border-black rounded-xl font-bold py-2.5 text-xs transition-all hover:brightness-110 active:scale-95 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:shadow-none flex items-center justify-center gap-1.5"
+                                        >
+                                            <span>no</span>
+                                        </button>
+                                    </>
+                                )}
                             </div>
                         </>
                     )}
