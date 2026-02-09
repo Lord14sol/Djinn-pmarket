@@ -401,8 +401,8 @@ export default function Home() {
 
       <section className="px-6 md:px-12 pb-20 max-w-[1600px] mx-auto mt-10 relative z-10">
         {!(activeCategory === 'Trending' && top3Markets && top3Markets.length > 0) && (
-          <h2 className="text-3xl font-bold mb-8 tracking-tight text-white">
-            {getCategoryTitle()}
+          <h2 className="text-2xl font-medium mb-8 tracking-tight text-gray-400 lowercase">
+            {getCategoryTitle().toLowerCase()}
           </h2>
         )}
 
@@ -442,13 +442,13 @@ export default function Home() {
             </motion.div>
           </div>
         ) : (
-          <AnimatePresence mode="wait">
+          <AnimatePresence mode="popLayout">
             <motion.div
               key={activeCategory}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.3 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
               className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 bg-transparent overflow-hidden"
             >
               {sortedMarkets
@@ -458,13 +458,11 @@ export default function Home() {
                   return (
                     <motion.div
                       key={`${market.slug}-${index}`}
-                      layout // Enable smooth layout transitions
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.9 }}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
                       transition={{
                         duration: 0.2,
-                        delay: index * 0.03 // Stagger animation
+                        delay: index * 0.03
                       }}
                       className="h-full"
                     >

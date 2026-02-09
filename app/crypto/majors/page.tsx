@@ -100,12 +100,13 @@ function MarketCard({ market, currentPrice }: { market: ChronosMarket, currentPr
     const asset = ASSETS[market.asset];
 
     // Fallback to priceToBeat if currentPrice not yet loaded (0)
-    const effectiveCurrentPrice = currentPrice || market.priceToBeat;
-    const priceDiff = effectiveCurrentPrice - market.priceToBeat;
+    const effectiveCurrentPrice = currentPrice || market.priceToBeat || 0;
+    const effectivePriceToBeat = market.priceToBeat || currentPrice || 0;
+    const priceDiff = effectiveCurrentPrice - effectivePriceToBeat;
     const isAbove = priceDiff >= 0;
 
-    // Calculate Mock Probability based on diff (0 diff = 50%)
-    const percentDiff = (priceDiff / market.priceToBeat) * 100;
+    // Calculate Probability based on diff (0 diff = 50%)
+    const percentDiff = effectivePriceToBeat > 0 ? (priceDiff / effectivePriceToBeat) * 100 : 0;
     const rawProb = 50 + (percentDiff * 40); // More sensitive multiplier
     const probability = Math.min(99, Math.max(1, rawProb));
     const finalProb = isAbove ? probability : (100 - probability);
@@ -115,8 +116,7 @@ function MarketCard({ market, currentPrice }: { market: ChronosMarket, currentPr
     return (
         <Link href={`/crypto/market/${market.id}`}>
             <motion.div
-                layoutId={`market-card-${market.id}`}
-                whileHover={{ scale: 1.02, y: -6 }}
+                whileHover={{ y: -4 }}
                 whileTap={{ scale: 0.98 }}
                 className="bg-white border-4 border-black rounded-[2rem] overflow-hidden shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer group relative h-full flex flex-col justify-between"
             >
@@ -175,11 +175,13 @@ function MarketCard({ market, currentPrice }: { market: ChronosMarket, currentPr
 
                 {/* Footer Buttons */}
                 <div className="px-6 pb-6 pt-0 grid grid-cols-2 gap-3">
-                    <div className="py-3 rounded-xl bg-emerald-100/50 text-emerald-700 font-black text-center text-xs uppercase tracking-widest border-2 border-transparent group-hover:border-black transition-all">
-                        UP
+                    <div className="py-3 rounded-xl bg-emerald-500 text-white font-bold text-center text-xs lowercase border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] group-hover:shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center justify-center gap-1.5">
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 2L10 7H2L6 2Z" fill="currentColor" /></svg>
+                        up
                     </div>
-                    <div className="py-3 rounded-xl bg-rose-100/50 text-rose-700 font-black text-center text-xs uppercase tracking-widest border-2 border-transparent group-hover:border-black transition-all">
-                        DOWN
+                    <div className="py-3 rounded-xl bg-red-500 text-white font-bold text-center text-xs lowercase border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] group-hover:shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center justify-center gap-1.5">
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 10L2 5H10L6 10Z" fill="currentColor" /></svg>
+                        down
                     </div>
                 </div>
             </motion.div>
@@ -205,7 +207,9 @@ export default function CryptoMajorsPage() {
     const prices = { BTC: btcPrice, ETH: ethPrice, SOL: solPrice };
 
     // Generate markets on MOUNT to avoid hydration mismatch (flashing)
+    // Generate markets on MOUNT to avoid hydration mismatch (flashing)
     useEffect(() => {
+        let mounted = true;
         const init = async () => {
             const now = Date.now();
             const generatedPromises: Promise<ChronosMarket>[] = [];
@@ -219,8 +223,7 @@ export default function CryptoMajorsPage() {
 
                 // Fetch Real Open Price
                 const realOpen = await fetchCandleOpen(ASSETS[asset].symbol, interval, start);
-                const base = { BTC: 97850, ETH: 3420, SOL: 195.50 }[asset];
-                const ptb = realOpen || base; // Fallback to base if fetch fails
+                const ptb = realOpen; // Use real Binance candle open only
 
                 return {
                     id: `${asset.toLowerCase()}-${interval.toLowerCase()}-${roundNum}`,
@@ -242,11 +245,14 @@ export default function CryptoMajorsPage() {
             });
 
             const results = await Promise.all(generatedPromises);
-            setMarkets(results);
-            setIsLoading(false);
+            if (mounted) {
+                setMarkets(results);
+                setIsLoading(false);
+            }
         };
 
         init();
+        return () => { mounted = false; };
     }, []);
 
     // Filter Logic
@@ -280,16 +286,16 @@ export default function CryptoMajorsPage() {
                     >
                         {/* Title */}
                         <div>
-                            <div className="flex items-center gap-2 text-xs font-black text-gray-500 mb-4 uppercase tracking-[0.2em]">
-                                <Link href="/markets" className="hover:text-white transition">Markets</Link>
+                            <div className="flex items-center gap-2 text-xs font-medium text-gray-500 mb-4 lowercase tracking-wide">
+                                <Link href="/markets" className="hover:text-white transition">markets</Link>
                                 <ChevronRight className="w-3 h-3" />
-                                <span className="text-[#F492B7]">Crypto</span>
+                                <span className="text-[#F492B7]">crypto</span>
                             </div>
-                            <h1 className="text-5xl md:text-7xl font-black text-white mb-4 tracking-tighter" style={{ fontFamily: 'var(--font-adriane), serif' }}>
-                                CRYPTO
+                            <h1 className="text-4xl md:text-6xl font-bold text-white mb-3 tracking-tight lowercase">
+                                crypto
                             </h1>
-                            <p className="text-gray-400 text-lg md:text-xl font-medium max-w-xl leading-relaxed border-l-4 border-[#F492B7] pl-6">
-                                <span className="text-white block mt-1">Predict prices. Win rebates. Live 24/7.</span>
+                            <p className="text-gray-500 text-base md:text-lg font-normal max-w-xl leading-relaxed">
+                                predict prices. win rebates. live 24/7.
                             </p>
                         </div>
 
@@ -348,10 +354,9 @@ export default function CryptoMajorsPage() {
                         </div>
                     ) : (
                         <motion.div
-                            layout
                             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
                         >
-                            <AnimatePresence>
+                            <AnimatePresence mode="popLayout">
                                 {filteredMarkets.map((market) => (
                                     <MarketCard
                                         key={market.id}

@@ -175,19 +175,23 @@ export default function CategoryMegaMenu() {
                         key={cat.id}
                         onClick={() => handleCategoryClick(cat)}
                         className={`
-                            shrink-0 text-[13px] font-black uppercase tracking-widest whitespace-nowrap
-                            transition-all duration-200
+                            shrink-0 text-[13px] font-bold lowercase tracking-wide whitespace-nowrap
+                            transition-all duration-200 relative
                             ${activeCategory === cat.slug
-                                ? 'scale-110'
-                                : 'text-gray-500 hover:text-white'
+                                ? 'text-white'
+                                : 'text-gray-600 hover:text-gray-300'
                             }
                         `}
-                        style={{
-                            color: activeCategory === cat.slug ? cat.glowColor : undefined,
-                            textShadow: activeCategory === cat.slug ? `0 0 10px ${cat.glowColor}40` : 'none'
-                        }}
                     >
-                        {cat.name}
+                        {cat.name.toLowerCase()}
+                        {activeCategory === cat.slug && (
+                            <motion.div
+                                layoutId="category-underline"
+                                className="absolute -bottom-1 left-0 right-0 h-[2px] rounded-full"
+                                style={{ backgroundColor: cat.glowColor }}
+                                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                            />
+                        )}
                     </button>
                 ))}
             </div>

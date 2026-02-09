@@ -2654,21 +2654,23 @@ export default function Page() {
                                     <div className="flex gap-2">
                                         <button
                                             onClick={() => { setSelectedSide('YES'); play('click'); }}
-                                            className={`flex-1 py-4 rounded-2xl text-xs font-black uppercase transition-all border-4 relative overflow-hidden group shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:shadow-none ${selectedSide === 'YES'
+                                            className={`flex-1 py-4 rounded-2xl text-xs font-black transition-all border-4 relative overflow-hidden group shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:shadow-none flex items-center justify-center gap-2 ${selectedSide === 'YES'
                                                 ? 'bg-emerald-400 text-black border-black -translate-y-1'
                                                 : 'bg-white text-black border-black hover:bg-emerald-50'
                                                 }`}
                                         >
-                                            <span className="relative z-10">{marketOutcomes[0]?.title || 'YES'}</span>
+                                            <svg width="14" height="14" viewBox="0 0 12 12" fill="none"><path d="M6 2L10 7H2L6 2Z" fill="currentColor"/></svg>
+                                            <span className="relative z-10 lowercase">{marketOutcomes[0]?.title === 'YES' ? 'up' : (marketOutcomes[0]?.title || 'up')}</span>
                                         </button>
                                         <button
                                             onClick={() => { setSelectedSide('NO'); play('click'); }}
-                                            className={`flex-1 py-4 rounded-2xl text-xs font-black uppercase transition-all border-4 relative overflow-hidden group shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:shadow-none ${selectedSide === 'NO'
+                                            className={`flex-1 py-4 rounded-2xl text-xs font-black transition-all border-4 relative overflow-hidden group shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:shadow-none flex items-center justify-center gap-2 ${selectedSide === 'NO'
                                                 ? 'bg-rose-400 text-black border-black -translate-y-1'
                                                 : 'bg-white text-black border-black hover:bg-rose-50'
                                                 }`}
                                         >
-                                            <span className="relative z-10">{marketOutcomes[1]?.title || 'NO'}</span>
+                                            <svg width="14" height="14" viewBox="0 0 12 12" fill="none"><path d="M6 10L2 5H10L6 10Z" fill="currentColor"/></svg>
+                                            <span className="relative z-10 lowercase">{marketOutcomes[1]?.title === 'NO' ? 'down' : (marketOutcomes[1]?.title || 'down')}</span>
                                         </button>
                                     </div>
                                 )}

@@ -166,6 +166,7 @@ impl ChronosMarket {
 
 #[account]
 pub struct ChronosPosition {
+    pub owner: Pubkey,           // User wallet (for filtering)
     pub market: Pubkey,          // ChronosMarket pubkey
     pub outcome: u8,             // 0 = YES, 1 = NO
     pub shares: u128,            // Number of shares held
@@ -174,6 +175,7 @@ pub struct ChronosPosition {
 
 impl ChronosPosition {
     pub const LEN: usize = 8     // Discriminator
+        + 32                     // owner
         + 32                     // market
         + 1                      // outcome
         + 16                     // shares
@@ -188,6 +190,9 @@ impl ChronosPosition {
 pub enum ChronosError {
     #[msg("Market is not active for trading")]
     MarketNotActive,
+    
+    #[msg("Market is not resolved")]
+    MarketNotResolved,
     
     #[msg("Market is in lock period - no new trades allowed")]
     MarketLocked,

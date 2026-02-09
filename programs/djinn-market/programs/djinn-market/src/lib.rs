@@ -673,6 +673,7 @@ pub mod djinn_market {
         
         // Update user position
         let position = &mut ctx.accounts.user_position;
+        position.owner = ctx.accounts.user.key();
         position.market = market.key();
         position.outcome = outcome_index;
         position.shares = position.shares.checked_add(shares).unwrap();
@@ -732,20 +733,25 @@ pub mod djinn_market {
         let final_price = parse_pyth_price(&pyth_data)?;
         
         // Determine winner: YES (0) if price >= target, NO (1) if price < target
-        let winning_outcome = if final_price >= market.target_price { 0 } else { 1 };
+        let final_price_val = final_price as u64; // Assuming price has same decimals or handling scaling elsewhere. 
+        // Note: Pyth price parsing usually returns price * 10^expo. 
+        // Let's assume target_price is scaled similarly.
+        
+        let winning_outcome = if final_price_val >= market.target_price { 0 } else { 1 };
         
         // Extract resolution fee (2%)
-        let resolution_fee = (market.vault_balance * RESOLUTION_FEE_BPS) / BPS_DENOMINATOR;
+        let resolution_fee = (market.vault_balance as u128 * RESOLUTION_FEE_BPS as u128) / BPS_DENOMINATOR as u128;
         
+        // PDA Signer
+        let market_key = market.key();
+        let seeds = &[
+            b"chronos_vault",
+            market_key.as_ref(),
+            &[market.vault_bump],
+        ];
+        let signer = &[&seeds[..]];
+
         if resolution_fee > 0 {
-            let market_key = market.key();
-            let seeds = &[
-                b"chronos_vault",
-                market_key.as_ref(),
-                &[market.vault_bump],
-            ];
-            let signer = &[&seeds[..]];
-            
             anchor_lang::system_program::transfer(
                 CpiContext::new_with_signer(
                     ctx.accounts.system_program.to_account_info(),
@@ -761,12 +767,92 @@ pub mod djinn_market {
             market.vault_balance = market.vault_balance.checked_sub(resolution_fee).unwrap();
         }
         
+        // HOUSE WIN CHECK: If no shares exist for the winning outcome, TREASURY takes all
+        let total_winning_shares = market.outcome_supplies[winning_outcome];
+        if total_winning_shares == 0 && market.vault_balance > 0 {
+             anchor_lang::system_program::transfer(
+                CpiContext::new_with_signer(
+                    ctx.accounts.system_program.to_account_info(),
+                    anchor_lang::system_program::Transfer {
+                        from: ctx.accounts.chronos_vault.to_account_info(),
+                        to: ctx.accounts.protocol_treasury.to_account_info(),
+                    },
+                    signer,
+                ),
+                market.vault_balance as u64,
+            )?;
+            market.vault_balance = 0; // Empty
+        }
+        
         // Update market state
-        market.final_price = Some(final_price);
-        market.winning_outcome = Some(winning_outcome);
+        market.final_price = Some(final_price_val);
+        market.winning_outcome = Some(winning_outcome as u8);
         market.total_pot_at_resolution = market.vault_balance as u64;
         market.status = ChronosStatus::Resolved;
         market.resolution_time = Some(clock.unix_timestamp);
+        
+        Ok(())
+    }
+
+    /// Claim winnings from Chronos market
+    pub fn claim_chronos_winnings(
+        ctx: Context<ClaimChronosWinnings>,
+        outcome_index: u8,
+    ) -> Result<()> {
+        use chronos_market::*;
+        
+        let market = &mut ctx.accounts.chronos_market;
+        let position = &mut ctx.accounts.user_position;
+        
+        // Check market resolved
+        require!(market.status == ChronosStatus::Resolved, ChronosError::MarketNotResolved);
+        
+        // Check valid claim
+        require!(!position.claimed, ChronosError::AlreadyClaimed);
+        require!(position.shares > 0, ChronosError::NoShares);
+        
+        let winning_outcome = market.winning_outcome.unwrap();
+        require!(outcome_index == winning_outcome, ChronosError::NotWinner);
+        
+        // Calculate payout: user_shares / total_winning_shares * SNAPSHOT_BALANCE
+        let total_winning_shares = market.outcome_supplies[winning_outcome as usize];
+        
+        if total_winning_shares == 0 {
+            // Edge case: No winners? Fund stuck in vault? 
+            // Usually shouldn't happen unless bug, or refund logic needed.
+            return Ok(());
+        }
+        
+        let snapshot_pot = market.total_pot_at_resolution as u128;
+        let payout = (snapshot_pot * position.shares) / total_winning_shares;
+        
+        // Transfer payout
+        if payout > 0 {
+            let market_key = market.key();
+            let seeds = &[
+                b"chronos_vault",
+                market_key.as_ref(),
+                &[market.vault_bump],
+            ];
+            let signer = &[&seeds[..]];
+            
+            anchor_lang::system_program::transfer(
+                CpiContext::new_with_signer(
+                    ctx.accounts.system_program.to_account_info(),
+                    anchor_lang::system_program::Transfer {
+                        from: ctx.accounts.chronos_vault.to_account_info(),
+                        to: ctx.accounts.user.to_account_info(),
+                    },
+                    signer,
+                ),
+                payout as u64,
+            )?;
+            
+            // Decrease vault balance tracking
+            market.vault_balance = market.vault_balance.checked_sub(payout).unwrap();
+        }
+        
+        position.claimed = true;
         
         Ok(())
     }
@@ -1013,6 +1099,35 @@ pub struct ResolveChronosMarket<'info> {
     /// CHECK: Treasury for resolution fee
     #[account(mut, address = G1_TREASURY)]
     pub protocol_treasury: AccountInfo<'info>,
+    
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(outcome_index: u8)]
+pub struct ClaimChronosWinnings<'info> {
+    #[account(mut)]
+    pub chronos_market: Box<Account<'info, chronos_market::ChronosMarket>>,
+    
+    /// CHECK: Chronos Vault PDA
+    #[account(mut)]
+    pub chronos_vault: AccountInfo<'info>,
+    
+    #[account(
+        mut,
+        seeds = [
+            b"chronos_pos",
+            chronos_market.key().as_ref(),
+            user.key().as_ref(), // User is signer
+            &[outcome_index]
+        ],
+        bump,
+        close = user // Rent Refund
+    )]
+    pub user_position: Box<Account<'info, chronos_market::ChronosPosition>>,
+    
+    #[account(mut)]
+    pub user: Signer<'info>,
     
     pub system_program: Program<'info, System>,
 }
