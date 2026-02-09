@@ -23,9 +23,18 @@ const INTERVAL_MAPPING: Record<string, { apiInterval: string; limit: number }> =
 // REST-only price polling (no WebSocket = no flashing)
 const POLL_INTERVAL = 3000; // 3 seconds
 
+export type CandleData = {
+    time: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+};
+
 export function useBinancePrice(symbol: 'BTC' | 'ETH' | 'SOL', interval: '15m' | '1h' | '4h' | '24h' | '1w' | 'all' = '15m') {
     const [price, setPrice] = useState<number>(0);
     const [history, setHistory] = useState<PriceData[]>([]);
+    const [candles, setCandles] = useState<CandleData[]>([]);
     const [isLoadingHistory, setIsLoadingHistory] = useState(true);
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -46,7 +55,17 @@ export function useBinancePrice(symbol: 'BTC' | 'ETH' | 'SOL', interval: '15m' |
                         time: k[0],
                         price: parseFloat(k[4])
                     }));
+
+                    const formattedCandles = data.map((k: any) => ({
+                        time: k[0],
+                        open: parseFloat(k[1]),
+                        high: parseFloat(k[2]),
+                        low: parseFloat(k[3]),
+                        close: parseFloat(k[4])
+                    }));
+
                     setHistory(formattedHistory);
+                    setCandles(formattedCandles);
 
                     if (formattedHistory.length > 0) {
                         setPrice(formattedHistory[formattedHistory.length - 1].price);
@@ -100,5 +119,5 @@ export function useBinancePrice(symbol: 'BTC' | 'ETH' | 'SOL', interval: '15m' |
         };
     }, [fetchCurrentPrice]);
 
-    return { price, history, isLoadingHistory };
+    return { price, history, candles, isLoadingHistory };
 }

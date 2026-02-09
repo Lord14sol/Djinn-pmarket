@@ -669,7 +669,7 @@ export default function ChronosMarketPage() {
     // Real-Time Price
     const hookInterval = (['15m', '1h', '4h', '24h', '1w'].includes(interval) ? interval : '15m') as '15m' | '1h' | '4h' | '24h' | '1w';
     const hookSymbol = asset.symbol as 'BTC' | 'ETH' | 'SOL';
-    const { price: currentPrice, history: priceHistory, isLoadingHistory } = useBinancePrice(
+    const { price: currentPrice, history: priceHistory, candles, isLoadingHistory } = useBinancePrice(
         hookSymbol,
         hookInterval
     );
@@ -941,40 +941,66 @@ export default function ChronosMarketPage() {
         const currentSlot = Math.floor(now / duration);
         const formatTime = (ts: number) => new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 
-        // Create 5 past rounds + 3 future slots
-        for (let i = 1; i <= 5; i++) {
-            const slotStart = (currentSlot - i) * duration;
-            const slotEnd = slotStart + duration;
-            const pastRoundId = liveRoundNumber - i;
+        // Create past rounds using REAL Binance History if available
+        if (candles && candles.length > 2) {
+            // candles are sorted oldest to newest. last one is current open candle.
+            // so we look backwards from length-2
+            const lastCompleteIndex = candles.length - 2;
 
-            // Skip if already exists
-            if (merged.some(r => r.id === pastRoundId)) continue;
+            for (let i = 0; i < 10; i++) { // expanded history to 10 rounds
+                const idx = lastCompleteIndex - i;
+                if (idx < 0) break;
 
-            // Deterministic seeded random based on round ID (stable across renders)
-            const seed = pastRoundId * 12345 + 67890; // Simple seed from round ID
-            const seededRandom1 = ((seed * 9301 + 49297) % 233280) / 233280;
-            const seededRandom2 = (((seed * 2) * 9301 + 49297) % 233280) / 233280;
-            const seededRandom3 = (((seed * 3) * 9301 + 49297) % 233280) / 233280;
+                const candle = candles[idx];
+                const pastRoundId = liveRoundNumber - (i + 1);
 
-            // Generate deterministic mock data - Dynamic Base Price
-            let basePrice = asset.defaultPrice || 97000;
+                // Skip if exists
+                if (merged.some(r => r.id === pastRoundId)) continue;
 
-            const mockStrikePrice = basePrice + (seededRandom1 - 0.5) * basePrice * 0.003;
-            const priceChange = (seededRandom2 - 0.5) * basePrice * 0.006;
-            const mockEndPrice = mockStrikePrice + priceChange;
-            const isUp = mockEndPrice >= mockStrikePrice;
+                const isUp = candle.close >= candle.open;
+                merged.push({
+                    id: pastRoundId,
+                    time: `${formatTime(candle.time)} — ${formatTime(candle.time + duration)}`,
+                    isWin: isUp,
+                    result: isUp ? 'UP' : 'DOWN',
+                    status: 'ENDED',
+                    strikePrice: candle.open,
+                    endPrice: candle.close,
+                    startTime: candle.time / 1000,
+                    endTime: (candle.time + duration) / 1000
+                });
+            }
+        } else {
+            // Fallback: Generate deterministic mock past rounds (only if API fails)
+            for (let i = 1; i <= 5; i++) {
+                const slotStart = (currentSlot - i) * duration;
+                const slotEnd = slotStart + duration;
+                const pastRoundId = liveRoundNumber - i;
 
-            merged.push({
-                id: pastRoundId,
-                time: `${formatTime(slotStart)} — ${formatTime(slotEnd)}`,
-                isWin: isUp,
-                result: isUp ? 'UP' : 'DOWN',
-                status: 'ENDED',
-                strikePrice: mockStrikePrice,
-                endPrice: mockEndPrice,
-                startTime: slotStart / 1000,
-                endTime: slotEnd / 1000
-            });
+                if (merged.some(r => r.id === pastRoundId)) continue;
+
+                const seed = pastRoundId * 12345 + 67890;
+                const seededRandom1 = ((seed * 9301 + 49297) % 233280) / 233280;
+                const seededRandom2 = (((seed * 2) * 9301 + 49297) % 233280) / 233280;
+
+                let basePrice = asset.defaultPrice || 97000;
+                const mockStrikePrice = basePrice + (seededRandom1 - 0.5) * basePrice * 0.003;
+                const priceChange = (seededRandom2 - 0.5) * basePrice * 0.006;
+                const mockEndPrice = mockStrikePrice + priceChange;
+                const isUp = mockEndPrice >= mockStrikePrice;
+
+                merged.push({
+                    id: pastRoundId,
+                    time: `${formatTime(slotStart)} — ${formatTime(slotEnd)}`,
+                    isWin: isUp,
+                    result: isUp ? 'UP' : 'DOWN',
+                    status: 'ENDED',
+                    strikePrice: mockStrikePrice,
+                    endPrice: mockEndPrice,
+                    startTime: slotStart / 1000,
+                    endTime: slotEnd / 1000
+                });
+            }
         }
 
         // Add future time slots (not tradable yet)
@@ -1000,7 +1026,7 @@ export default function ChronosMarketPage() {
 
         merged.sort((a, b) => b.id - a.id);
         return merged;
-    }, [rounds, completedRounds, getDuration, interval, liveRoundNumber, effectivePriceToBeat, asset.symbol]);
+    }, [rounds, completedRounds, getDuration, interval, liveRoundNumber, effectivePriceToBeat, asset.symbol, candles, asset.defaultPrice]);
 
 
 
