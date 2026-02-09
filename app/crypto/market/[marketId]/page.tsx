@@ -281,11 +281,21 @@ function MarketFinishedPanel({
     const outcomeColor = isUp ? 'text-emerald-500' : 'text-rose-500';
     const outcomeBg = isUp ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200';
 
+    // Check for Refund Scenario (One-sided betting)
+    const isRefund = round.upPool !== undefined && round.downPool !== undefined && (
+        (round.upPool > 0 && round.downPool === 0) ||
+        (round.downPool > 0 && round.upPool === 0)
+    );
+
     // Check if user won based on their position
+    // If Refund: Everyone gets back their SOL (User "Wins" refund)
     const userWon = userPosition && (
+        isRefund ||
         (userPosition.side === 'UP' && isUp) ||
         (userPosition.side === 'DOWN' && !isUp)
     );
+
+    const isRefundUI = isRefund && userPosition; // Show refund UI if user participated
 
     return (
         <motion.div
@@ -297,25 +307,31 @@ function MarketFinishedPanel({
             <div className="flex items-center gap-3 mb-6">
                 <img src={assetIcon} className="w-10 h-10" alt={assetName} />
                 <div>
-                    <h3 className="text-lg font-black uppercase tracking-tighter text-black">Market Finished</h3>
+                    <h3 className="text-lg font-black uppercase tracking-tighter text-black">
+                        {isRefund ? "Market Refunded" : "Market Finished"}
+                    </h3>
                     <p className="text-xs text-gray-500 font-semibold">{round.time}</p>
                 </div>
             </div>
 
             {/* Outcome Badge */}
-            <div className={`rounded-2xl border-2 ${outcomeBg} p-6 flex flex-col items-center justify-center`}>
-                <div className={`w-16 h-16 rounded-full ${isUp ? 'bg-emerald-500' : 'bg-rose-500'} flex items-center justify-center mb-4`}>
-                    {isUp ? (
-                        <ArrowUp className="w-8 h-8 text-white" />
+            <div className={`rounded-2xl border-2 ${isRefund ? 'bg-indigo-50 border-indigo-200' : outcomeBg} p-6 flex flex-col items-center justify-center`}>
+                <div className={`w-16 h-16 rounded-full ${isRefund ? 'bg-indigo-500' : (isUp ? 'bg-emerald-500' : 'bg-rose-500')} flex items-center justify-center mb-4`}>
+                    {isRefund ? (
+                        <Scale className="w-8 h-8 text-white" />
                     ) : (
-                        <ArrowDown className="w-8 h-8 text-white" />
+                        isUp ? <ArrowUp className="w-8 h-8 text-white" /> : <ArrowDown className="w-8 h-8 text-white" />
                     )}
                 </div>
-                <h2 className={`text-3xl font-black ${outcomeColor}`}>
-                    Outcome: {round.result}
+                <h2 className={`text-3xl font-black ${isRefund ? 'text-indigo-600' : outcomeColor}`}>
+                    Outcome: {isRefund ? 'REFUND' : round.result}
                 </h2>
                 <p className="text-sm text-gray-600 mt-2 text-center font-medium">
-                    {assetName} Up or Down - {round.time}
+                    {isRefund ? (
+                        "No opposing bets. All funds returned."
+                    ) : (
+                        `${assetName} Up or Down - ${round.time}`
+                    )}
                 </p>
             </div>
 
@@ -337,17 +353,17 @@ function MarketFinishedPanel({
 
             {/* User Holdings & Claim Section */}
             {userPosition && (
-                <div className={`mt-6 rounded-2xl border-2 p-5 ${userWon ? 'bg-emerald-50 border-emerald-300' : 'bg-rose-50 border-rose-300'}`}>
+                <div className={`mt-6 rounded-2xl border-2 p-5 ${userWon ? (isRefundUI ? 'bg-indigo-50 border-indigo-300' : 'bg-emerald-50 border-emerald-300') : 'bg-rose-50 border-rose-300'}`}>
                     <div className="flex items-center justify-between mb-4">
                         <div>
                             <p className="text-[10px] font-black uppercase text-gray-500">Your Position</p>
-                            <p className={`text-xl font-black ${userPosition.side === 'UP' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            <p className={`text-xl font-black ${isRefundUI ? 'text-indigo-600' : (userPosition.side === 'UP' ? 'text-emerald-600' : 'text-rose-600')}`}>
                                 {userPosition.shares.toFixed(2)} {userPosition.side} Shares
                             </p>
                         </div>
-                        <div className={`w-12 h-12 rounded-full ${userWon ? 'bg-emerald-500' : 'bg-rose-500'} flex items-center justify-center`}>
+                        <div className={`w-12 h-12 rounded-full ${userWon ? (isRefundUI ? 'bg-indigo-500' : 'bg-emerald-500') : 'bg-rose-500'} flex items-center justify-center`}>
                             {userWon ? (
-                                <Trophy className="w-6 h-6 text-white" />
+                                isRefundUI ? <Scale className="w-6 h-6 text-white" /> : <Trophy className="w-6 h-6 text-white" />
                             ) : (
                                 <XCircle className="w-6 h-6 text-white" />
                             )}
@@ -357,17 +373,22 @@ function MarketFinishedPanel({
                     {userWon ? (
                         <>
                             <div className="bg-white/60 rounded-xl p-4 mb-4">
-                                <p className="text-[10px] font-black uppercase text-emerald-600 mb-1">🎉 You Won!</p>
-                                <p className="text-2xl font-black text-emerald-700 tabular-nums">
-                                    +{userPosition.potentialWin.toFixed(4)} SOL
+                                <p className="text-[10px] font-black uppercase text-indigo-600 mb-1">
+                                    {isRefundUI ? "♻️ Refund Available" : "🎉 You Won!"}
+                                </p>
+                                <p className={`text-lg font-bold ${isRefundUI ? 'text-indigo-700' : 'text-emerald-700'} tabular-nums leading-tight`}>
+                                    {isRefundUI
+                                        ? "Redeeming your SOL..."
+                                        : `+${userPosition.potentialWin.toFixed(4)} SOL`
+                                    }
                                 </p>
                             </div>
                             <div className="flex gap-3">
                                 <button
                                     onClick={onClaim}
-                                    className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-black py-4 rounded-xl transition-all uppercase tracking-wider text-sm shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none"
+                                    className={`flex-1 ${isRefundUI ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-emerald-500 hover:bg-emerald-600'} text-white font-black py-4 rounded-xl transition-all uppercase tracking-wider text-sm shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none`}
                                 >
-                                    Claim Winnings
+                                    {isRefundUI ? "Claim Refund" : "Claim Winnings"}
                                 </button>
                                 <button
                                     onClick={onShare}
@@ -413,6 +434,9 @@ interface RoundData {
     strikePrice: number;
     endPrice: number;
     status: 'LIVE' | 'ENDED';
+    upPool?: number;
+    downPool?: number;
+    totalPool?: number;
 }
 
 function RoundSelector({
@@ -744,7 +768,7 @@ export default function ChronosMarketPage() {
             );
 
             // Find current active market logic
-            const activeM = relevant.find(m => m.account.roundNumber.toNumber() === currentRoundNumber);
+            const activeM = relevant.find(m => (m.account as any).roundNumber.toNumber() === currentRoundNumber);
             if (activeM) setCurrentMarketState(activeM.account);
 
             const mapped: RoundData[] = relevant.map(m => {
@@ -768,6 +792,15 @@ export default function ChronosMarketPage() {
                 const end = new Date(endTime * 1000);
                 const timeStr = `${start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} — ${end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
 
+                // Pool Data for Refund Logic
+                const upSharesBN = acc.outcomeSupplies ? acc.outcomeSupplies[0] : null;
+                const downSharesBN = acc.outcomeSupplies ? acc.outcomeSupplies[1] : null;
+                const upShares = upSharesBN ? (upSharesBN.toNumber ? upSharesBN.toNumber() : Number(upSharesBN)) : 0;
+                const downShares = downSharesBN ? (downSharesBN.toNumber ? downSharesBN.toNumber() : Number(downSharesBN)) : 0;
+
+                const potBN = acc.totalPotAtResolution || acc.vaultBalance;
+                const totalPot = potBN ? (potBN.toNumber ? potBN.toNumber() : Number(potBN)) : 0;
+
                 return {
                     id: (acc.roundNumber && acc.roundNumber.toNumber ? acc.roundNumber.toNumber() : (acc.roundNumber || 0)),
                     time: timeStr,
@@ -775,7 +808,10 @@ export default function ChronosMarketPage() {
                     result: result as 'UP' | 'DOWN' | 'LIVE',
                     status: isEnded ? 'ENDED' : 'LIVE',
                     strikePrice: strike,
-                    endPrice: endP || currentPrice,
+                    endPrice: endP,
+                    upPool: upShares,
+                    downPool: downShares,
+                    totalPool: totalPot / 1e9 // Store as SOL
                 };
             });
 
@@ -1212,7 +1248,6 @@ export default function ChronosMarketPage() {
                                                     fill={chartColor || '#000'}
                                                     stroke="white"
                                                     strokeWidth={2}
-                                                    isFront={true}
                                                 />
                                             </>
                                         )}
@@ -1403,7 +1438,7 @@ export default function ChronosMarketPage() {
                                 );
                             }
 
-                            return <TradePanel isAbove={isAbove} onTrade={handleAddTrade} currentPool={totalPool} marketState={currentMarketState} assetSymbol={asset.symbol} />;
+                            return <TradePanel isAbove={isAbove} onTrade={handleAddTrade} currentPool={totalPool} marketState={currentMarketState} />;
                         })()}
 
                         {/* Rules Card */}
