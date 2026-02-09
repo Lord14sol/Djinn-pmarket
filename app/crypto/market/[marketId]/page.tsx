@@ -877,20 +877,6 @@ export default function ChronosMarketPage() {
         return merged;
     }, [rounds, completedRounds, getDuration, interval, liveRoundNumber, effectivePriceToBeat]);
 
-    // Compute displayed prices based on selected round (past vs live)
-    const selectedRoundData = allRounds.find(r => r.id === selectedRoundView);
-    const isViewingPastRound = selectedRoundData && selectedRoundData.status === 'ENDED';
-
-    // When viewing past round: use that round's strikePrice/endPrice
-    // When viewing live round: use current live prices
-    const displayedTargetPrice = isViewingPastRound && selectedRoundData
-        ? selectedRoundData.strikePrice
-        : effectivePriceToBeat;
-
-    const displayedFinalPrice = isViewingPastRound && selectedRoundData
-        ? selectedRoundData.endPrice
-        : effectiveCurrentPrice;
-
     const formattedChartData = useMemo(() => {
         return priceHistory.map(p => ({ time: p.time, price: p.price }));
     }, [priceHistory]);
@@ -960,6 +946,20 @@ export default function ChronosMarketPage() {
 
     // Selected Round View
     const [selectedRoundView, setSelectedRoundView] = useState<number>(currentRoundNumber);
+
+    // Compute displayed prices based on selected round (past vs live)
+    const selectedRoundData = allRounds.find(r => r.id === selectedRoundView);
+    const isViewingPastRound = selectedRoundData && selectedRoundData.status === 'ENDED';
+
+    // When viewing past round: use that round's strikePrice/endPrice
+    // When viewing live round: use current live prices
+    const displayedTargetPrice = isViewingPastRound && selectedRoundData
+        ? selectedRoundData.strikePrice
+        : effectivePriceToBeat;
+
+    const displayedFinalPrice = isViewingPastRound && selectedRoundData
+        ? selectedRoundData.endPrice
+        : effectiveCurrentPrice;
 
     return (
         <div className="min-h-screen relative overflow-hidden bg-black text-black font-sans selection:bg-[#F492B7] selection:text-black">
