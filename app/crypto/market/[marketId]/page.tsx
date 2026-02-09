@@ -835,6 +835,8 @@ export default function ChronosMarketPage() {
                     status: 'LIVE',
                     strikePrice: effectivePriceToBeat,
                     endPrice: effectiveCurrentPrice,
+                    startTime: roundStart / 1000,
+                    endTime: roundEnd / 1000,
                 });
             }
 
@@ -860,6 +862,8 @@ export default function ChronosMarketPage() {
                 status: 'LIVE',
                 strikePrice: effectivePriceToBeat,
                 endPrice: effectiveCurrentPrice,
+                startTime: roundStart / 1000,
+                endTime: roundEnd / 1000,
             }]);
         }
 
@@ -1080,17 +1084,26 @@ export default function ChronosMarketPage() {
         ? selectedRoundData.endPrice
         : effectiveCurrentPrice;
 
-    // Synthesize Chart Data for Past Rounds (or Mock Demo)
+    // Synthesize Chart Data for Past Rounds (or Mock Demo) - NOW FOR LIVE TOO
     const formattedChartData = useMemo(() => {
-        if (isViewingPastRound && selectedRoundData && selectedRoundData.startTime && selectedRoundData.endTime) {
+        if (selectedRoundData && selectedRoundData.startTime && selectedRoundData.endTime) {
             const start = selectedRoundData.startTime * 1000; // Convert to ms
             const end = selectedRoundData.endTime * 1000;     // Convert to ms
+
+            // For live rounds, only chart up to NOW
+            const now = Date.now();
+            const isLive = selectedRoundData.status === 'LIVE' && end > now;
+            const effectiveEnd = isLive ? now : end;
+
             const strike = selectedRoundData.strikePrice;
-            const finalP = selectedRoundData.endPrice;
+            const finalP = selectedRoundData.endPrice; // This is current price for LIVE
+
 
             const points = [];
             const steps = 40; // More points for smoother line
-            const duration = end - start;
+            const duration = effectiveEnd - start;
+            if (duration <= 0) return [{ time: start, price: strike }]; // Safety
+
             const priceDiff = finalP - strike;
 
             // Generate seeded random walk
@@ -1116,7 +1129,7 @@ export default function ChronosMarketPage() {
             return points;
         }
         return priceHistory.map(p => ({ time: p.time, price: p.price }));
-    }, [isViewingPastRound, selectedRoundData, priceHistory]);
+    }, [selectedRoundData, priceHistory]);
 
     return (
         <div className="min-h-screen relative overflow-hidden bg-black text-black font-sans selection:bg-[#F492B7] selection:text-black">
