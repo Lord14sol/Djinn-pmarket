@@ -257,6 +257,79 @@ const TradePanel = ({ isAbove, onTrade, currentPool, marketState }: { isAbove: b
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// MARKET FINISHED PANEL (For Past/Ended Rounds)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function MarketFinishedPanel({
+    round,
+    assetName,
+    assetIcon,
+}: {
+    round: RoundData;
+    assetName: string;
+    assetIcon: string;
+}) {
+    const isUp = round.result === 'UP';
+    const outcomeColor = isUp ? 'text-emerald-500' : 'text-rose-500';
+    const outcomeBg = isUp ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200';
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="bg-white rounded-[2rem] border-4 border-black p-6 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden"
+        >
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-6">
+                <img src={assetIcon} className="w-10 h-10" alt={assetName} />
+                <div>
+                    <h3 className="text-lg font-black uppercase tracking-tighter text-black">Market Finished</h3>
+                    <p className="text-xs text-gray-500 font-semibold">{round.time}</p>
+                </div>
+            </div>
+
+            {/* Outcome Badge */}
+            <div className={`rounded-2xl border-2 ${outcomeBg} p-6 flex flex-col items-center justify-center`}>
+                <div className={`w-16 h-16 rounded-full ${isUp ? 'bg-emerald-500' : 'bg-rose-500'} flex items-center justify-center mb-4`}>
+                    {isUp ? (
+                        <ArrowUp className="w-8 h-8 text-white" />
+                    ) : (
+                        <ArrowDown className="w-8 h-8 text-white" />
+                    )}
+                </div>
+                <h2 className={`text-3xl font-black ${outcomeColor}`}>
+                    Outcome: {round.result}
+                </h2>
+                <p className="text-sm text-gray-600 mt-2 text-center font-medium">
+                    {assetName} Up or Down - {round.time}
+                </p>
+            </div>
+
+            {/* Price Details */}
+            <div className="mt-6 grid grid-cols-2 gap-4">
+                <div className="bg-gray-50 rounded-xl p-4 border-2 border-gray-200">
+                    <p className="text-[10px] font-black uppercase text-gray-400 mb-1">Price to Beat</p>
+                    <p className="text-lg font-black text-black tabular-nums">
+                        ${round.strikePrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </p>
+                </div>
+                <div className="bg-gray-50 rounded-xl p-4 border-2 border-gray-200">
+                    <p className="text-[10px] font-black uppercase text-gray-400 mb-1">Final Price</p>
+                    <p className={`text-lg font-black tabular-nums ${outcomeColor}`}>
+                        ${round.endPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </p>
+                </div>
+            </div>
+
+            {/* Disclaimer */}
+            <p className="text-xs text-gray-500 text-center mt-6">
+                By trading, you agree to the <span className="underline cursor-pointer">Terms of Use</span>.
+            </p>
+        </motion.div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // PAST ROUNDS SELECTOR & DETAILS
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -732,7 +805,7 @@ export default function ChronosMarketPage() {
         }
     }, [endTime, liveRoundNumber, interval, getDuration, isAbove, effectivePriceToBeat, effectiveCurrentPrice]);
 
-    // Merge blockchain rounds with locally tracked completed rounds
+    // Merge blockchain rounds with locally tracked completed rounds + generate mock past rounds
     const allRounds = useMemo(() => {
         const merged = [...rounds];
         completedRounds.forEach(cr => {
@@ -740,9 +813,62 @@ export default function ChronosMarketPage() {
                 merged.push(cr);
             }
         });
+
+        // Generate mock past rounds for the last 5 intervals (for demo/display)
+        const duration = getDuration(interval);
+        const now = Date.now();
+        const currentSlot = Math.floor(now / duration);
+        const formatTime = (ts: number) => new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+        // Create 5 past rounds + 3 future slots
+        for (let i = 1; i <= 5; i++) {
+            const slotStart = (currentSlot - i) * duration;
+            const slotEnd = slotStart + duration;
+            const pastRoundId = liveRoundNumber - i;
+
+            // Skip if already exists
+            if (merged.some(r => r.id === pastRoundId)) continue;
+
+            // Generate realistic mock data
+            const basePrice = effectivePriceToBeat || 97000;
+            const variation = (Math.random() - 0.5) * basePrice * 0.005; // 0.5% variation
+            const mockStrikePrice = basePrice + (Math.random() - 0.5) * basePrice * 0.002;
+            const mockEndPrice = mockStrikePrice + variation;
+            const isUp = mockEndPrice >= mockStrikePrice;
+
+            merged.push({
+                id: pastRoundId,
+                time: `${formatTime(slotStart)} — ${formatTime(slotEnd)}`,
+                isWin: isUp,
+                result: isUp ? 'UP' : 'DOWN',
+                status: 'ENDED',
+                strikePrice: mockStrikePrice,
+                endPrice: mockEndPrice,
+            });
+        }
+
+        // Add future time slots (not tradable yet)
+        for (let i = 1; i <= 2; i++) {
+            const slotStart = (currentSlot + i) * duration;
+            const slotEnd = slotStart + duration;
+            const futureRoundId = liveRoundNumber + i;
+
+            if (!merged.some(r => r.id === futureRoundId)) {
+                merged.push({
+                    id: futureRoundId,
+                    time: `${formatTime(slotStart)} — ${formatTime(slotEnd)}`,
+                    isWin: false,
+                    result: 'FUTURE',
+                    status: 'LIVE', // Mark as "upcoming"
+                    strikePrice: 0,
+                    endPrice: 0,
+                });
+            }
+        }
+
         merged.sort((a, b) => b.id - a.id);
         return merged;
-    }, [rounds, completedRounds]);
+    }, [rounds, completedRounds, getDuration, interval, liveRoundNumber, effectivePriceToBeat]);
 
     const formattedChartData = useMemo(() => {
         return priceHistory.map(p => ({ time: p.time, price: p.price }));
@@ -1089,9 +1215,25 @@ export default function ChronosMarketPage() {
 
                     </div>
 
-                    {/* RIGHT COLUMN - Trade Panel */}
+                    {/* RIGHT COLUMN - Trade Panel or Market Finished */}
                     <div className="lg:col-span-4 space-y-8">
-                        <TradePanel isAbove={isAbove} onTrade={handleAddTrade} currentPool={totalPool} marketState={currentMarketState} assetSymbol={asset.symbol} />
+                        {(() => {
+                            // Find the selected round data
+                            const selectedRound = allRounds.find(r => r.id === selectedRoundView);
+                            const isViewingPastRound = selectedRound && selectedRound.status === 'ENDED';
+
+                            if (isViewingPastRound && selectedRound) {
+                                return (
+                                    <MarketFinishedPanel
+                                        round={selectedRound}
+                                        assetName={asset.name}
+                                        assetIcon={asset.icon}
+                                    />
+                                );
+                            }
+
+                            return <TradePanel isAbove={isAbove} onTrade={handleAddTrade} currentPool={totalPool} marketState={currentMarketState} assetSymbol={asset.symbol} />;
+                        })()}
 
                         {/* Rules Card */}
                         <div className="bg-black text-white rounded-[2rem] border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(255,255,255,0.1)]">
