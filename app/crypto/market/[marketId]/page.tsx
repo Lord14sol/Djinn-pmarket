@@ -57,9 +57,9 @@ const Galaxy = dynamic(() => import('@/components/Galaxy'), { ssr: false });
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const ASSETS = {
-    btc: { name: 'Bitcoin', symbol: 'BTC', icon: 'https://cryptologos.cc/logos/bitcoin-btc-logo.png', color: '#F7931A' },
-    eth: { name: 'Ethereum', symbol: 'ETH', icon: 'https://cryptologos.cc/logos/ethereum-eth-logo.png', color: '#627EEA' },
-    sol: { name: 'Solana', symbol: 'SOL', icon: 'https://cryptologos.cc/logos/solana-sol-logo.png', color: '#000000' },
+    btc: { name: 'Bitcoin', symbol: 'BTC', icon: 'https://cryptologos.cc/logos/bitcoin-btc-logo.png', color: '#F7931A', defaultPrice: 97000 },
+    eth: { name: 'Ethereum', symbol: 'ETH', icon: 'https://cryptologos.cc/logos/ethereum-eth-logo.png', color: '#627EEA', defaultPrice: 2700 },
+    sol: { name: 'Solana', symbol: 'SOL', icon: 'https://cryptologos.cc/logos/solana-sol-logo.png', color: '#000000', defaultPrice: 195 },
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -742,8 +742,8 @@ export default function ChronosMarketPage() {
         }
     }, [interval, currentPrice, getDuration, priceToBeat, asset.symbol]);
 
-    const effectivePriceToBeat = priceToBeat || currentPrice || 0;
-    const effectiveCurrentPrice = currentPrice || priceToBeat || 0;
+    const effectivePriceToBeat = priceToBeat || currentPrice || asset.defaultPrice || 0;
+    const effectiveCurrentPrice = currentPrice || asset.defaultPrice || priceToBeat || 0;
     const priceDiff = effectiveCurrentPrice - effectivePriceToBeat;
     const isAbove = priceDiff >= 0;
     const chartColor = isAbove ? '#10B981' : '#F43F5E';
@@ -953,9 +953,7 @@ export default function ChronosMarketPage() {
             const seededRandom3 = (((seed * 3) * 9301 + 49297) % 233280) / 233280;
 
             // Generate deterministic mock data - Dynamic Base Price
-            let basePrice = 97000; // Default BTC
-            if (asset.symbol === 'ETH') basePrice = 2700;
-            if (asset.symbol === 'SOL') basePrice = 195;
+            let basePrice = asset.defaultPrice || 97000;
 
             const mockStrikePrice = basePrice + (seededRandom1 - 0.5) * basePrice * 0.003;
             const priceChange = (seededRandom2 - 0.5) * basePrice * 0.006;
