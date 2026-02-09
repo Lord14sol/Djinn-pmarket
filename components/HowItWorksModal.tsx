@@ -244,7 +244,7 @@ function TabContent({ id, setActiveTab }: { id: TabKey, setActiveTab: (t: TabKey
                         </div>
 
                         {/* Tagline - Pulled way up to sit 'between/below' center */}
-                        <p className="text-xl md:text-3xl font-black text-black tracking-widest uppercase bg-[#FFD600] px-8 py-3 -rotate-1 border-3 border-black shadow-[6px_6px_0px_0px_black] mx-auto -mt-36 relative z-20">
+                        <p className="text-xl md:text-3xl font-black text-black tracking-widest uppercase bg-[#FFD600] px-8 py-3 -rotate-1 border-3 border-black shadow-[6px_6px_0px_0px_black] mx-auto -mt-28 relative z-20">
                             The Future is Yours
                         </p>
                     </motion.div>
