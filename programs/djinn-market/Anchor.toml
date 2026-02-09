@@ -9,10 +9,10 @@ anchor_version = "0.28.0"
 solana_version = "1.18.20"
 
 [programs.localnet]
-djinn_market = "Fdbhx4cN5mPWzXneDm9XjaRgjYVjyXtpsJLGeQLPr7hg"
+djinn_market = "76HyPe3NMY39BXYaYPTq3QUmvxriXNhfEBZBXBxwxghB"
 
 [programs.devnet]
-djinn_market = "Fdbhx4cN5mPWzXneDm9XjaRgjYVjyXtpsJLGeQLPr7hg"
+djinn_market = "76HyPe3NMY39BXYaYPTq3QUmvxriXNhfEBZBXBxwxghB"
 
 [registry]
 url = "https://api.apr.dev"

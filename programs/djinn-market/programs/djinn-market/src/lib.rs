@@ -4,7 +4,7 @@ use anchor_lang::solana_program::hash;
 // Chronos Market Module - Automated Time-Based Crypto Markets
 pub mod chronos_market;
 
-declare_id!("Fdbhx4cN5mPWzXneDm9XjaRgjYVjyXtpsJLGeQLPr7hg");
+declare_id!("76HyPe3NMY39BXYaYPTq3QUmvxriXNhfEBZBXBxwxghB");
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // DJINN CURVE V4 AGGRESSIVE: "EARLY BIRD REWARDS"

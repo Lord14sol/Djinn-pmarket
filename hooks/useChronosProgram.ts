@@ -2,97 +2,10 @@ import { useAnchorWallet, useConnection } from "@solana/wallet-adapter-react";
 import { AnchorProvider, Program, Idl, BN, web3 } from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram } from "@solana/web3.js";
 import { useMemo, useCallback } from "react";
+import idl from "@/lib/idl/djinn_market.json";
 
-// Minimal IDL for frontend interaction
-const IDL: Idl = {
-    "version": "0.1.0",
-    "name": "djinn_market",
-    "instructions": [
-        {
-            "name": "buyChronosShares",
-            "accounts": [
-                { "name": "chronosMarket", "isMut": true, "isSigner": false },
-                { "name": "chronosVault", "isMut": true, "isSigner": false },
-                { "name": "userPosition", "isMut": true, "isSigner": false },
-                { "name": "user", "isMut": true, "isSigner": true },
-                { "name": "protocolTreasury", "isMut": true, "isSigner": false },
-                { "name": "systemProgram", "isMut": false, "isSigner": false }
-            ],
-            "args": [
-                { "name": "outcomeIndex", "type": "u8" },
-                { "name": "solIn", "type": "u64" },
-                { "name": "minSharesOut", "type": "u64" }
-            ]
-        },
-        {
-            "name": "claimChronosWinnings",
-            "accounts": [
-                { "name": "chronosMarket", "isMut": true, "isSigner": false },
-                { "name": "chronosVault", "isMut": true, "isSigner": false },
-                { "name": "userPosition", "isMut": true, "isSigner": false },
-                { "name": "user", "isMut": true, "isSigner": true },
-                { "name": "systemProgram", "isMut": false, "isSigner": false }
-            ],
-            "args": [
-                { "name": "outcomeIndex", "type": "u8" }
-            ]
-        }
-    ],
-    "accounts": [
-        {
-            "name": "ChronosMarket",
-            "type": {
-                "kind": "struct",
-                "fields": [
-                    { "name": "asset", "type": "u8" }, // Enum
-                    { "name": "interval", "type": "u8" }, // Enum
-                    { "name": "roundNumber", "type": "u64" },
-                    { "name": "targetPrice", "type": "u64" },
-                    { "name": "finalPrice", "type": { "option": "u64" } },
-                    { "name": "pythPriceFeed", "type": "publicKey" },
-                    { "name": "startTime", "type": "i64" },
-                    { "name": "endTime", "type": "i64" },
-                    { "name": "resolutionTime", "type": { "option": "i64" } },
-                    { "name": "status", "type": { "defined": "ChronosStatus" } },
-                    { "name": "winningOutcome", "type": { "option": "u8" } },
-                    { "name": "outcomeSupplies", "type": { "array": ["u128", 2] } },
-                    { "name": "vaultBalance", "type": "u128" },
-                    { "name": "totalPotAtResolution", "type": "u64" },
-                    { "name": "bump", "type": "u8" },
-                    { "name": "vaultBump", "type": "u8" },
-                    { "name": "keeper", "type": "publicKey" }
-                ]
-            }
-        },
-        {
-            "name": "ChronosPosition",
-            "type": {
-                "kind": "struct",
-                "fields": [
-                    { "name": "owner", "type": "publicKey" },
-                    { "name": "market", "type": "publicKey" },
-                    { "name": "outcome", "type": "u8" },
-                    { "name": "shares", "type": "u128" },
-                    { "name": "claimed", "type": "bool" }
-                ]
-            }
-        }
-    ],
-    "types": [
-        {
-            "name": "ChronosStatus",
-            "type": {
-                "kind": "enum",
-                "variants": [
-                    { "name": "Pending" },
-                    { "name": "Active" },
-                    { "name": "Locked" },
-                    { "name": "Resolved" }
-                ]
-            }
-        }
-    ]
-};
+// Load IDL from JSON
+const IDL: Idl = idl as Idl;
 
 const PROGRAM_ID = new PublicKey("76HyPe3NMY39BXYaYPTq3QUmvxriXNhfEBZBXBxwxghB");
 const TREASURY = new PublicKey("G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma");

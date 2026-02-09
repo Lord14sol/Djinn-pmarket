@@ -238,9 +238,309 @@
           "type": "u8"
         }
       ]
+    },
+    {
+      "name": "initializeChronosMarket",
+      "docs": [
+        "Initialize a new Chronos market (called by keeper bot)"
+      ],
+      "accounts": [
+        {
+          "name": "chronosMarket",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "chronosVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "pythPriceFeed",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "keeper",
+          "isMut": true,
+          "isSigner": true,
+          "docs": [
+            "Keeper bot that creates markets"
+          ]
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "asset",
+          "type": "u8"
+        },
+        {
+          "name": "interval",
+          "type": "u8"
+        },
+        {
+          "name": "roundNumber",
+          "type": "u64"
+        },
+        {
+          "name": "targetPrice",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "buyChronosShares",
+      "docs": [
+        "Buy shares in a Chronos market"
+      ],
+      "accounts": [
+        {
+          "name": "chronosMarket",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "chronosVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "userPosition",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "user",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "protocolTreasury",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "outcomeIndex",
+          "type": "u8"
+        },
+        {
+          "name": "solIn",
+          "type": "u64"
+        },
+        {
+          "name": "minSharesOut",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "resolveChronosMarket",
+      "docs": [
+        "Resolve a Chronos market using Pyth price"
+      ],
+      "accounts": [
+        {
+          "name": "chronosMarket",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "chronosVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "pythPriceFeed",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "protocolTreasury",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "claimChronosWinnings",
+      "docs": [
+        "Claim winnings from Chronos market"
+      ],
+      "accounts": [
+        {
+          "name": "chronosMarket",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "chronosVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "userPosition",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "user",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "outcomeIndex",
+          "type": "u8"
+        }
+      ]
     }
   ],
   "accounts": [
+    {
+      "name": "ChronosMarket",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "asset",
+            "type": {
+              "defined": "AssetType"
+            }
+          },
+          {
+            "name": "interval",
+            "type": {
+              "defined": "MarketInterval"
+            }
+          },
+          {
+            "name": "roundNumber",
+            "type": "u64"
+          },
+          {
+            "name": "targetPrice",
+            "type": "u64"
+          },
+          {
+            "name": "finalPrice",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "pythPriceFeed",
+            "type": "publicKey"
+          },
+          {
+            "name": "startTime",
+            "type": "i64"
+          },
+          {
+            "name": "endTime",
+            "type": "i64"
+          },
+          {
+            "name": "resolutionTime",
+            "type": {
+              "option": "i64"
+            }
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": "ChronosStatus"
+            }
+          },
+          {
+            "name": "winningOutcome",
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "outcomeSupplies",
+            "type": {
+              "array": [
+                "u128",
+                2
+              ]
+            }
+          },
+          {
+            "name": "vaultBalance",
+            "type": "u128"
+          },
+          {
+            "name": "totalPotAtResolution",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "vaultBump",
+            "type": "u8"
+          },
+          {
+            "name": "keeper",
+            "type": "publicKey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ChronosPosition",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "publicKey"
+          },
+          {
+            "name": "market",
+            "type": "publicKey"
+          },
+          {
+            "name": "outcome",
+            "type": "u8"
+          },
+          {
+            "name": "shares",
+            "type": "u128"
+          },
+          {
+            "name": "claimed",
+            "type": "bool"
+          }
+        ]
+      }
+    },
     {
       "name": "Market",
       "type": {
@@ -333,6 +633,57 @@
   ],
   "types": [
     {
+      "name": "AssetType",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "BTC"
+          },
+          {
+            "name": "ETH"
+          },
+          {
+            "name": "SOL"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ChronosStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Pending"
+          },
+          {
+            "name": "Active"
+          },
+          {
+            "name": "Locked"
+          },
+          {
+            "name": "Resolved"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketInterval",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "FifteenMinutes"
+          },
+          {
+            "name": "OneHour"
+          }
+        ]
+      }
+    },
+    {
       "name": "MarketStatus",
       "type": {
         "kind": "enum",
@@ -345,13 +696,57 @@
           }
         ]
       }
+    },
+    {
+      "name": "DjinnError",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "MarketNotActive"
+          },
+          {
+            "name": "MarketNotResolved"
+          },
+          {
+            "name": "MarketNotExpired"
+          },
+          {
+            "name": "SlippageExceeded"
+          },
+          {
+            "name": "InsufficientShares"
+          },
+          {
+            "name": "AlreadyClaimed"
+          },
+          {
+            "name": "NoShares"
+          },
+          {
+            "name": "NotWinner"
+          },
+          {
+            "name": "InvalidOutcome"
+          },
+          {
+            "name": "InvalidOutcomeCount"
+          },
+          {
+            "name": "MathError"
+          },
+          {
+            "name": "MarketExpired"
+          }
+        ]
+      }
     }
   ],
   "errors": [
     {
       "code": 6000,
       "name": "MarketNotActive",
-      "msg": "Market is not active"
+      "msg": "Market is not active for trading"
     },
     {
       "code": 6001,
@@ -360,56 +755,81 @@
     },
     {
       "code": 6002,
-      "name": "MarketNotExpired",
-      "msg": "Market has not expired yet"
+      "name": "MarketLocked",
+      "msg": "Market is in lock period - no new trades allowed"
     },
     {
       "code": 6003,
+      "name": "MarketNotEnded",
+      "msg": "Market has not ended yet"
+    },
+    {
+      "code": 6004,
+      "name": "AlreadyResolved",
+      "msg": "Market is already resolved"
+    },
+    {
+      "code": 6005,
+      "name": "InvalidPythPrice",
+      "msg": "Invalid Pyth price data"
+    },
+    {
+      "code": 6006,
+      "name": "StalePythPrice",
+      "msg": "Pyth price is stale"
+    },
+    {
+      "code": 6007,
+      "name": "InvalidOutcome",
+      "msg": "Invalid outcome (must be 0 or 1)"
+    },
+    {
+      "code": 6008,
       "name": "SlippageExceeded",
       "msg": "Slippage exceeded"
     },
     {
-      "code": 6004,
+      "code": 6009,
       "name": "InsufficientShares",
       "msg": "Insufficient shares"
     },
     {
-      "code": 6005,
+      "code": 6010,
       "name": "AlreadyClaimed",
-      "msg": "Already claimed"
+      "msg": "Already claimed winnings"
     },
     {
-      "code": 6006,
+      "code": 6011,
       "name": "NoShares",
       "msg": "No shares to claim"
     },
     {
-      "code": 6007,
+      "code": 6012,
       "name": "NotWinner",
-      "msg": "Not a winner"
+      "msg": "Not a winning position"
     },
     {
-      "code": 6008,
-      "name": "InvalidOutcome",
-      "msg": "Invalid outcome"
+      "code": 6013,
+      "name": "UnauthorizedKeeper",
+      "msg": "Unauthorized keeper"
     },
     {
-      "code": 6009,
-      "name": "InvalidOutcomeCount",
-      "msg": "Invalid outcome count (must be 2-6)"
+      "code": 6014,
+      "name": "InvalidAsset",
+      "msg": "Invalid asset type"
     },
     {
-      "code": 6010,
-      "name": "MathError",
-      "msg": "Math error"
+      "code": 6015,
+      "name": "InvalidInterval",
+      "msg": "Invalid interval type"
     },
     {
-      "code": 6011,
-      "name": "MarketExpired",
-      "msg": "Market has expired"
+      "code": 6016,
+      "name": "RoundMismatch",
+      "msg": "Round number mismatch"
     }
   ],
   "metadata": {
-    "address": "Fdbhx4cN5mPWzXneDm9XjaRgjYVjyXtpsJLGeQLPr7hg"
+    "address": "76HyPe3NMY39BXYaYPTq3QUmvxriXNhfEBZBXBxwxghB"
   }
 }
