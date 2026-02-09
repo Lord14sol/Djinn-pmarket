@@ -12,6 +12,8 @@ import {
     Clock,
     TrendingUp,
     TrendingDown,
+    ArrowUp,
+    ArrowDown,
     Wallet,
     Radio,
     Share2,
@@ -451,25 +453,30 @@ function RoundSelector({
                 {/* Divider */}
                 <div className="h-6 w-px bg-black/10" />
 
-                {/* Time Slot Buttons (Recent Rounds) */}
-                {rounds.slice(0, 5).map((round) => {
-                    const isActive = selectedRoundId === round.id;
-                    const isLive = round.status === 'LIVE';
+                {/* Time Slot Buttons (Chronological: past ← live → future) */}
+                {[...rounds]
+                    .filter(r => r.result !== 'FUTURE') // Exclude future slots from main bar for now
+                    .sort((a, b) => a.id - b.id) // Oldest on left, newest on right
+                    .slice(-5) // Show last 5 (most recent)
+                    .map((round) => {
+                        const isSelected = selectedRoundId === round.id;
+                        const isLiveRound = round.status === 'LIVE' && round.result === 'LIVE';
 
-                    return (
-                        <button
-                            key={round.id}
-                            onClick={() => onSelect(round.id)}
-                            className={`flex items-center gap-1.5 px-4 py-2.5 rounded-full text-xs font-black uppercase tracking-wider transition-all border-2 ${isActive
-                                ? 'bg-black text-white border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,0.2)]'
-                                : 'bg-white text-black border-black/20 hover:border-black'
-                                }`}
-                        >
-                            {isLive && <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />}
-                            {formatSlotLabel(round)}
-                        </button>
-                    );
-                })}
+                        return (
+                            <button
+                                key={round.id}
+                                onClick={() => onSelect(round.id)}
+                                className={`flex items-center gap-1.5 px-4 py-2.5 rounded-full text-xs font-black uppercase tracking-wider transition-all border-2 ${isSelected
+                                    ? 'bg-black text-white border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,0.2)]'
+                                    : 'bg-white text-black border-black/20 hover:border-black'
+                                    }`}
+                            >
+                                {/* Red dot ONLY on actual live round */}
+                                {isLiveRound && <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />}
+                                {formatSlotLabel(round)}
+                            </button>
+                        );
+                    })}
 
                 {/* More Dropdown (if more than 5 rounds) */}
                 {rounds.length > 5 && (
@@ -870,6 +877,20 @@ export default function ChronosMarketPage() {
         return merged;
     }, [rounds, completedRounds, getDuration, interval, liveRoundNumber, effectivePriceToBeat]);
 
+    // Compute displayed prices based on selected round (past vs live)
+    const selectedRoundData = allRounds.find(r => r.id === selectedRoundView);
+    const isViewingPastRound = selectedRoundData && selectedRoundData.status === 'ENDED';
+
+    // When viewing past round: use that round's strikePrice/endPrice
+    // When viewing live round: use current live prices
+    const displayedTargetPrice = isViewingPastRound && selectedRoundData
+        ? selectedRoundData.strikePrice
+        : effectivePriceToBeat;
+
+    const displayedFinalPrice = isViewingPastRound && selectedRoundData
+        ? selectedRoundData.endPrice
+        : effectiveCurrentPrice;
+
     const formattedChartData = useMemo(() => {
         return priceHistory.map(p => ({ time: p.time, price: p.price }));
     }, [priceHistory]);
@@ -1043,8 +1064,8 @@ export default function ChronosMarketPage() {
                                         />
                                         <YAxis
                                             domain={[
-                                                (dataMin: number) => effectivePriceToBeat > 0 ? Math.min(dataMin, effectivePriceToBeat * 0.999) : 'auto',
-                                                (dataMax: number) => effectivePriceToBeat > 0 ? Math.max(dataMax, effectivePriceToBeat * 1.001) : 'auto'
+                                                (dataMin: number) => displayedTargetPrice > 0 ? Math.min(dataMin, displayedTargetPrice * 0.999) : 'auto',
+                                                (dataMax: number) => displayedTargetPrice > 0 ? Math.max(dataMax, displayedTargetPrice * 1.001) : 'auto'
                                             ]}
                                             orientation="right"
                                             tickCount={10}
@@ -1063,12 +1084,12 @@ export default function ChronosMarketPage() {
                                             strokeDasharray="3 3"
                                         />
                                         <ReferenceLine
-                                            y={effectivePriceToBeat}
-                                            stroke="#000"
-                                            strokeDasharray="5 5"
-                                            strokeWidth={3}
+                                            y={displayedTargetPrice}
+                                            stroke="#F7931A"
+                                            strokeDasharray="4 4"
+                                            strokeWidth={2}
                                             label={{
-                                                value: `TARGET $${effectivePriceToBeat.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+                                                value: `TARGET $${displayedTargetPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
                                                 position: 'right',
                                                 fill: '#000',
                                                 fontWeight: 900,
