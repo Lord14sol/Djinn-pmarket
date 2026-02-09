@@ -1085,15 +1085,15 @@ export default function ChronosMarketPage() {
                                         />
                                         <ReferenceLine
                                             y={displayedTargetPrice}
-                                            stroke="#F7931A"
-                                            strokeDasharray="4 4"
+                                            stroke="#000000"
                                             strokeWidth={2}
+                                            strokeDasharray="5 5"
                                             label={{
-                                                value: `TARGET $${displayedTargetPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+                                                value: `$${displayedTargetPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
                                                 position: 'right',
                                                 fill: '#000',
                                                 fontWeight: 900,
-                                                fontSize: 11,
+                                                fontSize: 12,
                                                 dx: 5
                                             }}
                                         />

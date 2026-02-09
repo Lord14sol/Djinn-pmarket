@@ -94,7 +94,7 @@ const IDL: Idl = {
     ]
 };
 
-const PROGRAM_ID = new PublicKey("Fdbhx4cN5mPWzXneDm9XjaRgjYVjyXtpsJLGeQLPr7hg");
+const PROGRAM_ID = new PublicKey("76HyPe3NMY39BXYaYPTq3QUmvxriXNhfEBZBXBxwxghB");
 const TREASURY = new PublicKey("G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma");
 
 export function useChronosProgram() {
