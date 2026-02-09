@@ -679,6 +679,12 @@
           },
           {
             "name": "OneHour"
+          },
+          {
+            "name": "Daily"
+          },
+          {
+            "name": "Weekly"
           }
         ]
       }

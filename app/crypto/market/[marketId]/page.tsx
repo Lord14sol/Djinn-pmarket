@@ -1066,7 +1066,10 @@ export default function ChronosMarketPage() {
         }
 
         try {
-            const intervalVal = interval === '1h' ? 1 : 0;
+            const intervalVal = (interval === '1h' || interval === '1H') ? 1
+                : (interval === '24h' || interval === '24H' || interval === '1d' || interval === '1D') ? 2
+                    : (interval === '1w' || interval === '1W') ? 3
+                        : 0;
             const marketKey = deriveChronosMarketKey(asset.symbol, currentRoundNumber, intervalVal);
 
             // 0=UP/YES, 1=DOWN/NO
@@ -1391,7 +1394,10 @@ export default function ChronosMarketPage() {
                                     <>
                                         {/* MY HOLDINGS (Real Blockchain Data) */}
                                         {(() => {
-                                            const intervalVal = interval === '1h' ? 1 : 0;
+                                            const intervalVal = (interval === '1h' || interval === '1H') ? 1
+                                                : (interval === '24h' || interval === '24H' || interval === '1d' || interval === '1D') ? 2
+                                                    : (interval === '1w' || interval === '1W') ? 3
+                                                        : 0;
                                             try {
                                                 const currentMarketKey = deriveChronosMarketKey(asset.symbol, currentRoundNumber, intervalVal);
                                                 const myPos = realPositions.filter(p => p.account.market.toString() === currentMarketKey.toString());
@@ -1446,7 +1452,10 @@ export default function ChronosMarketPage() {
                                         assetIcon={asset.icon}
                                         userPosition={(() => {
                                             // 1. Try to find REAL position from blockchain state
-                                            const intervalEnum = interval === '1h' ? 1 : interval === '4h' ? 2 : 0;
+                                            const intervalEnum = (interval === '1h' || interval === '1H') ? 1
+                                                : (interval === '24h' || interval === '24H' || interval === '1d' || interval === '1D') ? 2
+                                                    : (interval === '1w' || interval === '1W') ? 3
+                                                        : 0;
                                             // Ensure we have valid data before deriving key
                                             if (!asset.symbol || selectedRound.id === undefined) return null;
 

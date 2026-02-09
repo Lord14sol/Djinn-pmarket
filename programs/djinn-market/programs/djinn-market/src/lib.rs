@@ -607,6 +607,8 @@ pub mod djinn_market {
         let interval_type = match interval {
             0 => MarketInterval::FifteenMinutes,
             1 => MarketInterval::OneHour,
+            2 => MarketInterval::Daily,
+            3 => MarketInterval::Weekly,
             _ => return Err(ChronosError::InvalidInterval.into()),
         };
         

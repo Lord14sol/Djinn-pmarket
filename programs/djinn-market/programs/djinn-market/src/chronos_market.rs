@@ -58,13 +58,17 @@ pub enum ChronosStatus {
 pub enum MarketInterval {
     FifteenMinutes = 0,  // 15 min markets (high frequency)
     OneHour = 1,         // 1 hour markets (standard)
+    Daily = 2,           // 24 hour markets (strategic)
+    Weekly = 3,          // 7 day markets (jackpot)
 }
 
 impl MarketInterval {
     pub fn duration_seconds(&self) -> i64 {
         match self {
-            MarketInterval::FifteenMinutes => 15 * 60,  // 900 seconds
-            MarketInterval::OneHour => 60 * 60,         // 3600 seconds
+            MarketInterval::FifteenMinutes => 15 * 60,      // 900 secons
+            MarketInterval::OneHour => 60 * 60,             // 3600 seconds
+            MarketInterval::Daily => 24 * 60 * 60,          // 86,400 seconds
+            MarketInterval::Weekly => 7 * 24 * 60 * 60,     // 604,800 seconds
         }
     }
     

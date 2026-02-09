@@ -20,7 +20,7 @@ const ASSETS = {
 };
 
 type AssetKey = keyof typeof ASSETS;
-type IntervalKey = '15M' | '1H' | '4H' | '24H' | '1W';
+type IntervalKey = '15M' | '1H' | '24H' | '1W';
 
 interface ChronosMarket {
     id: string;
@@ -39,7 +39,7 @@ interface ChronosMarket {
 async function fetchCandleOpen(symbol: string, interval: IntervalKey, startTime: number): Promise<number> {
     try {
         // Map Interval to Binance Format
-        const map: Record<string, string> = { '15M': '15m', '1H': '1h', '4H': '4h', '24H': '1d', '1W': '1w' };
+        const map: Record<string, string> = { '15M': '15m', '1H': '1h', '24H': '1d', '1W': '1w' };
         const bInterval = map[interval];
         const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}USDT&interval=${bInterval}&startTime=${startTime}&limit=1`);
         const data = await res.json();
@@ -239,7 +239,6 @@ export default function CryptoMajorsPage() {
             assets.forEach(asset => {
                 generatedPromises.push(createMarketPromise(asset, '15M', 15 * 60 * 1000, 15 * 60 * 1000)); // 15m
                 generatedPromises.push(createMarketPromise(asset, '1H', 60 * 60 * 1000, 60 * 60 * 1000));   // 1h
-                generatedPromises.push(createMarketPromise(asset, '4H', 4 * 60 * 60 * 1000, 4 * 60 * 60 * 1000)); // 4h
                 generatedPromises.push(createMarketPromise(asset, '24H', 24 * 60 * 60 * 1000, 24 * 60 * 60 * 1000)); // Daily
                 generatedPromises.push(createMarketPromise(asset, '1W', 7 * 24 * 60 * 60 * 1000, 7 * 24 * 60 * 60 * 1000)); // Weekly
             });
@@ -264,7 +263,7 @@ export default function CryptoMajorsPage() {
         });
     }, [markets, selectedInterval, selectedAsset]);
 
-    const intervals: (IntervalKey | 'ALL')[] = ['ALL', '15M', '1H', '4H', '24H', '1W'];
+    const intervals: (IntervalKey | 'ALL')[] = ['ALL', '15M', '1H', '24H', '1W'];
     const assetsList: (AssetKey | 'ALL')[] = ['ALL', 'BTC', 'ETH', 'SOL'];
 
     return (
