@@ -30,36 +30,31 @@ export default function TwitterWarningModal({ isOpen, onClose, onAccept }: Twitt
                 </div>
 
                 {/* Rules */}
-                <div className="px-6 pb-4 space-y-3">
+                <div className="px-6 pb-4 space-y-4">
                     <RuleItem
-                        number="1"
-                        title="literal search"
-                        description={`the oracle searches exact words. "Cripto" ≠ "Crypto". case-insensitive.`}
+                        emoji="🔍"
+                        title="Literal Search"
+                        description="The oracle looks for the EXACT phrase. 'Crypto' is not 'Cripto'. Make sure your keyword is precise."
                     />
                     <RuleItem
-                        number="2"
-                        title="no retweets"
-                        description="RTs do not count as a fulfilled prediction. only original tweets."
+                        emoji="🔄"
+                        title="Data Source"
+                        description="We use the official endpoint. Only original tweets from the target user count. Retweets are ignored."
                     />
                     <RuleItem
-                        number="3"
-                        title="deleted tweets"
-                        description="if the tweet is deleted before the oracle indexes it (~15 min), it does NOT count. once indexed, the result is FINAL."
+                        emoji="👻"
+                        title="Anti-Ghosting Protocol"
+                        description="If the source is deleted BEFORE the resolution condition is met, the market resolves to NO. If deleted AFTER resolution, the result stands."
                     />
                     <RuleItem
-                        number="4"
-                        title="7-day maximum"
-                        description="twitter markets are limited to 7 days. the API only searches the last 7 days of tweets."
+                        emoji="⏳"
+                        title="7-Day Limit"
+                        description="Twitter markets obey the API's memory horizon. You can only bet on events happening within the next 7 days."
                     />
                     <RuleItem
-                        number="5"
-                        title="early resolution"
-                        description="if the condition is met before expiry, the market resolves YES immediately. no more bets after resolution."
-                    />
-                    <RuleItem
-                        number="6"
-                        title="source of truth"
-                        description="resolution is based strictly on Twitter/X API availability via Cerberus oracle."
+                        emoji="⚡️"
+                        title="Instant Resolution"
+                        description="The moment the condition is met (Likes/Keyword), the market resolves YES immediately. No waiting for the deadline."
                     />
                 </div>
 
@@ -83,15 +78,15 @@ export default function TwitterWarningModal({ isOpen, onClose, onAccept }: Twitt
     );
 }
 
-function RuleItem({ number, title, description }: { number: string; title: string; description: string }) {
+function RuleItem({ emoji, title, description }: { emoji: string; title: string; description: string }) {
     return (
-        <div className="flex gap-3 items-start">
-            <div className="w-7 h-7 bg-black rounded-lg flex items-center justify-center shrink-0 mt-0.5">
-                <span className="text-[#FFD600] font-black text-xs">{number}</span>
+        <div className="flex gap-4 items-start group">
+            <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center shrink-0 mt-0.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.2)] group-hover:scale-110 transition-transform">
+                <span className="text-xl">{emoji}</span>
             </div>
             <div>
-                <p className="font-black text-sm text-black lowercase leading-tight">{title}</p>
-                <p className="text-xs text-black/70 font-medium leading-snug">{description}</p>
+                <p className="font-black text-base text-black uppercase tracking-tight leading-tight mb-1">{title}</p>
+                <p className="text-sm text-black/80 font-medium leading-snug">{description}</p>
             </div>
         </div>
     );

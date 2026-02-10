@@ -536,11 +536,22 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                                                 if (selectedCategory !== 'Twitter') {
                                                     setSelectedCategory('Twitter');
                                                 }
-                                                // Extract @username from URL
-                                                const match = url.match(/(?:twitter\.com|x\.com)\/([^\/\?#]+)/);
-                                                if (match && match[1] !== 'search' && match[1] !== 'hashtag' && match[1] !== 'home') {
-                                                    setTargetUsername(match[1]);
+
+                                                // 1. Extract Username
+                                                const userMatch = url.match(/(?:twitter\.com|x\.com)\/([^\/\?#]+)/);
+                                                if (userMatch && userMatch[1] && !['search', 'hashtag', 'home', 'explore'].includes(userMatch[1])) {
+                                                    setTargetUsername(userMatch[1]);
                                                 }
+
+                                                // 2. Extract Tweet ID (if present)
+                                                // Format: .../status/123456789...
+                                                const idMatch = url.match(/\/status\/(\d+)/);
+                                                if (idMatch && idMatch[1]) {
+                                                    setTargetTweetId(idMatch[1]);
+                                                    // If URL has an ID, user likely wants a metric threshold on that specific tweet
+                                                    // But we default to keyword. Let's keep default as keyword unless they switch.
+                                                }
+
                                                 // Show warning if not accepted yet
                                                 if (!twitterWarningAccepted) {
                                                     setShowTwitterWarning(true);
@@ -564,22 +575,20 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                                             <button
                                                 type="button"
                                                 onClick={() => setTwitterMarketType('keyword')}
-                                                className={`flex-1 py-2.5 border-2 border-black rounded-xl font-black text-xs uppercase transition-all ${
-                                                    twitterMarketType === 'keyword'
-                                                        ? 'bg-[#FFD600] text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] -translate-y-0.5'
-                                                        : 'bg-white text-gray-400 hover:text-black'
-                                                }`}
+                                                className={`flex-1 py-2.5 border-2 border-black rounded-xl font-black text-xs uppercase transition-all ${twitterMarketType === 'keyword'
+                                                    ? 'bg-[#FFD600] text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] -translate-y-0.5'
+                                                    : 'bg-white text-gray-400 hover:text-black'
+                                                    }`}
                                             >
                                                 keyword mention
                                             </button>
                                             <button
                                                 type="button"
                                                 onClick={() => setTwitterMarketType('metric')}
-                                                className={`flex-1 py-2.5 border-2 border-black rounded-xl font-black text-xs uppercase transition-all ${
-                                                    twitterMarketType === 'metric'
-                                                        ? 'bg-[#FFD600] text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] -translate-y-0.5'
-                                                        : 'bg-white text-gray-400 hover:text-black'
-                                                }`}
+                                                className={`flex-1 py-2.5 border-2 border-black rounded-xl font-black text-xs uppercase transition-all ${twitterMarketType === 'metric'
+                                                    ? 'bg-[#FFD600] text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] -translate-y-0.5'
+                                                    : 'bg-white text-gray-400 hover:text-black'
+                                                    }`}
                                             >
                                                 metric threshold
                                             </button>
@@ -589,15 +598,24 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                                             <div className="space-y-3">
                                                 <div>
                                                     <label className="text-black font-bold text-xs lowercase mb-1 block">target username</label>
-                                                    <div className="flex items-center gap-0">
-                                                        <span className="bg-black text-white font-black text-sm px-3 py-3 rounded-l-xl border-2 border-black border-r-0">@</span>
+                                                    <div className="flex items-center gap-0 group">
+                                                        <span className={`bg-black text-white font-black text-sm px-3 py-3 rounded-l-xl border-2 border-black border-r-0 ${targetUsername ? 'grayscale' : ''}`}>@</span>
                                                         <input
                                                             type="text"
                                                             placeholder="elonmusk"
-                                                            className="flex-1 bg-white border-2 border-black rounded-r-xl py-3 px-3 font-bold text-black outline-none focus:shadow-[2px_2px_0px_0px_#F492B7] transition-all placeholder:text-gray-300"
+                                                            className={`flex-1 bg-white border-2 border-black rounded-r-xl py-3 px-3 font-bold text-black outline-none focus:shadow-[2px_2px_0px_0px_#F492B7] transition-all placeholder:text-gray-300 ${targetUsername && sourceUrl.includes(targetUsername) ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}
                                                             value={targetUsername}
-                                                            onChange={(e) => setTargetUsername(e.target.value.replace('@', ''))}
+                                                            onChange={(e) => {
+                                                                // Only allow manual edit if NOT derived from URL
+                                                                if (!sourceUrl.includes('twitter.com') && !sourceUrl.includes('x.com')) {
+                                                                    setTargetUsername(e.target.value.replace('@', ''));
+                                                                }
+                                                            }}
+                                                            readOnly={!!(targetUsername && sourceUrl.includes(targetUsername))}
                                                         />
+                                                        {targetUsername && sourceUrl.includes(targetUsername) && (
+                                                            <div className="absolute right-8 text-xs font-bold text-gray-400 pointer-events-none">LOCKED FROM URL</div>
+                                                        )}
                                                     </div>
                                                 </div>
                                                 <div>
@@ -614,24 +632,50 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                                             </div>
                                         ) : (
                                             <div className="space-y-3">
-                                                <div>
+                                                <div className="relative">
                                                     <label className="text-black font-bold text-xs lowercase mb-1 block">tweet ID</label>
                                                     <input
                                                         type="text"
                                                         placeholder="1234567890123456789"
-                                                        className="w-full bg-white border-2 border-black rounded-xl py-3 px-3 font-bold text-black outline-none focus:shadow-[2px_2px_0px_0px_#F492B7] transition-all placeholder:text-gray-300"
+                                                        className={`w-full bg-white border-2 border-black rounded-xl py-3 px-3 font-bold text-black outline-none focus:shadow-[2px_2px_0px_0px_#F492B7] transition-all placeholder:text-gray-300 ${targetTweetId && sourceUrl.includes(targetTweetId) ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}
                                                         value={targetTweetId}
-                                                        onChange={(e) => setTargetTweetId(e.target.value)}
+                                                        onChange={(e) => {
+                                                            if (!sourceUrl.includes(e.target.value)) {
+                                                                setTargetTweetId(e.target.value);
+                                                            }
+                                                        }}
+                                                        readOnly={!!(targetTweetId && sourceUrl.includes(targetTweetId))}
                                                     />
+                                                    {targetTweetId && sourceUrl.includes(targetTweetId) && (
+                                                        <div className="absolute right-4 top-9 text-xs font-bold text-gray-400 pointer-events-none">LOCKED</div>
+                                                    )}
                                                 </div>
                                                 <div>
                                                     <label className="text-black font-bold text-xs lowercase mb-1 block">likes threshold</label>
+                                                    <div className="flex gap-2 mb-2">
+                                                        {['10000', '50000', '100000', '500000', '1000000'].map((val) => (
+                                                            <button
+                                                                key={val}
+                                                                onClick={() => setMetricThreshold(val)}
+                                                                className={`px-3 py-1.5 border-2 border-black rounded-lg text-xs font-black transition-all ${metricThreshold === val
+                                                                    ? 'bg-[#FFD600] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] -translate-y-0.5'
+                                                                    : 'bg-white text-black hover:bg-gray-100'}`}
+                                                            >
+                                                                {(parseInt(val) / 1000)}k
+                                                            </button>
+                                                        ))}
+                                                    </div>
                                                     <input
-                                                        type="number"
-                                                        placeholder="10000"
-                                                        className="w-full bg-white border-2 border-black rounded-xl py-3 px-3 font-bold text-black outline-none focus:shadow-[2px_2px_0px_0px_#F492B7] transition-all placeholder:text-gray-300"
-                                                        value={metricThreshold}
-                                                        onChange={(e) => setMetricThreshold(e.target.value)}
+                                                        type="text"
+                                                        placeholder="10,000"
+                                                        className="w-full bg-white border-2 border-black rounded-xl py-3 px-3 font-bold text-black outline-none focus:shadow-[2px_2px_0px_0px_#F492B7] transition-all placeholder:text-gray-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                        value={metricThreshold ? parseInt(metricThreshold).toLocaleString() : ''}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value.replace(/,/g, '');
+                                                            if (!isNaN(Number(val))) {
+                                                                setMetricThreshold(val);
+                                                            }
+                                                        }}
                                                     />
                                                 </div>
                                             </div>
