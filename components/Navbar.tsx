@@ -100,7 +100,8 @@ function NavbarContent() {
     };
 
     const handleClaimSuccess = async (newUsername: string) => {
-        setIsClaimModalOpen(false);
+        // Do NOT close modal here. Let the modal handle the transition to 'SUCCESS' step.
+        // The modal will call onClose when the user clicks 'Skip' or finishes.
         setUsername(newUsername);
         setUserPfp('/pink-pfp.png');
 
@@ -206,6 +207,8 @@ function NavbarContent() {
         const setupAuthListener = async () => {
             const { supabase } = await import('@/lib/supabase');
             const { upsertProfile, getProfile } = await import('@/lib/supabase-db');
+
+            console.log("🔌 Supabase URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
 
             const handleAuthSession = async (session: any) => {
                 if (session?.user?.user_metadata && session.provider_token) {
