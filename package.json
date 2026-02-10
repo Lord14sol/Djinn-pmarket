@@ -41,6 +41,7 @@
     "axios": "^1.13.2",
     "bs58": "^6.0.0",
     "canvas-confetti": "^1.9.4",
+    "cheerio": "^1.2.0",
     "clsx": "^2.1.1",
     "d3-array": "^3.2.4",
     "date-fns": "^4.1.0",
@@ -65,7 +66,8 @@
     "three": "^0.182.0",
     "tweetnacl": "^1.0.3",
     "tweetnacl-util": "^0.15.1",
-    "yahoo-finance2": "^3.11.2"
+    "yahoo-finance2": "^3.11.2",
+    "youtube-transcript": "^1.2.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
