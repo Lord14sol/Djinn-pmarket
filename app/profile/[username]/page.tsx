@@ -93,7 +93,9 @@ export default function ProfilePage() {
         achievements: [] as any[],
         createdMarkets: [] as any[],
         showGems: true,
-        joinedAt: ""
+        joinedAt: "",
+        twitter: "",
+        discord: ""
     };
 
     const [profile, setProfile] = useState(initialProfile);
@@ -102,6 +104,8 @@ export default function ProfilePage() {
     const [tempBio, setTempBio] = useState(profile.bio);
     const [tempShowGems, setTempShowGems] = useState(true); // New temp state
     const [tempPfp, setTempPfp] = useState('');
+    const [tempTwitter, setTempTwitter] = useState('');
+    const [tempDiscord, setTempDiscord] = useState('');
 
     // Availability Check State
     const [nameAvailable, setNameAvailable] = useState<boolean | null>(null);
@@ -117,6 +121,8 @@ export default function ProfilePage() {
             setTempBio(profile.bio);
             setTempShowGems(profile.showGems !== undefined ? profile.showGems : true);
             setTempPfp(profile.pfp);
+            setTempTwitter(profile.twitter || '');
+            setTempDiscord(profile.discord || '');
             setTempMedals(profile.medals || []); // Sync medals
             setNameAvailable(true); // Default to true for current name
         }
@@ -309,6 +315,8 @@ export default function ProfilePage() {
                             if (p.pfp) finalProfile.pfp = p.pfp;
                             else if (p.avatar_url) finalProfile.pfp = p.avatar_url;
                             if (p.bio) finalProfile.bio = p.bio;
+                            if (p.twitter) finalProfile.twitter = p.twitter;
+                            if (p.discord) finalProfile.discord = p.discord;
                         } catch (e) { }
                     }
                 }
@@ -322,6 +330,8 @@ export default function ProfilePage() {
                         if (dbProfile.avatar_url) finalProfile.pfp = dbProfile.avatar_url;
                         if (dbProfile.created_at) finalProfile.joinedAt = dbProfile.created_at;
                         if (typeof dbProfile.views === 'number') setViewCount(dbProfile.views);
+                        if (dbProfile.twitter) finalProfile.twitter = dbProfile.twitter;
+                        if (dbProfile.discord) finalProfile.discord = dbProfile.discord;
                     }
                 } catch (dbErr: any) {
                     console.warn("⚠️ Supabase profile sync failed (using local/default):", dbErr.message);
@@ -565,7 +575,10 @@ export default function ProfilePage() {
             pfp: pfpToCache,
             avatar_url: pfpToCache,
             medals: newData.medals || [],
-            showGems: newData.showGems !== undefined ? newData.showGems : true
+            medals: newData.medals || [],
+            showGems: newData.showGems !== undefined ? newData.showGems : true,
+            twitter: newData.twitter,
+            discord: newData.discord
         };
 
         try {
@@ -587,7 +600,9 @@ export default function ProfilePage() {
                 wallet_address: walletAddress,
                 username: newData.username,
                 bio: newData.bio,
-                avatar_url: newData.pfp
+                avatar_url: newData.pfp,
+                twitter: newData.twitter,
+                discord: newData.discord
             });
 
             if (!result) {
@@ -613,6 +628,8 @@ export default function ProfilePage() {
             username: tempName || profile.username,
             bio: tempBio || profile.bio,
             pfp: tempPfp || profile.pfp,
+            twitter: tempTwitter, // Allow empty string to clear
+            discord: tempDiscord,
             showGems: tempShowGems,
             medals: tempMedals // Save the new medals order
         };
@@ -1064,7 +1081,8 @@ export default function ProfilePage() {
                         { label: 'Win Rate', value: (profile.winRate || 0).toFixed(0) + '%' },
                         { label: 'Portfolio', value: (profile.portfolio || 0).toFixed(2) + ' SOL' }
                     ],
-                    qrValue: typeof window !== 'undefined' ? window.location.href : `https://djinn.market/profile/${profile.username}`
+                    qrValue: typeof window !== 'undefined' ? window.location.href : `https://djinn.market/profile/${profile.username}`,
+                    twitter: profile.twitter
                 }}
             />
         </main>
@@ -1247,7 +1265,7 @@ function BetCard({ bet, onCashOut, router, setShowShareModal }: any) {
 }
 
 // --- EDIT MODAL ---
-function EditModal({ profile, tempName, tempBio, setTempName, setTempBio, tempPfp, showGems, setShowGems, nameAvailable, isCheckingName, onClose, onSave, pfpInputRef, handleFileChange, openVault, tempMedals }: any) {
+function EditModal({ profile, tempName, tempBio, setTempName, setTempBio, tempPfp, setTempPfp, showGems, setShowGems, nameAvailable, isCheckingName, onClose, onSave, pfpInputRef, handleFileChange, openVault, tempMedals }: any) {
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-3xl">
             <div className="relative bg-white border-4 border-black w-full max-w-2xl max-h-[90vh] flex flex-col rounded-3xl shadow-[16px_16px_0px_0px_#F492B7] overflow-hidden">
@@ -1367,24 +1385,24 @@ function EditModal({ profile, tempName, tempBio, setTempName, setTempBio, tempPf
                                         <span className="absolute right-4 bottom-4 text-xs font-black text-black/40">{tempBio.length}/200</span>
                                     </div>
                                 </div>
+
                             </div>
                         </div>
-
                     </div>
                 </div>
 
-                {/* FOOTER - FIXED */}
-                <div className="p-8 shrink-0 border-t-4 border-black bg-white z-10">
-                    <div className="flex gap-4">
-                        <button onClick={onClose} className="flex-1 bg-white border-3 border-black text-black py-4 rounded-xl font-black lowercase text-sm hover:bg-black hover:text-white transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)]">cancel</button>
-                        <button onClick={onSave} className="flex-1 bg-[#F492B7] border-3 border-black text-black py-4 rounded-xl font-black lowercase text-sm hover:translate-y-1 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all">save changes</button>
-                    </div>
+            {/* FOOTER - FIXED */}
+            <div className="p-8 shrink-0 border-t-4 border-black bg-white z-10">
+                <div className="flex gap-4">
+                    <button onClick={onClose} className="flex-1 bg-white border-3 border-black text-black py-4 rounded-xl font-black lowercase text-sm hover:bg-black hover:text-white transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)]">cancel</button>
+                    <button onClick={onSave} className="flex-1 bg-[#F492B7] border-3 border-black text-black py-4 rounded-xl font-black lowercase text-sm hover:translate-y-1 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all">save changes</button>
                 </div>
-
-                {/* HIDDEN INPUTS */}
-                <input type="file" ref={pfpInputRef} className="hidden" onChange={(e) => handleFileChange(e, 'pfp')} />
             </div>
+
+            {/* HIDDEN INPUTS */}
+            <input type="file" ref={pfpInputRef} className="hidden" onChange={(e) => handleFileChange(e, 'pfp')} />
         </div>
+    </div>
     );
 }
 

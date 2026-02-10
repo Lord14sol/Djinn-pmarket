@@ -25,6 +25,7 @@ interface ShareExperienceProps {
         stats: { label: string; value: string }[];
         imageUrl?: string;
         qrValue: string;
+        twitter?: string;
     };
 }
 
@@ -112,6 +113,11 @@ export default function ShareExperience({ isOpen, onClose, layoutId, data }: Sha
                                             <h2 className="font-serif text-5xl font-bold leading-none tracking-tighter lowercase">
                                                 {data.username}
                                             </h2>
+                                            {data.twitter && (
+                                                <p className="text-xs font-black uppercase tracking-widest opacity-60 mt-1">
+                                                    @{data.twitter.replace('@', '')}
+                                                </p>
+                                            )}
                                             <div className="flex gap-2 mt-4">
                                                 <span className="px-2 py-0.5 rounded-md bg-current/10 text-[8px] font-black uppercase tracking-widest">Alpha User</span>
                                                 <span className="px-2 py-0.5 rounded-md bg-current/10 text-[8px] font-black uppercase tracking-widest">#54801</span>

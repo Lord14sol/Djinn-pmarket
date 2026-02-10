@@ -86,6 +86,8 @@ export interface Profile {
     created_at?: string;
     views?: number;
     gems?: number;
+    twitter?: string;
+    discord?: string;
 }
 
 // Local Mode: Desactivado para producción

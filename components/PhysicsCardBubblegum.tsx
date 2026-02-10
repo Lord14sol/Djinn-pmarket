@@ -241,14 +241,6 @@ export default function PhysicsCardBubblegum({ username, memberNumber }: Physics
                     <div className="absolute inset-0 pointer-events-none rounded-[2.5rem]" style={{
                         background: 'linear-gradient(130deg, rgba(255,255,255,0.5) 0%, transparent 15%, rgba(255,255,255,0.3) 25%, transparent 35%, rgba(0,0,0,0.15) 45%, rgba(255,255,255,0.6) 55%, transparent 65%, rgba(0,0,0,0.1) 75%, rgba(255,255,255,0.4) 85%, transparent 100%)'
                     }} />
-                    {/* Curved highlight band */}
-                    <div className="absolute inset-0 pointer-events-none rounded-[2.5rem]" style={{
-                        background: 'radial-gradient(ellipse at 30% 20%, rgba(255,255,255,0.6) 0%, transparent 40%), radial-gradient(ellipse at 70% 80%, rgba(255,255,255,0.3) 0%, transparent 35%)'
-                    }} />
-                    {/* Deep shadow creases */}
-                    <div className="absolute inset-0 pointer-events-none rounded-[2.5rem]" style={{
-                        background: 'radial-gradient(ellipse at 60% 40%, rgba(0,0,0,0.12) 0%, transparent 30%), radial-gradient(ellipse at 25% 70%, rgba(0,0,0,0.08) 0%, transparent 25%)'
-                    }} />
 
                     {/* FLUID IRIDESCENT BLOB */}
                     <motion.div
@@ -262,19 +254,7 @@ export default function PhysicsCardBubblegum({ username, memberNumber }: Physics
                         }}
                     />
 
-                    {/* RAINBOW FOIL - subtle */}
-                    <motion.div
-                        className="absolute inset-0 pointer-events-none opacity-[0.05] mix-blend-screen"
-                        style={{
-                            background: 'conic-gradient(from 45deg, #ff0080, #ff8c00, #40e0d0, #ff0080)',
-                            filter: 'blur(60px)',
-                            scale: 2,
-                            x: foilX,
-                            y: foilY,
-                        }}
-                    />
-
-                    {/* HOLOGRAPHIC OVERLAY - ultra rare shine during rotation */}
+                    {/* HOLOGRAPHIC OVERLAY */}
                     <motion.div
                         className="absolute inset-0 pointer-events-none mix-blend-screen z-25 rounded-[2.5rem]"
                         style={{
@@ -282,27 +262,6 @@ export default function PhysicsCardBubblegum({ username, memberNumber }: Physics
                             background: 'conic-gradient(from 0deg at 50% 50%, #ff0080, #ff8c00, #ffff00, #00ff88, #00ffff, #0088ff, #8800ff, #ff00ff, #ff0080)',
                         }}
                     />
-                    {/* Holographic white flash on card surface */}
-                    <motion.div
-                        className="absolute inset-0 pointer-events-none z-26 rounded-[2.5rem]"
-                        style={{
-                            opacity: holoFlashOpacity,
-                            background: 'radial-gradient(ellipse at 50% 50%, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0.2) 40%, transparent 70%)',
-                        }}
-                    />
-                    {/* Rainbow sparkle bands across card */}
-                    <motion.div
-                        className="absolute inset-0 pointer-events-none mix-blend-color-dodge z-26 rounded-[2.5rem] overflow-hidden"
-                        style={{
-                            opacity: holoOpacity,
-                        }}
-                    >
-                        <div style={{
-                            position: 'absolute',
-                            inset: '-50%',
-                            background: 'conic-gradient(from 45deg, transparent 0%, rgba(255,255,255,0.5) 3%, transparent 6%, transparent 12%, rgba(255,200,100,0.4) 15%, transparent 18%, transparent 24%, rgba(100,200,255,0.4) 27%, transparent 30%, transparent 36%, rgba(255,100,255,0.4) 39%, transparent 42%, transparent 48%, rgba(255,255,255,0.4) 51%, transparent 54%, transparent 60%, rgba(200,255,100,0.4) 63%, transparent 66%, transparent 72%, rgba(100,255,255,0.4) 75%, transparent 78%, transparent 84%, rgba(255,150,50,0.4) 87%, transparent 90%, transparent 100%)',
-                        }} />
-                    </motion.div>
 
                     {/* NOISE TEXTURE */}
                     <div className="absolute inset-0 pointer-events-none opacity-25 mix-blend-soft-light" style={{ filter: 'url(#noiseFilter)' }} />
@@ -310,146 +269,92 @@ export default function PhysicsCardBubblegum({ username, memberNumber }: Physics
                     {/* Inner border highlight */}
                     <div className="absolute inset-[1px] rounded-[2.4rem] border border-white/20 pointer-events-none" />
 
-                    {/* STAMP - Top right corner, watermark with parallax depth */}
-                    <motion.div
-                        className="absolute top-4 right-4 pointer-events-none z-[8]"
-                        style={{
-                            x: parallaxDeepX,
-                            y: parallaxDeepY,
-                            transformStyle: 'preserve-3d',
-                        }}
-                    >
-                        <div className="relative w-36 h-36 opacity-[0.15]" style={{ transform: 'translateZ(-15px)' }}>
+                    {/* ---- CONTENT ---- */}
+                    <div className="relative z-10 flex flex-col items-center h-full p-8" style={{ transformStyle: 'preserve-3d' }}>
+
+                        {/* 1. TOP DJINN LOGO (Higher up) */}
+                        <motion.div
+                            className="w-full flex justify-center mt-4 mb-4"
+                            style={{
+                                x: parallaxDeepX,
+                                y: parallaxDeepY,
+                                transform: 'translateZ(10px)'
+                            }}
+                        >
                             <Image
                                 src="/djinn-logo.png"
-                                alt=""
-                                width={200}
-                                height={200}
-                                className="w-full h-full object-contain grayscale brightness-200"
-                                unoptimized
+                                alt="Djinn"
+                                width={120}
+                                height={120}
+                                className="object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.3)]"
+                                priority
                             />
-                        </div>
-                    </motion.div>
+                        </motion.div>
 
-                    {/* ---- CONTENT ---- */}
-                    <div className="relative z-10 flex flex-col h-full p-10" style={{ transformStyle: 'preserve-3d' }}>
-                        {/* Bottom chrome line */}
-                        <div className="absolute bottom-10 left-10 right-10 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-
-                        {/* Push Djinn down but not too much */}
-                        <div className="flex-[0.55]" />
-
-                        {/* DJINN - 3D Parallax multi-layer text */}
-                        <div className="flex flex-col items-start pl-4 pb-4" style={{ transformStyle: 'preserve-3d' }}>
-                            {/* Shadow layer 3 - deepest (dark, blurred) */}
-                            <motion.h1
-                                className="text-[62px] font-black tracking-[-0.02em] pb-2 absolute"
+                        {/* 2. CENTER X PROFILE PICTURE (Circular) */}
+                        <div className="relative flex-1 flex items-center justify-center w-full" style={{ transformStyle: 'preserve-3d' }}>
+                            <motion.div
+                                className="relative w-48 h-48 rounded-full p-1 bg-gradient-to-br from-white to-gray-400 shadow-[0_20px_50px_rgba(0,0,0,0.3)]"
                                 style={{
-                                    lineHeight: '1.2',
-                                    fontFamily: 'var(--font-adriane), serif',
-                                    fontWeight: 700,
-                                    x: parallaxDeepX,
-                                    y: parallaxDeepY,
-                                    transform: 'translateZ(-12px)',
-                                    color: 'rgba(0,0,0,0.15)',
-                                    filter: 'blur(6px)',
-                                }}
-                                aria-hidden="true"
-                            >
-                                Djinn
-                            </motion.h1>
-                            {/* Shadow layer 2 - mid depth */}
-                            <motion.h1
-                                className="text-[62px] font-black tracking-[-0.02em] pb-2 absolute"
-                                style={{
-                                    lineHeight: '1.2',
-                                    fontFamily: 'var(--font-adriane), serif',
-                                    fontWeight: 700,
                                     x: parallaxMidX,
                                     y: parallaxMidY,
-                                    transform: 'translateZ(-6px)',
-                                    color: 'rgba(0,0,0,0.08)',
-                                    filter: 'blur(3px)',
+                                    transform: 'translateZ(30px)'
                                 }}
-                                aria-hidden="true"
                             >
-                                Djinn
-                            </motion.h1>
-                            {/* Main Djinn text - foreground, most parallax */}
-                            <motion.h1
-                                className="text-[62px] font-black tracking-[-0.02em] pb-2 relative"
+                                <div className="w-full h-full rounded-full overflow-hidden border-4 border-white/50 relative bg-black">
+                                    {/* Mock X PFP - In real app use props */}
+                                    <Image
+                                        src="/pink-pfp.png"
+                                        alt="X Profile"
+                                        fill
+                                        className="object-cover"
+                                    />
+                                </div>
+                                {/* Verified Badge */}
+                                <div className="absolute bottom-2 right-2 w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-lg border-2 border-gray-200">
+                                    <svg viewBox="0 0 24 24" className="w-6 h-6 fill-black"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
+                                </div>
+                            </motion.div>
+                        </div>
+
+
+                        {/* 3. BOTTOM INFO */}
+                        <div className="w-full mt-auto space-y-4" style={{ transformStyle: 'preserve-3d' }}>
+
+                            {/* X Handle (Front Center) */}
+                            <motion.div
+                                className="text-center"
                                 style={{
-                                    lineHeight: '1.2',
-                                    fontFamily: 'var(--font-adriane), serif',
-                                    fontWeight: 700,
                                     x: parallaxFrontX,
                                     y: parallaxFrontY,
-                                    transform: 'translateZ(25px)',
-                                    background: auroraGradient,
-                                    backgroundSize: '200% auto',
-                                    WebkitBackgroundClip: 'text',
-                                    WebkitTextFillColor: 'transparent',
-                                    filter: 'drop-shadow(0 0 30px rgba(0,255,171,0.4)) drop-shadow(0 0 60px rgba(123,97,255,0.25)) drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
-                                }}
-                                animate={{
-                                    backgroundPosition: ['0% center', '200% center']
-                                }}
-                                transition={{
-                                    duration: 4,
-                                    repeat: Infinity,
-                                    ease: "linear"
+                                    transform: 'translateZ(40px)'
                                 }}
                             >
-                                Djinn
-                            </motion.h1>
+                                <div className="inline-flex items-center gap-2 bg-black/5 backdrop-blur-md px-4 py-2 rounded-full border border-black/10 shadow-lg">
+                                    <svg viewBox="0 0 24 24" className="w-4 h-4 fill-black"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
+                                    <span className="text-lg font-black tracking-tight text-black">@DjinnUser</span>
+                                </div>
+                            </motion.div>
+
+                            {/* Djinn Username + ID (Right aligned as requested) */}
+                            <div className="flex items-center justify-between border-t border-black/10 pt-4 px-2">
+                                <motion.div className="flex flex-col items-start">
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-black/40">Identity</span>
+                                    <span className="text-xl font-black lowercase tracking-tight text-black" style={{ fontFamily: 'var(--font-adriane), serif' }}>
+                                        {username || 'agent'}
+                                    </span>
+                                </motion.div>
+
+                                <motion.div className="flex flex-col items-end">
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-black/40">Joined</span>
+                                    <span className="text-xl font-black tracking-widest text-black font-mono">
+                                        #{displayNumber}
+                                    </span>
+                                </motion.div>
+                            </div>
                         </div>
 
-                        {/* Space between Djinn and @ */}
-                        <div className="flex-[0.45]" />
-
-                        {/* @ USERNAME + # - mid-depth parallax */}
-                        <div className="flex items-end justify-between pl-5 pr-5 pb-3" style={{ transformStyle: 'preserve-3d' }}>
-                            <motion.span
-                                className="text-lg font-bold tracking-wide lowercase text-black/50"
-                                style={{
-                                    fontFamily: 'var(--font-unbounded), sans-serif',
-                                    x: parallaxMidX,
-                                    y: parallaxMidY,
-                                    transform: 'translateZ(12px)',
-                                }}
-                            >
-                                @{username || 'agent'}
-                            </motion.span>
-                            <span
-                                className="text-sm font-black text-black/30 tracking-widest"
-                                style={{ fontFamily: 'var(--font-unbounded), sans-serif', transform: 'translateZ(8px)' }}
-                            >
-                                #{displayNumber}
-                            </span>
-                        </div>
                     </div>
-
-                    {/* SPECULAR CHROME HIGHLIGHT - moves opposite for realism */}
-                    <motion.div
-                        className="absolute inset-[-50%] pointer-events-none opacity-60 mix-blend-color-dodge z-30"
-                        style={{
-                            background: 'radial-gradient(circle at center, rgba(255,255,255,0.8) 0%, transparent 50%)',
-                            x: glareParallaxX,
-                            y: glareParallaxY,
-                            filter: 'blur(50px)'
-                        }}
-                    />
-
-                    {/* CHROME SHINE SWEEP */}
-                    <motion.div
-                        className="absolute inset-x-[-150%] inset-y-0 pointer-events-none opacity-35 mix-blend-screen z-30"
-                        style={{
-                            background: 'linear-gradient(90deg, transparent 0%, transparent 35%, rgba(255,255,255,0.8) 50%, transparent 65%, transparent 100%)',
-                            skewX: -15
-                        }}
-                        animate={{ x: ['-100%', '250%'] }}
-                        transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", repeatDelay: 4 }}
-                    />
 
                     {/* Dynamic Glare */}
                     <motion.div

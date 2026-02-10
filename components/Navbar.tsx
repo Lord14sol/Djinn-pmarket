@@ -199,6 +199,74 @@ function NavbarContent() {
         }
     }, [connected]);
 
+    // Twitter Auth Listener (Robust)
+    useEffect(() => {
+        let authListener: any = null;
+
+        const setupAuthListener = async () => {
+            const { supabase } = await import('@/lib/supabase');
+            const { upsertProfile, getProfile } = await import('@/lib/supabase-db');
+
+            const handleAuthSession = async (session: any) => {
+                if (session?.user?.user_metadata && session.provider_token) {
+                    console.log("🐦 Twitter Session Detected via Listener:", session.user.user_metadata);
+                    if (!publicKey) return;
+
+                    try {
+                        const twitterHandle = session.user.user_metadata.user_name || session.user.user_metadata.full_name;
+                        const twitterAvatar = session.user.user_metadata.avatar_url;
+
+                        if (twitterHandle) {
+                            const existingProfile = await getProfile(publicKey.toBase58());
+
+                            // Check if already linked to avoid loop/redundant updates
+                            if (existingProfile?.twitter === `@${twitterHandle}`) {
+                                return;
+                            }
+
+                            const currentPfp = existingProfile?.avatar_url;
+                            const shouldUseTwitterPfp = !currentPfp || currentPfp === '/pink-pfp.png';
+
+                            await upsertProfile({
+                                wallet_address: publicKey.toBase58(),
+                                username: existingProfile?.username || username,
+                                bio: existingProfile?.bio || '',
+                                avatar_url: shouldUseTwitterPfp ? twitterAvatar : currentPfp,
+                                banner_url: existingProfile?.banner_url || null,
+                                twitter: `@${twitterHandle}`,
+                                discord: existingProfile?.discord || ''
+                            });
+
+                            alert(`✅ Linked X Account: @${twitterHandle}`);
+                            await supabase.auth.signOut();
+                            window.location.reload();
+                        }
+                    } catch (e) {
+                        console.error("Error linking account:", e);
+                    }
+                }
+            };
+
+            // Check initial session
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) handleAuthSession(session);
+
+            // Listen for changes (redirects)
+            const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+                if (session) handleAuthSession(session);
+            });
+            authListener = subscription;
+        };
+
+        if (connected && publicKey) {
+            setupAuthListener();
+        }
+
+        return () => {
+            if (authListener) authListener.unsubscribe();
+        };
+    }, [connected, publicKey, username]);
+
     return (
         <>
             <nav className="fixed top-0 left-0 w-full z-50 bg-black">

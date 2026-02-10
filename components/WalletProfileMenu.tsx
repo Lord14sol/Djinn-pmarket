@@ -4,6 +4,8 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
+import { supabase } from '@/lib/supabase';
+import { upsertProfile } from '@/lib/supabase-db';
 import { ADMIN_WALLETS } from '@/lib/whitelist';
 
 interface WalletProfileMenuProps {
@@ -34,6 +36,21 @@ export default function WalletProfileMenu({
     const router = useRouter();
 
     if (!isOpen) return null;
+
+    const handleConnectX = async () => {
+        try {
+            const { data, error } = await supabase.auth.signInWithOAuth({
+                provider: 'twitter',
+                options: {
+                    redirectTo: window.location.href, // Redirect back to here
+                },
+            });
+            if (error) throw error;
+        } catch (e) {
+            console.error("Failed to connect X:", e);
+            alert("Auth Error: Could not connect to X. Make sure Supabase is configured.");
+        }
+    };
 
     const handleCopy = () => {
         navigator.clipboard.writeText(walletAddress);
@@ -83,6 +100,15 @@ export default function WalletProfileMenu({
                         ⚡ Admin Dashboard
                     </Link>
                 )}
+
+                {/* Connect X Button */}
+                <button
+                    onClick={handleConnectX}
+                    className="w-[85%] bg-black text-white text-sm font-black uppercase tracking-widest py-3 rounded-xl border-2 border-transparent hover:bg-black/90 hover:border-white/20 transition-all flex items-center justify-center gap-2 group mb-3 shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)] active:translate-y-[2px] active:shadow-none"
+                >
+                    <svg viewBox="0 0 24 24" className="w-4 h-4 fill-white group-hover:scale-110 transition-transform"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
+                    Connect X
+                </button>
 
                 {/* 3. EDIT PROFILE BUTTON */}
                 <button
