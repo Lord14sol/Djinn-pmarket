@@ -208,8 +208,6 @@ function NavbarContent() {
             const { supabase } = await import('@/lib/supabase');
             const { upsertProfile, getProfile } = await import('@/lib/supabase-db');
 
-            console.log("🔌 Supabase URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
-
             const handleAuthSession = async (session: any) => {
                 if (session?.user?.user_metadata && session.provider_token) {
                     console.log("🐦 Twitter Session Detected via Listener:", session.user.user_metadata);
