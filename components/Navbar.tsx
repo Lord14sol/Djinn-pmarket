@@ -38,6 +38,10 @@ function NavbarContent() {
     // Hide navbar search on home/markets page (has its own big search bar)
     const isHomePage = pathname === '/' || pathname === '/markets';
 
+    useEffect(() => {
+        console.log("🔌 STARTUP Supabase URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
+    }, []);
+
     const [mounted, setMounted] = useState(false);
     useEffect(() => { setMounted(true); }, []);
 
