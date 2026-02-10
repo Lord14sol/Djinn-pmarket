@@ -959,6 +959,12 @@ export interface Market {
     outcome_colors?: string[]; // Array of hex colors for each outcome
     creator_username?: string;
     creator_avatar?: string;
+    // Twitter market fields
+    twitter_market_type?: 'keyword_mention' | 'metric_threshold';
+    target_username?: string;
+    target_keyword?: string;
+    target_tweet_id?: string;
+    metric_threshold?: number;
 }
 
 export async function createMarket(market: Partial<Market> & {
@@ -969,10 +975,24 @@ export async function createMarket(market: Partial<Market> & {
 }) {
     // Valid categories (including 'Trending' as fallback)
     const validCategories = ['Trending', 'Crypto', 'Politics', 'Sports', 'Earth', 'Movies',
-        'Culture', 'Tech', 'AI', 'Science', 'Finance', 'Gaming'];
+        'Culture', 'Tech', 'AI', 'Science', 'Finance', 'Gaming', 'Twitter'];
 
     if (!market.category || !validCategories.includes(market.category)) {
         throw new Error('Invalid or missing category. Must be one of: ' + validCategories.join(', '));
+    }
+
+    // Validate Twitter market fields
+    if (market.category === 'Twitter') {
+        const twitterType = market.twitter_market_type || 'keyword_mention';
+        if (twitterType === 'keyword_mention') {
+            if (!market.target_username || !market.target_keyword) {
+                throw new Error('Twitter keyword markets require a target username and keyword.');
+            }
+        } else if (twitterType === 'metric_threshold') {
+            if (!market.target_tweet_id || !market.metric_threshold) {
+                throw new Error('Twitter metric markets require a tweet ID and threshold.');
+            }
+        }
     }
 
     return withRetry(async () => {

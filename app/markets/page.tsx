@@ -77,7 +77,11 @@ export default function Home() {
               resolved: m.resolved,
               winningOutcome: m.winning_outcome,
               resolutionSource: m.resolution_source,
-              options: m.options, // ✅ Pass options for multi-outcome cards
+              options: m.options?.map((opt: string, idx: number) => ({
+                title: opt,
+                chance: 0,
+                color: m.outcome_colors?.[idx]
+              })),
               marketPDA: m.market_pda
             };
           });
@@ -143,7 +147,11 @@ export default function Home() {
           winningOutcome: payload.new.winning_outcome,
           resolutionSource: payload.new.resolution_source,
           banner_url: payload.new.banner_url,
-          options: payload.new.options, // ✅ Pass options for live updates
+          options: payload.new.options?.map((opt: string, idx: number) => ({
+            title: opt,
+            chance: 0,
+            color: payload.new.outcome_colors?.[idx]
+          })),
           icon: payload.new.banner_url,
           isNew: true,
           justArrived: true // Flag for pump animation (10s)
@@ -218,7 +226,12 @@ export default function Home() {
     const marketWithTimestamp = {
       ...newMarket,
       createdAt: newMarket.createdAt || Date.now(),
-      category: newMarket.category || 'Trending'
+      category: newMarket.category || 'Trending',
+      options: newMarket.options?.map((opt: string, idx: number) => ({
+        title: opt,
+        chance: newMarket.chance || 50, // Use main market chance or 50 as default since per-outcome is not available
+        color: newMarket.outcome_colors?.[idx]
+      }))
     };
     setMarkets(prev => [marketWithTimestamp, ...prev]);
 

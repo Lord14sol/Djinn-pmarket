@@ -12,6 +12,7 @@ import { useRouter } from 'next/navigation';
 import { Loader2, ExternalLink } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useSound } from './providers/SoundProvider';
+import TwitterWarningModal from './TwitterWarningModal';
 
 // --- ICONS ---
 const CloseIcon = () => (
@@ -53,8 +54,11 @@ const COLORS = [
 ];
 
 const CATEGORIES = [
-    'Crypto', 'Politics', 'Sports', 'Business', 'Science', 'Tech/AI', 'Gaming', 'Pop Culture', 'Global', 'Other'
+    'Crypto', 'Politics', 'Sports', 'Business', 'Science', 'Tech/AI', 'Gaming', 'Pop Culture', 'Twitter', 'Global', 'Other'
 ];
+
+// Max duration for Twitter markets (API only searches 7 days back)
+const TWITTER_MAX_DAYS = 7;
 
 export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModalProps) {
     const router = useRouter();
@@ -82,6 +86,15 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
     const [initialBuyAmount, setInitialBuyAmount] = useState('0');
     const [initialBuySide, setInitialBuySide] = useState<'yes' | 'no'>('yes');
 
+    // Twitter market fields
+    const [showTwitterWarning, setShowTwitterWarning] = useState(false);
+    const [twitterWarningAccepted, setTwitterWarningAccepted] = useState(false);
+    const [twitterMarketType, setTwitterMarketType] = useState<'keyword' | 'metric'>('keyword');
+    const [targetUsername, setTargetUsername] = useState('');
+    const [targetKeyword, setTargetKeyword] = useState('');
+    const [targetTweetId, setTargetTweetId] = useState('');
+    const [metricThreshold, setMetricThreshold] = useState('10000');
+
     const [error, setError] = useState('');
     const [successData, setSuccessData] = useState<{
         txSignature: string;
@@ -106,6 +119,13 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                 setSuccessData(null);
                 setSourceUrl('');
                 setSelectedCategory('Crypto');
+                setShowTwitterWarning(false);
+                setTwitterWarningAccepted(false);
+                setTwitterMarketType('keyword');
+                setTargetUsername('');
+                setTargetKeyword('');
+                setTargetTweetId('');
+                setMetricThreshold('10000');
             }, 300);
             return () => clearTimeout(t);
         }
@@ -166,8 +186,10 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                 .slice(0, 20);
 
             const slug = `${sanitizedName}-${timestamp}`;
-            const SEVEN_DAYS_SECONDS = 7 * 24 * 60 * 60;
-            const finalResolutionTime = Math.floor(Date.now() / 1000) + SEVEN_DAYS_SECONDS;
+            // Twitter markets are capped at 7 days (API limitation)
+            const maxDays = finalCategory === 'Twitter' ? TWITTER_MAX_DAYS : 7;
+            const RESOLUTION_SECONDS = maxDays * 24 * 60 * 60;
+            const finalResolutionTime = Math.floor(Date.now() / 1000) + RESOLUTION_SECONDS;
 
             let finalBanner = "https://arweave.net/djinn-placeholder";
             if (mainImage) {
@@ -234,7 +256,15 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                 resolution_source: sourceUrl || 'DERIVED',
                 banner_url: finalBanner,
                 options: options.map(opt => opt.name || '').filter(name => name.trim() !== ''),
-                outcome_colors: options.map(opt => opt.color) // ✅ Saving colors
+                outcome_colors: options.map(opt => opt.color),
+                // Twitter market fields
+                ...(finalCategory === 'Twitter' ? {
+                    twitter_market_type: twitterMarketType === 'keyword' ? 'keyword_mention' : 'metric_threshold',
+                    target_username: targetUsername.replace('@', '') || undefined,
+                    target_keyword: targetKeyword || undefined,
+                    target_tweet_id: targetTweetId || undefined,
+                    metric_threshold: twitterMarketType === 'metric' ? parseInt(metricThreshold) || undefined : undefined,
+                } : {})
             });
 
             const initialVol = parseFloat(initialBuyAmount) || 0;
@@ -472,7 +502,12 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                                         {CATEGORIES.map((cat) => (
                                             <button
                                                 key={cat}
-                                                onClick={() => setSelectedCategory(cat)}
+                                                onClick={() => {
+                                                    setSelectedCategory(cat);
+                                                    if (cat === 'Twitter' && !twitterWarningAccepted) {
+                                                        setShowTwitterWarning(true);
+                                                    }
+                                                }}
                                                 className={`px-4 py-2 rounded-xl text-xs font-black uppercase border-2 border-black transition-all ${selectedCategory === cat
                                                     ? 'bg-[#FFD600] text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-y-1'
                                                     : 'bg-white text-gray-500 hover:text-black hover:bg-gray-50'
@@ -492,10 +527,123 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                                         placeholder="https://x.com/..."
                                         className="w-full bg-white border-2 border-black rounded-xl py-4 px-4 font-bold text-black outline-none focus:shadow-[4px_4px_0px_0px_#F492B7] transition-all placeholder:text-gray-300"
                                         value={sourceUrl}
-                                        onChange={(e) => setSourceUrl(e.target.value)}
+                                        onChange={(e) => {
+                                            const url = e.target.value;
+                                            setSourceUrl(url);
+
+                                            // Auto-detect Twitter URLs
+                                            if (url.includes('twitter.com') || url.includes('x.com')) {
+                                                if (selectedCategory !== 'Twitter') {
+                                                    setSelectedCategory('Twitter');
+                                                }
+                                                // Extract @username from URL
+                                                const match = url.match(/(?:twitter\.com|x\.com)\/([^\/\?#]+)/);
+                                                if (match && match[1] !== 'search' && match[1] !== 'hashtag' && match[1] !== 'home') {
+                                                    setTargetUsername(match[1]);
+                                                }
+                                                // Show warning if not accepted yet
+                                                if (!twitterWarningAccepted) {
+                                                    setShowTwitterWarning(true);
+                                                }
+                                            }
+                                        }}
                                     />
                                     <p className="text-xs font-bold text-gray-500 mt-2 lowercase">the oracle dogs use this to verify the outcome</p>
                                 </div>
+
+                                {/* Twitter Market Config */}
+                                {selectedCategory === 'Twitter' && (
+                                    <div className="space-y-4 border-2 border-black rounded-xl p-5 bg-[#FFF9E6]">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="text-lg">🐦</span>
+                                            <label className="text-black font-black lowercase tracking-tight">twitter market config</label>
+                                        </div>
+
+                                        {/* Market Type Toggle */}
+                                        <div className="flex gap-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => setTwitterMarketType('keyword')}
+                                                className={`flex-1 py-2.5 border-2 border-black rounded-xl font-black text-xs uppercase transition-all ${
+                                                    twitterMarketType === 'keyword'
+                                                        ? 'bg-[#FFD600] text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] -translate-y-0.5'
+                                                        : 'bg-white text-gray-400 hover:text-black'
+                                                }`}
+                                            >
+                                                keyword mention
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setTwitterMarketType('metric')}
+                                                className={`flex-1 py-2.5 border-2 border-black rounded-xl font-black text-xs uppercase transition-all ${
+                                                    twitterMarketType === 'metric'
+                                                        ? 'bg-[#FFD600] text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] -translate-y-0.5'
+                                                        : 'bg-white text-gray-400 hover:text-black'
+                                                }`}
+                                            >
+                                                metric threshold
+                                            </button>
+                                        </div>
+
+                                        {twitterMarketType === 'keyword' ? (
+                                            <div className="space-y-3">
+                                                <div>
+                                                    <label className="text-black font-bold text-xs lowercase mb-1 block">target username</label>
+                                                    <div className="flex items-center gap-0">
+                                                        <span className="bg-black text-white font-black text-sm px-3 py-3 rounded-l-xl border-2 border-black border-r-0">@</span>
+                                                        <input
+                                                            type="text"
+                                                            placeholder="elonmusk"
+                                                            className="flex-1 bg-white border-2 border-black rounded-r-xl py-3 px-3 font-bold text-black outline-none focus:shadow-[2px_2px_0px_0px_#F492B7] transition-all placeholder:text-gray-300"
+                                                            value={targetUsername}
+                                                            onChange={(e) => setTargetUsername(e.target.value.replace('@', ''))}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="text-black font-bold text-xs lowercase mb-1 block">keyword to search</label>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Bitcoin"
+                                                        className="w-full bg-white border-2 border-black rounded-xl py-3 px-3 font-bold text-black outline-none focus:shadow-[2px_2px_0px_0px_#F492B7] transition-all placeholder:text-gray-300"
+                                                        value={targetKeyword}
+                                                        onChange={(e) => setTargetKeyword(e.target.value)}
+                                                    />
+                                                    <p className="text-xs text-black/50 font-medium mt-1">exact match, case-insensitive</p>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                <div>
+                                                    <label className="text-black font-bold text-xs lowercase mb-1 block">tweet ID</label>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="1234567890123456789"
+                                                        className="w-full bg-white border-2 border-black rounded-xl py-3 px-3 font-bold text-black outline-none focus:shadow-[2px_2px_0px_0px_#F492B7] transition-all placeholder:text-gray-300"
+                                                        value={targetTweetId}
+                                                        onChange={(e) => setTargetTweetId(e.target.value)}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-black font-bold text-xs lowercase mb-1 block">likes threshold</label>
+                                                    <input
+                                                        type="number"
+                                                        placeholder="10000"
+                                                        className="w-full bg-white border-2 border-black rounded-xl py-3 px-3 font-bold text-black outline-none focus:shadow-[2px_2px_0px_0px_#F492B7] transition-all placeholder:text-gray-300"
+                                                        value={metricThreshold}
+                                                        onChange={(e) => setMetricThreshold(e.target.value)}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* 7-day limit notice */}
+                                        <div className="flex items-center gap-2 bg-black/5 rounded-lg px-3 py-2">
+                                            <span className="text-sm">⏰</span>
+                                            <p className="text-xs font-bold text-black/60 lowercase">twitter markets are limited to 7 days max (API constraint)</p>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Outcomes with Custom Color Menu */}
                                 <div>
@@ -608,6 +756,21 @@ export default function CreateMarketModal({ isOpen, onClose }: CreateMarketModal
                     </>
                 )}
             </div>
+
+            <TwitterWarningModal
+                isOpen={showTwitterWarning}
+                onClose={() => {
+                    setShowTwitterWarning(false);
+                    // If they cancel, revert category
+                    if (!twitterWarningAccepted) {
+                        setSelectedCategory('Crypto');
+                    }
+                }}
+                onAccept={() => {
+                    setTwitterWarningAccepted(true);
+                    setShowTwitterWarning(false);
+                }}
+            />
 
             <AchievementToast achievements={newAchievements} onClose={() => setNewAchievements([])} />
         </div>

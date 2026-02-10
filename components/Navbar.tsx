@@ -235,13 +235,7 @@ function NavbarContent() {
 
                     <div className="flex items-center gap-4">
                         <div className="hidden sm:flex items-center gap-4">
-                            {/* How It Works Button */}
-                            <button
-                                onClick={() => { setIsHowItWorksOpen(true); play('click'); }}
-                                className="text-white/60 hover:text-white font-bold text-xs uppercase tracking-widest transition-colors mr-2"
-                            >
-                                How It Works
-                            </button>
+
 
                             <motion.button
                                 whileHover={{ scale: 1.05 }}
@@ -349,12 +343,7 @@ function NavbarContent() {
                                                         <span>Profile</span>
                                                     </Link>
 
-                                                    <button
-                                                        onClick={() => { setIsHowItWorksOpen(true); setIsNavMenuOpen(false); }}
-                                                        className="w-full flex items-center gap-3 px-5 py-3 text-white/50 hover:bg-white/10 transition-all text-xs font-bold uppercase tracking-widest text-left"
-                                                    >
-                                                        <span>❓ How It Works</span>
-                                                    </button>
+
                                                 </div>
                                             </>
                                         )}

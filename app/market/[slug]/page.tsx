@@ -2589,35 +2589,51 @@ export default function Page() {
                             className="bg-white rounded-3xl border-2 border-black p-6 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden"
                         >
                             {/* Header Gradient - Jim Raptis Principle: Epic Data Visualization */}
-                            <div className="w-full flex flex-col items-center px-6 py-10 rounded-3xl bg-gradient-to-br from-[#FF92C6] via-[#FFB6C1] to-[#F492CC] border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden mb-8 group/pool">
-                                <motion.div
-                                    animate={{
-                                        scale: [1, 1.05, 1],
-                                        rotate: [0, 1, 0]
-                                    }}
-                                    transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                                    className="absolute inset-0 opacity-20 pointer-events-none"
-                                >
-                                    <div className="absolute top-0 right-0 w-32 h-32 bg-white rounded-full -mr-16 -mt-16 blur-2xl" />
-                                    <div className="absolute bottom-0 left-0 w-24 h-24 bg-black rounded-full -ml-12 -mb-12 blur-xl" />
-                                </motion.div>
-                                <span className="text-[11px] font-black uppercase tracking-[0.6em] text-black/80 mb-3 relative z-10 drop-shadow-sm">Total Pool</span>
-                                <div className="flex items-baseline gap-2 relative z-10">
-                                    <span className="text-6xl font-black text-black tracking-tighter drop-shadow-[0_2px_2px_rgba(255,255,255,0.5)]">
-                                        <AnimatedNumber value={totalPoolSol} decimals={2} className="inline" />
-                                    </span>
-                                    <span className="text-3xl font-black text-white drop-shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">SOL</span>
+                            {/* Header Gradient - "The Obsidian Vault" Theme */}
+                            <div className="w-full flex flex-col items-center px-6 py-10 rounded-3xl bg-black border-4 border-black relative overflow-hidden mb-8 group/pool isolate">
+
+                                {/* 1. Dynamic Background Mesh */}
+                                <div className="absolute inset-0 opacity-40">
+                                    <div className="absolute top-0 right-0 w-64 h-64 bg-[#F492B7] rounded-full mix-blend-screen filter blur-[80px] opacity-20 animate-pulse" />
+                                    <div className="absolute bottom-0 left-0 w-64 h-64 bg-[#9945FF] rounded-full mix-blend-screen filter blur-[80px] opacity-20" />
                                 </div>
+
+                                {/* 2. Grid Overlay */}
+                                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay" />
+
+                                {/* 3. Content */}
                                 <motion.div
-                                    initial={{ width: 0 }}
-                                    animate={{ width: "80%" }}
-                                    className="h-1 bg-black/10 rounded-full mt-6 relative z-10 overflow-hidden"
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="relative z-10 flex flex-col items-center"
                                 >
-                                    <motion.div
-                                        animate={{ x: ["-100%", "100%"] }}
-                                        transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                                        className="w-full h-full bg-gradient-to-r from-transparent via-white/40 to-transparent"
-                                    />
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-[#00FF94] shadow-[0_0_10px_#00FF94] animate-pulse" />
+                                        <span className="text-[10px] font-black uppercase tracking-[0.4em] text-white/40">Total Pool</span>
+                                        <div className="w-1.5 h-1.5 rounded-full bg-[#00FF94] shadow-[0_0_10px_#00FF94] animate-pulse" />
+                                    </div>
+
+                                    <div className="flex items-baseline gap-2">
+                                        <span className="text-6xl font-black text-white tracking-tighter drop-shadow-2xl filter">
+                                            <AnimatedNumber
+                                                value={totalPoolSol}
+                                                decimals={2}
+                                                className="inline bg-clip-text text-transparent bg-gradient-to-b from-white to-gray-400"
+                                            />
+                                        </span>
+                                        <span className="text-2xl font-black text-[#F492B7] tracking-tight">SOL</span>
+                                    </div>
+
+                                    {/* 4. Interactive Progress Bar */}
+                                    <div className="w-full max-w-[80%] h-1.5 bg-white/10 rounded-full mt-6 relative overflow-hidden group-hover/pool:bg-white/20 transition-colors">
+                                        <motion.div
+                                            layoutId="pool-progress"
+                                            className="absolute inset-0 bg-gradient-to-r from-[#F492B7] to-[#9945FF]"
+                                            initial={{ x: '-100%' }}
+                                            animate={{ x: '100%' }}
+                                            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                                        />
+                                    </div>
                                 </motion.div>
                             </div>
 
@@ -2659,7 +2675,7 @@ export default function Page() {
                                                 : 'bg-white text-black border-black hover:bg-emerald-50'
                                                 }`}
                                         >
-                                            <svg width="14" height="14" viewBox="0 0 12 12" fill="none"><path d="M6 2L10 7H2L6 2Z" fill="currentColor"/></svg>
+                                            <svg width="14" height="14" viewBox="0 0 12 12" fill="none"><path d="M6 2L10 7H2L6 2Z" fill="currentColor" /></svg>
                                             <span className="relative z-10 lowercase">{marketOutcomes[0]?.title === 'YES' ? 'up' : (marketOutcomes[0]?.title || 'up')}</span>
                                         </button>
                                         <button
@@ -2669,7 +2685,7 @@ export default function Page() {
                                                 : 'bg-white text-black border-black hover:bg-rose-50'
                                                 }`}
                                         >
-                                            <svg width="14" height="14" viewBox="0 0 12 12" fill="none"><path d="M6 10L2 5H10L6 10Z" fill="currentColor"/></svg>
+                                            <svg width="14" height="14" viewBox="0 0 12 12" fill="none"><path d="M6 10L2 5H10L6 10Z" fill="currentColor" /></svg>
                                             <span className="relative z-10 lowercase">{marketOutcomes[1]?.title === 'NO' ? 'down' : (marketOutcomes[1]?.title || 'down')}</span>
                                         </button>
                                     </div>
