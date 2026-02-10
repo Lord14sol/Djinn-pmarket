@@ -17,6 +17,8 @@ import { useMarketData } from '@/hooks/useMarketData';
 import { useRealtimeChart } from '@/hooks/useRealtimeChart';
 import { useSound } from '@/components/providers/SoundProvider';
 import MorphingIcon from '@/components/ui/MorphingIcon';
+import EarningsTicketModal from '@/components/EarningsTicketModal';
+import confetti from 'canvas-confetti';
 
 // Components
 import PrettyChart from '@/components/market/PrettyChart';
@@ -39,7 +41,7 @@ import IgnitionBar from '@/components/market/IgnitionBar';
 import bs58Module from 'bs58';
 const bs58 = (bs58Module as any).default || bs58Module;
 import { ADMIN_WALLETS } from '@/lib/whitelist';
-import StressTestWidget from '@/components/market/StressTestWidget';
+
 
 // Utils
 const TREASURY_WALLET = new PublicKey("G1NaEsx5Pg7dSmyYy6Jfraa74b7nTbmN9A9NuiK171Ma");
@@ -85,7 +87,7 @@ export default function Page() {
     const slug = params?.slug as string || '';
     const { publicKey, signTransaction } = useWallet();
     const { connection } = useConnection();
-    const { program, buyShares, sellShares, isReady: isContractReady } = useDjinnProtocol();
+    const { program, buyShares, sellShares, claimReward, isReady: isContractReady } = useDjinnProtocol();
     const { play } = useSound();
 
     // --- STATE ---
@@ -137,6 +139,7 @@ export default function Page() {
 
     // Confirmation & Toast State
     const [showConfetti, setShowConfetti] = useState(false);
+    const [isClaimModalOpen, setIsClaimModalOpen] = useState(false);
     const [djinnToast, setDjinnToast] = useState<{ isVisible: boolean; type: 'SUCCESS' | 'ERROR' | 'INFO'; title: string; message: string; actionLink?: string; actionLabel?: string }>({ isVisible: false, type: 'INFO', title: '', message: '' });
 
 
@@ -1913,6 +1916,51 @@ export default function Page() {
     const inputSubtext = tradeMode === 'BUY' ? 'Amount to Spend' : 'Value to Extract';
 
     // Handler to toggle logic
+    const handleClaimWinnings = async () => {
+        if (!marketAccount || !publicKey) return;
+        try {
+            const winningOutcome = marketAccount.winning_outcome;
+            const isMultiOutcome = (marketOutcomes?.length || 0) > 2;
+
+            // Determine index or side
+            let sideOrIndex: 'yes' | 'no' | number = 'yes';
+
+            if (isMultiOutcome) {
+                const winIdx = marketOutcomes.findIndex(o => o.title === winningOutcome || o.id === winningOutcome);
+                if (winIdx === -1) throw new Error("Could not find winning outcome index");
+                sideOrIndex = winIdx;
+            } else {
+                sideOrIndex = winningOutcome === 'YES' ? 'yes' : 'no';
+            }
+
+            await claimReward(new PublicKey(marketAccount.marketPDA), new PublicKey(marketAccount.yes_token_mint || PublicKey.default), new PublicKey(marketAccount.no_token_mint || PublicKey.default), sideOrIndex);
+
+            // Success feedback
+            setIsClaimModalOpen(false);
+            setDjinnToast({
+                isVisible: true,
+                type: 'SUCCESS',
+                title: 'CLAIM SUCCESSFUL',
+                message: 'Your winnings have been sent to your wallet.'
+            });
+            play('success');
+
+            // Refresh data
+            refreshAll();
+            mutateHolders();
+            setTimeout(() => window.location.reload(), 2000);
+        } catch (e: any) {
+            console.error(e);
+            setDjinnToast({
+                isVisible: true,
+                type: 'ERROR',
+                title: 'CLAIM FAILED',
+                message: e.message || "Unknown error occurred."
+            });
+            play('error');
+        }
+    };
+
     const handleTrade = async (e?: any) => {
         if (e && e.preventDefault) e.preventDefault();
         console.log(`🖱️ ${tradeMode} Button Clicked.`);
@@ -2637,11 +2685,50 @@ export default function Page() {
                                 </motion.div>
                             </div>
 
-                            {/* Buy/Sell Toggles - Jim Raptis Principle: Drastic Selected Items */}
-                            <div className="mb-8 p-1.5 bg-gray-100 border-4 border-black rounded-2xl flex gap-1.5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-                                <button onClick={() => { setTradeMode('BUY'); play('click'); }} className={`flex-1 py-4 rounded-xl text-xs font-black tracking-widest uppercase transition-all border-4 ${tradeMode === 'BUY' ? 'bg-emerald-400 text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-y-1' : 'text-black/60 border-transparent bg-transparent hover:text-black'}`}>BUY</button>
-                                <button onClick={() => { setTradeMode('SELL'); play('click'); }} className={`flex-1 py-4 rounded-xl text-xs font-black tracking-widest uppercase transition-all border-4 ${tradeMode === 'SELL' ? 'bg-rose-400 text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-y-1' : 'text-black/60 border-transparent bg-transparent hover:text-black'}`}>SELL</button>
-                            </div>
+                            {/* RESOLVED STATE HANDLING */}
+                            {marketAccount?.resolved ? (
+                                <div className="mb-8">
+                                    <div className="w-full py-4 bg-black text-white font-black text-center text-sm uppercase tracking-[0.3em] rounded-xl border-4 border-black mb-4 shadow-[4px_4px_0px_rgba(0,0,0,0.2)]">
+                                        MARKET RESOLVED
+                                    </div>
+
+                                    {/* WINNINGS CHECK */}
+                                    {(() => {
+                                        const winningOutcome = marketAccount.winning_outcome; // 'YES', 'NO', or ID
+                                        // Determine user's winning shares
+                                        let winningShares = 0;
+                                        if (isMultiOutcome) {
+                                            const winIdx = marketOutcomes.findIndex(o => o.title === winningOutcome || o.id === winningOutcome);
+                                            if (winIdx !== -1) winningShares = myShares[winIdx] || 0;
+                                        } else {
+                                            winningShares = winningOutcome === 'YES' ? (myShares[0] || 0) : (winningOutcome === 'NO' ? (myShares[1] || 0) : 0);
+                                        }
+
+                                        if (winningShares > 0.01) {
+                                            return (
+                                                <button
+                                                    onClick={() => setIsClaimModalOpen(true)}
+                                                    className="w-full py-5 bg-[#FFD600] text-black font-black text-xl uppercase tracking-widest rounded-2xl border-4 border-black shadow-[6px_6px_0px_black] hover:-translate-y-1 hover:shadow-[10px_10px_0px_black] active:translate-y-0 active:shadow-none transition-all animate-pulse"
+                                                >
+                                                    CLAIM {formatCompact(winningShares)} SOL
+                                                </button>
+                                            )
+                                        } else {
+                                            return (
+                                                <div className="text-center p-4 bg-gray-100 rounded-xl border-2 border-black/10">
+                                                    <span className="text-xs font-bold text-gray-400 uppercase">Better luck next time</span>
+                                                </div>
+                                            )
+                                        }
+                                    })()}
+                                </div>
+                            ) : (
+                                /* Buy/Sell Toggles - Jim Raptis Principle: Drastic Selected Items */
+                                <div className="mb-8 p-1.5 bg-gray-100 border-4 border-black rounded-2xl flex gap-1.5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+                                    <button onClick={() => { setTradeMode('BUY'); play('click'); }} className={`flex-1 py-4 rounded-xl text-xs font-black tracking-widest uppercase transition-all border-4 ${tradeMode === 'BUY' ? 'bg-emerald-400 text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-y-1' : 'text-black/60 border-transparent bg-transparent hover:text-black'}`}>BUY</button>
+                                    <button onClick={() => { setTradeMode('SELL'); play('click'); }} className={`flex-1 py-4 rounded-xl text-xs font-black tracking-widest uppercase transition-all border-4 ${tradeMode === 'SELL' ? 'bg-rose-400 text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-y-1' : 'text-black/60 border-transparent bg-transparent hover:text-black'}`}>SELL</button>
+                                </div>
+                            )}
 
                             {/* Outcome Selector - Jim Raptis Principle: Frictionless Selection */}
                             <div className="mb-8">
@@ -2783,11 +2870,7 @@ export default function Page() {
                     }}
                 />
 
-                {
-                    marketAccount && marketAccount.marketPDA && (
-                        <StressTestWidget marketPda={marketAccount.marketPDA} />
-                    )
-                }
+
 
                 <DjinnToast
                     isVisible={djinnToast.isVisible}
@@ -2797,6 +2880,39 @@ export default function Page() {
                     message={djinnToast.message}
                     actionLink={djinnToast.actionLink}
                     actionLabel={djinnToast.actionLabel}
+                />
+                <EarningsTicketModal
+                    isOpen={isClaimModalOpen}
+                    onClose={() => setIsClaimModalOpen(false)}
+                    amount={(() => {
+                        if (!marketAccount?.winning_outcome) return 0;
+                        const winningOutcome = marketAccount.winning_outcome;
+                        const isMultiOutcome = (marketOutcomes?.length || 0) > 2;
+                        let s = 0;
+                        if (isMultiOutcome) {
+                            const winIdx = marketOutcomes.findIndex(o => o.title === winningOutcome || o.id === winningOutcome);
+                            if (winIdx !== -1) s = myShares[winIdx] || 0;
+                        } else {
+                            s = winningOutcome === 'YES' ? (myShares[0] || 0) : (winningOutcome === 'NO' ? (myShares[1] || 0) : 0);
+                        }
+                        return s;
+                    })()}
+                    marketTitle={marketAccount?.title || 'Unknown Market'}
+                    outcome={marketAccount?.winning_outcome || 'Unknown'}
+                    shares={(() => {
+                        if (!marketAccount?.winning_outcome) return 0;
+                        const winningOutcome = marketAccount.winning_outcome;
+                        const isMultiOutcome = (marketOutcomes?.length || 0) > 2;
+                        let s = 0;
+                        if (isMultiOutcome) {
+                            const winIdx = marketOutcomes.findIndex(o => o.title === winningOutcome || o.id === winningOutcome);
+                            if (winIdx !== -1) s = myShares[winIdx] || 0;
+                        } else {
+                            s = winningOutcome === 'YES' ? (myShares[0] || 0) : (winningOutcome === 'NO' ? (myShares[1] || 0) : 0);
+                        }
+                        return s;
+                    })()}
+                    onClaim={handleClaimWinnings}
                 />
             </div >
         </div >

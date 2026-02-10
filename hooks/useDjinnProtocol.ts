@@ -245,12 +245,17 @@ export const useDjinnProtocol = () => {
         marketPda: PublicKey,
         yesMint: PublicKey,
         noMint: PublicKey,
-        side: 'yes' | 'no' = 'yes'
+        sideOrIndex: 'yes' | 'no' | number = 'yes'
     ) => {
         if (!program || !anchorWallet || !connection || !publicKey) throw new Error("Wallet not connected");
 
         try {
-            const outcomeIndex = side.toLowerCase() === 'yes' ? 0 : 1;
+            let outcomeIndex = 0;
+            if (typeof sideOrIndex === 'number') {
+                outcomeIndex = sideOrIndex;
+            } else {
+                outcomeIndex = sideOrIndex.toLowerCase() === 'yes' ? 0 : 1;
+            }
 
             const [marketVaultPda] = await PublicKey.findProgramAddress(
                 [Buffer.from("market_vault"), marketPda.toBuffer()],
