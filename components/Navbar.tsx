@@ -94,12 +94,16 @@ function NavbarContent() {
                     console.warn('⚠️ LocalStorage full, skipped profile cache update');
                 }
             } else {
-                console.log('✨ New User Detected! Opening Claim Flow...');
+                console.log('✨ New User Detected! Opening Claim Flow for:', walletAddress);
                 setTempConnectedWallet(walletAddress);
                 setIsClaimModalOpen(true);
             }
-        } catch (err) {
-            console.error('Database sync error:', err);
+        } catch (err: any) {
+            console.error('🔴 Database sync error:', err);
+            // If Supabase is down or blocked, don't crash the UI, but log clearly
+            if (err.message?.includes('PGRST')) {
+                console.warn('Supabase query failed, might be a schema issue or network.');
+            }
         }
     };
 
@@ -204,73 +208,6 @@ function NavbarContent() {
         }
     }, [connected]);
 
-    // Twitter Auth Listener (Robust)
-    useEffect(() => {
-        let authListener: any = null;
-
-        const setupAuthListener = async () => {
-            const { supabase } = await import('@/lib/supabase');
-            const { upsertProfile, getProfile } = await import('@/lib/supabase-db');
-
-            const handleAuthSession = async (session: any) => {
-                if (session?.user?.user_metadata && session.provider_token) {
-                    console.log("🐦 Twitter Session Detected via Listener:", session.user.user_metadata);
-                    if (!publicKey) return;
-
-                    try {
-                        const twitterHandle = session.user.user_metadata.user_name || session.user.user_metadata.full_name;
-                        const twitterAvatar = session.user.user_metadata.avatar_url;
-
-                        if (twitterHandle) {
-                            const existingProfile = await getProfile(publicKey.toBase58());
-
-                            // Check if already linked to avoid loop/redundant updates
-                            if (existingProfile?.twitter === `@${twitterHandle}`) {
-                                return;
-                            }
-
-                            const currentPfp = existingProfile?.avatar_url;
-                            const shouldUseTwitterPfp = !currentPfp || currentPfp === '/pink-pfp.png';
-
-                            await upsertProfile({
-                                wallet_address: publicKey.toBase58(),
-                                username: existingProfile?.username || username,
-                                bio: existingProfile?.bio || '',
-                                avatar_url: shouldUseTwitterPfp ? twitterAvatar : currentPfp,
-                                banner_url: existingProfile?.banner_url || null,
-                                twitter: `@${twitterHandle}`,
-                                discord: existingProfile?.discord || ''
-                            });
-
-                            alert(`✅ Linked X Account: @${twitterHandle}`);
-                            await supabase.auth.signOut();
-                            window.location.reload();
-                        }
-                    } catch (e) {
-                        console.error("Error linking account:", e);
-                    }
-                }
-            };
-
-            // Check initial session
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session) handleAuthSession(session);
-
-            // Listen for changes (redirects)
-            const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-                if (session) handleAuthSession(session);
-            });
-            authListener = subscription;
-        };
-
-        if (connected && publicKey) {
-            setupAuthListener();
-        }
-
-        return () => {
-            if (authListener) authListener.unsubscribe();
-        };
-    }, [connected, publicKey, username]);
 
     return (
         <>
@@ -404,6 +341,31 @@ function NavbarContent() {
                                                         <MorphingIcon type="activity" size={18} />
                                                         <span>Activity Feed</span>
                                                     </Link>
+
+                                                    <div className="border-t-2 border-white my-1" />
+
+                                                    <button
+                                                        onClick={() => {
+                                                            setIsNavMenuOpen(false);
+                                                            setIsWalletModalOpen(false);
+                                                            setIsOpen(true); // Open profile menu
+                                                        }}
+                                                        className="w-full flex items-center gap-3 px-5 py-3 text-[#FF69B4] hover:bg-white hover:text-black transition-all text-sm font-black uppercase tracking-wider"
+                                                    >
+                                                        <span className="text-lg">𝕏</span>
+                                                        <span>Connect X</span>
+                                                    </button>
+
+                                                    <button
+                                                        onClick={() => {
+                                                            setIsNavMenuOpen(false);
+                                                            setIsClaimModalOpen(true);
+                                                        }}
+                                                        className="w-full flex items-center gap-3 px-5 py-3 text-white hover:bg-[#F492B7] hover:text-black transition-all text-sm font-black uppercase tracking-wider"
+                                                    >
+                                                        <span className="text-lg">💎</span>
+                                                        <span>Claim Host</span>
+                                                    </button>
 
                                                     <div className="border-t-2 border-white my-1" />
 

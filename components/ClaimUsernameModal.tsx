@@ -75,16 +75,23 @@ export default function ClaimUsernameModal({ isOpen, walletAddress, onSuccess, o
     const handleConnectX = async () => {
         const { supabase } = await import('@/lib/supabase');
         try {
+            console.log("Attempting X connection from Claim Modal...");
             const { data, error } = await supabase.auth.signInWithOAuth({
-                provider: 'twitter',
+                provider: 'X',
                 options: {
-                    redirectTo: window.location.href,
+                    redirectTo: window.location.origin,
                 },
             });
-            if (error) throw error;
-        } catch (e) {
-            console.error("Failed to connect X:", e);
-            alert("Auth Error: Could not connect to X. Make sure Supabase is configured.");
+            if (error) {
+                console.error("🔴 Supabase Auth Error (Claim Modal):", error);
+                alert(`Auth Error: ${error.message}`);
+                throw error;
+            }
+        } catch (e: any) {
+            console.error("❌ Failed to connect X:", e);
+            if (!e.message?.includes("provider is not enabled")) {
+                alert("Auth Error: Could not connect to X.");
+            }
         }
     };
 

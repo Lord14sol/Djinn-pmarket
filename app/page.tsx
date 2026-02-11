@@ -87,7 +87,18 @@ export default function DjinnLanding() {
     useEffect(() => {
         refreshStatus();
         const interval = setInterval(refreshStatus, 30000);
-        return () => clearInterval(interval);
+
+        // Instant refresh on profile update event (e.g. after X sync)
+        const handleProfileUpdate = () => {
+            console.log("🔔 [Home] Profile update detected, refreshing...");
+            refreshStatus();
+        };
+        window.addEventListener('djinn-profile-updated', handleProfileUpdate);
+
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('djinn-profile-updated', handleProfileUpdate);
+        };
     }, [refreshStatus]);
 
     useEffect(() => {
@@ -218,7 +229,12 @@ export default function DjinnLanding() {
                             transition={{ type: "spring", stiffness: 100, damping: 15 }}
                             className="w-full max-w-xl h-[680px] relative"
                         >
-                            <PhysicsCardBubblegum username={profile.username} memberNumber={status.count} />
+                            <PhysicsCardBubblegum
+                                username={profile.username}
+                                memberNumber={status.count}
+                                pfp={profile.avatar_url}
+                                twitterHandle={profile.twitter}
+                            />
                         </motion.div>
                     ) : (loading && connected) ? (
                         /* Loading state after connection but before profile load */

@@ -58,14 +58,23 @@ export function useWalletConnection() {
         setState({ isConnecting: true, error: null });
 
         try {
+            // STEP 0: Small breathing room before selection to prevent event collision
+            await new Promise(resolve => setTimeout(resolve, 100));
+
             // STEP 1: Select the wallet adapter
             console.log('[Wallet] 1. Selecting:', walletName);
             select(walletName);
 
             // STEP 2: Wait for wallet extension to initialize
             // Poll for readiness instead of fixed delay
-            console.log('[Wallet] 2. Waiting for adapter...');
-            await new Promise(resolve => setTimeout(resolve, 500)); // Initial breathing room
+            console.log('[Wallet] 2. Waiting for adapter readiness...');
+
+            // Give it multiple ticks to stabilize
+            for (let i = 0; i < 5; i++) {
+                await new Promise(resolve => setTimeout(resolve, 300));
+                // If the adapter is already connected or ready, we can move faster
+                if (wallet?.adapter?.connected) break;
+            }
 
             // STEP 3: Call connect() with Retry Logic
             console.log('[Wallet] 3. Calling connect()...');
@@ -103,8 +112,16 @@ export function useWalletConnection() {
 
         } catch (error: any) {
             connectionAttemptRef.current = false;
+
+            // Log full error for deep debugging
+            console.error('[Wallet] ✗ Detailed Connection error:', {
+                name: error?.name,
+                message: error?.message,
+                code: error?.code,
+                errorObject: error
+            });
+
             const msg = error?.message || 'Connection failed';
-            console.error('[Wallet] ✗ Connection error:', msg);
 
             if (msg.includes('User rejected') || msg.includes('user rejected')) {
                 setState({ isConnecting: false, error: 'Connection cancelled by user' });

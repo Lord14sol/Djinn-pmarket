@@ -22,6 +22,13 @@ async function getSupabaseModule() {
  */
 export async function POST(request: Request) {
     try {
+        // --- SECURITY CHECK ---
+        const adminSecret = request.headers.get('x-admin-secret');
+        if (!adminSecret || adminSecret !== process.env.ADMIN_SECRET) {
+            console.warn('[API] Unauthorized oracle trigger attempt');
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const body = await request.json();
         const { market_slug, market_title, current_mcap_sol, force = false } = body;
 
@@ -73,7 +80,7 @@ export async function POST(request: Request) {
         if (!config.bot_enabled) {
             // Mark for manual verification
             await updateMarketVerificationStatus(market_slug, 'pending_manual');
-            await logOracleEvent('trigger', `Market ${market_slug} reached MCAP but bot is disabled. Marked for manual verification.`);
+            await logOracleEvent('system', `Market ${market_slug} reached MCAP but bot is disabled. Marked for manual verification.`);
 
             return NextResponse.json({
                 triggered: false,
@@ -83,7 +90,7 @@ export async function POST(request: Request) {
         }
 
         // Trigger Cerberus verification
-        await logOracleEvent('trigger', `🎯 MCAP TRIGGER: ${market_slug} reached ${current_mcap_sol.toFixed(2)} SOL (${(current_mcap_sol / GRADUATION_MCAP_SOL * 100).toFixed(1)}%)`);
+        await logOracleEvent('system', `🎯 MCAP TRIGGER: ${market_slug} reached ${current_mcap_sol.toFixed(2)} SOL (${(current_mcap_sol / GRADUATION_MCAP_SOL * 100).toFixed(1)}%)`);
 
         // Update market status to pending verification
         await updateMarketVerificationStatus(market_slug, 'pending');
@@ -99,7 +106,7 @@ export async function POST(request: Request) {
             logOracleEvent('error', `Analysis failed for ${market_slug}: ${err.message}`);
         });
 
-        await logOracleEvent('trigger', `🐕 CERBERUS activated for: ${market_title}`);
+        await logOracleEvent('system', `🐕 CERBERUS activated for: ${market_title}`);
 
         return NextResponse.json({
             triggered: true,

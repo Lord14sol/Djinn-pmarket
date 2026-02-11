@@ -19,6 +19,13 @@ export async function GET() {
 
 export async function POST(req: Request) {
     try {
+        // --- SECURITY CHECK ---
+        const adminSecret = req.headers.get('x-admin-secret');
+        if (!adminSecret || adminSecret !== process.env.ADMIN_SECRET) {
+            console.warn('[API] Unauthorized POST attempt');
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const body = await req.json();
 
         // Validate required fields
@@ -59,6 +66,13 @@ export async function POST(req: Request) {
 
 export async function PUT(req: Request) {
     try {
+        // --- SECURITY CHECK ---
+        const adminSecret = req.headers.get('x-admin-secret');
+        if (!adminSecret || adminSecret !== process.env.ADMIN_SECRET) {
+            console.warn('[API] Unauthorized PUT attempt');
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const body = await req.json();
 
         if (!body.slug) {

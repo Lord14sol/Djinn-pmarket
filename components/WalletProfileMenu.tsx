@@ -39,16 +39,24 @@ export default function WalletProfileMenu({
 
     const handleConnectX = async () => {
         try {
+            console.log("Attempting X connection with provider 'X'...");
             const { data, error } = await supabase.auth.signInWithOAuth({
-                provider: 'twitter',
+                provider: 'X',
                 options: {
-                    redirectTo: window.location.href, // Redirect back to here
+                    redirectTo: window.location.origin, // Use origin for consistency
                 },
             });
-            if (error) throw error;
-        } catch (e) {
-            console.error("Failed to connect X:", e);
-            alert("Auth Error: Could not connect to X. Make sure Supabase is configured.");
+            if (error) {
+                console.error("🔴 Supabase Auth Error:", error);
+                alert(`Auth Error: ${error.message} (Code: ${error.status})`);
+                throw error;
+            }
+            console.log("✅ OAuth initialized:", data);
+        } catch (e: any) {
+            console.error("❌ Failed to connect X:", e);
+            if (!e.message?.includes("provider is not enabled")) {
+                alert("Auth Error: Could not connect to X. Check console for details.");
+            }
         }
     };
 

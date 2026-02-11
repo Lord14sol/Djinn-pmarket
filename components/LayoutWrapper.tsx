@@ -147,6 +147,72 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
         checkAccess();
     }, [pathname, connected, publicKey, router]);
 
+    // GLOBAL X AUTH LISTENER
+    useEffect(() => {
+        let authListener: any = null;
+
+        const setupAuthListener = async () => {
+            const { supabase } = await import('@/lib/supabase');
+            const { upsertProfile, getProfile } = await import('@/lib/supabase-db');
+
+            const handleAuthSession = async (session: any) => {
+                const metadata = session?.user?.user_metadata;
+                if (metadata && publicKey) {
+                    console.log("🐦 [Global] X Metadata Found:", metadata);
+                    try {
+                        const twitterHandle = metadata.user_name || metadata.name || metadata.full_name;
+                        let twitterAvatar = metadata.avatar_url;
+
+                        // QUALITY FIX: X/Twitter returns tiny 48x48 thumbnails by default (_normal)
+                        // We upgrade to _400x400 for a crisp look, or strip the suffix for original size.
+                        if (twitterAvatar && twitterAvatar.includes('_normal.')) {
+                            twitterAvatar = twitterAvatar.replace('_normal.', '_400x400.');
+                        }
+
+                        if (twitterHandle) {
+                            const walletAddress = publicKey.toBase58();
+                            const existingProfile = await getProfile(walletAddress);
+                            const formattedHandle = twitterHandle.startsWith('@') ? twitterHandle : `@${twitterHandle}`;
+
+                            if (existingProfile?.twitter === formattedHandle && existingProfile?.avatar_url === twitterAvatar) {
+                                return;
+                            }
+
+                            console.log(`🔄 [Global] Syncing X data for ${walletAddress}...`);
+                            const result = await upsertProfile({
+                                wallet_address: walletAddress,
+                                username: existingProfile?.username || `user_${walletAddress.slice(0, 4)}`,
+                                bio: existingProfile?.bio || 'Djinn Trader',
+                                avatar_url: twitterAvatar || existingProfile?.avatar_url || '/pink-pfp.png',
+                                twitter: formattedHandle,
+                                discord: existingProfile?.discord || ''
+                            });
+
+                            if (result) {
+                                await supabase.auth.signOut();
+                                window.dispatchEvent(new CustomEvent('djinn-profile-updated'));
+                                console.log("✅ [Global] Profile synced with X!");
+                            }
+                        }
+                    } catch (e) {
+                        console.error("❌ [Global] Auth sync error:", e);
+                    }
+                }
+            };
+
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) handleAuthSession(session);
+
+            const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+                if (session) handleAuthSession(session);
+            });
+            authListener = subscription;
+        };
+
+        if (connected && publicKey) setupAuthListener();
+        return () => authListener?.unsubscribe();
+    }, [connected, publicKey]);
+
     return (
         <>
             {!isGenesis && <Navbar />}

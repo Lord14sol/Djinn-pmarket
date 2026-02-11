@@ -17,6 +17,8 @@ interface LanyardProps {
     fov?: number;
     username?: string;
     memberNumber?: number;
+    pfp?: string | null;
+    twitterHandle?: string | null;
 }
 
 export default function Lanyard({
@@ -24,7 +26,9 @@ export default function Lanyard({
     gravity = [0, -40, 0],
     fov = 20,
     username = 'agent',
-    memberNumber = 1
+    memberNumber = 1,
+    pfp = null,
+    twitterHandle = null
 }: LanyardProps) {
     const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
 
@@ -54,7 +58,13 @@ export default function Lanyard({
             >
                 <ambientLight intensity={0.5} />
                 <Physics gravity={gravity} timeStep={isMobile ? 1 / 30 : 1 / 60}>
-                    <Band isMobile={isMobile} username={username} memberNumber={memberNumber} />
+                    <Band
+                        isMobile={isMobile}
+                        username={username}
+                        memberNumber={memberNumber}
+                        pfp={pfp}
+                        twitterHandle={twitterHandle}
+                    />
                 </Physics>
             </Canvas>
         </div>
@@ -67,9 +77,19 @@ interface BandProps {
     isMobile?: boolean;
     username?: string;
     memberNumber?: number;
+    pfp?: string | null;
+    twitterHandle?: string | null;
 }
 
-function Band({ maxSpeed = 50, minSpeed = 0, isMobile = false, username = 'agent', memberNumber = 1 }: BandProps) {
+function Band({
+    maxSpeed = 50,
+    minSpeed = 0,
+    isMobile = false,
+    username = 'agent',
+    memberNumber = 1,
+    pfp = null,
+    twitterHandle = null
+}: BandProps) {
     const band = useRef<any>(null);
     const fixed = useRef<any>(null);
     const j1 = useRef<any>(null);
@@ -200,7 +220,12 @@ function Band({ maxSpeed = 50, minSpeed = 0, isMobile = false, username = 'agent
                             }}
                         >
                             <div style={{ width: '480px', height: '650px' }}>
-                                <PhysicsCardBubblegum username={username} memberNumber={memberNumber} />
+                                <PhysicsCardBubblegum
+                                    username={username}
+                                    memberNumber={memberNumber}
+                                    pfp={pfp}
+                                    twitterHandle={twitterHandle}
+                                />
                             </div>
                         </Html>
                     </group>

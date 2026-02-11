@@ -44,6 +44,7 @@ export default function DracoDashboard() {
     const [isLogged, setIsLogged] = useState(false);
     const [user, setUser] = useState('');
     const [pwd, setPwd] = useState('');
+    const [secret, setSecret] = useState('');
     const [markets, setMarkets] = useState<any[]>([]);
     const [expandedLogs, setExpandedLogs] = useState<string | null>(null);
     const [processingQueue, setProcessingQueue] = useState<string[]>([]);
@@ -83,7 +84,10 @@ export default function DracoDashboard() {
         setProcessingQueue(prev => [...prev, id]);
         await fetch('/api/markets', {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'x-admin-secret': secret
+            },
             body: JSON.stringify({ id, status }),
         });
         setProcessingQueue(prev => prev.filter(p => p !== id));
@@ -116,11 +120,11 @@ export default function DracoDashboard() {
                             />
                         </div>
                         <div>
-                            <label className="block text-green-500 text-xs mb-2 uppercase tracking-widest">Access Code</label>
+                            <label className="block text-green-500 text-xs mb-2 uppercase tracking-widest">Secret Key</label>
                             <input
-                                type="password" value={pwd} onChange={(e) => setPwd(e.target.value)}
+                                type="password" value={secret} onChange={(e) => setSecret(e.target.value)}
                                 className="w-full bg-black border border-green-900 p-3 text-green-400 focus:outline-none focus:border-green-500 transition-colors"
-                                placeholder="PASSWORD"
+                                placeholder="ADMIN_SECRET"
                             />
                         </div>
                         <button type="submit" className="w-full bg-green-500 text-black font-black p-4 rounded hover:bg-green-400 transition-all uppercase tracking-widest">
@@ -318,7 +322,10 @@ function MarketRow({ market: m, expandedLogs, setExpandedLogs, updateStatus, pro
     const handleLordOverride = async (decision: 'VERIFIED' | 'REJECTED') => {
         await fetch('/api/markets', {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'x-admin-secret': secret
+            },
             body: JSON.stringify({
                 id: m.id,
                 status: decision,

@@ -20,6 +20,13 @@ async function getSupabaseModule() {
  */
 export async function POST(request: Request) {
     try {
+        // --- SECURITY CHECK ---
+        const adminSecret = request.headers.get('x-admin-secret');
+        if (!adminSecret || adminSecret !== process.env.ADMIN_SECRET) {
+            console.warn('[API] Unauthorized oracle resolution attempt');
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const body = await request.json();
         const { market_slug, verdict: overrideVerdict, force = false } = body;
 
@@ -101,7 +108,7 @@ export async function POST(request: Request) {
         }
 
         // 5. Execute resolution
-        await logOracleEvent('resolution', `🎯 Resolving market: ${market_slug} → ${finalVerdict}`);
+        await logOracleEvent('system', `🎯 Resolving market: ${market_slug} → ${finalVerdict}`);
 
         const result = await resolveMarket(market_slug, finalVerdict);
 
@@ -118,7 +125,7 @@ export async function POST(request: Request) {
             cerberus_verdict: finalVerdict
         });
 
-        await logOracleEvent('resolution', `✅ Market resolved: ${market_slug} → ${finalVerdict} | Winners: ${result.winningBets}, Pool: ${result.totalPool} SOL`);
+        await logOracleEvent('system', `✅ Market resolved: ${market_slug} → ${finalVerdict} | Winners: ${result.winningBets}, Pool: ${result.totalPool} SOL`);
 
         return NextResponse.json({
             resolved: true,

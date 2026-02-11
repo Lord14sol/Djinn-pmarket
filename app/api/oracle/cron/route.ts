@@ -42,13 +42,16 @@ export async function GET(request: Request) {
     };
 
     try {
-        // Optional: Verify cron secret in production
-        const cronSecret = request.headers.get('x-cron-secret');
-        const expectedSecret = process.env.CRON_SECRET;
-        if (expectedSecret && cronSecret !== expectedSecret) {
-            // In production, reject unauthorized cron calls
-            // For now, just log warning
-            console.warn('[CRON] Missing or invalid cron secret');
+        // --- SECURITY CHECK ---
+        const cronSecret = request.headers.get('x-cron-secret') || request.headers.get('x-admin-secret');
+        const expectedCronSecret = process.env.CRON_SECRET;
+        const expectedAdminSecret = process.env.ADMIN_SECRET;
+
+        // Block unauthorized access if any secret is configured
+        if ((expectedCronSecret && cronSecret !== expectedCronSecret) &&
+            (expectedAdminSecret && cronSecret !== expectedAdminSecret)) {
+            console.warn('[CRON] Unauthorized access attempt');
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
         const { logOracleEvent, getOracleConfig } = await getOracleModule();
@@ -64,7 +67,7 @@ export async function GET(request: Request) {
         // Check if oracle is enabled
         const config = await getOracleConfig();
 
-        await logOracleEvent('cron', '🔄 CERBERUS CRON JOB STARTED');
+        await logOracleEvent('system', '🔄 CERBERUS CRON JOB STARTED');
 
         // ═══════════════════════════════════════════════════════════════
         // PHASE 1: MCAP TRIGGER CHECK
@@ -94,11 +97,11 @@ export async function GET(request: Request) {
                         });
 
                         results.triggered_verifications.push(market.slug);
-                        await logOracleEvent('cron', `🎯 Triggered verification: ${market.slug} (${estimatedMcapSol.toFixed(1)} SOL)`);
+                        await logOracleEvent('system', `🎯 Triggered verification: ${market.slug} (${estimatedMcapSol.toFixed(1)} SOL)`);
                     } else {
                         // Mark for manual verification
                         await updateMarketVerificationStatus(market.slug, 'pending_manual');
-                        await logOracleEvent('cron', `⚠️ Bot disabled, marked for manual: ${market.slug}`);
+                        await logOracleEvent('system', `⚠️ Bot disabled, marked for manual: ${market.slug}`);
                     }
                 }
             } catch (err) {
@@ -134,7 +137,7 @@ export async function GET(request: Request) {
 
                     if (!result.error) {
                         results.resolved_markets.push(market.slug);
-                        await logOracleEvent('cron', `✅ Auto-resolved: ${market.slug} → ${verdict}`);
+                        await logOracleEvent('system', `✅ Auto-resolved: ${market.slug} → ${verdict}`);
                     } else {
                         results.errors.push(`Resolution failed: ${market.slug}`);
                     }
@@ -150,7 +153,7 @@ export async function GET(request: Request) {
         // ═══════════════════════════════════════════════════════════════
         results.stats.processing_time_ms = Date.now() - startTime;
 
-        await logOracleEvent('cron', `🏁 CRON COMPLETE: ${results.triggered_verifications.length} verified, ${results.resolved_markets.length} resolved, ${results.errors.length} errors (${results.stats.processing_time_ms}ms)`);
+        await logOracleEvent('system', `🏁 CRON COMPLETE: ${results.triggered_verifications.length} verified, ${results.resolved_markets.length} resolved, ${results.errors.length} errors (${results.stats.processing_time_ms}ms)`);
 
         return NextResponse.json({
             success: true,

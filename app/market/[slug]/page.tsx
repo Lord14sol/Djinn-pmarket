@@ -1757,7 +1757,7 @@ export default function Page() {
             if (marketAccount?.market_pda && publicKey) {
                 try {
                     const marketPda = new PublicKey(marketAccount.market_pda);
-                    const PROGRAM_ID = new PublicKey('HkjMQFag41pUutseBpXSXUuEwSKuc2CByRJjyiwAvGjL');
+                    const PROGRAM_ID = new PublicKey('Fdbhx4cN5mPWzXneDm9XjaRgjYVjyXtpsJLGeQLPr7hg');
 
                     // Read BOTH UserPositions (YES and NO) after any trade
                     for (const outcomeIndex of [0, 1]) {
@@ -2351,7 +2351,7 @@ export default function Page() {
                 if (marketAccount?.market_pda && publicKey) {
                     try {
                         const marketPda = new PublicKey(marketAccount.market_pda);
-                        const PROGRAM_ID = new PublicKey('HkjMQFag41pUutseBpXSXUuEwSKuc2CByRJjyiwAvGjL');
+                        const PROGRAM_ID = new PublicKey('Fdbhx4cN5mPWzXneDm9XjaRgjYVjyXtpsJLGeQLPr7hg');
 
                         refreshAll();
                         // Delay to allow RPC to propagate changes
