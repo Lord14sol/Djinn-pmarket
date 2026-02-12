@@ -287,11 +287,12 @@ export default function PhysicsCardBubblegum({ username, memberNumber, pfp, twit
                     {/* NOISE TEXTURE */}
                     <div className="absolute inset-0 pointer-events-none opacity-25 mix-blend-soft-light" style={{ filter: 'url(#noiseFilter)' }} />
 
+
                     {/* CONTENT ---- */}
                     <div className="relative z-10 flex flex-col items-center h-full p-8" style={{ transformStyle: 'preserve-3d' }}>
 
                         {/* 1. TOP TITLE GROUP (NEW) */}
-                        <div className="relative flex-1 flex flex-col items-center justify-end w-full pb-20" style={{ transformStyle: 'preserve-3d' }}>
+                        <div className="relative flex-1 flex flex-col items-center justify-end w-full pb-10" style={{ transformStyle: 'preserve-3d' }}>
                             <motion.h2
                                 className="text-[3.5rem] font-black tracking-[-0.04em] relative"
                                 style={{

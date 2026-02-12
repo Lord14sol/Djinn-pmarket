@@ -12,6 +12,7 @@ import { useModal } from '@/lib/ModalContext';
 import Link from 'next/link';
 import { searchMarkets, searchProfiles } from '@/lib/supabase-db';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useSound } from '@/components/providers/SoundProvider';
 
 // --- ICONOS ---
 const SearchIcon = () => (
@@ -34,6 +35,7 @@ const HeroContent = ({ onMarketCreated }: { onMarketCreated: (m: any) => void })
     const router = useRouter();
     const searchParams = useSearchParams();
     const { openCreateMarket } = useModal();
+    const { play } = useSound();
 
     const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false);
 
@@ -263,7 +265,7 @@ const HeroContent = ({ onMarketCreated }: { onMarketCreated: (m: any) => void })
                             }
                         `}</style>
                         <button
-                            onClick={openCreateMarket}
+                            onClick={() => { openCreateMarket(); play('click'); }}
                             className="chroma-hover text-black text-xl font-black py-4 px-12 rounded-xl shadow-[0_0_20px_rgba(244,146,183,0.3)] hover:scale-105 active:scale-95 transition-all uppercase relative overflow-hidden group tracking-wide"
                         >
                             <div className="absolute inset-0 bg-white/20 animate-pulse pointer-events-none mix-blend-overlay opacity-0 group-hover:opacity-100 transition-opacity" />

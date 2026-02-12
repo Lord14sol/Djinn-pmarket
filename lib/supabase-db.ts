@@ -88,6 +88,13 @@ export interface Profile {
     gems?: number;
     twitter?: string;
     discord?: string;
+    user_number?: number;
+    tier?: 'FOUNDER' | 'REFERRAL' | 'WAITLIST';
+    has_access?: boolean;
+    has_genesis_gem?: boolean;
+    referral_code?: string;
+    referred_by?: string | null;
+    share_count?: number;
 }
 
 // Local Mode: Desactivado para producción
@@ -483,6 +490,9 @@ export async function followUser(follower: string, target: string) {
     }
 
     const { error } = await supabase.from('follows').insert({ follower, target });
+    if (error) {
+        console.error(`[Social] ❌ Follow error:`, error.message, { follower, target });
+    }
     return !error;
 }
 
@@ -496,6 +506,9 @@ export async function unfollowUser(follower: string, target: string) {
     }
 
     const { error } = await supabase.from('follows').delete().eq('follower', follower).eq('target', target);
+    if (error) {
+        console.error(`[Social] ❌ Unfollow error:`, error.message, { follower, target });
+    }
     return !error;
 }
 
@@ -854,6 +867,70 @@ export async function getCreatorStats(walletAddress: string): Promise<{ totalVol
         estimatedFees,
         totalMarkets: markets.length
     };
+}
+
+// Profile Stats (calculated from real data)
+export async function getProfileStats(walletAddress: string): Promise<{
+    marketsCreated: number;
+    biggestWin: number;
+    winRate: number;
+    activePositionsValue: number;
+    totalProfit: number;
+}> {
+    try {
+        // 1. Markets created count
+        const { count: marketsCreated } = await supabase
+            .from('markets')
+            .select('*', { count: 'exact', head: true })
+            .eq('creator_wallet', walletAddress);
+
+        // 2. Get all bets for win rate + biggest win
+        const { data: allBets } = await supabase
+            .from('bets')
+            .select('payout, claimed, amount, sol_amount, shares, entry_price, side, market_slug')
+            .eq('wallet_address', walletAddress)
+            .gt('created_at', '2026-01-30T15:45:00.000Z');
+
+        let biggestWin = 0;
+        let wins = 0;
+        let resolvedBets = 0;
+        let activePositionsValue = 0;
+        let totalProfit = 0;
+
+        if (allBets) {
+            for (const bet of allBets) {
+                if (bet.payout !== null && bet.payout !== undefined) {
+                    resolvedBets++;
+                    if (bet.payout > 0) {
+                        wins++;
+                        const profit = bet.payout - (bet.sol_amount || bet.amount || 0);
+                        if (profit > biggestWin) biggestWin = profit;
+                        totalProfit += profit;
+                    } else {
+                        totalProfit -= (bet.sol_amount || bet.amount || 0);
+                    }
+                }
+
+                if (!bet.claimed) {
+                    const val = (bet.shares || 0) * (bet.entry_price || 0);
+                    activePositionsValue += val;
+                }
+            }
+        }
+
+        const winRate = resolvedBets > 0 ? (wins / resolvedBets) * 100 : 0;
+
+        return {
+            marketsCreated: marketsCreated || 0,
+            biggestWin,
+            winRate: Math.round(winRate * 10) / 10,
+            activePositionsValue,
+            totalProfit
+        };
+    } catch (err) {
+        console.error('getProfileStats error:', err);
+        return { marketsCreated: 0, biggestWin: 0, winRate: 0, activePositionsValue: 0, totalProfit: 0 };
+    }
 }
 
 // ============================================
@@ -1483,7 +1560,7 @@ export async function getUserAchievements(walletAddress: string): Promise<Achiev
         .from('user_achievements')
         .select(`
             earned_at,
-            achievement:achievements (
+            achievements (
                 code, name, description, image_url, xp
             )
         `)
@@ -1495,9 +1572,9 @@ export async function getUserAchievements(walletAddress: string): Promise<Achiev
     }
 
     // Transform nested result if necessary, or return as is (client handles nesting)
-    // Supabase returns { earned_at, achievement: { ... } }
-    return data.map((item: any) => ({
-        ...item.achievement,
+    // Supabase returns { earned_at, achievements: { ... } }
+    return (data || []).map((item: any) => ({
+        ...(item.achievements || {}),
         earned_at: item.earned_at
     }));
 }
@@ -1696,8 +1773,8 @@ export async function getFollowCounts(walletAddress: string): Promise<{ follower
         return { followers: 0, following: 0 };
     }
     const [followersRes, followingRes] = await Promise.all([
-        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_wallet', walletAddress),
-        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_wallet', walletAddress)
+        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('target', walletAddress),
+        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower', walletAddress)
     ]);
 
     return {
@@ -1706,6 +1783,106 @@ export async function getFollowCounts(walletAddress: string): Promise<{ follower
     };
 }
 
+
+export async function getFollowers(wallet: string): Promise<Profile[]> {
+    if (LOCAL_MODE) {
+        return [];
+    }
+
+    const { data } = await supabase.from('follows').select('follower').eq('target', wallet);
+    if (!data || data.length === 0) return [];
+
+    const followers = data.map(d => d.follower);
+    const { data: profiles } = await supabase.from('profiles').select('*').in('wallet_address', followers);
+    return profiles || [];
+}
+
+// ============================================
+// NOTIFICATIONS
+// ============================================
+
+export interface Notification {
+    id?: string;
+    target_wallet: string;
+    from_wallet: string;
+    type: string;
+    message: string;
+    read: boolean;
+    created_at?: string;
+}
+
+export async function createNotification(targetWallet: string, type: string, fromWallet: string, message: string): Promise<boolean> {
+    try {
+        const { error } = await supabase.from('notifications').insert({
+            target_wallet: targetWallet,
+            from_wallet: fromWallet,
+            type,
+            message,
+            read: false
+        });
+        return !error;
+    } catch (e) {
+        console.error('Error creating notification:', e);
+        return false;
+    }
+}
+
+export async function getNotifications(wallet: string, limit = 20): Promise<(Notification & { from_profile?: Profile })[]> {
+    try {
+        const { data, error } = await supabase
+            .from('notifications')
+            .select('*')
+            .eq('target_wallet', wallet)
+            .order('created_at', { ascending: false })
+            .limit(limit);
+
+        if (error || !data) return [];
+
+        // Fetch profiles for from_wallet
+        const fromWallets = [...new Set(data.map(n => n.from_wallet))];
+        const { data: profiles } = await supabase.from('profiles').select('*').in('wallet_address', fromWallets);
+        const profileMap: Record<string, Profile> = {};
+        profiles?.forEach(p => { profileMap[p.wallet_address] = p; });
+
+        return data.map(n => ({
+            ...n,
+            from_profile: profileMap[n.from_wallet] || null
+        }));
+    } catch (e) {
+        console.error('Error fetching notifications:', e);
+        return [];
+    }
+}
+
+export async function getUnreadNotificationCount(wallet: string): Promise<number> {
+    try {
+        const { count, error } = await supabase
+            .from('notifications')
+            .select('*', { count: 'exact', head: true })
+            .eq('target_wallet', wallet)
+            .eq('read', false);
+
+        if (error) return 0;
+        return count || 0;
+    } catch (e) {
+        return 0;
+    }
+}
+
+export async function markNotificationsRead(wallet: string): Promise<boolean> {
+    try {
+        const { error } = await supabase
+            .from('notifications')
+            .update({ read: true })
+            .eq('target_wallet', wallet)
+            .eq('read', false);
+
+        return !error;
+    } catch (e) {
+        console.error('Error marking notifications read:', e);
+        return false;
+    }
+}
 
 // ============================================
 // GLOBAL SEARCH
@@ -1954,4 +2131,133 @@ export async function getActiveMarketsForMcapMonitoring() {
         ...m,
         total_pool_sol: (m.total_yes_pool || 0) + (m.total_no_pool || 0)
     }));
+}
+
+// ============================================
+// TIERED ACCESS & REFERRALS
+// ============================================
+
+/**
+ * Get the number of successful referrals for a user ID
+ */
+export async function getReferralCount(userId: string): Promise<number> {
+    const { count, error } = await supabase
+        .from('referrals')
+        .select('*', { count: 'exact', head: true })
+        .eq('referrer_id', userId)
+        .eq('is_valid', true);
+
+    if (error) {
+        console.error('Error fetching referral count:', error);
+        return 0;
+    }
+    return count || 0;
+}
+
+/**
+ * Get list of profiles referred by a user ID
+ */
+export async function getReferredUsers(userId: string): Promise<any[]> {
+    const { data, error } = await supabase
+        .from('referrals')
+        .select(`
+            new_user_id,
+            new_user_wallet,
+            created_at,
+            profiles:new_user_id (username, avatar_url)
+        `)
+        .eq('referrer_id', userId)
+        .eq('is_valid', true);
+
+    if (error) {
+        console.error('Error fetching referred users:', error);
+        return [];
+    }
+    return (data || []).map((r: any) => ({
+        id: r.new_user_id,
+        wallet_address: r.new_user_wallet,
+        username: r.profiles?.username,
+        avatar_url: r.profiles?.avatar_url,
+        joined_at: r.created_at
+    }));
+}
+
+/**
+ * Register a new referral
+ */
+export async function registerReferral(referrerId: string, referrerUsername: string, newUserId: string, newUserWallet: string): Promise<boolean> {
+    const { error } = await supabase
+        .from('referrals')
+        .insert({
+            referrer_id: referrerId,
+            referrer_username: referrerUsername,
+            new_user_id: newUserId,
+            new_user_wallet: newUserWallet
+        });
+
+    if (error) {
+        if (error.code === '23505') return true; // Already exists
+        console.error('Error registering referral:', error);
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Get profile by referral code
+ */
+export async function getProfileByReferralCode(code: string): Promise<Profile | null> {
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('referral_code', code)
+        .maybeSingle();
+
+    if (error) return null;
+    return data;
+}
+
+/**
+ * Get the wallet address for a given username
+ */
+export async function getWalletByUsername(username: string): Promise<string | null> {
+    if (!username) return null;
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('wallet_address')
+        .eq('username', username)
+        .maybeSingle();
+
+    if (error || !data) return null;
+    return data.wallet_address;
+}
+
+/**
+ * Get global stats for landing page tiers
+ */
+export async function getGlobalAccessStats() {
+    const { data, error } = await supabase
+        .from('system_stats')
+        .select('*')
+        .eq('id', 'main')
+        .maybeSingle();
+
+    if (error || !data) {
+        console.error('Error fetching system stats:', error);
+        return {
+            totalUsers: 0,
+            accessGranted: 0,
+            foundersCount: 0,
+            referralAccessCount: 0,
+            waitlistCount: 0
+        };
+    }
+
+    return {
+        totalUsers: data.total_users || 0,
+        accessGranted: data.total_access_granted || 0,
+        foundersCount: data.founders_count || 0,
+        referralAccessCount: data.referral_access_count || 0,
+        waitlistCount: data.waitlist_count || 0
+    };
 }

@@ -9,6 +9,7 @@ import { Loader2, ArrowRight, LogOut } from 'lucide-react';
 import { getWhitelistStatus, registerForWhitelist } from '@/lib/whitelist';
 import CustomWalletModal from '@/components/CustomWalletModal';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import dynamic from 'next/dynamic';
 
 // Lazy load PhysicsCardBubblegum
@@ -19,6 +20,10 @@ const PhysicsCardBubblegum = dynamic(() => import('@/components/PhysicsCardBubbl
             <Loader2 className="w-8 h-8 animate-spin text-[#FF69B4]" />
         </div>
     )
+});
+
+const ReferralPanel = dynamic(() => import('@/components/ReferralPanel'), {
+    ssr: false,
 });
 
 // Lazy load Galaxy background
@@ -60,17 +65,7 @@ export default function DjinnLanding() {
         }
 
         try {
-            const [whitelistResult, profileResult] = await Promise.all([
-                getWhitelistStatus(walletAddress),
-                getProfile(walletAddress)
-            ]);
-
-            setStatus(prev => {
-                if (JSON.stringify(prev) !== JSON.stringify(whitelistResult)) {
-                    return whitelistResult;
-                }
-                return prev;
-            });
+            const profileResult = await getProfile(walletAddress);
             setProfile(profileResult);
 
             // If connected and has no profile, show claim modal
@@ -221,21 +216,74 @@ export default function DjinnLanding() {
                 <AnimatePresence mode="wait">
                     {/* Show card IF profile exists */}
                     {connected && profile ? (
-                        <motion.div
-                            key="card-section"
-                            initial={{ opacity: 0, scale: 0.8, y: 50 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.8, y: 50 }}
-                            transition={{ type: "spring", stiffness: 100, damping: 15 }}
-                            className="w-full max-w-xl h-[680px] relative"
-                        >
-                            <PhysicsCardBubblegum
-                                username={profile.username}
-                                memberNumber={status.count}
-                                pfp={profile.avatar_url}
-                                twitterHandle={profile.twitter}
-                            />
-                        </motion.div>
+                        <div className="w-full flex flex-col items-center gap-12">
+                            <motion.div
+                                key="card-section"
+                                initial={{ opacity: 0, scale: 0.8, y: 50 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.8, y: 50 }}
+                                transition={{ type: "spring", stiffness: 100, damping: 15 }}
+                                className="w-full max-w-xl h-[680px] relative"
+                            >
+                                <PhysicsCardBubblegum
+                                    username={profile.username}
+                                    memberNumber={profile.user_number}
+                                    pfp={profile.avatar_url}
+                                    twitterHandle={profile.twitter}
+                                    hasGenesisGem={profile.has_genesis_gem}
+                                />
+                            </motion.div>
+
+                            {/* TIER-BASED UI */}
+                            <motion.div
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.3 }}
+                                className="w-full max-w-2xl flex flex-col items-center gap-6"
+                            >
+                                {profile.has_access ? (
+                                    /* ACCESS GRANTED (Tier 1 or Tier 2 Unlocked) */
+                                    <Link
+                                        href="/markets"
+                                        className="group relative py-6 px-24 font-black uppercase text-2xl italic tracking-tighter
+                                            bg-white text-black
+                                            rounded-full
+                                            border-[4px] border-black
+                                            shadow-[8px_8px_0px_#10B981]
+                                            hover:shadow-[4px_4px_0px_#10B981] hover:translate-x-[4px] hover:translate-y-[4px]
+                                            active:shadow-none active:translate-x-[8px] active:translate-y-[8px]
+                                            transition-all duration-150 flex items-center justify-center"
+                                    >
+                                        <span className="flex items-center gap-4">
+                                            WELCOME {profile.tier === 'REFERRAL' ? 'BACK' : ''}
+                                            <ArrowRight className="w-8 h-8 stroke-[4]" />
+                                        </span>
+                                    </Link>
+                                ) : profile.tier === 'REFERRAL' ? (
+                                    /* TIER 2: REFERRAL GATED */
+                                    <div className="w-full space-y-8 flex flex-col items-center">
+                                        <div className="bg-black/60 backdrop-blur-md px-10 py-5 rounded-[2rem] border-[3px] border-white/10 text-center shadow-xl">
+                                            <p className="text-[#F492B7] font-black italic tracking-tighter text-2xl lowercase mb-1">spots full</p>
+                                            <p className="text-white/60 font-bold tracking-tight text-sm lowercase">wait for updates or unlock with 3 friends</p>
+                                        </div>
+
+                                        <ReferralPanel
+                                            username={profile.username}
+                                            userId={profile.id}
+                                        />
+                                    </div>
+                                ) : profile.tier === 'WAITLIST' ? (
+                                    /* TIER 3: WAITLIST */
+                                    <div className="space-y-4 text-center">
+                                        <div className="bg-white text-black border-[4px] border-black px-12 py-6 rounded-[2rem] shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+                                            <p className="font-black text-3xl lowercase tracking-tighter italic mb-1">devnet full</p>
+                                            <p className="font-bold text-sm tracking-tight lowercase">mainnet coming soon</p>
+                                        </div>
+                                        <p className="text-white/40 font-bold text-xs uppercase tracking-widest mt-4">Follow us on X for updates</p>
+                                    </div>
+                                ) : null}
+                            </motion.div>
+                        </div>
                     ) : (loading && connected) ? (
                         /* Loading state after connection but before profile load */
                         <motion.div

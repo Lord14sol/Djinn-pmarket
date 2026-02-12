@@ -19,6 +19,8 @@ import HowItWorksModal from './HowItWorksModal';
 import { useSound } from '@/components/providers/SoundProvider';
 import MorphingIcon from '@/components/ui/MorphingIcon';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getUnreadNotificationCount, getNotifications, markNotificationsRead } from '@/lib/supabase-db';
+import type { Notification, Profile } from '@/lib/supabase-db';
 
 const mainCategories = ["Trending", "New", "Earth", "Politics", "Crypto", "Sports", "Culture", "Tech", "Science", "Finance", "Climate", "Mentions", "Movies", "AI", "Gaming", "Music"];
 const earthSubcategories = ["North America", "Central America", "South America", "Europe", "Africa", "Asia", "Oceania"];
@@ -28,6 +30,7 @@ function NavbarContent() {
     const [isNavMenuOpen, setIsNavMenuOpen] = useState(false);
     const [userPfp, setUserPfp] = useState<string | null>(null);
     const [username, setUsername] = useState<string>("User");
+    const [hasGenesisGem, setHasGenesisGem] = useState<boolean>(false);
     const [balance, setBalance] = useState<number>(0);
     const { openCreateMarket, openActivityFeed } = useModal();
     const { unlockAchievement } = useAchievement();
@@ -53,6 +56,11 @@ function NavbarContent() {
     const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false);
     const [tempConnectedWallet, setTempConnectedWallet] = useState<string | null>(null);
 
+    // Notifications
+    const [notificationCount, setNotificationCount] = useState(0);
+    const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+    const [notifications, setNotifications] = useState<(Notification & { from_profile?: Profile })[]>([]);
+
     // Cargar perfil (Local + Supabase + Balance)
     const loadProfile = async () => {
         if (!connected || !publicKey) {
@@ -69,6 +77,7 @@ function NavbarContent() {
                 const profile = JSON.parse(cachedProfile);
                 setUsername(profile.username || 'Anon');
                 setUserPfp(profile.avatar_url && profile.avatar_url.trim() ? profile.avatar_url : '/pink-pfp.png');
+                setHasGenesisGem(!!profile.has_genesis_gem);
             }
         } catch (e) {
             console.error('Cache read error:', e);
@@ -82,11 +91,13 @@ function NavbarContent() {
                 const profileData = {
                     username: dbProfile.username || `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}`,
                     avatar_url: dbProfile.avatar_url && dbProfile.avatar_url.trim() ? dbProfile.avatar_url : '/pink-pfp.png',
-                    bio: dbProfile.bio || ''
+                    bio: dbProfile.bio || '',
+                    has_genesis_gem: !!dbProfile.has_genesis_gem
                 };
 
                 setUsername(profileData.username);
                 setUserPfp(profileData.avatar_url);
+                setHasGenesisGem(profileData.has_genesis_gem);
 
                 try {
                     localStorage.setItem(`djinn_profile_${walletAddress}`, JSON.stringify(profileData));
@@ -208,6 +219,35 @@ function NavbarContent() {
         }
     }, [connected]);
 
+    // Poll notification count every 30s
+    useEffect(() => {
+        if (!connected || !publicKey) {
+            setNotificationCount(0);
+            return;
+        }
+
+        const wallet = publicKey.toBase58();
+        const fetchCount = () => {
+            getUnreadNotificationCount(wallet).then(setNotificationCount);
+        };
+        fetchCount();
+        const interval = setInterval(fetchCount, 30000);
+        return () => clearInterval(interval);
+    }, [connected, publicKey]);
+
+    const handleOpenNotifications = async () => {
+        if (!publicKey) return;
+        const wallet = publicKey.toBase58();
+        setIsNotificationsOpen(true);
+        setIsNavMenuOpen(false);
+
+        const notifs = await getNotifications(wallet);
+        setNotifications(notifs);
+
+        // Mark as read
+        await markNotificationsRead(wallet);
+        setNotificationCount(0);
+    };
 
     return (
         <>
@@ -246,18 +286,19 @@ function NavbarContent() {
                     <div className="flex items-center gap-4">
                         <div className="hidden sm:flex items-center gap-4">
 
-
-                            <motion.button
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                                onClick={() => {
-                                    openCreateMarket();
-                                    play('click');
-                                }}
-                                className="bg-[#F492B7] text-black text-sm font-black py-3 px-6 rounded-xl hover:brightness-110 active:scale-95 transition-all uppercase tracking-wide shadow-lg"
-                            >
-                                Create a Market
-                            </motion.button>
+                            {pathname !== '/markets' && (
+                                <motion.button
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={() => {
+                                        openCreateMarket();
+                                        play('click');
+                                    }}
+                                    className="bg-[#F492B7] text-black text-sm font-black py-3 px-6 rounded-xl hover:brightness-110 active:scale-95 transition-all uppercase tracking-wide shadow-lg"
+                                >
+                                    Create a Market
+                                </motion.button>
+                            )}
 
                             {!mounted ? (
                                 <div className="px-5 py-2.5 rounded-xl bg-[#1A1A1A] text-gray-400 text-[11px] font-black uppercase tracking-wider border-2 border-white/10">
@@ -316,9 +357,14 @@ function NavbarContent() {
                                                 setIsNavMenuOpen(!isNavMenuOpen);
                                                 play('toggle');
                                             }}
-                                            className="p-2 text-black bg-[#F492B7] rounded-xl hover:brightness-110 active:scale-95 transition-all shadow-lg"
+                                            className="relative p-2 text-black bg-[#F492B7] rounded-xl hover:brightness-110 active:scale-95 transition-all shadow-lg"
                                         >
                                             <MorphingIcon type={isNavMenuOpen ? "close" : "menu"} size={24} />
+                                            {notificationCount > 0 && (
+                                                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 border-2 border-black animate-pulse">
+                                                    {notificationCount > 9 ? '9+' : notificationCount}
+                                                </span>
+                                            )}
                                         </motion.button>
 
                                         {isNavMenuOpen && (
@@ -342,29 +388,17 @@ function NavbarContent() {
                                                         <span>Activity Feed</span>
                                                     </Link>
 
-                                                    <div className="border-t-2 border-white my-1" />
-
                                                     <button
-                                                        onClick={() => {
-                                                            setIsNavMenuOpen(false);
-                                                            setIsWalletModalOpen(false);
-                                                            setIsOpen(true); // Open profile menu
-                                                        }}
-                                                        className="w-full flex items-center gap-3 px-5 py-3 text-[#FF69B4] hover:bg-white hover:text-black transition-all text-sm font-black uppercase tracking-wider"
+                                                        onClick={handleOpenNotifications}
+                                                        className="w-full flex items-center gap-3 px-5 py-3 text-white hover:text-black hover:bg-[#F492B7] transition-all text-sm font-bold group relative"
                                                     >
-                                                        <span className="text-lg">𝕏</span>
-                                                        <span>Connect X</span>
-                                                    </button>
-
-                                                    <button
-                                                        onClick={() => {
-                                                            setIsNavMenuOpen(false);
-                                                            setIsClaimModalOpen(true);
-                                                        }}
-                                                        className="w-full flex items-center gap-3 px-5 py-3 text-white hover:bg-[#F492B7] hover:text-black transition-all text-sm font-black uppercase tracking-wider"
-                                                    >
-                                                        <span className="text-lg">💎</span>
-                                                        <span>Claim Host</span>
+                                                        <span className="text-lg">🔔</span>
+                                                        <span>Notifications</span>
+                                                        {notificationCount > 0 && (
+                                                            <span className="ml-auto min-w-[20px] h-[20px] bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center px-1">
+                                                                {notificationCount}
+                                                            </span>
+                                                        )}
                                                     </button>
 
                                                     <div className="border-t-2 border-white my-1" />
@@ -392,6 +426,67 @@ function NavbarContent() {
                 <CategoryMegaMenu />
             </nav>
 
+            {/* NOTIFICATIONS PANEL */}
+            <AnimatePresence>
+                {isNotificationsOpen && (
+                    <>
+                        <div className="fixed inset-0 z-[80] bg-black/40 backdrop-blur-sm" onClick={() => setIsNotificationsOpen(false)} />
+                        <motion.div
+                            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+                            transition={{ duration: 0.2 }}
+                            className="fixed top-28 right-6 w-[360px] max-h-[70vh] bg-[#1A1A1A] border-2 border-white/20 rounded-2xl shadow-[8px_8px_0px_0px_rgba(244,146,183,0.3)] z-[81] overflow-hidden flex flex-col"
+                        >
+                            <div className="p-4 border-b border-white/10 flex items-center justify-between">
+                                <h3 className="text-white text-sm font-black uppercase tracking-widest">Notifications</h3>
+                                <button onClick={() => setIsNotificationsOpen(false)} className="text-gray-400 hover:text-white transition-colors font-black">✕</button>
+                            </div>
+                            <div className="overflow-y-auto flex-1">
+                                {notifications.length === 0 ? (
+                                    <div className="p-8 text-center text-gray-500 text-xs font-bold uppercase tracking-widest">
+                                        No notifications yet
+                                    </div>
+                                ) : (
+                                    notifications.map((notif, i) => (
+                                        <button
+                                            key={notif.id || i}
+                                            onClick={() => {
+                                                setIsNotificationsOpen(false);
+                                                const profileName = notif.from_profile?.username || notif.from_wallet;
+                                                router.push(`/profile/${profileName}`);
+                                            }}
+                                            className="w-full flex items-center gap-3 p-4 hover:bg-white/5 transition-colors text-left border-b border-white/5 last:border-0 group"
+                                        >
+                                            <img
+                                                src={notif.from_profile?.avatar_url || '/pink-pfp.png'}
+                                                alt=""
+                                                className="w-10 h-10 rounded-full object-cover bg-black border border-white/10 group-hover:border-[#F492B7]/50 transition-colors flex-shrink-0"
+                                                onError={(e) => { e.currentTarget.src = '/pink-pfp.png'; }}
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm text-white">
+                                                    <span className="font-black text-[#F492B7] group-hover:text-white transition-colors">
+                                                        {notif.from_profile?.username || `${notif.from_wallet.slice(0, 4)}...${notif.from_wallet.slice(-4)}`}
+                                                    </span>
+                                                    {' '}{notif.message}
+                                                </p>
+                                                <p className="text-[10px] text-gray-500 mt-1">
+                                                    {notif.created_at ? new Date(notif.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
+                                                </p>
+                                            </div>
+                                            {!notif.read && (
+                                                <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
+                                            )}
+                                        </button>
+                                    ))
+                                )}
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
+
             <WalletProfileMenu
                 isOpen={isOpen}
                 onClose={() => setIsOpen(false)}
@@ -407,6 +502,7 @@ function NavbarContent() {
                 openActivityFeed={openActivityFeed}
                 connected={connected}
                 publicKey={publicKey}
+                hasGenesisGem={hasGenesisGem}
             />
 
             <CustomWalletModal

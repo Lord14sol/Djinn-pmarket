@@ -51,14 +51,30 @@ export default function ClaimUsernameModal({ isOpen, walletAddress, onSuccess, o
         setError('');
 
         try {
+            // Check for referral in localStorage
+            const referrerUsername = localStorage.getItem('referredBy');
+            let referrerWallet = null;
+            if (referrerUsername) {
+                const { getWalletByUsername, registerReferral } = await import('@/lib/supabase-db');
+                referrerWallet = await getWalletByUsername(referrerUsername);
+            }
+
             const newProfile = await upsertProfile({
                 wallet_address: walletAddress,
                 username: username,
                 bio: 'New Djinn Trader',
-                avatar_url: '/pink-pfp.png'
+                avatar_url: '/pink-pfp.png',
+                referred_by: referrerWallet
             });
 
             if (newProfile) {
+                // If there was a referral, register it in the referrals table
+                if (referrerWallet) {
+                    const { registerReferral } = await import('@/lib/supabase-db');
+                    await registerReferral(referrerWallet, walletAddress);
+                    localStorage.removeItem('referredBy');
+                }
+
                 // Instead of closing, move to SUCCESS step
                 setStep('SUCCESS');
             } else {

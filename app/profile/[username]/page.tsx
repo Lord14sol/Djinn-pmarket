@@ -56,12 +56,18 @@ export default function ProfilePage() {
     useEffect(() => {
         // Fallback Price Fetcher if Context is 0
         if (!contextSolPrice) {
-            fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd')
-                .then(res => res.json())
-                .then(data => {
+            const fetchPrice = async () => {
+                try {
+                    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
+                    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                    const data = await res.json();
                     if (data.solana?.usd) setLocalSolPrice(data.solana.usd);
-                })
-                .catch(err => console.error('Fallback price fetch failed', err));
+                } catch (err) {
+                    console.warn('[Price] Fallback fetch failed (likely rate limited/blocked), using fallback of 165', err);
+                    setLocalSolPrice(165); // Hard fallback to current ballpark
+                }
+            };
+            fetchPrice();
         }
     }, [contextSolPrice]);
 
@@ -174,6 +180,7 @@ export default function ProfilePage() {
     }, [connection, publicKey]);
 
     const [isFollowingModalOpen, setIsFollowingModalOpen] = useState(false);
+    const [isFollowersModalOpen, setIsFollowersModalOpen] = useState(false);
     const profileSlug = params.username as string;
     const isDefaultProfile = profileSlug === 'default';
     const [isMyProfile, setIsMyProfile] = useState(false);
@@ -191,10 +198,12 @@ export default function ProfilePage() {
 
     // --- CREATOR STATS (NEW) ---
     const [creatorStats, setCreatorStats] = useState<{ totalVolume: number, estimatedFees: number, totalMarkets: number } | null>(null);
+    const [profileStats, setProfileStats] = useState<{ marketsCreated: number, biggestWin: number, winRate: number, activePositionsValue: number, totalProfit: number } | null>(null);
 
     useEffect(() => {
         if (targetWalletAddress) {
             supabaseDb.getCreatorStats(targetWalletAddress).then(setCreatorStats);
+            supabaseDb.getProfileStats(targetWalletAddress).then(setProfileStats);
         }
     }, [targetWalletAddress]);
 
@@ -504,15 +513,15 @@ export default function ProfilePage() {
         };
     }, [targetWalletAddress]);
 
-    // 3. LOAD ACTIVE BETS FROM SUPABASE
+    // 3. LOAD BETS FROM SUPABASE (active + closed)
     const loadActiveBets = async (walletAddress: string) => {
         try {
             const bets = await supabaseDb.getUserBets(walletAddress);
             const activeBets = bets.filter(bet => !bet.claimed);
+            const claimedBets = bets.filter(bet => bet.claimed);
 
-            const formattedBets = await Promise.all(activeBets.map(async (bet: any) => {
-                // Fetch Market Metadata (Icon, Title) AND Live Data (Price, Volume)
-                // We'll run parallel fetches for speed
+            // Format a bet for display
+            const formatBet = async (bet: any) => {
                 const [marketMeta, marketData] = await Promise.all([
                     supabaseDb.getMarket(bet.market_slug),
                     supabaseDb.getMarketData(bet.market_slug)
@@ -520,12 +529,9 @@ export default function ProfilePage() {
 
                 const currentPrice = marketData?.live_price || bet.entry_price || 50;
                 const volume = marketData?.volume || 0;
-
-                // Calculate based on YES/NO position
                 const purchasePrice = bet.side === 'YES' ? currentPrice : (100 - currentPrice);
                 const invested = bet.amount || 0;
                 const shares = bet.shares || 0;
-
                 const currentValue = shares * (purchasePrice / 100);
                 const profit = currentValue - invested;
                 const change = invested > 0 ? ((profit / invested) * 100).toFixed(1) : '0.0';
@@ -534,22 +540,30 @@ export default function ProfilePage() {
                     id: bet.id || bet.market_slug,
                     title: marketMeta?.title || bet.market_slug,
                     market_icon: (marketMeta as any)?.icon || marketMeta?.banner_url || '🔮',
-                    volume: volume, // Add Volume
+                    volume,
                     invested,
-                    current: currentValue,
-                    shares: shares,
+                    current: bet.claimed ? (bet.payout || 0) : currentValue,
+                    shares,
                     side: bet.side,
                     change: `${profit >= 0 ? '+' : ''}${change}%`,
-                    profit,
+                    profit: bet.claimed ? ((bet.payout || 0) - invested) : profit,
                     sol_amount: bet.sol_amount,
                     market_slug: bet.market_slug,
-                    payout: bet.payout
+                    payout: bet.payout,
+                    entry_price: bet.entry_price,
+                    currentPrice: (bet as any).currentPrice || currentPrice,
+                    outcome_name: bet.side
                 };
-            }));
+            };
 
-            setProfile(prev => ({ ...prev, activeBets: formattedBets }));
+            const [formattedActive, formattedClosed] = await Promise.all([
+                Promise.all(activeBets.map(formatBet)),
+                Promise.all(claimedBets.map(formatBet))
+            ]);
+
+            setProfile(prev => ({ ...prev, activeBets: formattedActive, closedBets: formattedClosed }));
         } catch (error) {
-            console.error('Error loading active bets:', error);
+            console.error('Error loading bets:', error);
         }
     };
 
@@ -694,15 +708,21 @@ export default function ProfilePage() {
         try {
             if (isFollowingUser) {
                 const ok = await supabaseDb.unfollowUser(myWallet, targetWalletAddress);
+                console.log(`[Follow] Unfollow result for ${targetWalletAddress}:`, ok);
                 if (ok) {
                     setIsFollowingUser(false);
                     setFollowersCount(prev => Math.max(0, prev - 1));
                 }
             } else {
                 const ok = await supabaseDb.followUser(myWallet, targetWalletAddress);
+                console.log(`[Follow] Follow result for ${targetWalletAddress}:`, ok);
                 if (ok) {
                     setIsFollowingUser(true);
                     setFollowersCount(prev => prev + 1);
+                    // Create notification for the target user (fire-and-forget, don't block follow)
+                    try {
+                        supabaseDb.createNotification(targetWalletAddress, 'follow', myWallet, 'started following you');
+                    } catch (_) { /* notifications table may not exist yet */ }
                 }
             }
         } catch (err) {
@@ -832,7 +852,7 @@ export default function ProfilePage() {
                             {/* NOMBRE + MEDALS + EDIT BUTTON */}
                             <div className="flex items-center justify-between gap-4">
                                 <div className="flex items-center gap-3 flex-wrap">
-                                    <h1 className="text-6xl font-black tracking-tighter leading-none text-white drop-shadow-[0_0_10px_rgba(244,146,183,0.5)]">{profile.username}</h1>
+                                    <h1 className="text-6xl font-black tracking-tighter leading-none text-white">{profile.username}</h1>
 
                                     {/* MEDALS */}
                                     {profile.medals && profile.medals.map((m: string, i: number) => {
@@ -852,44 +872,29 @@ export default function ProfilePage() {
                                 </div>
 
                                 {isMyProfile && (
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={() => {
-                                                setTempName(profile.username);
-                                                setTempBio(profile.bio);
-                                                setTempPfp(profile.pfp);
-                                                setIsEditModalOpen(true);
-                                            }}
-                                            className="border-3 border-black bg-white text-black px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest hover:translate-y-1 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center gap-2"
-                                        >
-                                            <span>✎</span> Edit Profile
-                                        </button>
-                                        <motion.button
-                                            layoutId="share-experience"
-                                            onClick={() => setShowShareModal(true)}
-                                            className="border-3 border-black bg-[#F492B7] text-black px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest hover:translate-y-1 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center gap-2"
-                                        >
-                                            <Share2 size={14} /> Share
-                                        </motion.button>
-                                    </div>
-                                )}
-                                {!isMyProfile && (
-                                    <motion.button
-                                        layoutId="share-experience"
-                                        onClick={() => setShowShareModal(true)}
-                                        className="border-3 border-black bg-white/10 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest hover:translate-y-1 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center gap-2"
+                                    <button
+                                        onClick={() => {
+                                            setTempName(profile.username);
+                                            setTempBio(profile.bio);
+                                            setTempPfp(profile.pfp);
+                                            setIsEditModalOpen(true);
+                                        }}
+                                        className="border-3 border-black bg-white text-black px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest hover:translate-y-1 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center gap-2"
                                     >
-                                        <Share2 size={14} /> Share Profile
-                                    </motion.button>
+                                        <span>✎</span> Edit Profile
+                                    </button>
                                 )}
                             </div>
 
                             {/* FOLLOWERS/FOLLOWING - BELOW NOMBRE */}
                             <div className="flex items-center gap-3">
-                                <div className="bg-black/5 border-2 border-black rounded-xl px-4 py-2 flex items-center gap-2">
+                                <button
+                                    className="bg-black/5 border-2 border-black rounded-xl px-4 py-2 flex items-center gap-2 hover:bg-[#F492B7] transition-all"
+                                    onClick={() => setIsFollowersModalOpen(true)}
+                                >
                                     <span className="text-white text-2xl font-black">{formatCompact(followersCount)}</span>
                                     <span className="text-white/70 text-xs font-black lowercase">followers</span>
-                                </div>
+                                </button>
                                 <button
                                     className="bg-black/5 border-2 border-black rounded-xl px-4 py-2 flex items-center gap-2 hover:bg-[#F492B7] transition-all"
                                     onClick={() => setIsFollowingModalOpen(true)}
@@ -942,27 +947,25 @@ export default function ProfilePage() {
                     />
                     <StatCard
                         label="Win rate"
-                        value={`${profile.winRate || '0.0'}%`}
+                        value={`${profileStats?.winRate ?? profile.winRate ?? 0}%`}
                         color="text-black"
                     />
                     <StatCard
                         label="Biggest win"
-                        value={`+$${profile.biggestWin?.toLocaleString() || '0'}`}
+                        value={`+${(profileStats?.biggestWin ?? profile.biggestWin ?? 0).toLocaleString()} SOL`}
                         color="text-[#10B981]"
                     />
-                    <StatCard label="Markets created" value={creatorStats?.totalMarkets || profile.createdMarkets?.length || 0} color="text-black" />
+                    <StatCard label="Markets created" value={profileStats?.marketsCreated ?? creatorStats?.totalMarkets ?? profile.createdMarkets?.length ?? 0} color="text-black" />
                 </div>
 
                 {/* CHARTS GRID */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
-                    <ProfitLossCard profit={profile.profit} activeBets={profile.activeBets.filter((b: any) => !b.market_slug?.includes('mkjm2hmf'))} />
-                    {(isMyProfile || profile.username.toLowerCase() === 'lord') && (
-                        <CreatorRewardsCard
-                            createdMarkets={profile.createdMarkets.filter((m: any) => !m.slug?.includes('mkjm2hmf'))}
-                            isMyProfile={isMyProfile}
-                            creatorStats={creatorStats}
-                        />
-                    )}
+                    <ProfitLossCard profit={profile.profit} activeBets={profile.activeBets.filter((b: any) => !b.market_slug?.includes('mkjm2hmf'))} walletAddress={targetWalletAddress || publicKey?.toBase58() || ''} />
+                    <CreatorRewardsCard
+                        createdMarkets={profile.createdMarkets.filter((m: any) => !m.slug?.includes('mkjm2hmf'))}
+                        isMyProfile={isMyProfile}
+                        creatorStats={creatorStats}
+                    />
                 </div>
 
                 {/* TABS NAVIGATION */}
@@ -1064,6 +1067,18 @@ export default function ProfilePage() {
                             <button onClick={() => setIsFollowingModalOpen(false)} className="text-gray-400 hover:text-white transition-colors">✕</button>
                         </div>
                         <FollowingList wallet={targetWalletAddress} router={router} onClose={() => setIsFollowingModalOpen(false)} />
+                    </div>
+                </div>
+            )}
+            {/* FOLLOWERS LIST MODAL */}
+            {isFollowersModalOpen && targetWalletAddress && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="bg-[#1A1A1A] w-full max-w-md rounded-3xl border border-white/10 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+                        <div className="p-6 border-b border-white/5 flex items-center justify-between">
+                            <h3 className="text-xl font-black uppercase tracking-tighter text-white">Followers</h3>
+                            <button onClick={() => setIsFollowersModalOpen(false)} className="text-gray-400 hover:text-white transition-colors">✕</button>
+                        </div>
+                        <FollowersList wallet={targetWalletAddress} router={router} onClose={() => setIsFollowersModalOpen(false)} />
                     </div>
                 </div>
             )}
@@ -1391,77 +1406,94 @@ function EditModal({ profile, tempName, tempBio, setTempName, setTempBio, tempPf
                     </div>
                 </div>
 
-            {/* FOOTER - FIXED */}
-            <div className="p-8 shrink-0 border-t-4 border-black bg-white z-10">
-                <div className="flex gap-4">
-                    <button onClick={onClose} className="flex-1 bg-white border-3 border-black text-black py-4 rounded-xl font-black lowercase text-sm hover:bg-black hover:text-white transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)]">cancel</button>
-                    <button onClick={onSave} className="flex-1 bg-[#F492B7] border-3 border-black text-black py-4 rounded-xl font-black lowercase text-sm hover:translate-y-1 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all">save changes</button>
+                {/* FOOTER - FIXED */}
+                <div className="p-8 shrink-0 border-t-4 border-black bg-white z-10">
+                    <div className="flex gap-4">
+                        <button onClick={onClose} className="flex-1 bg-white border-3 border-black text-black py-4 rounded-xl font-black lowercase text-sm hover:bg-black hover:text-white transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)]">cancel</button>
+                        <button onClick={onSave} className="flex-1 bg-[#F492B7] border-3 border-black text-black py-4 rounded-xl font-black lowercase text-sm hover:translate-y-1 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all">save changes</button>
+                    </div>
                 </div>
-            </div>
 
-            {/* HIDDEN INPUTS */}
-            <input type="file" ref={pfpInputRef} className="hidden" onChange={(e) => handleFileChange(e, 'pfp')} />
+                {/* HIDDEN INPUTS */}
+                <input type="file" ref={pfpInputRef} className="hidden" onChange={(e) => handleFileChange(e, 'pfp')} />
+            </div>
         </div>
-    </div>
     );
 }
 
-// --- PROFIT/LOSS CARD - MATCHING CREATOR REWARDS STYLE ---
-// --- PROFIT/LOSS CARD - MATCHING CREATOR REWARDS STYLE ---
-function ProfitLossCard({ profit, activeBets }: { profit: number; activeBets: any[] }) {
-    const [period, setPeriod] = useState<'1D' | '1W' | '1M' | 'ALL'>('1M');
+// --- PROFIT/LOSS CARD - REAL DATA ---
+function ProfitLossCard({ profit, activeBets, walletAddress }: { profit: number; activeBets: any[]; walletAddress?: string }) {
+    const [period, setPeriod] = useState<'1D' | '1W' | '1M' | 'ALL'>('ALL');
     const [hoverValue, setHoverValue] = useState<number | null>(null);
     const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+    const [activities, setActivities] = useState<any[]>([]);
 
-    // Derived values for styling
-    const isPositive = profit >= 0;
-    const chartColor = '#F492B7'; // User requested pink chart for P/L
+    const chartColor = '#F492B7';
 
-
-    // Mock period-based profit calculation for visual effect (YouTube counter style)
-    const periodProfit = useMemo(() => {
-        if (period === 'ALL') return profit;
-        if (period === '1M') return profit * 0.9;
-        if (period === '1W') return profit * 0.4;
-        return profit * 0.05; // 1D
-    }, [period, profit]);
-
-    // Generate chart data client-side only to prevent hydration mismatch
-    const [chartData, setChartData] = useState<{ y: number; val: number }[]>([]);
-
+    // Load real activity data
     useEffect(() => {
-        const dataPoints = period === '1D' ? 24 : period === '1W' ? 7 : period === '1M' ? 30 : 90;
-        const rawValues = [];
-        let value = profit;
-        // Make volatility relative to profit magnitude or fallback to base
-        const baseVol = Math.max(Math.abs(profit) * 0.05, 50);
-        const volatility = period === '1D' ? baseVol : period === '1W' ? baseVol * 2 : baseVol * 5;
+        if (!walletAddress) {
+            setActivities([]);
+            return;
+        }
+        setActivities([]); // Clear before fetch to avoid stale data
+        supabaseDb.getUserActivity(walletAddress).then(data => {
+            setActivities(data || []);
+        });
+    }, [walletAddress]);
 
-        // Generate backwards from current profit
-        rawValues.push(profit);
-        for (let i = 0; i < dataPoints - 1; i++) {
-            const change = (Math.random() - 0.5) * volatility;
-            value -= change;
-            rawValues.unshift(value);
+    // Build cumulative P/L chart from real activities
+    const { chartData, currentProfit } = useMemo(() => {
+        if (activities.length === 0) return {
+            chartData: [{ y: 50, val: 0 }, { y: 50, val: 0 }],
+            currentProfit: 0
+        };
+
+        // Filter by period
+        const now = new Date();
+        let cutoff = new Date(0); // ALL
+        if (period === '1D') cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        else if (period === '1W') cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        else if (period === '1M') cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+        // Sort oldest first for cumulative calculation
+        const sorted = [...activities]
+            .filter(a => new Date(a.created_at || 0) >= cutoff)
+            .sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
+
+        if (sorted.length === 0) return {
+            chartData: [{ y: 50, val: 0 }, { y: 50, val: 0 }],
+            currentProfit: 0
+        };
+
+        // Build cumulative P/L: BUY = -cost, SELL = +revenue
+        const rawValues: number[] = [0]; // Start at 0
+        let cumulative = 0;
+        for (const act of sorted) {
+            const amount = act.sol_amount || act.amount || 0;
+            if (act.order_type === 'SELL' || act.action === 'sell') {
+                cumulative += amount;
+            } else {
+                cumulative -= amount;
+            }
+            rawValues.push(cumulative);
         }
 
         // Normalize to 0-100 range for SVG
         const maxVal = Math.max(...rawValues);
         const minVal = Math.min(...rawValues);
-        const range = maxVal - minVal || 1; // Avoid div 0
+        const range = maxVal - minVal || 1;
 
         const calculated = rawValues.map(val => ({
-            // Map value to 10-90 range to keep padding
             y: 90 - ((val - minVal) / range) * 80,
-            val: val
+            val
         }));
 
-        setChartData(calculated);
-    }, [period, profit]);
+        return { chartData: calculated, currentProfit: cumulative };
+    }, [activities, period]);
 
-    // Derived logic for dataPoints for tooltip interaction
-    const dataPoints = period === '1D' ? 24 : period === '1W' ? 7 : period === '1M' ? 30 : 90;
-
+    const isPositive = currentProfit >= 0;
+    const displayValue = hoverValue !== null ? hoverValue : currentProfit;
     const periodLabels = { '1D': 'Past Day', '1W': 'Past Week', '1M': 'Past Month', 'ALL': 'All Time' };
 
     return (
@@ -1474,8 +1506,8 @@ function ProfitLossCard({ profit, activeBets }: { profit: number; activeBets: an
                             {isPositive ? '▲' : '▼'} profit/loss
                         </span>
                     </div>
-                    <h2 className="text-4xl font-black tracking-tighter leading-none italic text-[#10B981]">
-                        $<AnimatedNumber value={Math.abs(hoverValue !== null ? hoverValue : periodProfit)} />
+                    <h2 className={`text-4xl font-black tracking-tighter leading-none italic ${isPositive ? 'text-[#10B981]' : 'text-red-500'}`}>
+                        {displayValue >= 0 ? '+' : '-'}{Math.abs(displayValue).toFixed(2)} SOL
                     </h2>
                     <p className="text-black/60 text-xs font-bold mt-1">{periodLabels[period]} • {new Date().toLocaleDateString()}</p>
                 </div>
@@ -1504,7 +1536,7 @@ function ProfitLossCard({ profit, activeBets }: { profit: number; activeBets: an
                     const rect = e.currentTarget.getBoundingClientRect();
                     const x = e.clientX - rect.left;
                     const width = rect.width;
-                    const index = Math.min(Math.floor((x / width) * dataPoints), dataPoints - 1);
+                    const index = Math.min(Math.floor((x / width) * chartData.length), chartData.length - 1);
                     if (chartData[index]) {
                         setHoverValue(chartData[index].val);
                         setHoverIndex(index);
@@ -1516,10 +1548,10 @@ function ProfitLossCard({ profit, activeBets }: { profit: number; activeBets: an
                 }}
             >
                 {/* Vertical Line Indicator */}
-                {hoverIndex !== null && (
+                {hoverIndex !== null && chartData.length > 1 && (
                     <div
                         className="absolute top-0 bottom-0 w-0.5 bg-black/30 z-20 pointer-events-none transition-transform duration-75"
-                        style={{ left: `${(hoverIndex / (dataPoints - 1)) * 100}%` }}
+                        style={{ left: `${(hoverIndex / (chartData.length - 1)) * 100}%` }}
                     />
                 )}
 
@@ -1539,7 +1571,6 @@ function ProfitLossCard({ profit, activeBets }: { profit: number; activeBets: an
                             />
                         </>
                     ) : (
-                        // Placeholder flat line if no data
                         <path d="M 0 50 L 240 50" stroke={chartColor} strokeWidth="2.5" strokeDasharray="4 4" opacity="0.5" />
                     )}
                 </svg>
@@ -1641,8 +1672,8 @@ function CreatorRewardsCard({ createdMarkets, isMyProfile, creatorStats }: { cre
         }
     };
 
-    // Only hide if not the user's own profile AND no stats
-    if (!isMyProfile && (!creatorStats || creatorStats.estimatedFees < 0.01)) return null;
+    // Move condition to JSX
+    const isVisible = isMyProfile || (creatorStats && creatorStats.totalMarkets > 0) || createdMarkets.length > 0;
 
     // Time period state
     const [rewardsPeriod, setRewardsPeriod] = useState<'1D' | '3D' | '1W' | '1M' | 'ALL'>('ALL');
@@ -1691,6 +1722,8 @@ function CreatorRewardsCard({ createdMarkets, isMyProfile, creatorStats }: { cre
     }, [rewardsPeriod, dataPoints, displayBigNumber]);
 
     const periodLabels = { '1D': 'Today', '3D': '3 Days', '1W': 'This Week', '1M': 'This Month', 'ALL': 'All Time' };
+
+    if (!isVisible) return null;
 
     return (
         <div className="bg-white border-4 border-black rounded-3xl p-6 mb-8 relative overflow-hidden shadow-[8px_8px_0px_0px_#10B981] hover:translate-y-1 hover:shadow-[4px_4px_0px_0px_#10B981] transition-all">
@@ -1977,7 +2010,7 @@ function PositionsTable({ activeBets, closedBets, isMyProfile, solPrice }: { act
                                         {/* Value (USD) - Prominent */}
                                         <td className="py-5 text-right">
                                             <div className="font-black text-black text-lg tracking-tight italic">
-                                                ${formatCompact(valUsd)}
+                                                ${valUsd.toFixed(2)}
                                             </div>
                                         </td>
 
@@ -1986,10 +2019,10 @@ function PositionsTable({ activeBets, closedBets, isMyProfile, solPrice }: { act
                                             <div className="flex flex-col items-end gap-0.5">
                                                 <div className={`flex items-center gap-1.5 font-black text-sm italic ${isPositive ? 'text-[#10B981]' : 'text-red-500'}`}>
                                                     {isPositive && <span className="text-base">🚀</span>}
-                                                    <span>{isPositive ? '+' : ''}${formatCompact(pnlUsd)}</span>
+                                                    <span>{isPositive ? '+' : ''}${pnlUsd.toFixed(2)}</span>
                                                 </div>
                                                 <span className={`text-xs font-black px-1.5 py-0.5 rounded border-2 ${isPositive ? 'bg-[#10B981] border-black text-white' : 'bg-red-500 border-black text-white'}`}>
-                                                    {isPositive ? '+' : ''}{pnlPercent.toFixed(1)}%
+                                                    {isPositive ? '+' : ''}{pnlPercent.toFixed(2)}%
                                                 </span>
                                             </div>
                                         </td>
@@ -2285,6 +2318,46 @@ function MedalVault({ profile, earnedAchievements, selectedMedals, setSelectedMe
     );
 }
 
+
+function FollowersList({ wallet, router, onClose }: any) {
+    const [list, setList] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        supabaseDb.getFollowers(wallet).then(data => {
+            setList(data);
+            setLoading(false);
+        });
+    }, [wallet]);
+
+    if (loading) return <div className="p-8 text-center text-gray-500 text-xs font-bold uppercase tracking-widest">Loading djinns...</div>;
+    if (list.length === 0) return <div className="p-8 text-center text-gray-500 text-xs font-bold uppercase tracking-widest">No followers yet</div>;
+
+    return (
+        <div className="p-4 overflow-y-auto flex-1 space-y-2">
+            {list.map((u, i) => (
+                <div
+                    key={i}
+                    className="flex items-center gap-4 p-3 hover:bg-white/5 rounded-xl transition-colors cursor-pointer group"
+                    onClick={() => { onClose(); router.push(`/profile/${u.username}`); }}
+                >
+                    <img
+                        src={u.avatar_url || '/pink-pfp.png'}
+                        className="w-10 h-10 rounded-full object-cover bg-black border border-white/10 group-hover:border-[#F492B7]/50 transition-colors"
+                        alt=""
+                    />
+                    <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold truncate text-white group-hover:text-[#F492B7] transition-colors">{u.username}</p>
+                        <p className="text-[10px] text-gray-500 truncate font-mono">{u.wallet_address}</p>
+                    </div>
+                    <button className="text-[10px] font-black uppercase bg-white/5 px-3 py-1.5 rounded-lg text-gray-400 group-hover:bg-white group-hover:text-black transition-all">
+                        View
+                    </button>
+                </div>
+            ))}
+        </div>
+    );
+}
 
 function FollowingList({ wallet, router, onClose }: any) {
     const [list, setList] = useState<any[]>([]);

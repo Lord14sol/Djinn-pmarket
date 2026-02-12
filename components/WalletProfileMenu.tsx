@@ -1,12 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-
-import { supabase } from '@/lib/supabase';
-import { upsertProfile } from '@/lib/supabase-db';
-import { ADMIN_WALLETS } from '@/lib/whitelist';
 
 interface WalletProfileMenuProps {
     isOpen: boolean;
@@ -16,6 +11,7 @@ interface WalletProfileMenuProps {
     walletAddress: string;
     disconnect: () => void;
     onEditProfile: () => void;
+    hasGenesisGem?: boolean;
     // Extra props passed from Navbar
     openCreateMarket?: () => void;
     openActivityFeed?: () => void;
@@ -30,43 +26,18 @@ export default function WalletProfileMenu({
     pfp,
     walletAddress,
     disconnect,
-    onEditProfile
+    onEditProfile,
+    hasGenesisGem = false
 }: WalletProfileMenuProps) {
     const [copied, setCopied] = useState(false);
-    const router = useRouter();
 
     if (!isOpen) return null;
-
-    const handleConnectX = async () => {
-        try {
-            console.log("Attempting X connection with provider 'X'...");
-            const { data, error } = await supabase.auth.signInWithOAuth({
-                provider: 'X',
-                options: {
-                    redirectTo: window.location.origin, // Use origin for consistency
-                },
-            });
-            if (error) {
-                console.error("🔴 Supabase Auth Error:", error);
-                alert(`Auth Error: ${error.message} (Code: ${error.status})`);
-                throw error;
-            }
-            console.log("✅ OAuth initialized:", data);
-        } catch (e: any) {
-            console.error("❌ Failed to connect X:", e);
-            if (!e.message?.includes("provider is not enabled")) {
-                alert("Auth Error: Could not connect to X. Check console for details.");
-            }
-        }
-    };
 
     const handleCopy = () => {
         navigator.clipboard.writeText(walletAddress);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
     };
-
-    const isAdmin = ADMIN_WALLETS.includes(walletAddress);
 
     return (
         <>
@@ -85,38 +56,35 @@ export default function WalletProfileMenu({
                 </button>
 
                 {/* 1. USERNAME */}
-                <Link
-                    href={`/profile/${username}`}
-                    onClick={onClose}
-                    className="text-black text-2xl font-black mb-1 hover:text-[#F492B7] transition-colors uppercase tracking-tight"
-                >
-                    @{username}
-                </Link>
+                <div className="flex items-center gap-2 mb-1">
+                    <Link
+                        href={`/profile/${username}`}
+                        onClick={onClose}
+                        className="text-black text-2xl font-black hover:text-[#F492B7] transition-colors uppercase tracking-tight"
+                    >
+                        @{username}
+                    </Link>
+                    {hasGenesisGem && (
+                        <div className="relative group cursor-help">
+                            <div className="absolute inset-0 bg-[#F492B7] blur-md opacity-40 group-hover:opacity-70 transition-opacity animate-pulse rounded-full" />
+                            <img
+                                src="/genesis-medal-v2.png"
+                                alt="Genesis Gem"
+                                className="w-8 h-8 relative z-10 drop-shadow-[0_0_5px_rgba(244,146,183,0.5)] transition-transform group-hover:scale-110"
+                                title="Genesis Member"
+                            />
+                            {/* Tooltip */}
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1 bg-black text-[#F492B7] text-[10px] font-black uppercase tracking-widest rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none border border-[#F492B7]/30 shadow-xl">
+                                Genesis Member
+                            </div>
+                        </div>
+                    )}
+                </div>
 
                 {/* 2. PROFILE LINK (Mock) */}
                 <Link href={`/profile/${username}`} className="text-gray-500 text-xs mb-6 hover:text-black transition-colors font-mono">
                     djinn.markets/profile/{username}
                 </Link>
-
-                {/* 2.5 ADMIN LINK (CONDITIONAL) */}
-                {isAdmin && (
-                    <Link
-                        href="/admin"
-                        onClick={onClose}
-                        className="mb-4 bg-[#F492B7] text-black text-xs font-black uppercase tracking-widest border-2 border-black hover:translate-y-[2px] hover:shadow-none shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 rounded-xl px-5 py-2.5 transition-all"
-                    >
-                        ⚡ Admin Dashboard
-                    </Link>
-                )}
-
-                {/* Connect X Button */}
-                <button
-                    onClick={handleConnectX}
-                    className="w-[85%] bg-black text-white text-sm font-black uppercase tracking-widest py-3 rounded-xl border-2 border-transparent hover:bg-black/90 hover:border-white/20 transition-all flex items-center justify-center gap-2 group mb-3 shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)] active:translate-y-[2px] active:shadow-none"
-                >
-                    <svg viewBox="0 0 24 24" className="w-4 h-4 fill-white group-hover:scale-110 transition-transform"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
-                    Connect X
-                </button>
 
                 {/* 3. EDIT PROFILE BUTTON */}
                 <button
