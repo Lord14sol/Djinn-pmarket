@@ -298,10 +298,7 @@ export default function PhysicsCardBubblegum({ username, memberNumber, pfp, twit
                                 style={{
                                     fontFamily: 'var(--font-adriane), serif',
                                     fontWeight: 700,
-                                    background: auroraGradient,
-                                    backgroundSize: '200% auto',
-                                    WebkitBackgroundClip: 'text',
-                                    WebkitTextFillColor: 'transparent',
+                                    color: 'black',
                                     x: parallaxFrontX,
                                     y: parallaxFrontY,
                                     transform: 'translateZ(100px)',
@@ -512,16 +509,20 @@ export default function PhysicsCardBubblegum({ username, memberNumber, pfp, twit
 
                             <div className="flex flex-col items-center mb-8 mx-auto text-black/90">
                                 <span
-                                    className="text-[1.05rem] font-black tracking-wide leading-none"
+                                    className="text-[1.05rem] tracking-wide leading-none text-black"
                                     style={{
                                         fontFamily: 'var(--font-unbounded), sans-serif',
+                                    }}
+                                >
+                                    <span style={{ fontWeight: 900 }}>i am</span> a <span style={{
+                                        fontFamily: 'var(--font-adriane), serif',
+                                        fontWeight: 700,
                                         background: auroraGradient,
                                         backgroundSize: '200% auto',
                                         WebkitBackgroundClip: 'text',
-                                        WebkitTextFillColor: 'transparent'
-                                    }}
-                                >
-                                    <span style={{ fontWeight: 900 }}>i am</span> a <span style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}>Djinn</span>
+                                        WebkitTextFillColor: 'transparent',
+                                        display: 'inline-block'
+                                    }}>Djinn</span>
                                 </span>
                             </div>
 
