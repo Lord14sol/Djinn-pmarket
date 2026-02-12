@@ -193,7 +193,7 @@ export default function DjinnLanding() {
                     >
                         <div className="w-40 h-40 md:w-56 md:h-56 relative -mr-3 md:-mr-4">
                             <Image
-                                src="/djinn-logo.png?v=3"
+                                src="/djinn-logo.png"
                                 alt="Djinn"
                                 fill
                                 className="object-contain"
