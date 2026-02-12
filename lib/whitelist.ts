@@ -104,3 +104,24 @@ export async function registerForWhitelist(walletAddress: string): Promise<{ suc
 
     return { success: true, message: "GENESIS SPOT SECURED. WELCOME TO DJINN." };
 }
+/**
+ * Checks if a wallet is one of the first 1000 Genesis members.
+ */
+export async function isGenesisMember(walletAddress: string): Promise<boolean> {
+    try {
+        // Query only the first 1000 records ordered by creation
+        // and check if this wallet is among them.
+        const { data, error } = await supabase
+            .from('genesis_whitelist')
+            .select('wallet_address')
+            .order('created_at', { ascending: true })
+            .limit(GENESIS_LIMIT);
+
+        if (error) throw error;
+
+        return data?.some(row => row.wallet_address === walletAddress) || false;
+    } catch (e) {
+        console.error('[Whitelist] isGenesisMember error:', e);
+        return false;
+    }
+}

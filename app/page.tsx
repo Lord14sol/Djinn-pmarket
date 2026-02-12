@@ -55,6 +55,8 @@ export default function DjinnLanding() {
     const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
     const [isClaimModalOpen, setIsClaimModalOpen] = useState(false);
     const [isRegistering, setIsRegistering] = useState(false);
+    const [showGenesisAnnouncement, setShowGenesisAnnouncement] = useState(false);
+    const [isGenesis, setIsGenesis] = useState(false);
 
     const walletAddress = useMemo(() => publicKey?.toBase58(), [publicKey]);
 
@@ -69,9 +71,20 @@ export default function DjinnLanding() {
             setProfile(profileResult);
 
             // Fetch whitelist status too
-            const { getWhitelistStatus } = await import('@/lib/whitelist');
-            const whitelistStatus = await getWhitelistStatus(walletAddress);
+            const { getWhitelistStatus, isGenesisMember } = await import('@/lib/whitelist');
+            const [whitelistStatus, genesisCheck] = await Promise.all([
+                getWhitelistStatus(walletAddress),
+                isGenesisMember(walletAddress)
+            ]);
+
             setStatus(whitelistStatus);
+            setIsGenesis(genesisCheck);
+
+            // If genesis member and haven't seen announcement this session
+            if (genesisCheck && !sessionStorage.getItem('djinn_genesis_announced')) {
+                setShowGenesisAnnouncement(true);
+                sessionStorage.setItem('djinn_genesis_announced', 'true');
+            }
 
             // If connected and has no profile, show claim modal
             if (connected && !profileResult && !isClaimModalOpen) {
@@ -102,11 +115,11 @@ export default function DjinnLanding() {
     }, [refreshStatus]);
 
     useEffect(() => {
-        if (connected && !loading && (status.isAdmin || profile?.has_access)) {
-            console.log("🚀 [Home] Access confirmed, redirecting to markets...");
+        if (connected && !loading && status.isAdmin) {
+            console.log("🚀 [Home] Admin detected, redirecting to markets...");
             router.push('/markets');
         }
-    }, [connected, loading, status.isAdmin, profile?.has_access, router]);
+    }, [connected, loading, status.isAdmin, router]);
 
     // Instantly open claim modal when wallet connects and no profile
     useEffect(() => {
@@ -372,6 +385,48 @@ export default function DjinnLanding() {
                 onSuccess={handleClaimSuccess}
                 onClose={() => setIsClaimModalOpen(false)}
             />
+
+            {/* Genesis Announcement Modal */}
+            <AnimatePresence>
+                {showGenesisAnnouncement && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0 bg-black/80 backdrop-blur-md"
+                            onClick={() => setShowGenesisAnnouncement(false)}
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                            className="relative bg-white border-[6px] border-black p-10 rounded-[3rem] shadow-[20px_20px_0px_#FF69B4] max-w-lg w-full text-center flex flex-col items-center"
+                        >
+                            <div className="w-32 h-32 mb-8 relative animate-bounce">
+                                <Image
+                                    src="/genesis-medal-v2.png"
+                                    alt="Genesis Medal"
+                                    fill
+                                    className="object-contain"
+                                />
+                            </div>
+                            <h2 className="text-black text-5xl font-black lowercase tracking-tighter italic leading-none mb-6">
+                                genesis unlocked
+                            </h2>
+                            <p className="text-black/60 font-bold text-lg leading-relaxed mb-10 lowercase">
+                                you are one of the first 1000 members. your genesis medal is now available in your profile.
+                            </p>
+                            <button
+                                onClick={() => setShowGenesisAnnouncement(false)}
+                                className="w-full bg-black text-white font-black uppercase tracking-widest py-5 rounded-2xl border-4 border-black hover:bg-[#FF69B4] hover:text-black transition-all shadow-[8px_8px_0px_#FF69B4] hover:shadow-none hover:translate-x-1 hover:translate-y-1 active:translate-x-2 active:translate-y-2 active:shadow-none"
+                            >
+                                enter djinn
+                            </button>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

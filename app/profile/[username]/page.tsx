@@ -101,7 +101,8 @@ export default function ProfilePage() {
         showGems: true,
         joinedAt: "",
         twitter: "",
-        discord: ""
+        discord: "",
+        isGenesis: false
     };
 
     const [profile, setProfile] = useState(initialProfile);
@@ -351,6 +352,10 @@ export default function ProfilePage() {
                 }
 
                 // 3. Special "Architect" Injection
+                const { isGenesisMember } = await import('@/lib/whitelist');
+                const isGenesisMemberUser = await isGenesisMember(targetAddress);
+                finalProfile.isGenesis = isGenesisMemberUser;
+
                 if (isLordWallet) {
                     finalProfile.medals = ['FIRST_MARKET', 'ORACLE', 'DIAMOND_HANDS', 'PINK_CRYSTAL', 'EMERALD_SAGE', 'MOON_DANCER', 'MARKET_SNIPER', 'APEX_PREDATOR', 'GOLD_TROPHY', 'LEGENDARY_TRADER'];
                     finalProfile.profit = 1250000;
@@ -1327,6 +1332,28 @@ function EditModal({ profile, tempName, tempBio, setTempName, setTempBio, tempPf
                                     <div className="flex items-center justify-between mb-3">
                                         <div className="bg-black border-3 border-black rounded-lg px-3 py-1.5">
                                             <p className="text-xs font-black uppercase tracking-widest text-white">username</p>
+                                        </div>
+                                        {/* USERNAME & MEDAL */}
+                                        <div className="flex items-center gap-4">
+                                            <h1 className="text-7xl font-black uppercase tracking-tighter italic leading-none text-white">
+                                                {profile.username}
+                                            </h1>
+                                            {profile.isGenesis && (
+                                                <div className="relative group/genesis">
+                                                    <div className="w-16 h-16 bg-white border-4 border-black rounded-2xl shadow-[6px_6px_0px_#FF69B4] flex items-center justify-center hover:scale-110 transition-transform cursor-help">
+                                                        <Image
+                                                            src="/genesis-medal-v2.png"
+                                                            alt="Genesis"
+                                                            width={40}
+                                                            height={40}
+                                                            className="object-contain"
+                                                        />
+                                                    </div>
+                                                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-4 px-4 py-2 bg-black border-2 border-[#FF69B4] text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-xl opacity-0 group-hover/genesis:opacity-100 transition-opacity whitespace-nowrap shadow-[6px_6px_0px_#FF69B4] pointer-events-none z-50">
+                                                        Genesis Member #1000
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                         <div className="flex items-center gap-1.5 transition-all duration-300">
                                             {isCheckingName ? (
