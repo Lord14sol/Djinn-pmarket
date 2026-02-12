@@ -2183,16 +2183,35 @@ export async function getReferredUsers(userId: string): Promise<any[]> {
 }
 
 /**
+ * Grant full access to a user after successful referrals
+ */
+export async function grantReferralAccess(userId: string): Promise<boolean> {
+    const { error } = await supabase
+        .from('profiles')
+        .update({
+            has_access: true,
+            tier: 'REFERRAL'
+        })
+        .eq('id', userId);
+
+    if (error) {
+        console.error('Error granting referral access:', error);
+        return false;
+    }
+    return true;
+}
+
+/**
  * Register a new referral
  */
-export async function registerReferral(referrerId: string, referrerUsername: string, newUserId: string, newUserWallet: string): Promise<boolean> {
+export async function registerReferral(referrerId: string, newUserId: string, newUserWallet: string): Promise<boolean> {
     const { error } = await supabase
         .from('referrals')
         .insert({
             referrer_id: referrerId,
-            referrer_username: referrerUsername,
             new_user_id: newUserId,
-            new_user_wallet: newUserWallet
+            new_user_wallet: newUserWallet,
+            is_valid: true
         });
 
     if (error) {

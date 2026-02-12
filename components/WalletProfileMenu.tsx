@@ -62,8 +62,18 @@ export default function WalletProfileMenu({
                         onClick={onClose}
                         className="text-black text-2xl font-black hover:text-[#F492B7] transition-colors uppercase tracking-tight"
                     >
-                        @{username}
                     </Link>
+                    {hasGenesisGem && (
+                        <div className="relative group/badge">
+                            <div className="w-6 h-6 bg-[#F492B7]/10 rounded-full flex items-center justify-center border border-[#F492B7]/30 hover:scale-110 transition-transform cursor-help">
+                                <img src="/genesis-medal-v2.png" className="w-4 h-4 object-contain" alt="Genesis Gem" />
+                            </div>
+                            {/* Tooltip */}
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-black text-white text-[9px] font-black uppercase tracking-widest rounded-lg border-2 border-[#F492B7] opacity-0 group-hover/badge:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-[4px_4px_0px_0px_#F492B7]">
+                                Genesis Member
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* 2. PROFILE LINK (Mock) */}

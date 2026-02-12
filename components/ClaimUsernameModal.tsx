@@ -70,8 +70,11 @@ export default function ClaimUsernameModal({ isOpen, walletAddress, onSuccess, o
             if (newProfile) {
                 // If there was a referral, register it in the referrals table
                 if (referrerWallet) {
-                    const { registerReferral } = await import('@/lib/supabase-db');
-                    await registerReferral(referrerWallet, walletAddress);
+                    const { registerReferral, getProfile } = await import('@/lib/supabase-db');
+                    const referrerProfile = await getProfile(referrerWallet);
+                    if (referrerProfile?.id) {
+                        await registerReferral(referrerProfile.id, newProfile.id, walletAddress);
+                    }
                     localStorage.removeItem('referredBy');
                 }
 

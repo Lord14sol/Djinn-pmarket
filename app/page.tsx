@@ -68,6 +68,11 @@ export default function DjinnLanding() {
             const profileResult = await getProfile(walletAddress);
             setProfile(profileResult);
 
+            // Fetch whitelist status too
+            const { getWhitelistStatus } = await import('@/lib/whitelist');
+            const whitelistStatus = await getWhitelistStatus(walletAddress);
+            setStatus(whitelistStatus);
+
             // If connected and has no profile, show claim modal
             if (connected && !profileResult && !isClaimModalOpen) {
                 setIsClaimModalOpen(true);
@@ -261,9 +266,11 @@ export default function DjinnLanding() {
                                 ) : profile.tier === 'REFERRAL' ? (
                                     /* TIER 2: REFERRAL GATED */
                                     <div className="w-full space-y-8 flex flex-col items-center">
-                                        <div className="bg-black/60 backdrop-blur-md px-10 py-5 rounded-[2rem] border-[3px] border-white/10 text-center shadow-xl">
-                                            <p className="text-[#F492B7] font-black italic tracking-tighter text-2xl lowercase mb-1">spots full</p>
-                                            <p className="text-white/60 font-bold tracking-tight text-sm lowercase">wait for updates or unlock with 3 friends</p>
+                                        <div className="bg-[#F492B7] text-black border-[4px] border-black px-12 py-7 rounded-[2.5rem] shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] text-center relative overflow-hidden group transition-all hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[14px_14px_0px_0px_rgba(0,0,0,1)]">
+                                            <div className="relative z-10">
+                                                <p className="font-black text-4xl lowercase tracking-tighter italic leading-none mb-1.5">spots full</p>
+                                                <p className="font-bold text-[13px] tracking-tight lowercase opacity-90 border-t-2 border-black/10 pt-1.5 mt-1.5 mx-auto max-w-[200px]">wait for updates or unlock with 3 friends</p>
+                                            </div>
                                         </div>
 
                                         <ReferralPanel
@@ -274,11 +281,11 @@ export default function DjinnLanding() {
                                 ) : profile.tier === 'WAITLIST' ? (
                                     /* TIER 3: WAITLIST */
                                     <div className="space-y-4 text-center">
-                                        <div className="bg-white text-black border-[4px] border-black px-12 py-6 rounded-[2rem] shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-                                            <p className="font-black text-3xl lowercase tracking-tighter italic mb-1">devnet full</p>
-                                            <p className="font-bold text-sm tracking-tight lowercase">mainnet coming soon</p>
+                                        <div className="bg-white text-black border-[4px] border-black px-12 py-7 rounded-[2.5rem] shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] transition-all hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[14px_14px_0px_0px_rgba(0,0,0,1)]">
+                                            <p className="font-black text-4xl lowercase tracking-tighter italic leading-none mb-1.5">devnet full</p>
+                                            <p className="font-bold text-[13px] tracking-tight lowercase opacity-60 border-t-2 border-black/10 pt-1.5 mt-1.5 mx-auto max-w-[150px]">mainnet coming soon</p>
                                         </div>
-                                        <p className="text-white/40 font-bold text-xs uppercase tracking-widest mt-4">Follow us on X for updates</p>
+                                        <p className="text-white/40 font-bold text-xs uppercase tracking-[0.3em] mt-6">Follow @djinnmarkets for updates</p>
                                     </div>
                                 ) : null}
                             </motion.div>

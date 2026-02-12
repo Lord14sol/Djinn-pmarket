@@ -7,6 +7,12 @@ const nextConfig = {
         optimizePackageImports: ['lucide-react', 'recharts', 'lightweight-charts'],
     },
     images: {
+        localPatterns: [
+            {
+                pathname: '/**',
+                search: '',
+            },
+        ],
         remotePatterns: [
             {
                 protocol: 'https',
