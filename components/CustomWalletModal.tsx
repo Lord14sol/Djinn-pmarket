@@ -124,7 +124,7 @@ export default function CustomWalletModal({ isOpen, onClose }: CustomWalletModal
                                     <div className="flex flex-col items-center pt-7 pb-5 px-6">
                                         <div className="w-20 h-20 rounded-[1.5rem] border-[3px] border-black overflow-hidden flex items-center justify-center bg-black/[0.03] shadow-[4px_4px_0px_#000] mb-5">
                                             <img
-                                                src="/djinn-logo.png?v=3"
+                                                src="/djinn-logo.png"
                                                 alt="Djinn"
                                                 className="w-14 h-14 object-contain"
                                             />

@@ -270,7 +270,7 @@ function NavbarContent() {
                 <div className="w-full px-6 md:px-12 h-24 flex items-center justify-between relative">
                     <Link href="/markets" className="flex items-center group gap-0">
                         <div className="relative w-16 h-16 md:w-24 md:h-24 transition-transform duration-500 group-hover:scale-110 -mr-3">
-                            <Image src="/djinn-logo.png?v=3" alt="Djinn Logo" fill className="object-contain" priority />
+                            <Image src="/djinn-logo.png" alt="Djinn Logo" fill className="object-contain" priority />
                         </div>
                         <span className="text-3xl md:text-5xl text-white mt-1 relative z-10" style={{ fontFamily: 'var(--font-adriane), serif', fontWeight: 700 }}>
                             Djinn

@@ -259,7 +259,7 @@ export default function PrettyChartWrapper({ series, trigger }: { series: Outcom
             {/* Platform Watermark - Centered Seal */}
             <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-[0.05]">
                 <div className="relative w-64 h-64 grayscale">
-                    <img src="/djinn-logo.png?v=3" alt="Djinn Seal" className="w-full h-full object-contain" />
+                    <img src="/djinn-logo.png" alt="Djinn Seal" className="w-full h-full object-contain" />
                 </div>
             </div>
         </div>

@@ -101,7 +101,7 @@ export default function ShareExperience({ isOpen, onClose, layoutId, data }: Sha
                                                 <span className="text-sm font-black italic tracking-tighter">Djinn.market</span>
                                             </div>
                                             <div className="w-12 h-12 rounded-full border border-current/20 flex items-center justify-center p-2 backdrop-blur-md">
-                                                <img src="/djinn-logo.png?v=3" className={`w-full h-full object-contain ${activeSkin.contrast === 'dark' ? 'brightness-200' : 'brightness-0'}`} alt="Logo" />
+                                                <img src="/djinn-logo.png" className={`w-full h-full object-contain ${activeSkin.contrast === 'dark' ? 'brightness-200' : 'brightness-0'}`} alt="Logo" />
                                             </div>
                                         </div>
 
