@@ -312,7 +312,7 @@ export default function PhysicsCardBubblegum({ username, memberNumber, pfp, twit
                         </div>
 
                         {/* 2. CENTER X PROFILE PICTURE (Liquid Chrome Crystal Frame) */}
-                        <div className="relative flex-[3] flex items-center justify-center w-full" style={{ transformStyle: 'preserve-3d' }}>
+                        <div className="relative flex-[3] flex items-center justify-center w-full mt-[-2.5rem]" style={{ transformStyle: 'preserve-3d' }}>
                             <motion.div
                                 className="relative w-80 h-80 rounded-[2.5rem] p-[2px] bg-gradient-to-br from-white/80 via-white/20 to-white/80"
                                 style={{
