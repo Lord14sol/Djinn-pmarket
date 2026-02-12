@@ -292,7 +292,7 @@ export default function PhysicsCardBubblegum({ username, memberNumber, pfp, twit
                     <div className="relative z-10 flex flex-col items-center h-full p-8" style={{ transformStyle: 'preserve-3d' }}>
 
                         {/* 1. TOP TITLE GROUP (NEW) */}
-                        <div className="relative flex-1 flex flex-col items-center justify-end w-full pb-10" style={{ transformStyle: 'preserve-3d' }}>
+                        <div className="relative flex-[0.7] flex flex-col items-center justify-end w-full pb-2" style={{ transformStyle: 'preserve-3d' }}>
                             <motion.h2
                                 className="text-[3.5rem] font-black tracking-[-0.04em] relative"
                                 style={{
@@ -315,7 +315,7 @@ export default function PhysicsCardBubblegum({ username, memberNumber, pfp, twit
                         </div>
 
                         {/* 2. CENTER X PROFILE PICTURE (Liquid Chrome Crystal Frame) */}
-                        <div className="relative flex-[2.5] flex items-center justify-center w-full" style={{ transformStyle: 'preserve-3d' }}>
+                        <div className="relative flex-[3] flex items-center justify-center w-full" style={{ transformStyle: 'preserve-3d' }}>
                             <motion.div
                                 className="relative w-80 h-80 rounded-[2.5rem] p-[2px] bg-gradient-to-br from-white/80 via-white/20 to-white/80"
                                 style={{
