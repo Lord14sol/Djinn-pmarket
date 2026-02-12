@@ -509,7 +509,7 @@ export default function PhysicsCardBubblegum({ username, memberNumber, pfp, twit
 
                             <div className="flex flex-col items-center mb-8 mx-auto text-black/90">
                                 <span
-                                    className="text-[1.05rem] tracking-wide leading-none text-black"
+                                    className="text-[1.05rem] tracking-wide leading-relaxed text-black"
                                     style={{
                                         fontFamily: 'var(--font-unbounded), sans-serif',
                                     }}
@@ -521,7 +521,8 @@ export default function PhysicsCardBubblegum({ username, memberNumber, pfp, twit
                                         backgroundSize: '200% auto',
                                         WebkitBackgroundClip: 'text',
                                         WebkitTextFillColor: 'transparent',
-                                        display: 'inline-block'
+                                        display: 'inline-block',
+                                        paddingBottom: '0.15em'
                                     }}>Djinn</span>
                                 </span>
                             </div>

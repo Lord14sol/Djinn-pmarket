@@ -102,10 +102,11 @@ export default function DjinnLanding() {
     }, [refreshStatus]);
 
     useEffect(() => {
-        if (connected && !loading && status.isAdmin) {
+        if (connected && !loading && (status.isAdmin || profile?.has_access)) {
+            console.log("🚀 [Home] Access confirmed, redirecting to markets...");
             router.push('/markets');
         }
-    }, [connected, loading, status.isAdmin, router]);
+    }, [connected, loading, status.isAdmin, profile?.has_access, router]);
 
     // Instantly open claim modal when wallet connects and no profile
     useEffect(() => {
