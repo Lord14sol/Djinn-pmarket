@@ -14,7 +14,7 @@ import PumpEffect from '@/components/PumpEffect';
 import { ADMIN_WALLETS } from '@/lib/whitelist';
 import TheGreatPyramid from '@/components/TheGreatPyramid';
 import { useSound } from '@/components/providers/SoundProvider';
-import Galaxy from '@/components/Galaxy';
+import StarfieldBg from '@/components/StarfieldBg';
 
 // Fresh start timestamp - hide markets created before this (filtering for clean view)
 const FRESH_START_TIMESTAMP = process.env.NEXT_PUBLIC_FRESH_START_TIMESTAMP
@@ -381,24 +381,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen w-full bg-black text-white font-sans selection:bg-[#F492B7] selection:text-black relative">
-      {/* Galaxy Background */}
-      <div className="fixed inset-0 z-0">
-        <Galaxy
-          mouseRepulsion
-          mouseInteraction
-          density={1}
-          glowIntensity={0.3}
-          saturation={0}
-          hueShift={320}
-          twinkleIntensity={0.3}
-          rotationSpeed={0.1}
-          repulsionStrength={2}
-          autoCenterRepulsion={0}
-          starSpeed={0.5}
-          speed={1}
-          transparent={false}
-        />
-      </div>
+      <StarfieldBg />
 
       {/* Hero Section con Callback para crear mercados */}
       <div className="relative z-10">

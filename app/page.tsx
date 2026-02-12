@@ -199,7 +199,6 @@ export default function DjinnLanding() {
                                 className="object-contain"
                                 priority
                                 sizes="(max-width: 768px) 144px, 208px"
-                                unoptimized
                             />
                         </div>
                         <div className="flex flex-col items-start leading-none">

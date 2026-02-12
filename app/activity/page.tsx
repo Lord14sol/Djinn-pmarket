@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { formatDistanceToNow } from 'date-fns';
 import { ArrowLeft, ExternalLink, Activity, Clock, TrendingUp, TrendingDown, Filter } from 'lucide-react';
 import { getGlobalActivities, getProfile } from '@/lib/supabase-db';
-import Galaxy from '@/components/Galaxy';
+import StarfieldBg from '@/components/StarfieldBg';
 import { useSound } from '@/components/providers/SoundProvider';
 
 // Mock SOL Price (or fetch real)
@@ -90,24 +90,7 @@ export default function ActivityPage() {
     return (
         <div className="min-h-screen bg-black text-white font-sans selection:bg-[#F492B7] selection:text-black pt-28 pb-12 px-4 md:px-8 relative overflow-hidden">
 
-            {/* Galaxy Background */}
-            <div className="fixed inset-0 z-0">
-                <Galaxy
-                    mouseRepulsion
-                    mouseInteraction
-                    density={1}
-                    glowIntensity={0.3}
-                    saturation={0}
-                    hueShift={320}
-                    twinkleIntensity={0.3}
-                    rotationSpeed={0.1}
-                    repulsionStrength={2}
-                    autoCenterRepulsion={0}
-                    starSpeed={0.5}
-                    speed={1}
-                    transparent={false}
-                />
-            </div>
+            <StarfieldBg />
 
             {/* HEADER */}
             <div className="relative z-10 max-w-6xl mx-auto mb-6 text-center md:text-left">

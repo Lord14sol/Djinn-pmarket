@@ -5,9 +5,7 @@ import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight, Filter } from 'lucide-react';
 import { useBinancePrice } from '@/hooks/useBinancePrice';
-import dynamic from 'next/dynamic';
-
-const Galaxy = dynamic(() => import('@/components/Galaxy'), { ssr: false });
+import StarfieldBg from '@/components/StarfieldBg';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONFIG
@@ -268,10 +266,7 @@ export default function CryptoMajorsPage() {
 
     return (
         <div className="min-h-screen relative overflow-hidden bg-black selection:bg-[#F492B7] selection:text-black">
-            {/* Galaxy Background - Fixed */}
-            <div className="fixed inset-0 z-0 opacity-50">
-                <Galaxy starSpeed={0.3} />
-            </div>
+            <StarfieldBg />
 
             {/* Content */}
             <div className="relative z-10 flex flex-col items-center">

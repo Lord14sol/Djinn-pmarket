@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import Galaxy from '@/components/Galaxy';
+import StarfieldBg from '@/components/StarfieldBg';
 import { useSound } from '@/components/providers/SoundProvider';
 
 // --- MOCK DATA GENERATOR ---
@@ -214,24 +214,7 @@ export default function LeaderboardPage() {
 
     return (
         <main className="min-h-screen bg-black text-white pb-20 pt-28 px-6 relative font-sans overflow-hidden">
-            {/* Galaxy Background */}
-            <div className="fixed inset-0 z-0">
-                <Galaxy
-                    mouseRepulsion
-                    mouseInteraction
-                    density={1}
-                    glowIntensity={0.3}
-                    saturation={0}
-                    hueShift={320}
-                    twinkleIntensity={0.3}
-                    rotationSpeed={0.1}
-                    repulsionStrength={2}
-                    autoCenterRepulsion={0}
-                    starSpeed={0.5}
-                    speed={1}
-                    transparent={false}
-                />
-            </div>
+            <StarfieldBg />
 
             <style jsx global>{`
                 ::selection {

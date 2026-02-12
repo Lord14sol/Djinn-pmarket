@@ -49,8 +49,7 @@ import { getOutcomeColor } from '@/lib/market-colors';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { useChronosProgram, deriveChronosMarketKey } from '@/hooks/useChronosProgram';
 
-// Dynamic import Galaxy
-const Galaxy = dynamic(() => import('@/components/Galaxy'), { ssr: false });
+import StarfieldBg from '@/components/StarfieldBg';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONFIG
@@ -1162,10 +1161,7 @@ export default function ChronosMarketPage() {
 
     return (
         <div className="min-h-screen relative overflow-hidden bg-black text-black font-sans selection:bg-[#F492B7] selection:text-black">
-            {/* Galaxy Background - Fixed */}
-            <div className="fixed inset-0 z-0 opacity-40">
-                <Galaxy starSpeed={0.2} />
-            </div>
+            <StarfieldBg />
 
             {/* Top Bar */}
             <div className="relative z-20 sticky top-0 bg-black/80 backdrop-blur-md border-b border-white/10">

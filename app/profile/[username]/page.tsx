@@ -27,7 +27,7 @@ import { usePrice } from '@/lib/PriceContext';
 import { getSpotPrice } from '@/lib/core-amm';
 import { useSound } from '@/components/providers/SoundProvider';
 import ShareExperience from '@/components/ShareExperience';
-import Galaxy from '@/components/Galaxy';
+import StarfieldBg from '@/components/StarfieldBg';
 
 // Helper format function
 function formatCompact(num: number) {
@@ -330,31 +330,29 @@ export default function ProfilePage() {
                     }
                 }
 
-                // 2. Database - Source of Truth (Background Sync)
-                try {
-                    const dbProfile = await supabaseDb.getProfile(targetAddress);
-                    if (dbProfile) {
-                        finalProfile.username = dbProfile.username || finalProfile.username;
-                        finalProfile.bio = dbProfile.bio || finalProfile.bio;
-                        if (dbProfile.avatar_url) finalProfile.pfp = dbProfile.avatar_url;
-                        if (dbProfile.created_at) finalProfile.joinedAt = dbProfile.created_at;
-                        if (typeof dbProfile.views === 'number') setViewCount(dbProfile.views);
-                        if (dbProfile.twitter) finalProfile.twitter = dbProfile.twitter;
-                        if (dbProfile.discord) finalProfile.discord = dbProfile.discord;
-                    }
-                } catch (dbErr: any) {
-                    console.warn("⚠️ Supabase profile sync failed (using local/default):", dbErr.message);
-                }
-
-                // 3. Special "Architect" Injection (Absolute Memory)
-                // Lock legendary medals to the specific GOD_WALLET only
-                // User can still customize Name/Bio/PFP
+                // 2. PARALLEL FETCH: Profile + Achievements + Balance
                 const isLordWallet = targetAddress === GOD_WALLET || targetAddress === 'C31JQfZBVRsnvFqiNptD95rvbEx8fsuPwdZn62yEWx9X';
 
-                if (isLordWallet) {
+                const [dbProfile, achievements, balance] = await Promise.all([
+                    supabaseDb.getProfile(targetAddress).catch(() => null),
+                    isLordWallet ? Promise.resolve(null) : supabaseDb.getUserAchievements(targetAddress).catch(() => []),
+                    connection.getBalance(new PublicKey(targetAddress)).catch(() => 0)
+                ]);
 
+                // Apply DB profile
+                if (dbProfile) {
+                    finalProfile.username = dbProfile.username || finalProfile.username;
+                    finalProfile.bio = dbProfile.bio || finalProfile.bio;
+                    if (dbProfile.avatar_url) finalProfile.pfp = dbProfile.avatar_url;
+                    if (dbProfile.created_at) finalProfile.joinedAt = dbProfile.created_at;
+                    if (typeof dbProfile.views === 'number') setViewCount(dbProfile.views);
+                    if (dbProfile.twitter) finalProfile.twitter = dbProfile.twitter;
+                    if (dbProfile.discord) finalProfile.discord = dbProfile.discord;
+                }
+
+                // 3. Special "Architect" Injection
+                if (isLordWallet) {
                     finalProfile.medals = ['FIRST_MARKET', 'ORACLE', 'DIAMOND_HANDS', 'PINK_CRYSTAL', 'EMERALD_SAGE', 'MOON_DANCER', 'MARKET_SNIPER', 'APEX_PREDATOR', 'GOLD_TROPHY', 'LEGENDARY_TRADER'];
-                    // Gems hardcode removed - using real profile.gems or 0
                     finalProfile.profit = 1250000;
                     setViewCount(99999);
                     finalProfile.achievements = [
@@ -369,18 +367,13 @@ export default function ProfilePage() {
                         { code: 'THE_CHAMPION', name: 'The Champion', image_url: '/gold-trophy.png', xp: 50000 },
                         { code: 'LEGENDARY_TRADER', name: 'Legendary Trader', image_url: '/gems-trophy.png', xp: 100000 }
                     ];
-                } else {
-                    // Regular users medals
-                    const ach = await supabaseDb.getUserAchievements(targetAddress);
-                    finalProfile.achievements = ach;
-                    finalProfile.medals = ach.map(a => a.code);
+                } else if (achievements) {
+                    finalProfile.achievements = achievements;
+                    finalProfile.medals = achievements.map((a: any) => a.code);
                 }
 
                 // 4. On-chain Balance
-                try {
-                    const bal = await connection.getBalance(new PublicKey(targetAddress));
-                    finalProfile.portfolio = bal / LAMPORTS_PER_SOL;
-                } catch (e) { }
+                finalProfile.portfolio = balance / LAMPORTS_PER_SOL;
 
                 // 5. Load Active Bets for everyone
                 loadActiveBets(targetAddress);
@@ -789,24 +782,7 @@ export default function ProfilePage() {
                     onCancel={handleCropCancel}
                 />
             )}
-            {/* NO BANNER - Space Theme Background from global or main */}
-            <div className="fixed inset-0 z-0">
-                <Galaxy
-                    mouseRepulsion
-                    mouseInteraction
-                    density={1}
-                    glowIntensity={0.3}
-                    saturation={0}
-                    hueShift={320}
-                    twinkleIntensity={0.3}
-                    rotationSpeed={0.1}
-                    repulsionStrength={2}
-                    autoCenterRepulsion={0}
-                    starSpeed={0.5}
-                    speed={1}
-                    transparent={false}
-                />
-            </div>
+            <StarfieldBg />
 
             <div className="max-w-[1600px] mx-auto px-14 pt-2 relative z-10">
                 {/* PROFILE INFO - NO BACKGROUND */}
