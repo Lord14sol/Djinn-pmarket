@@ -1,0 +1,7 @@
+[build]
+# Use stable rust features only
+rustflags = ["-C", "link-arg=-zstack-size=8192"]
+
+[target.bpfel-unknown-unknown]
+# BPF target settings
+rustflags = ["-C", "link-arg=-zstack-size=8192"]

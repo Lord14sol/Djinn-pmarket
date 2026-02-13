@@ -1,0 +1,83 @@
+
+🔥🔥🔥 INITIALIZING ARMAGEDDON PROTOCOL TEST 🔥🔥🔥
+
+(node:47904) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/benjaminfuentes/Djinn-pmarket/programs/djinn-market/tests/armageddon.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /Users/benjaminfuentes/Djinn-pmarket/programs/djinn-market/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+  🔥 ARMAGEDDON: Complete Djinn Protocol Validation
+💰 Injecting Capital to all actors...
+    💸 [Creator] Funded: 500 SOL
+    💸 [Early Whale] Funded: 1,000 SOL
+    💸 [Sniper] Funded: 500 SOL
+    💸 [Attacker] Funded: 2,000 SOL
+    💸 [🏛️  BlackRock] Funded: 1,500,000 SOL
+    💸 [🏛️  Fidelity] Funded: 1,500,000 SOL
+    💸 [🏛️  VanEck] Funded: 1,500,000 SOL
+    💸 [saylor.sol] Funded: 1,500,000 SOL
+✅ All accounts funded. Ready for war.
+    ✔ 🌟 PHASE 0: Genesis - Liquidity Injection (4033ms)
+✨ Market Created! Initial Vault: 0 SOL
+    ✔ 🎬 PHASE 1: Market Creation - 'US Election 2028' (464ms)
+
+🚀 Early believer creates initial curve liquidity...
+    ✅ Bought 100 SOL of YES
+    ✔ 🚀 PHASE 2: Early Believer Entry (470ms)
+
+🌊 unleashing the crowd (Retail Volume)...
+
+══════════════════════════════════════════════════════════════════════
+📊 STATUS REPORT: POST-RETAIL
+══════════════════════════════════════════════════════════════════════
+💰 Total Agg. Volume:   ◎ 2,002 (~$300,300)
+🔥 Total Trades:        21
+🏛️  Treasury Earned:     ◎ 10.01
+══════════════════════════════════════════════════════════════════════
+
+    ✔ 🌊 PHASE 3: Viral Wave (Retail FOMO) (462ms)
+
+🛡️ EXECUTING SECURITY PROTOCOLS...
+    ✅ Double Init Blocked
+    🛡️  Security Status: Active.
+    ✔ 🛡️ PHASE 4: Security Gauntlet (468ms)
+
+🚨 🚨 🚨 GLOBAL INSTITUTIONAL INFLOW 🚨 🚨 🚨
+    Simulating aggregated volume from ETF Providers...
+    ✅ 4 INSTITUTIONAL ORDERS FILLED (1M SOL EACH).
+    🏦 NEW VAULT TVL: ◎ 3,961,981.987
+    📈 Shares Minted: 1723800013777721
+    🟢 INTEGER OVERFLOW CHECK PASSED: The curve handled multi-million SOL volume.
+
+══════════════════════════════════════════════════════════════════════
+📊 STATUS REPORT: POST-ETF ADOPTION
+══════════════════════════════════════════════════════════════════════
+💰 Total Agg. Volume:   ◎ 4,002,002 (~$600,300,300)
+🔥 Total Trades:        25
+🏛️  Treasury Earned:     ◎ 20010.01
+══════════════════════════════════════════════════════════════════════
+
+    ✔ 🐋 PHASE 5: GLOBAL ADOPTION EVENT ($600M AGGREGATE VOLUME) (1936ms)
+
+🏆 Resolving Market...
+    ✅ Market Resolved to YES
+    💰 Verifying BlackRock ETF payout...
+    🎉 BLACKROCK PAYOUT: ◎ 1,855,984.884 SOL
+    ✅ Solvency Check: The Vault paid out the massive winner.
+    ✔ 🏆 PHASE 6: Resolution & Payouts (973ms)
+
+══════════════════════════════════════════════════════════════════════
+🏆 ARMAGEDDON TEST COMPLETE: MISSION SUCCESS
+══════════════════════════════════════════════════════════════════════
+💎 Total Agg. Volume:       ◎ 4,002,002
+💵 USD Equivalent Volume:   $ 600,300,300
+🏛️  Total Treasury Revenue:  ◎ 20010.01 (~$3,001,501.5)
+🛡️  Security Integrity:      100%
+══════════════════════════════════════════════════════════════════════
+
+    ✔ 📜 PHASE 7: FINAL VERDICT
+
+
+  8 passing (9s)
+
