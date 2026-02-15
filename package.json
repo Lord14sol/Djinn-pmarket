@@ -7,7 +7,8 @@
     "dev:fast": "npm run dev & sleep 4 && ./scripts/warm-cache.sh",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "cerberus": "ts-node scripts/run-cerberus.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.28.0",
