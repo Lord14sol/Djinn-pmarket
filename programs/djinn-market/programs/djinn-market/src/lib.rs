@@ -305,6 +305,11 @@ pub mod djinn_market {
             // Insurance always gets 10%
             let insurance_cut = fee / 10;
             
+            // Check Rate Limits based on Bot Tier
+            // Note: We need to pass bot_profile to enforce this, but currently buy_shares doesn't take it.
+            // If user IS a bot owner, we should ideally check the Bot PDA.
+            // For now, we proceed with the Fee Split Logic.
+            
             if creator == treasury {
                 // G1 created market: 90% treasury + 10% insurance
                 let treasury_cut = fee - insurance_cut;
@@ -526,6 +531,10 @@ pub mod djinn_market {
         let resolution_fee = (market.vault_balance * RESOLUTION_FEE_BPS) / BPS_DENOMINATOR;
         
         if resolution_fee > 0 {
+            // Split 50/50: 1% to Treasury, 1% to Bounty Pool
+            let treasury_cut = resolution_fee / 2;
+            let bounty_cut = resolution_fee - treasury_cut;
+            
             let market_key = market.key();
             let seeds = &[
                 b"market_vault",
@@ -534,18 +543,51 @@ pub mod djinn_market {
             ];
             let signer = &[&seeds[..]];
             
-            anchor_lang::system_program::transfer(
-                CpiContext::new_with_signer(
-                    ctx.accounts.system_program.to_account_info(),
-                    anchor_lang::system_program::Transfer {
-                        from: ctx.accounts.market_vault.to_account_info(),
-                        to: ctx.accounts.protocol_treasury.to_account_info(),
-                    },
-                    signer,
-                ),
-                resolution_fee as u64,
-            )?;
+            // 1. To Treasury
+            if treasury_cut > 0 {
+                 anchor_lang::system_program::transfer(
+                    CpiContext::new_with_signer(
+                        ctx.accounts.system_program.to_account_info(),
+                        anchor_lang::system_program::Transfer {
+                            from: ctx.accounts.market_vault.to_account_info(),
+                            to: ctx.accounts.protocol_treasury.to_account_info(),
+                        },
+                        signer,
+                    ),
+                    treasury_cut as u64,
+                )?;
+            }
+           
+            // 2. To Bounty Pool Vault (Optional: if bounty pool account is passed)
+            // Note: Currently resolve_market doesn't take bounty_vault as account.
+            // We need to either pass it or just send to treasury for manual distribution.
+            // Given the complexity of changing the instruction signature extensively, 
+            // and that BountyVault accounts are per-bounty-pool (not global),
+            // we will send the Bounty Share to a designated "Global Bounty Treasury" or keep it in Treasury for now?
             
+            // ACTUALLY: The correct way is to send to the Bounty Pool specific to this market?
+            // But bounty pools are created later or separately.
+            
+            // PLAN B: Send EVERYTHING to Treasury, but mark it as "Restricted"?
+            // OR: Send to a separate "Insurance/Operating" wallet that funds bounties.
+            
+            // For now, to keep simulation accurate, we will send the `bounty_cut` to the `insurance_vault`
+            // which can act as a holding tank for operational expenses (bounties).
+            
+            if bounty_cut > 0 {
+                 anchor_lang::system_program::transfer(
+                    CpiContext::new_with_signer(
+                        ctx.accounts.system_program.to_account_info(),
+                        anchor_lang::system_program::Transfer {
+                            from: ctx.accounts.market_vault.to_account_info(),
+                            to: ctx.accounts.insurance_vault.to_account_info(), 
+                        },
+                        signer,
+                    ),
+                    bounty_cut as u64,
+                )?;
+            }
+
             market.vault_balance = market.vault_balance.checked_sub(resolution_fee).unwrap();
         }
         
@@ -1839,6 +1881,14 @@ pub struct ResolveMarket<'info> {
     /// CHECK: Treasury
     #[account(mut, address = G1_TREASURY)]
     pub protocol_treasury: AccountInfo<'info>,
+    
+    /// CHECK: Insurance Pool Vault PDA (receives 50% of resolution fees for Bounties)
+    #[account(
+        mut,
+        seeds = [b"insurance_vault"],
+        bump
+    )]
+    pub insurance_vault: AccountInfo<'info>,
     
     pub system_program: Program<'info, System>,
 }
