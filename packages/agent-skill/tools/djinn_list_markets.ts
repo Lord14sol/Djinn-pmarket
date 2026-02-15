@@ -26,7 +26,8 @@ export interface ListMarketsParams {
     status?: string;
     limit?: number;
     offset?: number;
-    sortBy?: 'volume' | 'created' | 'expires';
+    sortBy?: 'volume' | 'created' | 'expiry';
+    verifiedOnly?: boolean;
 }
 
 export async function djinn_list_markets(
@@ -38,9 +39,8 @@ export async function djinn_list_markets(
     if (params.category) queryParams.set('category', params.category);
     if (params.status) queryParams.set('status', params.status || 'active');
     if (params.limit) queryParams.set('limit', String(params.limit || 50));
-    if (params.offset) queryParams.set('offset', String(params.offset || 0));
-    if (params.sortBy) queryParams.set('sort', params.sortBy || 'volume');
 
+    // Fetch all for client-side filtering if needed
     const response = await fetch(`${apiUrl}/api/markets?${queryParams}`);
 
     if (!response.ok) {
@@ -48,7 +48,14 @@ export async function djinn_list_markets(
     }
 
     const data = await response.json();
-    return data.markets as DjinnMarket[];
+    let markets = data.markets || data || [];
+
+    // Client-side optimizations
+    if (params.verifiedOnly) {
+        markets = markets.filter((m: any) => m.verified === true || m.cerberusVerdict === 'VERIFIED');
+    }
+
+    return markets as DjinnMarket[];
 }
 
 export default djinn_list_markets;

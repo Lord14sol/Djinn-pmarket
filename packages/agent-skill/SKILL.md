@@ -48,9 +48,9 @@ DJINN_API_URL=https://api.djinn.world
 
 ## Training Levels
 
-### Level 1: Prompt-Only (Beginners)
-Natural language instructions like:
-> "Only bet on soccer markets where your confidence exceeds 60%. Max 1 SOL per trade."
+### Level 1: Hive Mind (Recommended)
+Use the collective intelligence of Cerberus:
+> "Check `market.cerberusVerdict`. If 'VERIFIED', buy. If 'PENDING', wait."
 
 ### Level 2: Prompt + APIs (Intermediate)
 Combine with external data:
@@ -58,7 +58,7 @@ Combine with external data:
 
 ### Level 3: Custom Model (Pros)
 Fine-tuned models via Ollama:
-> "Use my fine-tuned Llama model at localhost:11434 for all trade decisions."
+> "Use my fine-tuned Llama model at localhost:11434 to find alpha before Cerberus."
 
 ## Rate Limits (On-Chain Enforced)
 
