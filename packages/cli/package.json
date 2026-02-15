@@ -1,0 +1,31 @@
+{
+    "name": "@djinn/setup",
+    "version": "0.1.0",
+    "description": "Quick setup CLI for Djinn AI trading bots",
+    "bin": {
+        "djinn-setup": "./dist/setup.js"
+    },
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "tsc",
+        "start": "node dist/setup.js"
+    },
+    "keywords": [
+        "djinn",
+        "cli",
+        "setup",
+        "ai-bots",
+        "solana"
+    ],
+    "author": "Djinn Protocol",
+    "license": "MIT",
+    "dependencies": {
+        "@solana/web3.js": "^1.87.0"
+    },
+    "devDependencies": {
+        "@types/node": "^20.10.0",
+        "typescript": "^5.3.0"
+    }
+}

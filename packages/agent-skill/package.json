@@ -1,0 +1,24 @@
+{
+    "name": "@djinn/agent-skill",
+    "version": "0.1.0",
+    "description": "OpenClaw skill for AI bots to interact with Djinn prediction markets",
+    "main": "tools/index.ts",
+    "files": [
+        "SKILL.md",
+        "tools"
+    ],
+    "keywords": [
+        "djinn",
+        "openclaw",
+        "skill",
+        "ai-bots",
+        "prediction-markets"
+    ],
+    "author": "Djinn Protocol",
+    "license": "MIT",
+    "dependencies": {
+        "@djinn/sdk": "^0.1.0",
+        "@solana/web3.js": "^1.87.0",
+        "@coral-xyz/anchor": "^0.29.0"
+    }
+}
