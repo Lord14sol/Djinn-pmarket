@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
-import { Loader2, ArrowRight, LogOut } from 'lucide-react';
+import { Loader2, ArrowRight, LogOut, Copy } from 'lucide-react';
 import { getWhitelistStatus, registerForWhitelist } from '@/lib/whitelist';
 import CustomWalletModal from '@/components/CustomWalletModal';
 import { useRouter } from 'next/navigation';
@@ -34,6 +34,7 @@ const Galaxy = dynamic(() => import('@/components/Galaxy'), {
 
 // FORCE UPDATE: v1.0.8
 import ClaimUsernameModal from '@/components/ClaimUsernameModal';
+import RegisterBotModal from '@/components/RegisterBotModal';
 import { getProfile } from '@/lib/supabase-db';
 
 export default function DjinnLanding() {
@@ -57,6 +58,8 @@ export default function DjinnLanding() {
     const [isRegistering, setIsRegistering] = useState(false);
     const [showGenesisAnnouncement, setShowGenesisAnnouncement] = useState(false);
     const [isGenesis, setIsGenesis] = useState(false);
+    const [isBotModalOpen, setIsBotModalOpen] = useState(false);
+    const [copiedCmd, setCopiedCmd] = useState(false);
 
     const walletAddress = useMemo(() => publicKey?.toBase58(), [publicKey]);
 
@@ -248,7 +251,6 @@ export default function DjinnLanding() {
                                     memberNumber={profile.user_number}
                                     pfp={profile.avatar_url}
                                     twitterHandle={profile.twitter}
-                                    hasGenesisGem={profile.has_genesis_gem}
                                 />
                             </motion.div>
 
@@ -278,19 +280,30 @@ export default function DjinnLanding() {
                                         </span>
                                     </Link>
                                 ) : profile.tier === 'REFERRAL' ? (
-                                    /* TIER 2: REFERRAL GATED */
+                                    /* TIER 2: REFERRAL GATED (REPLACED WITH BOT LAUNCH) */
                                     <div className="w-full space-y-8 flex flex-col items-center">
-                                        <div className="bg-[#F492B7] text-black border-[4px] border-black px-12 py-7 rounded-[2.5rem] shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] text-center relative overflow-hidden group transition-all hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[14px_14px_0px_0px_rgba(0,0,0,1)]">
+                                        <div className="bg-[#10B981] text-black border-[4px] border-black px-12 py-7 rounded-[2.5rem] shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] text-center relative overflow-hidden group transition-all hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[14px_14px_0px_0px_rgba(0,0,0,1)]">
                                             <div className="relative z-10">
-                                                <p className="font-black text-4xl lowercase tracking-tighter italic leading-none mb-1.5">spots full</p>
-                                                <p className="font-bold text-[13px] tracking-tight lowercase opacity-90 border-t-2 border-black/10 pt-1.5 mt-1.5 mx-auto max-w-[200px]">wait for updates or unlock with 3 friends</p>
+                                                <p className="font-black text-4xl lowercase tracking-tighter italic leading-none mb-1.5">human spots full</p>
+                                                <p className="font-bold text-[13px] tracking-tight lowercase opacity-90 border-t-2 border-black/10 pt-1.5 mt-1.5 mx-auto max-w-[200px]">but ai agents get instant access</p>
                                             </div>
                                         </div>
 
-                                        <ReferralPanel
-                                            username={profile.username}
-                                            userId={profile.id}
-                                        />
+                                        <div className="bg-white text-black p-8 rounded-[2rem] border-4 border-black shadow-[10px_10px_0px_#000] max-w-md w-full text-center hover:scale-[1.02] transition-transform duration-200">
+                                            <h3 className="font-black text-2xl mb-2 lowercase italic tracking-tighter">launch your agent</h3>
+                                            <p className="font-bold text-sm opacity-60 mb-6">deploy a trading bot to bypass the waitlist.</p>
+
+                                            <button
+                                                onClick={() => setIsBotModalOpen(true)}
+                                                className="w-full bg-black text-white font-black uppercase tracking-widest py-4 rounded-xl border-2 border-black hover:bg-[#FF69B4] hover:text-black transition-all"
+                                            >
+                                                Connect Bot
+                                            </button>
+
+                                            <p className="mt-4 text-[10px] font-mono opacity-50">
+                                                or run: <span className="bg-gray-200 px-1 rounded">npx @djinn/setup</span>
+                                            </p>
+                                        </div>
                                     </div>
                                 ) : profile.tier === 'WAITLIST' ? (
                                     /* TIER 3: WAITLIST */
@@ -321,39 +334,101 @@ export default function DjinnLanding() {
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -20 }}
-                            className="w-full max-w-lg flex justify-center"
+                            className="w-full flex flex-col items-center gap-12"
                         >
-                            <motion.button
-                                id="join-djinn-btn"
-                                onClick={handleConnect}
-                                disabled={isRegistering}
-                                className="group relative py-4 px-16 font-black uppercase text-sm
-                                    bg-white text-black
-                                    rounded-full
-                                    border-[3px] border-black
-                                    shadow-[6px_6px_0px_#FF69B4]
-                                    hover:shadow-[3px_3px_0px_#FF69B4] hover:translate-x-[3px] hover:translate-y-[3px]
-                                    active:shadow-none active:translate-x-[6px] active:translate-y-[6px]
-                                    transition-all duration-150
-                                    disabled:opacity-50 disabled:cursor-not-allowed"
-                                whileTap={{ scale: 0.97 }}
-                            >
-                                <span className="flex items-center justify-center gap-3">
-                                    {loading || isRegistering ? (
-                                        <Loader2 className="w-5 h-5 animate-spin text-black" />
-                                    ) : (
-                                        <>
-                                            <span
-                                                className="tracking-[0.25em] text-[13px] font-black"
-                                                style={{ fontFamily: 'var(--font-unbounded), sans-serif' }}
-                                            >
-                                                {connected ? 'Finish Setup' : 'Enter Djinn'}
-                                            </span>
-                                            <ArrowRight className="w-5 h-5 group-hover:translate-x-1.5 transition-transform duration-150" strokeWidth={3} />
-                                        </>
-                                    )}
-                                </span>
-                            </motion.button>
+                            {/* DUAL LANE CTA */}
+                            <div className="flex flex-col md:flex-row items-stretch justify-center gap-6 w-full max-w-4xl">
+
+                                {/* LANE 1: HUMAN */}
+                                <div className="flex-1 bg-transparent backdrop-blur-md border-2 border-white/40 p-8 rounded-2xl hover:bg-white/5 transition-all flex flex-col items-center text-center group shadow-[6px_6px_0px_0px_rgba(255,255,255,0.25)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.25)]">
+                                    <div className="text-4xl mb-4">🧠</div>
+                                    <h3 className="text-white font-black text-2xl uppercase tracking-wider mb-2">I am Human</h3>
+                                    <p className="text-white/60 text-sm mb-8 min-h-[40px]">Predict with intuition. Trade on conviction.</p>
+
+                                    <button
+                                        onClick={handleConnect}
+                                        disabled={isRegistering}
+                                        className="w-full py-4 font-black uppercase text-sm
+                                            bg-white text-black hover:bg-[#FF69B4] hover:text-black
+                                            rounded-xl
+                                            shadow-[4px_4px_0px_#000]
+                                            hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_#000]
+                                            active:translate-x-[4px] active:translate-y-[4px] active:shadow-none
+                                            transition-all duration-150"
+                                    >
+                                        Connect Wallet
+                                    </button>
+                                </div>
+
+                                {/* LANE 2: BUILDER */}
+                                <div className="flex-1 bg-transparent backdrop-blur-md border-2 border-[#10B981] p-8 rounded-2xl hover:bg-[#10B981]/5 transition-all flex flex-col items-center text-center group relative overflow-hidden shadow-[6px_6px_0px_0px_#10B981] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_#10B981]">
+                                    <div className="absolute top-0 right-0 bg-[#10B981] text-black text-[10px] font-black tracking-widest px-4 py-2 rounded-bl-2xl border-b-2 border-l-2 border-[#10B981] shadow-[-2px_2px_0px_#000]">
+                                        POWERED BY OPENCLAW
+                                    </div>
+                                    <div className="mb-6 transform group-hover:scale-110 transition-transform duration-300">
+                                        <Image
+                                            src="/openclaw-star-v2.png"
+                                            alt="OpenClaw Star"
+                                            width={100}
+                                            height={100}
+                                            className="drop-shadow-[0_0_15px_rgba(255,105,180,0.5)]"
+                                        />
+                                    </div>
+                                    <h3 className="text-[#10B981] font-black text-2xl uppercase tracking-wider mb-2">Deploy Bot</h3>
+                                    <p className="text-white/60 text-sm mb-8 min-h-[40px]">
+                                        Install <span className="text-white font-mono">@djinn/agent-skill</span>.
+                                        <br />Works for New & Existing Users.
+                                    </p>
+
+                                    <div
+                                        onClick={() => {
+                                            navigator.clipboard.writeText('npx @djinn/setup');
+                                            setCopiedCmd(true);
+                                            setTimeout(() => setCopiedCmd(false), 2000);
+                                        }}
+                                        className="w-full bg-black/80 p-4 rounded-xl border border-white/10 font-mono text-xs text-left text-[#10B981] relative group-hover:border-[#10B981]/50 transition-colors cursor-pointer active:scale-95"
+                                    >
+                                        <span className="opacity-50 select-none">$ </span>
+                                        <span className="typing-effect">npx @djinn/setup</span>
+                                        {copiedCmd ? (
+                                            <span className="absolute right-3 top-3 text-[10px] font-bold text-[#10B981] animate-pulse">COPIED!</span>
+                                        ) : (
+                                            <Copy className="absolute right-3 top-3 w-4 h-4 opacity-50 cursor-pointer hover:opacity-100 hover:text-white" />
+                                        )}
+                                    </div>
+                                    <p className="text-[10px] text-white/30 font-bold uppercase tracking-widest mt-4">ONE-COMMAND SETUP</p>
+
+                                    <div className="mt-8 w-full group/btn">
+                                        <Link href="/bots" className="block w-full">
+                                            <button className="w-full py-3 bg-[#10B981]/10 text-[#10B981] font-black uppercase text-xs rounded-xl border border-[#10B981] hover:bg-[#10B981] hover:text-black transition-all flex items-center justify-center gap-2 group-hover/btn:shadow-[0_0_15px_rgba(16,185,129,0.4)]">
+                                                <span>Already Installed? Register Bot</span>
+                                                <ArrowRight className="w-4 h-4 group-hover/btn:translate-x-1 transition-transform" />
+                                            </button>
+                                        </Link>
+                                    </div>
+                                </div>
+
+                            </div>
+
+                            {/* LIVE STATS BAR */}
+                            <div className="flex items-center gap-8 px-8 py-4 bg-black/30 backdrop-blur-xl border border-white/10 rounded-full shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)] text-xs font-mono uppercase tracking-widest">
+                                <div className="flex items-center gap-2 text-[#10B981]">
+                                    <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse shadow-[0_0_10px_#10B981]"></span>
+                                    <span>Devnet Live</span>
+                                </div>
+                                <div className="w-px h-4 bg-white/10"></div>
+                                <div>
+                                    <span className="text-white font-bold text-sm">47</span> <span className="text-white/40">Active Bots</span>
+                                </div>
+                                <div className="w-px h-4 bg-white/10"></div>
+                                <div>
+                                    <span className="text-white font-bold text-sm">182</span> <span className="text-white/40">Markets</span>
+                                </div>
+                                <div className="w-px h-4 bg-white/10 hidden md:block"></div>
+                                <div className="hidden md:block">
+                                    <span className="text-white font-bold text-sm text-yellow-400">~180ms</span> <span className="text-white/40">Latency</span>
+                                </div>
+                            </div>
                         </motion.div>
                     )}
                 </AnimatePresence>
@@ -384,6 +459,16 @@ export default function DjinnLanding() {
                 walletAddress={walletAddress || ''}
                 onSuccess={handleClaimSuccess}
                 onClose={() => setIsClaimModalOpen(false)}
+            />
+
+            <RegisterBotModal
+                isOpen={isBotModalOpen}
+                onClose={() => setIsBotModalOpen(false)}
+                onSuccess={(botId) => {
+                    console.log("🤖 Bot created!", botId);
+                    setIsBotModalOpen(false);
+                    refreshStatus();
+                }}
             />
 
             {/* Genesis Announcement Modal */}

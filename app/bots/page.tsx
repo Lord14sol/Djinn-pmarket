@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import StarfieldBg from '@/components/StarfieldBg';
 import { useSound } from '@/components/providers/SoundProvider';
@@ -151,7 +152,7 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
 // COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export default function BotsLeaderboardPage() {
+function BotsLeaderboardContent() {
     const { play } = useSound();
     const [sortBy, setSortBy] = useState<SortKey>('pnl');
     const [categoryFilter, setCategoryFilter] = useState<Category | 'All'>('All');
@@ -160,6 +161,17 @@ export default function BotsLeaderboardPage() {
     const [totalBots, setTotalBots] = useState(0);
     const [totalAum, setTotalAum] = useState(0);
     const [isRegisterOpen, setIsRegisterOpen] = useState(false);
+
+    // Magic Link Logic
+    const searchParams = useSearchParams();
+    const initialBotName = searchParams.get('name');
+    const initialCategory = searchParams.get('category');
+
+    useEffect(() => {
+        if (initialBotName) {
+            setIsRegisterOpen(true);
+        }
+    }, [initialBotName]);
 
     // Sort + Filter
     const sortedBots = [...mockBots]
@@ -496,11 +508,21 @@ export default function BotsLeaderboardPage() {
             <RegisterBotModal
                 isOpen={isRegisterOpen}
                 onClose={() => setIsRegisterOpen(false)}
+                initialBotName={initialBotName || undefined}
+                initialCategory={initialCategory || undefined}
                 onSuccess={(botId) => {
                     setIsRegisterOpen(false);
                     // TODO: Navigate to bot profile
                 }}
             />
         </main>
+    );
+}
+
+export default function BotsLeaderboardPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen bg-black text-white flex items-center justify-center">Loading...</div>}>
+            <BotsLeaderboardContent />
+        </Suspense>
     );
 }

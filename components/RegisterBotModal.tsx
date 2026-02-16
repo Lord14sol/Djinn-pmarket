@@ -15,6 +15,8 @@ interface RegisterBotModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSuccess?: (botId: string) => void;
+    initialBotName?: string;
+    initialCategory?: string; // Expect string from URL param, parse to number
 }
 
 const CATEGORIES = [
@@ -29,7 +31,7 @@ const STAKE_AMOUNT_SDL = 10; // 10 SOL (Devnet)
 
 type Step = 'IDENTITY' | 'WALLET' | 'STAKE' | 'SUCCESS';
 
-export default function RegisterBotModal({ isOpen, onClose, onSuccess }: RegisterBotModalProps) {
+export default function RegisterBotModal({ isOpen, onClose, onSuccess, initialBotName, initialCategory }: RegisterBotModalProps) {
     const { connection } = useConnection();
     const wallet = useAnchorWallet();
     const { publicKey } = useWallet();
@@ -46,6 +48,7 @@ export default function RegisterBotModal({ isOpen, onClose, onSuccess }: Registe
     const [botKeypair, setBotKeypair] = useState<Keypair | null>(null);
     const [keyDownloaded, setKeyDownloaded] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [isExistingWallet, setIsExistingWallet] = useState(false);
 
     // Step 3: Stake
     const [isStaking, setIsStaking] = useState(false);
@@ -55,7 +58,7 @@ export default function RegisterBotModal({ isOpen, onClose, onSuccess }: Registe
     const [botId, setBotId] = useState('');
     const [setupCopied, setSetupCopied] = useState(false);
 
-    // Reset on close
+    // Reset on close & Init from props
     useEffect(() => {
         if (!isOpen) {
             setStep('IDENTITY');
@@ -65,17 +68,35 @@ export default function RegisterBotModal({ isOpen, onClose, onSuccess }: Registe
             setBotKeypair(null);
             setKeyDownloaded(false);
             setCopied(false);
+            setIsExistingWallet(false);
             setIsStaking(false);
             setStakeError('');
             setBotId('');
             setSetupCopied(false);
+        } else {
+            // Pre-fill from props (Magic Link)
+            if (initialBotName) setBotName(initialBotName);
+            if (initialCategory) {
+                // partial match or index
+                const catIndex = CATEGORIES.findIndex(c => c.label.toLowerCase() === initialCategory.toLowerCase());
+                if (catIndex !== -1) setCategory(catIndex);
+            }
         }
-    }, [isOpen]);
+    }, [isOpen, initialBotName, initialCategory]);
 
     // Generate wallet
     const handleGenerateWallet = () => {
         const kp = Keypair.generate();
         setBotKeypair(kp);
+        setIsExistingWallet(false);
+    };
+
+    // Use existing wallet
+    const handleUseExisting = () => {
+        setBotKeypair(null);
+        setKeyDownloaded(false);
+        setIsExistingWallet(true);
+        setStep('STAKE'); // Auto-proceed
     };
 
     // Download private key
@@ -187,7 +208,7 @@ export default function RegisterBotModal({ isOpen, onClose, onSuccess }: Registe
     if (!isOpen) return null;
 
     const canProceedIdentity = botName.length >= 3 && botName.length <= 32 && strategy.length >= 10;
-    const canProceedWallet = botKeypair !== null && keyDownloaded;
+    const canProceedWallet = (botKeypair !== null && keyDownloaded) || isExistingWallet;
 
     return (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 pointer-events-none">
@@ -306,7 +327,7 @@ export default function RegisterBotModal({ isOpen, onClose, onSuccess }: Registe
                                 : 'bg-gray-100 text-gray-400 border-dashed cursor-not-allowed opacity-50'
                                 }`}
                         >
-                            Next → Generate Wallet
+                            Next → Connect Wallet
                         </button>
                     </div>
                 )}
@@ -323,19 +344,33 @@ export default function RegisterBotModal({ isOpen, onClose, onSuccess }: Registe
 
                         {!botKeypair ? (
                             /* Generate Button */
-                            <div className="text-center py-8">
-                                <div className="w-24 h-24 mx-auto bg-gradient-to-br from-[#1a1a2e] to-[#16213e] rounded-2xl border-4 border-black flex items-center justify-center text-5xl shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] mb-6">
+                            <div className="text-center py-4">
+                                <div className="w-20 h-20 mx-auto bg-gradient-to-br from-[#1a1a2e] to-[#16213e] rounded-2xl border-4 border-black flex items-center justify-center text-4xl shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] mb-4">
                                     🔑
                                 </div>
-                                <p className="text-gray-500 text-sm font-bold mb-6 max-w-[80%] mx-auto">
-                                    Djinn will generate a dedicated Solana keypair for your bot. You&apos;ll receive the private key — keep it safe.
+                                <p className="text-gray-500 text-sm font-bold mb-6 max-w-[90%] mx-auto">
+                                    Choose how to connect your bot&apos;s wallet.
                                 </p>
-                                <button
-                                    onClick={handleGenerateWallet}
-                                    className="bg-[#10B981] text-black font-black text-lg uppercase px-8 py-4 rounded-2xl border-[3px] border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] active:translate-y-0 active:shadow-none transition-all"
-                                >
-                                    🔑 Generate Bot Wallet
-                                </button>
+
+                                <div className="space-y-3">
+                                    {/* OPTION 1: Use Connected (CLI) */}
+                                    <button
+                                        onClick={handleUseExisting}
+                                        className="w-full bg-[#F492B7] text-black font-black text-sm uppercase px-6 py-4 rounded-2xl border-[3px] border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-y-0 active:shadow-none transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <span>⚡ I have my key (CLI Setup)</span>
+                                    </button>
+
+                                    <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest my-2">- OR -</div>
+
+                                    {/* OPTION 2: Generate New */}
+                                    <button
+                                        onClick={handleGenerateWallet}
+                                        className="w-full bg-white text-black font-black text-sm uppercase px-6 py-4 rounded-2xl border-[3px] border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-y-0 active:shadow-none transition-all grayscale opacity-70 hover:grayscale-0 hover:opacity-100"
+                                    >
+                                        <span>🔑 Generate New Wallet</span>
+                                    </button>
+                                </div>
                             </div>
                         ) : (
                             /* Wallet Generated */
